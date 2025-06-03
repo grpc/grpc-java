@@ -22,6 +22,7 @@ import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
+import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -51,6 +52,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
+import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
@@ -569,6 +571,7 @@ public abstract class BinderTransport
 
     private final long readyTimeoutMillis;
     private final PingTracker pingTracker;
+    private final boolean preAuthorizeServer;
 
     @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
@@ -577,6 +580,9 @@ public abstract class BinderTransport
 
     @GuardedBy("this")
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
+
+    @GuardedBy("this")
+    private ListenableFuture<Status> preAuthResultFuture;
 
     /**
      * Constructs a new transport instance.
@@ -602,6 +608,7 @@ public abstract class BinderTransport
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       this.readyTimeoutMillis = factory.readyTimeoutMillis;
+      this.preAuthorizeServer = factory.preAuthorizeServers;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
@@ -643,7 +650,11 @@ public abstract class BinderTransport
         synchronized (BinderClientTransport.this) {
           if (inState(TransportState.NOT_STARTED)) {
             setState(TransportState.SETUP);
-            serviceBinding.bind();
+            if (preAuthorizeServer) {
+              preAuthorizeServer();
+            } else {
+              serviceBinding.bind();
+            }
             if (readyTimeoutMillis >= 0) {
               readyTimeoutFuture =
                   getScheduledExecutorService()
@@ -655,6 +666,40 @@ public abstract class BinderTransport
           }
         }
       };
+    }
+
+    @GuardedBy("this")
+    private void preAuthorizeServer() {
+      ServiceInfo serviceInfo;
+      try {
+        serviceInfo = serviceBinding.resolve();
+      } catch (StatusException e) {
+        shutdownInternal(e.getStatus(), true);
+        return;
+      }
+
+      // It's unlikely, but the server identity/existence of this Service could change by the time
+      // we actually connect. It doesn't matter though, because:
+      // - If pre-auth fails (but would succeed for the new identity), grpc-core will retry
+      // against the replacement server using a new instance of BinderClientTransport.
+      // - If pre-auth succeeds (but would fail for the new identity), we might incorrectly bind
+      // to an unauthorized server, but we'll notice when we check SecurityPolicy again as part of
+      // the usual handshake.
+      preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+      Futures.addCallback(
+          preAuthResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              handlePreAuthResult(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
     }
 
     private synchronized void onReadyTimeout() {
@@ -751,6 +796,10 @@ public abstract class BinderTransport
         readyTimeoutFuture.cancel(false);
         readyTimeoutFuture = null;
       }
+      if (preAuthResultFuture != null) {
+        preAuthResultFuture.cancel(false);
+        preAuthResultFuture = null;
+      }
       serviceBinding.unbind();
       clientTransportListener.transportTerminated();
     }
@@ -770,13 +819,8 @@ public abstract class BinderTransport
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
-          ListenableFuture<Status> authFuture =
-              (securityPolicy instanceof AsyncSecurityPolicy)
-                  ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
-                  : Futures.submit(
-                      () -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
           Futures.addCallback(
-              authFuture,
+              checkServerAuthorizationAsync(remoteUid),
               new FutureCallback<Status>() {
                 @Override
                 public void onSuccess(Status result) {
@@ -789,6 +833,22 @@ public abstract class BinderTransport
                 }
               },
               offloadExecutor);
+        }
+      }
+    }
+
+    private ListenableFuture<Status> checkServerAuthorizationAsync(int remoteUid) {
+      return (securityPolicy instanceof AsyncSecurityPolicy)
+          ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
+          : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
+    }
+
+    private synchronized void handlePreAuthResult(Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else {
+          serviceBinding.bind();
         }
       }
     }

@@ -23,6 +23,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.UserHandle;
 import androidx.annotation.AnyThread;
@@ -30,7 +33,9 @@ import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
+import java.lang.reflect.Method;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -244,6 +249,47 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     mainThreadExecutor.execute(() -> notifyUnbound(reason));
     if (unbindFrom != null) {
       unbindFrom.unbindService(this);
+    }
+  }
+
+  private static int getIdentifier(UserHandle userHandle) throws ReflectiveOperationException {
+    return (int) userHandle.getClass().getDeclaredMethod("getIdentifier").invoke(userHandle);
+  }
+
+  private static ResolveInfo resolveServiceAsUser(
+      PackageManager packageManager, Intent bindIntent, int flags, UserHandle targetUserHandle)
+      throws ReflectiveOperationException {
+    Method resolveService;
+    Object[] args;
+    if (targetUserHandle == null) {
+      resolveService =
+          packageManager.getClass().getMethod("resolveService", Intent.class, int.class);
+      args = new Object[] {bindIntent, flags};
+    } else {
+      resolveService =
+          packageManager
+              .getClass()
+              .getMethod("resolveServiceAsUser", Intent.class, int.class, int.class);
+      args = new Object[] {bindIntent, flags, getIdentifier(targetUserHandle)};
+    }
+    return (ResolveInfo) resolveService.invoke(packageManager, args);
+  }
+
+  @AnyThread
+  public ServiceInfo resolve() throws StatusException {
+    checkState(sourceContext != null);
+    try {
+      ResolveInfo resolveInfo =
+          resolveServiceAsUser(sourceContext.getPackageManager(), bindIntent, 0, targetUserHandle);
+      if (resolveInfo == null) {
+        // Same code as when bindService() returns false.
+        throw Status.UNIMPLEMENTED
+            .withDescription("resolveService(" + bindIntent + ") returned null")
+            .asException();
+      }
+      return resolveInfo.serviceInfo;
+    } catch (ReflectiveOperationException e) {
+      throw Status.fromThrowable(e).asRuntimeException();
     }
   }
 

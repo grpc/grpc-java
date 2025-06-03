@@ -17,7 +17,9 @@
 package io.grpc.binder;
 
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.UserHandle;
+import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.NameResolver;
 
