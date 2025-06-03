@@ -45,11 +45,4 @@ public final class ApiConstants {
    */
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
-
-  /**
-   * The authentic ServiceInfo for an {@link io.grpc.EquivalentAddressGroup} of {@link
-   * AndroidComponentAddress}es, in case a {@link NameResolver} has already looked it up.
-   */
-  public static final Attributes.Key<ServiceInfo> TARGET_SERVICE_INFO =
-      Attributes.Key.create("target-service-info");
 }
