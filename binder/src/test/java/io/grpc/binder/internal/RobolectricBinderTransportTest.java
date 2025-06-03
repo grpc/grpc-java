@@ -21,6 +21,7 @@ import static org.robolectric.Shadows.shadowOf;
 import android.app.Application;
 import android.content.Intent;
 import androidx.test.core.app.ApplicationProvider;
+import com.google.common.collect.ImmutableList;
 import io.grpc.ServerStreamTracer;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.internal.AbstractTransportTest;
@@ -33,10 +34,13 @@ import io.grpc.internal.SharedResourcePool;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.annotation.LooperMode.Mode;
 
@@ -52,7 +56,7 @@ import org.robolectric.annotation.LooperMode.Mode;
  * meaning test cases don't run on the main thread. This supports the AbstractTransportTest approach
  * where the test thread frequently blocks waiting for transport state changes to take effect.
  */
-@RunWith(RobolectricTestRunner.class)
+@RunWith(ParameterizedRobolectricTestRunner.class)
 @LooperMode(Mode.INSTRUMENTATION_TEST)
 public final class RobolectricBinderTransportTest extends AbstractTransportTest {
 
@@ -65,6 +69,20 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   private int nextServerAddress;
+
+  @Parameter
+  public boolean preAuthorizeServers;
+
+  @Parameters(name = "preAuthorizeServers={0}")
+  public static ImmutableList<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
+
+  @Before
+  public void requestRealisticBindServiceBehavior() {
+    shadowOf(application).setBindServiceCallsOnServiceConnectedDirectly(false);
+    shadowOf(application).setUnbindServiceCallsOnServiceDisconnected(false);
+  }
 
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
@@ -81,6 +99,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
             .setStreamTracerFactories(streamTracerFactories)
             .build();
 
+    shadowOf(application.getPackageManager()).addServiceIfNotPresent(listenAddr.getComponent());
     shadowOf(application)
         .setComponentNameAndServiceForBindServiceForIntent(
             listenAddr.asBindIntent(), listenAddr.getComponent(), binderServer.getHostBinder());
@@ -101,6 +120,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     BinderClientTransportFactory.Builder builder =
         new BinderClientTransportFactory.Builder()
+            .setPreAuthorizeServers(preAuthorizeServers)
             .setSourceContext(application)
             .setScheduledExecutorPool(executorServicePool)
             .setOffloadExecutorPool(offloadExecutorPool);
