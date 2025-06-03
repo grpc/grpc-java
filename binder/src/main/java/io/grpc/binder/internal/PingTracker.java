@@ -104,9 +104,10 @@ final class PingTracker {
     }
 
     private synchronized void success() {
+      long currentTickerTimeNanos = ticker.read();
       if (!done) {
         done = true;
-        executor.execute(() -> callback.onSuccess(ticker.read() - startTimeNanos));
+        executor.execute(() -> callback.onSuccess(currentTickerTimeNanos - startTimeNanos));
       }
     }
   }

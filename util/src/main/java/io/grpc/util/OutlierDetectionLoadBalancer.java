@@ -148,12 +148,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // On the first go we use the configured interval.
         initialDelayNanos = config.intervalNanos;
       } else {
-        Long currentTickerTimeNanos = ticker.read();
-        Long elepsedTimeNanos = currentTickerTimeNanos - detectionTimerStartNanos;
+        long currentTickerTimeNanos = ticker.read();
+        long elapsedTimeNanos = currentTickerTimeNanos - detectionTimerStartNanos;
         // If a timer has started earlier we cancel it and use the difference between the start
         // time and now as the interval.
         initialDelayNanos = Math.max(0L,
-            config.intervalNanos - elepsedTimeNanos);
+            config.intervalNanos - elapsedTimeNanos);
       }
 
       // If a timer has been previously created we need to cancel it and reset all the call counters
