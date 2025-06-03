@@ -33,6 +33,7 @@ import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import java.lang.reflect.Method;
 import java.util.concurrent.Executor;
@@ -275,12 +276,18 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @AnyThread
-  public ServiceInfo resolve() {
+  public ServiceInfo resolve() throws StatusException {
     checkState(sourceContext != null);
     try {
       ResolveInfo resolveInfo =
           resolveServiceAsUser(sourceContext.getPackageManager(), bindIntent, 0, targetUserHandle);
-      return resolveInfo != null ? resolveInfo.serviceInfo : null;
+      if (resolveInfo == null) {
+        // Same code as when bindService() returns false.
+        throw Status.UNIMPLEMENTED
+            .withDescription("resolveService(" + bindIntent + ") returned null")
+            .asException();
+      }
+      return resolveInfo.serviceInfo;
     } catch (ReflectiveOperationException e) {
       throw Status.fromThrowable(e).asRuntimeException();
     }

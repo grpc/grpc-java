@@ -670,22 +670,22 @@ public abstract class BinderTransport
 
     @GuardedBy("this")
     private void preAuthorizeServer() {
-      ServiceInfo serviceInfo = serviceBinding.resolve();
+      ServiceInfo serviceInfo;
+      try {
+        serviceInfo = serviceBinding.resolve();
+      } catch (StatusException e) {
+        shutdownInternal(e.getStatus(), true);
+        return;
+      }
 
-      // It's unlikely, but in theory the server identity/existence represented by this ServiceInfo
-      // could change by the time we actually bind/connect. It doesn't matter though, because:
+      // It's unlikely, but the server identity/existence of this Service could change by the time
+      // we actually connect. It doesn't matter though, because:
       // - If pre-auth fails (but would succeed for the new identity), grpc-core will retry
       // against the replacement server using a new instance of BinderClientTransport.
       // - If pre-auth succeeds (but would fail for the new identity), we might incorrectly bind
-      // to an unauthorized server, but we'll notice when we the SecurityPolicy again as part of the
-      // usual handshake.
-      if (serviceInfo == null) {
-        preAuthResultFuture =
-            Futures.immediateFuture(
-                Status.UNIMPLEMENTED.withDescription("resolveService() was null"));
-      } else {
-        preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
-      }
+      // to an unauthorized server, but we'll notice when we check SecurityPolicy again as part of
+      // the usual handshake.
+      preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
       Futures.addCallback(
           preAuthResultFuture,
           new FutureCallback<Status>() {

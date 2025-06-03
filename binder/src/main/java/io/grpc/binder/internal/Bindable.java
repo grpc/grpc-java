@@ -20,7 +20,9 @@ import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Status;
+import io.grpc.StatusException;
 
 /** An interface for managing a {@code Binder} connection. */
 interface Bindable {
@@ -48,7 +50,7 @@ interface Bindable {
 
   /** Fetches details about the remote service from PackageManager *before* binding to it. */
   @AnyThread
-  ServiceInfo resolve();
+  ServiceInfo resolve() throws StatusException;
 
   /**
    * Attempt to bind with the remote service.
