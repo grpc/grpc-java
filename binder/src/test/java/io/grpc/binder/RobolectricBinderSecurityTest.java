@@ -149,23 +149,6 @@ public final class RobolectricBinderSecurityTest {
         .build();
   }
 
-  static class ConstantSecurityPolicy extends AsyncSecurityPolicy {
-    final SettableFuture<Status> result = SettableFuture.create();
-
-    ConstantSecurityPolicy(Status status) {
-      result.set(status);
-    }
-
-    ConstantSecurityPolicy(Throwable t) {
-      result.setException(t);
-    }
-
-    @Override
-    public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-      return Futures.nonCancellationPropagating(result);
-    }
-  }
-
   private static class SomeService extends LifecycleService {
 
     private final IBinderReceiver binderReceiver = new IBinderReceiver();
