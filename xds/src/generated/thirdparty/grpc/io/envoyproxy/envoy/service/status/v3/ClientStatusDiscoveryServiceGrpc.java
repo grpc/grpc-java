@@ -9,9 +9,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * also be used to get the current xDS states directly from the client.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: envoy/service/status/v3/csds.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class ClientStatusDiscoveryServiceGrpc {
 

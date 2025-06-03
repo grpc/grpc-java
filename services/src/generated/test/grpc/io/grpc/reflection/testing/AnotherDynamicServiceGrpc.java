@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * AnotherDynamicService
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/dynamic_reflection_test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AnotherDynamicServiceGrpc {
 
