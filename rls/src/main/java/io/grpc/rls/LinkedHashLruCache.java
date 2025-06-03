@@ -345,8 +345,4 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
           .toString();
     }
   }
-
-  public final void setEstimatedSizeBytes(long newSizeBytes) {
-    this.estimatedSizeBytes = newSizeBytes;
-  }
 }
