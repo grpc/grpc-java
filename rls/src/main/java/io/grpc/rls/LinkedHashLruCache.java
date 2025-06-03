@@ -299,6 +299,10 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
 
     @Override
     public void onEviction(K key, SizedValue value, EvictionType cause) {
+      handleEvictionType(key,value,cause);
+    }
+
+    private void handleEvictionType(K key, SizedValue value, EvictionType cause) {
       if (delegate != null) {
         delegate.onEviction(key, value.value, cause);
       }
@@ -340,10 +344,6 @@ abstract class LinkedHashLruCache<K, V> implements LruCache<K, V> {
           .add("value", value)
           .toString();
     }
-  }
-
-  public final void setEstimatedMaxSizeBytes(long newSizeBytes) {
-    this.estimatedMaxSizeBytes = newSizeBytes;
   }
 
   public final void setEstimatedSizeBytes(long newSizeBytes) {

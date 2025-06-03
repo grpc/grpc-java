@@ -267,7 +267,7 @@ public class LinkedHashLruCacheTest {
   }
 
   @Test
-  public void testFitToLimitWithEstimatedMaxSizeBytes() {
+  public void testFitToLimitUsingReSize() {
     Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
     Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
     Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
@@ -277,10 +277,10 @@ public class LinkedHashLruCacheTest {
     cache.cache(3, entry3);
 
     assertThat(cache.estimatedSize()).isEqualTo(2);
-    cache.setEstimatedMaxSizeBytes(2);
+    cache.resize(1);
 
-    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(2);
-    assertThat(cache.fitToLimit()).isEqualTo(true);
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(1);
+    assertThat(cache.fitToLimit()).isEqualTo(false);
     assertThat(cache.estimatedSizeBytes()).isEqualTo(1);
   }
 
