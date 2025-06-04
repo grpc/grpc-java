@@ -183,8 +183,8 @@ public final class ClientCalls {
   }
 
   /**
-   * Executes a unary call and blocks on the response, converting StatusRuntimeException to
-   * StatusException for consistency with other blocking call types.
+   * Executes a unary call and blocks on the response, converting StatusRuntimeException
+   * to StatusException.
    *
    * @return the single response message.
    * @throws StatusException on error
