@@ -122,7 +122,7 @@ public class XdsDependencyManagerTest {
   private Server xdsServer;
 
   private final FakeClock fakeClock = new FakeClock();
-  private final String serverName = InProcessServerBuilder.generateName();
+  private final String serverName = "the-service-name";
   private final Queue<XdsTestUtils.LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   private final AtomicBoolean adsEnded = new AtomicBoolean(true);
   private final AtomicBoolean lrsEnded = new AtomicBoolean(true);
@@ -153,7 +153,7 @@ public class XdsDependencyManagerTest {
   @Before
   public void setUp() throws Exception {
     xdsServer = cleanupRule.register(InProcessServerBuilder
-        .forName(serverName)
+        .forName("control-plane")
         .addService(controlPlaneService)
         .addService(lrsService)
         .directExecutor()
@@ -163,7 +163,7 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName);
 
     channel = cleanupRule.register(
-        InProcessChannelBuilder.forName(serverName).directExecutor().build());
+        InProcessChannelBuilder.forName("control-plane").directExecutor().build());
     XdsTransportFactory xdsTransportFactory =
         ignore -> new GrpcXdsTransportFactory.GrpcXdsTransport(channel);
 
@@ -351,10 +351,10 @@ public class XdsDependencyManagerTest {
     // Update config so that one of the 2 "valid" clusters has an EDS resource, the other does not
     // and there is an EDS that doesn't have matching clusters
     ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, XdsTestUtils.EDS_NAME + 0);
+        "127.0.1.1", ENDPOINT_HOSTNAME, ENDPOINT_PORT, XdsTestUtils.EDS_NAME + 0);
     edsMap.put(XdsTestUtils.EDS_NAME + 0, clusterLoadAssignment);
     clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, "garbageEds");
+        "127.0.1.2", ENDPOINT_HOSTNAME, ENDPOINT_PORT, "garbageEds");
     edsMap.put("garbageEds", clusterLoadAssignment);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
@@ -421,7 +421,7 @@ public class XdsDependencyManagerTest {
   @Test
   public void testMissingRds() {
     String rdsName = "badRdsName";
-    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, serverName, rdsName);
+    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, rdsName);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(serverName, clientListener));
 
@@ -578,7 +578,7 @@ public class XdsDependencyManagerTest {
 
     Map<String, Message> edsMap = new HashMap<>();
     ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
+        "127.0.1.4", ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
     edsMap.put(edsName, clusterLoadAssignment);
 
     RouteConfiguration routeConfig =

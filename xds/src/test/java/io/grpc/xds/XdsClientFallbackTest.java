@@ -84,10 +84,10 @@ public class XdsClientFallbackTest {
   private static final String FALLBACK_EDS_NAME = "fallback-" + EDS_NAME;
   private static final HttpConnectionManager MAIN_HTTP_CONNECTION_MANAGER =
       HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
-          new Filter.NamedFilterConfig(MAIN_SERVER, RouterFilter.ROUTER_CONFIG)));
+          new Filter.NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)));
   private static final HttpConnectionManager FALLBACK_HTTP_CONNECTION_MANAGER =
-      HttpConnectionManager.forRdsName(0, RDS_NAME, ImmutableList.of(
-          new Filter.NamedFilterConfig(FALLBACK_SERVER, RouterFilter.ROUTER_CONFIG)));
+      HttpConnectionManager.forRdsName(0, FALLBACK_RDS_NAME, ImmutableList.of(
+          new Filter.NamedFilterConfig("terminal-filter", RouterFilter.ROUTER_CONFIG)));
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private boolean originalEnableXdsFallback;
@@ -201,7 +201,7 @@ public class XdsClientFallbackTest {
     String edsName = isMainServer ? EDS_NAME : FALLBACK_EDS_NAME;
 
     controlPlane.setLdsConfig(ControlPlaneRule.buildServerListener(),
-        ControlPlaneRule.buildClientListener(MAIN_SERVER, serverName));
+        ControlPlaneRule.buildClientListener(MAIN_SERVER, rdsName));
 
     controlPlane.setRdsConfig(rdsName,
         XdsTestUtils.buildRouteConfiguration(MAIN_SERVER, rdsName, clusterName));

@@ -53,7 +53,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -84,7 +83,6 @@ import org.mockito.Mockito;
 public class GcpAuthenticationFilterTest {
   private static final GcpAuthenticationFilter.Provider FILTER_PROVIDER =
       new GcpAuthenticationFilter.Provider();
-  private static final String serverName = InProcessServerBuilder.generateName();
   private static final LdsUpdate ldsUpdate = getLdsUpdate();
   private static final EdsUpdate edsUpdate = getEdsUpdate();
   private static final RdsUpdate rdsUpdate = getRdsUpdate();
@@ -461,7 +459,7 @@ public class GcpAuthenticationFilterTest {
 
   private static LdsUpdate getLdsUpdate() {
     Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
-        serverName, RouterFilter.ROUTER_CONFIG);
+        "router", RouterFilter.ROUTER_CONFIG);
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
     return XdsListenerResource.LdsUpdate.forApiListener(httpConnectionManager);
@@ -469,7 +467,7 @@ public class GcpAuthenticationFilterTest {
 
   private static RdsUpdate getRdsUpdate() {
     RouteConfiguration routeConfiguration =
-        buildRouteConfiguration(serverName, RDS_NAME, CLUSTER_NAME);
+        buildRouteConfiguration("my-server", RDS_NAME, CLUSTER_NAME);
     XdsResourceType.Args args = new XdsResourceType.Args(null, "0", "0", null, null, null);
     try {
       return XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
@@ -481,7 +479,7 @@ public class GcpAuthenticationFilterTest {
   private static EdsUpdate getEdsUpdate() {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        "127.0.0.5", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));

@@ -136,7 +136,7 @@ public class XdsTestUtils {
                            int endpointPort) {
 
     Listener serverListener = ControlPlaneRule.buildServerListener();
-    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, serverName, rdsName);
+    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, rdsName);
     service.setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(SERVER_LISTENER, serverListener, serverName, clientListener));
 
@@ -148,7 +148,7 @@ public class XdsTestUtils {
     service.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.<String, Message>of(clusterName, cluster));
 
     ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, endpointHostname, endpointPort, edsName);
+        "127.0.0.11", endpointHostname, endpointPort, edsName);
     service.setXdsConfig(ADS_TYPE_URL_EDS,
         ImmutableMap.<String, Message>of(edsName, clusterLoadAssignment));
 
@@ -186,7 +186,7 @@ public class XdsTestUtils {
     Map<String, Message> edsMap = new HashMap<>();
     for (String child : children) {
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+          "127.0.0.16", ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
       edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
     }
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
@@ -225,7 +225,7 @@ public class XdsTestUtils {
         continue;
       }
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          child, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+          "127.0.0.15", ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
       edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
     }
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
@@ -236,7 +236,7 @@ public class XdsTestUtils {
     XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();
 
     Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
-        serverHostName, RouterFilter.ROUTER_CONFIG);
+        "terminal-filter", RouterFilter.ROUTER_CONFIG);
 
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
@@ -257,7 +257,7 @@ public class XdsTestUtils {
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        "127.0.0.11", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
@@ -280,10 +280,10 @@ public class XdsTestUtils {
     return builder.build();
   }
 
-  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverAddress) {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        serverAddress, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
@@ -338,7 +338,7 @@ public class XdsTestUtils {
       clusterMap.put(clusterName, cluster);
 
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          clusterName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
+          "127.0.0.13", ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
       edsMap.put(edsName, clusterLoadAssignment);
     }
   }
@@ -346,7 +346,7 @@ public class XdsTestUtils {
   static Listener buildInlineClientListener(String rdsName, String clusterName, String serverName) {
     HttpFilter
         httpFilter = HttpFilter.newBuilder()
-        .setName(serverName)
+        .setName("terminal-filter")
         .setTypedConfig(Any.pack(Router.newBuilder().build()))
         .setIsOptional(true)
         .build();

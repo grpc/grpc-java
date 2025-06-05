@@ -22,6 +22,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.net.InetAddresses;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -78,7 +79,8 @@ final class Endpoints {
     @VisibleForTesting
     static LbEndpoint create(String address, int port, int loadBalancingWeight, boolean isHealthy,
         String hostname, ImmutableMap<String, Object> endpointMetadata) {
-      return LbEndpoint.create(new EquivalentAddressGroup(new InetSocketAddress(address, port)),
+      return LbEndpoint.create(
+          new EquivalentAddressGroup(new InetSocketAddress(InetAddresses.forString(address), port)),
           loadBalancingWeight, isHealthy, hostname, endpointMetadata);
     }
   }
