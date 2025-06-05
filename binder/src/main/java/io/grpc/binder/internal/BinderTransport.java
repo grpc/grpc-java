@@ -488,7 +488,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       }
       numIncomingBytes += size;
       if ((numIncomingBytes - acknowledgedIncomingBytes) > TRANSACTION_BYTES_WINDOW_FORCE_ACK) {
-        sendAcknowledgeBytes(checkNotNull(outgoingBinder), numIncomingBytes);
+        synchronized (this) {
+          sendAcknowledgeBytes(checkNotNull(outgoingBinder), numIncomingBytes);
+        }
         acknowledgedIncomingBytes = numIncomingBytes;
       }
       return true;
@@ -520,15 +522,14 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @GuardedBy("this")
   protected void handlePingResponse(Parcel parcel) {}
 
+  @GuardedBy("this")
   private void sendAcknowledgeBytes(OneWayBinderProxy iBinder, long n) {
     // Send a transaction to acknowledge reception of incoming data.
     try (ParcelHolder parcel = ParcelHolder.obtain()) {
       parcel.get().writeLong(n);
       iBinder.transact(ACKNOWLEDGE_BYTES, parcel);
     } catch (RemoteException re) {
-      synchronized (this) {
-        shutdownInternal(statusFromRemoteException(re), true);
-      }
+      shutdownInternal(statusFromRemoteException(re), true);
     }
   }
 
