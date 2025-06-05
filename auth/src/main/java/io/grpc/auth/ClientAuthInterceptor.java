@@ -77,7 +77,7 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
           // JWT. However, today it does not cache JWT and so we won't bother tring to cache its
           // return value based on the URI.
           Map<String, List<String>> latestMetadata = getRequestMetadata(uri);
-          if (lastMetadata == null || lastMetadata != latestMetadata) {
+          if (lastMetadata.equals(null) || !Objects.equals(lastMetadata, latestMetadata)) {
             lastMetadata = latestMetadata;
             cached = toHeaders(lastMetadata);
           }
