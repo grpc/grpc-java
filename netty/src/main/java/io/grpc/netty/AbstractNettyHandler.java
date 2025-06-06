@@ -199,8 +199,7 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       pingReturn++;
       setPinging(false);
 
-      long currentTickerTimeNanos = ticker.read();
-      long elapsedTime = Math.max(0L,(currentTickerTimeNanos - lastPingTime));
+      long elapsedTime = (ticker.read() - lastPingTime);
       if (elapsedTime == 0) {
         elapsedTime = 1;
       }
