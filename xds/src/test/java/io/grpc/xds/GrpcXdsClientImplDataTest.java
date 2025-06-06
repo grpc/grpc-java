@@ -1078,6 +1078,30 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseLocalityLbEndpoints_onlyPermitIp() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("example.com").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    ResourceInvalidException ex = assertThrows(
+        ResourceInvalidException.class,
+        () -> XdsEndpointResource.parseLocalityLbEndpoints(proto));
+    assertThat(ex.getMessage()).contains("IP");
+    assertThat(ex.getMessage()).contains("example.com");
+  }
+
+  @Test
   public void parseLocalityLbEndpoints_treatUnknownHealthAsHealthy()
       throws ResourceInvalidException {
     io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
