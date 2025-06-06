@@ -227,7 +227,7 @@ public class OutlierDetectionLoadBalancerTest {
     when(mockStreamTracerFactory.newClientStreamTracer(any(),
         any())).thenReturn(mockStreamTracer);
 
-    loadBalancer = new OutlierDetectionLoadBalancer(mockHelper, fakeClock.getTimeProvider());
+    loadBalancer = new OutlierDetectionLoadBalancer(mockHelper, fakeClock.getTicker());
   }
 
   @Test
