@@ -31,6 +31,7 @@ import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.TransactionTooLargeException;
+import androidx.annotation.BinderThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ticker;
 import com.google.common.base.Verify;
@@ -107,8 +108,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * https://github.com/grpc/proposal/blob/master/L73-java-binderchannel/wireformat.md
  */
 @ThreadSafe
-public abstract class BinderTransport
-    implements LeakSafeOneWayBinder.TransactionHandler, IBinder.DeathRecipient {
+public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   private static final Logger logger = Logger.getLogger(BinderTransport.class.getName());
 
@@ -212,9 +212,11 @@ public abstract class BinderTransport
   private final FlowController flowController;
 
   /** The number of incoming bytes we've received. */
-  private final AtomicLong numIncomingBytes;
+  // Only read/written on @BinderThread.
+  private long numIncomingBytes;
 
   /** The number of incoming bytes we've told our peer we've received. */
+  // Only read/written on @BinderThread.
   private long acknowledgedIncomingBytes;
 
   private BinderTransport(
@@ -227,10 +229,9 @@ public abstract class BinderTransport
     this.attributes = attributes;
     this.logId = logId;
     scheduledExecutorService = executorServicePool.getObject();
-    incomingBinder = new LeakSafeOneWayBinder(this);
+    incomingBinder = new LeakSafeOneWayBinder(this::handleTransaction);
     ongoingCalls = new ConcurrentHashMap<>();
     flowController = new FlowController(TRANSACTION_BYTES_WINDOW);
-    numIncomingBytes = new AtomicLong();
   }
 
   // Override in child class.
@@ -425,8 +426,9 @@ public abstract class BinderTransport
     }
   }
 
-  @Override
-  public final boolean handleTransaction(int code, Parcel parcel) {
+  @BinderThread
+  @VisibleForTesting
+  final boolean handleTransaction(int code, Parcel parcel) {
     try {
       return handleTransactionInternal(code, parcel);
     } catch (RuntimeException e) {
@@ -442,6 +444,7 @@ public abstract class BinderTransport
     }
   }
 
+  @BinderThread
   private boolean handleTransactionInternal(int code, Parcel parcel) {
     if (code < FIRST_CALL_ID) {
       synchronized (this) {
@@ -485,11 +488,12 @@ public abstract class BinderTransport
       if (inbound != null) {
         inbound.handleTransaction(parcel);
       }
-      long nib = numIncomingBytes.addAndGet(size);
-      if ((nib - acknowledgedIncomingBytes) > TRANSACTION_BYTES_WINDOW_FORCE_ACK) {
+      numIncomingBytes += size;
+      if ((numIncomingBytes - acknowledgedIncomingBytes) > TRANSACTION_BYTES_WINDOW_FORCE_ACK) {
         synchronized (this) {
-          sendAcknowledgeBytes(checkNotNull(outgoingBinder));
+          sendAcknowledgeBytes(checkNotNull(outgoingBinder), numIncomingBytes);
         }
+        acknowledgedIncomingBytes = numIncomingBytes;
       }
       return true;
     }
@@ -521,10 +525,8 @@ public abstract class BinderTransport
   protected void handlePingResponse(Parcel parcel) {}
 
   @GuardedBy("this")
-  private void sendAcknowledgeBytes(OneWayBinderProxy iBinder) {
+  private void sendAcknowledgeBytes(OneWayBinderProxy iBinder, long n) {
     // Send a transaction to acknowledge reception of incoming data.
-    long n = numIncomingBytes.get();
-    acknowledgedIncomingBytes = n;
     try (ParcelHolder parcel = ParcelHolder.obtain()) {
       parcel.get().writeLong(n);
       iBinder.transact(ACKNOWLEDGE_BYTES, parcel);
