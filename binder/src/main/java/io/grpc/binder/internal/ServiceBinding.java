@@ -23,13 +23,18 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.UserHandle;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.VerifyException;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -245,6 +250,39 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     if (unbindFrom != null) {
       unbindFrom.unbindService(this);
     }
+  }
+
+  private static int getIdentifier(UserHandle userHandle) throws ReflectiveOperationException {
+    return (int) userHandle.getClass().getDeclaredMethod("getIdentifier").invoke(userHandle);
+  }
+
+  private static ResolveInfo resolveServiceAsUser(
+      PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
+    try {
+      return (ResolveInfo)
+          packageManager
+              .getClass()
+              .getMethod("resolveServiceAsUser", Intent.class, int.class, int.class)
+              .invoke(packageManager, intent, flags, getIdentifier(targetUserHandle));
+    } catch (ReflectiveOperationException e) {
+      throw new VerifyException(e);
+    }
+  }
+
+  @AnyThread
+  public ServiceInfo resolve() throws StatusException {
+    checkState(sourceContext != null);
+    PackageManager packageManager = sourceContext.getPackageManager();
+    ResolveInfo resolveInfo =
+        targetUserHandle != null
+            ? resolveServiceAsUser(packageManager, bindIntent, 0, targetUserHandle)
+            : packageManager.resolveService(bindIntent, 0);
+    if (resolveInfo == null) {
+      throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
+          .withDescription("resolveService(" + bindIntent + ") returned null")
+          .asException();
+    }
+    return resolveInfo.serviceInfo;
   }
 
   @MainThread

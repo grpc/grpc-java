@@ -22,6 +22,7 @@ import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
+import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -571,6 +572,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
     private final long readyTimeoutMillis;
     private final PingTracker pingTracker;
+    private final boolean preAuthorizeServer;
 
     @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
@@ -579,6 +581,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
     @GuardedBy("this")
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
+
+    @GuardedBy("this")
+    private ListenableFuture<Status> preAuthResultFuture;
 
     /**
      * Constructs a new transport instance.
@@ -604,6 +609,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       this.readyTimeoutMillis = factory.readyTimeoutMillis;
+      this.preAuthorizeServer = factory.preAuthorizeServers;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
@@ -645,7 +651,11 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
         synchronized (BinderClientTransport.this) {
           if (inState(TransportState.NOT_STARTED)) {
             setState(TransportState.SETUP);
-            serviceBinding.bind();
+            if (preAuthorizeServer) {
+              preAuthorizeServer();
+            } else {
+              serviceBinding.bind();
+            }
             if (readyTimeoutMillis >= 0) {
               readyTimeoutFuture =
                   getScheduledExecutorService()
@@ -657,6 +667,41 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
           }
         }
       };
+    }
+
+    @GuardedBy("this")
+    private void preAuthorizeServer() {
+      ServiceInfo serviceInfo;
+      try {
+        serviceInfo = serviceBinding.resolve();
+      } catch (StatusException e) {
+        shutdownInternal(e.getStatus(), true);
+        return;
+      }
+
+      // It's unlikely, but the identity/existence of this Service could change by the time we
+      // actually connect. It doesn't matter though, because:
+      // - If pre-auth fails (but would succeed against the server's new state), the grpc-core layer
+      // will eventually retry using a new transport instance that will see the Service's new state.
+      // - If pre-auth succeeds (but would fail against the server's new state), we might give an
+      // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
+      // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
+      // can't typically control the exact timing of its installation.
+      preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+      Futures.addCallback(
+          preAuthResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              handlePreAuthResult(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
     }
 
     private synchronized void onReadyTimeout() {
@@ -753,6 +798,10 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
         readyTimeoutFuture.cancel(false);
         readyTimeoutFuture = null;
       }
+      if (preAuthResultFuture != null) {
+        preAuthResultFuture.cancel(false);
+        preAuthResultFuture = null;
+      }
       serviceBinding.unbind();
       clientTransportListener.transportTerminated();
     }
@@ -772,13 +821,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
-          ListenableFuture<Status> authFuture =
-              (securityPolicy instanceof AsyncSecurityPolicy)
-                  ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
-                  : Futures.submit(
-                      () -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
           Futures.addCallback(
-              authFuture,
+              checkServerAuthorizationAsync(remoteUid),
               new FutureCallback<Status>() {
                 @Override
                 public void onSuccess(Status result) {
@@ -791,6 +835,22 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
                 }
               },
               offloadExecutor);
+        }
+      }
+    }
+
+    private ListenableFuture<Status> checkServerAuthorizationAsync(int remoteUid) {
+      return (securityPolicy instanceof AsyncSecurityPolicy)
+          ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
+          : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
+    }
+
+    private synchronized void handlePreAuthResult(Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else {
+          serviceBinding.bind();
         }
       }
     }
