@@ -348,8 +348,8 @@ public final class SimpleServiceGrpc {
      * Simple unary RPC.
      * </pre>
      */
-    public io.grpc.testing.protobuf.SimpleResponse unaryRpc(io.grpc.testing.protobuf.SimpleRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.protobuf.SimpleResponse unaryRpc(io.grpc.testing.protobuf.SimpleRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getUnaryRpcMethod(), getCallOptions(), request);
     }
 

@@ -192,8 +192,8 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * Update the tes client's configuration.
      * </pre>
      */
-    public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getConfigureMethod(), getCallOptions(), request);
     }
   }

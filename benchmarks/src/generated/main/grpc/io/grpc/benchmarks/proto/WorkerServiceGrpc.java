@@ -387,8 +387,8 @@ public final class WorkerServiceGrpc {
      * Just return the core count - unary call
      * </pre>
      */
-    public io.grpc.benchmarks.proto.Control.CoreResponse coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.benchmarks.proto.Control.CoreResponse coreCount(io.grpc.benchmarks.proto.Control.CoreRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getCoreCountMethod(), getCallOptions(), request);
     }
 
@@ -397,8 +397,8 @@ public final class WorkerServiceGrpc {
      * Quit this worker
      * </pre>
      */
-    public io.grpc.benchmarks.proto.Control.Void quitWorker(io.grpc.benchmarks.proto.Control.Void request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.benchmarks.proto.Control.Void quitWorker(io.grpc.benchmarks.proto.Control.Void request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getQuitWorkerMethod(), getCallOptions(), request);
     }
   }

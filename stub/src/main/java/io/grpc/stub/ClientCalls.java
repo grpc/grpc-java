@@ -183,6 +183,23 @@ public final class ClientCalls {
   }
 
   /**
+   * Executes a unary call and blocks on the response,
+   * throws a checked {@link StatusException}.
+   *
+   * @return the single response message.
+   * @throws StatusException on error
+   */
+  public static <ReqT, RespT> RespT blockingV2UnaryCall(
+      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
+      throws StatusException {
+    try {
+      return blockingUnaryCall(channel, method, callOptions, req);
+    } catch (StatusRuntimeException e) {
+      throw e.getStatus().asException(e.getTrailers());
+    }
+  }
+
+  /**
    * Executes a server-streaming call returning a blocking {@link Iterator} over the
    * response stream.  The {@code call} should not be already started.  After calling this method,
    * {@code call} should no longer be used.
