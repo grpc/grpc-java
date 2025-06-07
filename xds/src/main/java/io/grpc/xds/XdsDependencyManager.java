@@ -525,6 +525,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     public void close() {
+      cancelled = true;
       xdsClient.cancelXdsResourceWatch(type, resourceName, this);
     }
 
