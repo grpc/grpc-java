@@ -216,6 +216,20 @@ and the [`java_proto_library`](https://bazel.build/reference/be/java#java_proto_
 and `load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")` (from this project), as in
 [this example `BUILD.bazel`](https://github.com/grpc/grpc-java/blob/master/examples/BUILD.bazel).
 
+Note that [this project does not publish](https://github.com/grpc/grpc-java/issues/12055) the `grpc-java` module
+to the Bazel Central Registry (BCR); and [the existing one](https://registry.bazel.build/modules/grpc-java) is by someone
+else than this project's maintainers - and thus may well not contain latest versions. You can still use it like this:
+
+```bazel
+bazel_dep(name = "grpc-java", version = "1.73.0", repo_name = "io_grpc_grpc_java")
+
+git_override(
+    module_name = "grpc-java",
+    remote = "https://github.com/grpc/grpc-java.git",
+    tag = "v1.73.0",
+)
+```
+
 API Stability
 -------------
 
