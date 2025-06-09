@@ -97,7 +97,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       return Status.OK;
     }
     if (!clusterConfigOr.hasValue()) {
-      // TODO: improve error message?
       return fail(clusterConfigOr.getStatus());
     }
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
