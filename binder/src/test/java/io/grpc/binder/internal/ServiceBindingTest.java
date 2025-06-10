@@ -316,9 +316,11 @@ public final class ServiceBindingTest {
   @Config(sdk = 33)
   public void testResolveNonExistentServiceWithTargetUserThrows() throws Exception {
     ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
-    binding = newBuilder()
-        .setTargetUserHandle(generateUserHandle(/* userId = */ 12345))
-        .setTargetComponent(doesNotExistService).build();
+    binding =
+        newBuilder()
+            .setTargetUserHandle(generateUserHandle(/* userId= */ 12345))
+            .setTargetComponent(doesNotExistService)
+            .build();
     StatusException statusException = assertThrows(StatusException.class, binding::resolve);
     assertThat(statusException.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
     assertThat(statusException.getStatus().getDescription()).contains("does.not.exist");

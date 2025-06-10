@@ -56,26 +56,21 @@ public class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
   /** Represents a single call to {@link AsyncSecurityPolicy#checkAuthorizationAsync(int)}. */
   public static class AuthRequest {
 
-    /**
-     * The argument passed to {@link AsyncSecurityPolicy#checkAuthorizationAsync(int)}.
-     */
+    /** The argument passed to {@link AsyncSecurityPolicy#checkAuthorizationAsync(int)}. */
     public final int uid;
+
     private final SettableFuture<Status> resultFuture = SettableFuture.create();
 
     private AuthRequest(int uid) {
       this.uid = uid;
     }
 
-    /**
-     * Provides this SecurityPolicy's response to this authorization request.
-     */
+    /** Provides this SecurityPolicy's response to this authorization request. */
     public void setResult(Status result) {
       checkState(resultFuture.set(result));
     }
 
-    /**
-     * Simulates an exceptional response to this authorization request.
-     */
+    /** Simulates an exceptional response to this authorization request. */
     public void setResult(Throwable t) {
       checkState(resultFuture.setException(t));
     }
