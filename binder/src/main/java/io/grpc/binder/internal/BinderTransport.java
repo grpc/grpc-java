@@ -648,38 +648,33 @@ public abstract class BinderTransport
     @Override
     public synchronized Runnable start(ManagedClientTransport.Listener clientTransportListener) {
       this.clientTransportListener = checkNotNull(clientTransportListener);
-      return () -> {
-        synchronized (BinderClientTransport.this) {
-          if (inState(TransportState.NOT_STARTED)) {
-            setState(TransportState.SETUP);
-            if (preAuthorizeServer) {
-              preAuthorizeServer();
-            } else {
-              serviceBinding.bind();
-            }
-            if (readyTimeoutMillis >= 0) {
-              readyTimeoutFuture =
-                  getScheduledExecutorService()
-                      .schedule(
-                          BinderClientTransport.this::onReadyTimeout,
-                          readyTimeoutMillis,
-                          MILLISECONDS);
-            }
+      return this::startInternal;
+    }
+
+    private synchronized void startInternal() {
+      if (inState(TransportState.NOT_STARTED)) {
+        setState(TransportState.SETUP);
+        try {
+          if (preAuthorizeServer) {
+            preAuthorize(serviceBinding.resolve());
+          } else {
+            serviceBinding.bind();
           }
+        } catch (StatusException e) {
+          shutdownInternal(e.getStatus(), true);
+          return;
         }
-      };
+        if (readyTimeoutMillis >= 0) {
+          readyTimeoutFuture =
+              getScheduledExecutorService()
+                  .schedule(
+                      BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
+        }
+      }
     }
 
     @GuardedBy("this")
-    private void preAuthorizeServer() {
-      ServiceInfo serviceInfo;
-      try {
-        serviceInfo = serviceBinding.resolve();
-      } catch (StatusException e) {
-        shutdownInternal(e.getStatus(), true);
-        return;
-      }
-
+    private void preAuthorize(ServiceInfo serviceInfo) {
       // It's unlikely, but the identity/existence of this Service could change by the time we
       // actually connect. It doesn't matter though, because:
       // - If pre-auth fails (but would succeed against the server's new state), the grpc-core layer
@@ -703,6 +698,16 @@ public abstract class BinderTransport
             }
           },
           offloadExecutor);
+    }
+
+    private synchronized void handlePreAuthResult(Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else {
+          serviceBinding.bind();
+        }
+      }
     }
 
     private synchronized void onReadyTimeout() {
@@ -844,16 +849,6 @@ public abstract class BinderTransport
       return (securityPolicy instanceof AsyncSecurityPolicy)
           ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
           : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
-    }
-
-    private synchronized void handlePreAuthResult(Status authorization) {
-      if (inState(TransportState.SETUP)) {
-        if (!authorization.isOk()) {
-          shutdownInternal(authorization, true);
-        } else {
-          serviceBinding.bind();
-        }
-      }
     }
 
     private synchronized void handleAuthResult(IBinder binder, Status authorization) {

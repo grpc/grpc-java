@@ -205,7 +205,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     //  test never exercises server SecurityPolicy.
     ShadowBinder.setCallingUid(11111); // UID of the server *process*.
 
-    serverPkgInfo.applicationInfo.uid = 22222;  // UID of the server *app*, which can be different.
+    serverPkgInfo.applicationInfo.uid = 22222; // UID of the server *app*, which can be different.
     shadowOf(application.getPackageManager()).installPackage(serverPkgInfo);
     shadowOf(application.getPackageManager()).addOrUpdateService(serviceInfo);
     server = newServer(Collections.emptyList());
