@@ -176,13 +176,9 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(
               directAddress, directAddress.getAuthority(), transportFactoryBuilder, null);
-      // TODO(jdcormie): Rollout step 2: Pre-auth *all* addresses by default.
-      preAuthorizeServers(false);
     } else {
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(target, transportFactoryBuilder, null);
-      // TODO(jdcormie): Rollout step 1: Pre-auth NameResolver results by default.
-      preAuthorizeServers(false);
     }
     idleTimeout(60, TimeUnit.SECONDS);
   }

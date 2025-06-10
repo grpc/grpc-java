@@ -55,7 +55,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
   final long readyTimeoutMillis;
-  final boolean preAuthorizeServers;
+  final boolean preAuthorizeServers; // TODO(jdcormie): Default to true.
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -220,7 +220,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
       return this;
     }
 
-    /** Whether to check server addresses against the SecurityPolicy before binding to them. */
+    /** Whether to check server addresses against the SecurityPolicy *before* binding to them. */
     public Builder setPreAuthorizeServers(boolean preAuthorizeServers) {
       this.preAuthorizeServers = preAuthorizeServers;
       return this;
