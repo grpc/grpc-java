@@ -214,15 +214,15 @@ public final class EchoTestServiceGrpc {
 
     /**
      */
-    public io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.istio.test.Echo.EchoResponse echo(io.istio.test.Echo.EchoRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getEchoMethod(), getCallOptions(), request);
     }
 
     /**
      */
-    public io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.istio.test.Echo.ForwardEchoResponse forwardEcho(io.istio.test.Echo.ForwardEchoRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getForwardEchoMethod(), getCallOptions(), request);
     }
   }

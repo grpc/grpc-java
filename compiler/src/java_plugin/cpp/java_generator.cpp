@@ -745,9 +745,10 @@ static void PrintStub(
               "    $lower_method_name$($input_type$ request)");
        } else {
           // Simple RPC
+          (*vars)["throws_decl"] = " throws io.grpc.StatusException";
           p->Print(
               *vars,
-              "$output_type$ $lower_method_name$($input_type$ request)");
+              "$output_type$ $lower_method_name$($input_type$ request)$throws_decl$");
        }
        break;
       case ASYNC_CALL:
@@ -827,7 +828,8 @@ static void PrintStub(
                if (server_streaming) {
                    (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingV2ServerStreamingCall";
                 } else {
-                  (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingUnaryCall";
+                  (*vars)["calls_method"] = "io.grpc.stub.ClientCalls.blockingV2UnaryCall";
+                  (*vars)["throws_decl"] = " throws io.grpc.StatusException";
                 }
 
             p->Print(

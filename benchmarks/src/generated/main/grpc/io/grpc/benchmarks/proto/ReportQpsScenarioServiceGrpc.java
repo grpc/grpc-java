@@ -177,8 +177,8 @@ public final class ReportQpsScenarioServiceGrpc {
      * Report results of a QPS test benchmark scenario.
      * </pre>
      */
-    public io.grpc.benchmarks.proto.Control.Void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.benchmarks.proto.Control.Void reportScenario(io.grpc.benchmarks.proto.Control.ScenarioResult request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getReportScenarioMethod(), getCallOptions(), request);
     }
   }
