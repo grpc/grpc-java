@@ -252,10 +252,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     }
   }
 
+  // Sadly we must call this system API reflectively since it isn't part of the Android SDK.
   private static int getIdentifier(UserHandle userHandle) throws ReflectiveOperationException {
-    return (int) userHandle.getClass().getDeclaredMethod("getIdentifier").invoke(userHandle);
+    return (int) userHandle.getClass().getMethod("getIdentifier").invoke(userHandle);
   }
 
+  // Sadly we must call this system API reflectively since it isn't part of the Android SDK.
   private static ResolveInfo resolveServiceAsUser(
       PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
     try {
@@ -279,7 +281,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
             : packageManager.resolveService(bindIntent, 0);
     if (resolveInfo == null) {
       throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
-          .withDescription("resolveService(" + bindIntent + ") returned null")
+          .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
           .asException();
     }
     return resolveInfo.serviceInfo;
