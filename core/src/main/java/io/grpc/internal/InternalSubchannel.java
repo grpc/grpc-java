@@ -348,8 +348,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       if (state.getState() == SHUTDOWN) {
         throw new IllegalArgumentException("Cannot transition out of SHUTDOWN to " + newState);
       }
-      Preconditions.checkState(state.getState() != SHUTDOWN,
-          "Cannot transition out of SHUTDOWN to " + newState);
       if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
         state = ConnectivityStateInfo.forNonError(IDLE);
       } else {
