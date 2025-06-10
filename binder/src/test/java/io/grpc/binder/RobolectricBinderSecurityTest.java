@@ -79,14 +79,14 @@ public final class RobolectricBinderSecurityTest {
 
   @Before
   public void setUp() {
-    ApplicationInfo serverAppInfo = ApplicationInfoBuilder.newBuilder()
-        .setPackageName(context.getPackageName())
-        .build();
+    ApplicationInfo serverAppInfo =
+        ApplicationInfoBuilder.newBuilder().setPackageName(context.getPackageName()).build();
     serverAppInfo.uid = android.os.Process.myUid();
-    PackageInfo serverPkgInfo = PackageInfoBuilder.newBuilder()
-        .setPackageName(serverAppInfo.packageName)
-        .setApplicationInfo(serverAppInfo)
-        .build();
+    PackageInfo serverPkgInfo =
+        PackageInfoBuilder.newBuilder()
+            .setPackageName(serverAppInfo.packageName)
+            .setApplicationInfo(serverAppInfo)
+            .build();
     shadowOf(context.getPackageManager()).installPackage(serverPkgInfo);
 
     ServiceInfo serviceInfo = new ServiceInfo();
@@ -95,8 +95,8 @@ public final class RobolectricBinderSecurityTest {
     serviceInfo.applicationInfo = serverAppInfo;
     shadowOf(context.getPackageManager()).addOrUpdateService(serviceInfo);
 
-    AndroidComponentAddress listenAddress = AndroidComponentAddress.forRemoteComponent(
-        serviceInfo.packageName, serviceInfo.name);
+    AndroidComponentAddress listenAddress =
+        AndroidComponentAddress.forRemoteComponent(serviceInfo.packageName, serviceInfo.name);
 
     MethodDescriptor<Empty, Empty> methodDesc = getMethodDescriptor();
     ServerCallHandler<Empty, Empty> callHandler =
