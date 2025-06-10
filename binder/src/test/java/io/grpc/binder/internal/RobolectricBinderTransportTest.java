@@ -199,7 +199,13 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
   @Test
   public void clientAuthorizesServerUidsInOrder() throws Exception {
-    serverAppInfo.uid = 11111;
+    // TODO(jdcormie): In real Android, Binder#getCallingUid is thread-local but Robolectric only
+    //  lets us fake value this *globally*. So the ShadowBinder#setCallingUid() here unrealistically
+    //  affects the server's view of the client's uid too. For now this doesn't matter because this
+    //  test never exercises server SecurityPolicy.
+    ShadowBinder.setCallingUid(11111); // UID of the server *process*.
+
+    serverPkgInfo.applicationInfo.uid = 22222;  // UID of the server *app*, which can be different.
     shadowOf(application.getPackageManager()).installPackage(serverPkgInfo);
     shadowOf(application.getPackageManager()).addOrUpdateService(serviceInfo);
     server = newServer(Collections.emptyList());
@@ -213,23 +219,17 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
                     .setSecurityPolicy(securityPolicy)
                     .buildClientTransportFactory())
             .build();
-
-    // TODO(jdcormie): In real Android, Binder#getCallingUid is thread-local but Robolectric only
-    //  lets us fake value this *globally*. So the ShadowBinder#setCallingUid() here unrealistically
-    //  affects the server's view of the client's uid too. For now this doesn't matter because this
-    //  test never exercises server SecurityPolicy.
-    ShadowBinder.setCallingUid(22222); // UID of the server *process* which != serverAppInfo.uid.
     runIfNotNull(client.start(mockClientTransportListener));
 
     if (preAuthServersParam) {
       AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_MS, MILLISECONDS);
-      assertThat(preAuthRequest.uid).isEqualTo(serverAppInfo.uid);
+      assertThat(preAuthRequest.uid).isEqualTo(22222);
       verify(mockClientTransportListener, never()).transportReady();
       preAuthRequest.setResult(Status.OK);
     }
 
     AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_MS, MILLISECONDS);
-    assertThat(authRequest.uid).isEqualTo(22222);
+    assertThat(authRequest.uid).isEqualTo(11111);
     verify(mockClientTransportListener, never()).transportReady();
     authRequest.setResult(Status.OK);
 
