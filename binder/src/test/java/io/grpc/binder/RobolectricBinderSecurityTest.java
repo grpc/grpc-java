@@ -22,7 +22,13 @@ import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.ServiceInfo;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.test.core.content.pm.ApplicationInfoBuilder;
+import androidx.test.core.content.pm.PackageInfoBuilder;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -46,11 +52,13 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.annotation.LooperMode.Mode;
 
-@RunWith(RobolectricTestRunner.class)
+@RunWith(ParameterizedRobolectricTestRunner.class)
 @LooperMode(Mode.INSTRUMENTATION_TEST)
 public final class RobolectricBinderSecurityTest {
 
@@ -62,10 +70,33 @@ public final class RobolectricBinderSecurityTest {
   private ManagedChannel channel;
   private Server server;
 
+  @Parameter public boolean preAuthServersParam;
+
+  @Parameters(name = "preAuthServersParam={0}")
+  public static ImmutableList<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
+
   @Before
   public void setUp() {
-    AndroidComponentAddress listenAddress =
-        AndroidComponentAddress.forRemoteComponent(context.getPackageName(), "HostService");
+    ApplicationInfo serverAppInfo = ApplicationInfoBuilder.newBuilder()
+        .setPackageName(context.getPackageName())
+        .build();
+    serverAppInfo.uid = android.os.Process.myUid();
+    PackageInfo serverPkgInfo = PackageInfoBuilder.newBuilder()
+        .setPackageName(serverAppInfo.packageName)
+        .setApplicationInfo(serverAppInfo)
+        .build();
+    shadowOf(context.getPackageManager()).installPackage(serverPkgInfo);
+
+    ServiceInfo serviceInfo = new ServiceInfo();
+    serviceInfo.name = "SomeService";
+    serviceInfo.packageName = serverAppInfo.packageName;
+    serviceInfo.applicationInfo = serverAppInfo;
+    shadowOf(context.getPackageManager()).addOrUpdateService(serviceInfo);
+
+    AndroidComponentAddress listenAddress = AndroidComponentAddress.forRemoteComponent(
+        serviceInfo.packageName, serviceInfo.name);
 
     MethodDescriptor<Empty, Empty> methodDesc = getMethodDescriptor();
     ServerCallHandler<Empty, Empty> callHandler =
@@ -110,6 +141,7 @@ public final class RobolectricBinderSecurityTest {
             checkNotNull(binderReceiver.get()));
     channel =
         BinderChannelBuilder.forAddress(listenAddress, context)
+            .preAuthorizeServers(preAuthServersParam)
             .build();
   }
 

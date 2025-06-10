@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
+import static io.grpc.binder.ApiConstants.PRE_AUTH_SERVER_OVERRIDE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
@@ -607,7 +608,9 @@ public abstract class BinderTransport
       this.securityPolicy = factory.securityPolicy;
       this.offloadExecutor = offloadExecutorPool.getObject();
       this.readyTimeoutMillis = factory.readyTimeoutMillis;
-      this.preAuthorizeServer = factory.preAuthorizeServers;
+      Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
+      this.preAuthorizeServer =
+          preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
       numInUseStreams = new AtomicInteger();
       pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
