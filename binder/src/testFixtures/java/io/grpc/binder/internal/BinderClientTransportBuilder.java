@@ -16,6 +16,8 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.ChannelLogger;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
@@ -33,27 +35,28 @@ public class BinderClientTransportBuilder {
       new ClientTransportOptions();
 
   public BinderClientTransportBuilder setServerAddress(SocketAddress serverAddress) {
-    this.serverAddress = serverAddress;
+    this.serverAddress = checkNotNull(serverAddress);
     return this;
   }
 
   public BinderClientTransportBuilder setChannelLogger(ChannelLogger channelLogger) {
-    this.channelLogger = channelLogger;
+    this.channelLogger = checkNotNull(channelLogger);
     return this;
   }
 
   public BinderClientTransportBuilder setClientTransportOptions(ClientTransportOptions options) {
-    this.options = options;
+    this.options = checkNotNull(options);
     return this;
   }
 
   public BinderClientTransportBuilder setClientTransportFactory(
       BinderClientTransportFactory factory) {
-    this.factory = factory;
+    this.factory = checkNotNull(factory);
     return this;
   }
 
   public BinderTransport.BinderClientTransport build() {
-    return factory.newClientTransport(serverAddress, options, channelLogger);
+    return factory.newClientTransport(
+        checkNotNull(serverAddress), checkNotNull(options), checkNotNull(channelLogger));
   }
 }
