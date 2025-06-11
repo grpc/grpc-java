@@ -28,7 +28,6 @@ import static io.grpc.xds.XdsTestUtils.ENDPOINT_HOSTNAME;
 import static io.grpc.xds.XdsTestUtils.ENDPOINT_PORT;
 import static io.grpc.xds.XdsTestUtils.RDS_NAME;
 import static io.grpc.xds.XdsTestUtils.getEdsNameForCluster;
-import static io.grpc.xds.client.CommonBootstrapperTestUtils.SERVER_URI;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -48,28 +47,22 @@ import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.grpc.BindableService;
 import io.grpc.ChannelLogger;
-import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.StatusOrMatcher;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
-import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
-import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
-import io.grpc.xds.client.XdsTransportFactory;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayDeque;
@@ -96,7 +89,6 @@ import org.mockito.ArgumentMatcher;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -108,21 +100,20 @@ public class XdsDependencyManagerTest {
   public static final String CLUSTER_TYPE_NAME = XdsClusterResource.getInstance().typeName();
   public static final String ENDPOINT_TYPE_NAME = XdsEndpointResource.getInstance().typeName();
 
-  @Mock
-  private XdsClientMetricReporter xdsClientMetricReporter;
-
   private final SynchronizationContext syncContext =
       new SynchronizationContext((t, e) -> {
         throw new AssertionError(e);
       });
-
-  private ManagedChannel channel;
-  private XdsClient xdsClient;
-  private XdsDependencyManager xdsDependencyManager;
-  private TestWatcher xdsConfigWatcher;
-  private Server xdsServer;
-
   private final FakeClock fakeClock = new FakeClock();
+
+  private XdsClient xdsClient = XdsTestUtils.createXdsClient(
+      Collections.singletonList("control-plane"),
+      serverInfo -> new GrpcXdsTransportFactory.GrpcXdsTransport(
+          InProcessChannelBuilder.forName(serverInfo.target()).directExecutor().build()),
+      fakeClock);
+
+  private TestWatcher xdsConfigWatcher;
+
   private final String serverName = "the-service-name";
   private final Queue<XdsTestUtils.LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   private final AtomicBoolean adsEnded = new AtomicBoolean(true);
@@ -150,10 +141,12 @@ public class XdsDependencyManagerTest {
       .build();
 
   private final ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
+  private XdsDependencyManager xdsDependencyManager = new XdsDependencyManager(
+      xdsClient, syncContext, serverName, serverName, nameResolverArgs, scheduler);
 
   @Before
   public void setUp() throws Exception {
-    xdsServer = cleanupRule.register(InProcessServerBuilder
+    cleanupRule.register(InProcessServerBuilder
         .forName("control-plane")
         .addService(controlPlaneService)
         .addService(lrsService)
@@ -162,15 +155,6 @@ public class XdsDependencyManagerTest {
         .start());
 
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName);
-
-    channel = cleanupRule.register(
-        InProcessChannelBuilder.forName("control-plane").directExecutor().build());
-    XdsTransportFactory xdsTransportFactory =
-        ignore -> new GrpcXdsTransportFactory.GrpcXdsTransport(channel);
-
-    xdsClient = CommonBootstrapperTestUtils.createXdsClient(
-        Collections.singletonList(SERVER_URI), xdsTransportFactory, fakeClock,
-        new ExponentialBackoffPolicy.Provider(), MessagePrinter.INSTANCE, xdsClientMetricReporter);
 
     testWatcher = new TestWatcher();
     xdsConfigWatcher = mock(TestWatcher.class, delegatesTo(testWatcher));
@@ -183,9 +167,6 @@ public class XdsDependencyManagerTest {
       xdsDependencyManager.shutdown();
     }
     xdsClient.shutdown();
-    channel.shutdown();  // channel not owned by XdsClient
-
-    xdsServer.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
 
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
@@ -194,8 +175,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void verify_basic_config() {
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(StatusOr.fromValue(defaultXdsConfig));
     testWatcher.verifyStats(1, 0);
@@ -203,8 +183,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void verify_config_update() {
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(StatusOr.fromValue(defaultXdsConfig));
@@ -221,8 +200,7 @@ public class XdsDependencyManagerTest {
   @Test
   public void verify_simple_aggregate() {
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(StatusOr.fromValue(defaultXdsConfig));
 
     List<String> childNames = Arrays.asList("clusterC", "clusterB", "clusterA");
@@ -281,8 +259,7 @@ public class XdsDependencyManagerTest {
     List<String> childNames2 = Arrays.asList("clusterA", "clusterX");
     XdsTestUtils.addAggregateToExistingConfig(controlPlaneService, rootName2, childNames2);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(any());
 
     Closeable subscription1 = xdsDependencyManager.subscribeToCluster(rootName1);
@@ -313,8 +290,7 @@ public class XdsDependencyManagerTest {
   @Test
   public void testDelayedSubscription() {
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(StatusOr.fromValue(defaultXdsConfig));
 
     String rootName1 = "root_c";
@@ -360,8 +336,7 @@ public class XdsDependencyManagerTest {
     edsMap.put("garbageEds", clusterLoadAssignment);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
@@ -393,8 +368,9 @@ public class XdsDependencyManagerTest {
   @Test
   public void testMissingLds() {
     String ldsName = "badLdsName";
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+    xdsDependencyManager = new XdsDependencyManager(xdsClient, syncContext,
         serverName, ldsName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher).onUpdate(
@@ -409,8 +385,7 @@ public class XdsDependencyManagerTest {
     Listener serverListener =
         ControlPlaneRule.buildServerListener().toBuilder().setName(serverName).build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.of(serverName, serverListener));
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher).onUpdate(
@@ -427,8 +402,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(serverName, clientListener));
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
     verify(xdsConfigWatcher).onUpdate(
@@ -444,8 +418,7 @@ public class XdsDependencyManagerTest {
         "wrong-virtual-host", XdsTestUtils.RDS_NAME, XdsTestUtils.CLUSTER_NAME);
     controlPlaneService.setXdsConfig(
         ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     // Update with a config that has a virtual host that doesn't match the server name
     verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
@@ -460,8 +433,9 @@ public class XdsDependencyManagerTest {
     String ldsResourceName =
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+    xdsDependencyManager = new XdsDependencyManager(xdsClient, syncContext,
         serverName, ldsResourceName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(
         argThat(StatusOrMatcher.hasStatus(
@@ -474,8 +448,7 @@ public class XdsDependencyManagerTest {
   @Test
   public void testChangeRdsName_fromLds() {
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(StatusOr.fromValue(defaultXdsConfig));
 
     String newRdsName = "newRdsName1";
@@ -530,8 +503,7 @@ public class XdsDependencyManagerTest {
 
     // Start the actual test
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     XdsConfig initialConfig = xdsUpdateCaptor.getValue().getValue();
 
@@ -576,8 +548,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     XdsConfig config = xdsUpdateCaptor.getValue().getValue();
     assertThat(config.getClusters().get("clusterA").hasValue()).isTrue();
@@ -611,12 +582,12 @@ public class XdsDependencyManagerTest {
 
     // The cycle is loaded and detected
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     XdsConfig config = xdsUpdateCaptor.getValue().getValue();
     assertThat(config.getClusters().get("clusterA").hasValue()).isFalse();
     assertThat(config.getClusters().get("clusterA").getStatus().getDescription()).contains("cycle");
+    assertThat(config.getClusters().get("clusterB").hasValue()).isTrue();
 
     // Orphan the cycle and it is discarded
     routeConfig =
@@ -657,8 +628,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
     // Start the actual test
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     XdsConfig initialConfig = xdsUpdateCaptor.getValue().getValue();
     assertThat(initialConfig.getClusters().keySet())
@@ -675,8 +645,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testChangeRdsName_FromLds_complexTree() {
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     // Create the same tree as in testMultipleParentsInCdsTree
     Cluster rootCluster =
@@ -721,8 +690,7 @@ public class XdsDependencyManagerTest {
   public void testChangeAggCluster() {
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(any());
 
     // Setup initial config A -> A1 -> (A11, A12)
@@ -775,8 +743,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(
         ADS_TYPE_URL_CDS, ImmutableMap.of(XdsTestUtils.CLUSTER_NAME,
           Cluster.newBuilder().setName(XdsTestUtils.CLUSTER_NAME).build()));
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
     Status status = xdsUpdateCaptor.getValue().getValue()
@@ -789,8 +756,7 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
         ENDPOINT_HOSTNAME, ENDPOINT_PORT);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(any());
 
@@ -822,8 +788,7 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
         ENDPOINT_HOSTNAME, ENDPOINT_PORT);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(any());
 
@@ -855,8 +820,7 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
         ENDPOINT_HOSTNAME, ENDPOINT_PORT);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(any());
 
@@ -888,8 +852,7 @@ public class XdsDependencyManagerTest {
     XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
         ENDPOINT_HOSTNAME, ENDPOINT_PORT);
 
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(any());
 
@@ -922,8 +885,7 @@ public class XdsDependencyManagerTest {
         ENDPOINT_HOSTNAME, ENDPOINT_PORT);
 
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
-    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
-        serverName, serverName, nameResolverArgs, scheduler);
+    xdsDependencyManager.start(xdsConfigWatcher);
     inOrder.verify(xdsConfigWatcher).onUpdate(any());
     xdsDependencyManager.shutdown();
 
