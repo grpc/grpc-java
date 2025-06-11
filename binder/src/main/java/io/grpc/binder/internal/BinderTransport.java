@@ -648,28 +648,31 @@ public abstract class BinderTransport
     @Override
     public synchronized Runnable start(ManagedClientTransport.Listener clientTransportListener) {
       this.clientTransportListener = checkNotNull(clientTransportListener);
-      return this::startInternal;
-    }
-
-    private synchronized void startInternal() {
-      if (inState(TransportState.NOT_STARTED)) {
-        setState(TransportState.SETUP);
-        try {
-          if (preAuthorizeServer) {
-            preAuthorize(serviceBinding.resolve());
-          } else {
-            serviceBinding.bind();
+      return () -> {
+        synchronized (BinderClientTransport.this) {
+          if (inState(TransportState.NOT_STARTED)) {
+            setState(TransportState.SETUP);
+            try {
+              if (preAuthorizeServer) {
+                preAuthorize(serviceBinding.resolve());
+              } else {
+                serviceBinding.bind();
+              }
+            } catch (StatusException e) {
+              shutdownInternal(e.getStatus(), true);
+              return;
+            }
+            if (readyTimeoutMillis >= 0) {
+              readyTimeoutFuture =
+                  getScheduledExecutorService()
+                      .schedule(
+                          BinderClientTransport.this::onReadyTimeout,
+                          readyTimeoutMillis,
+                          MILLISECONDS);
+            }
           }
-        } catch (StatusException e) {
-          shutdownInternal(e.getStatus(), true);
-          return;
         }
-        if (readyTimeoutMillis >= 0) {
-          readyTimeoutFuture =
-              getScheduledExecutorService()
-                  .schedule(this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
-        }
-      }
+      };
     }
 
     @GuardedBy("this")
