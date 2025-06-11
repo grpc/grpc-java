@@ -667,8 +667,7 @@ public abstract class BinderTransport
         if (readyTimeoutMillis >= 0) {
           readyTimeoutFuture =
               getScheduledExecutorService()
-                  .schedule(
-                      BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
+                  .schedule(this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
         }
       }
     }
