@@ -66,7 +66,9 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsClientMetricReporter;
+import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.io.Closeable;
 import java.io.IOException;
@@ -562,7 +564,39 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
-  public void testCdsCycle() throws Exception {
+  public void testCdsDeleteUnsubscribesChild() throws Exception {
+    RouteConfiguration routeConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterA");
+    Map<String, Message> clusterMap = new HashMap<>();
+    Map<String, Message> edsMap = new HashMap<>();
+    XdsTestUtils.addEdsClusters(clusterMap, edsMap, "clusterA");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
+
+    InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
+    xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
+        serverName, serverName, nameResolverArgs, scheduler);
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsConfig config = xdsUpdateCaptor.getValue().getValue();
+    assertThat(config.getClusters().get("clusterA").hasValue()).isTrue();
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> watches =
+        xdsClient.getSubscribedResourcesMetadataSnapshot().get();
+    assertThat(watches.get(XdsEndpointResource.getInstance()).keySet())
+        .containsExactly("eds_clusterA");
+
+    // Delete cluster
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
+    inOrder.verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    config = xdsUpdateCaptor.getValue().getValue();
+    assertThat(config.getClusters().get("clusterA").hasValue()).isFalse();
+    watches = xdsClient.getSubscribedResourcesMetadataSnapshot().get();
+    assertThat(watches).doesNotContainKey(XdsEndpointResource.getInstance());
+  }
+
+  @Test
+  public void testCdsCycleReclaimed() throws Exception {
     RouteConfiguration routeConfig =
         XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterA");
     Map<String, Message> clusterMap = new HashMap<>();
@@ -575,6 +609,7 @@ public class XdsDependencyManagerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, clusterMap);
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
 
+    // The cycle is loaded and detected
     InOrder inOrder = Mockito.inOrder(xdsConfigWatcher);
     xdsDependencyManager = new XdsDependencyManager(xdsClient, xdsConfigWatcher, syncContext,
         serverName, serverName, nameResolverArgs, scheduler);
@@ -582,6 +617,16 @@ public class XdsDependencyManagerTest {
     XdsConfig config = xdsUpdateCaptor.getValue().getValue();
     assertThat(config.getClusters().get("clusterA").hasValue()).isFalse();
     assertThat(config.getClusters().get("clusterA").getStatus().getDescription()).contains("cycle");
+
+    // Orphan the cycle and it is discarded
+    routeConfig =
+        XdsTestUtils.buildRouteConfiguration(serverName, XdsTestUtils.RDS_NAME, "clusterC");
+    controlPlaneService.setXdsConfig(
+        ADS_TYPE_URL_RDS, ImmutableMap.of(XdsTestUtils.RDS_NAME, routeConfig));
+    inOrder.verify(xdsConfigWatcher).onUpdate(any());
+    Map<XdsResourceType<?>, Map<String, ResourceMetadata>> watches =
+        xdsClient.getSubscribedResourcesMetadataSnapshot().get();
+    assertThat(watches.get(XdsClusterResource.getInstance()).keySet()).containsExactly("clusterC");
   }
 
   @Test
