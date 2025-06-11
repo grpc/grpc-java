@@ -272,6 +272,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @AnyThread
+  @Override
   public ServiceInfo resolve() throws StatusException {
     checkState(sourceContext != null);
     PackageManager packageManager = sourceContext.getPackageManager();
