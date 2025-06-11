@@ -52,14 +52,20 @@ import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.StatusOr;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.client.XdsTransportFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -362,6 +368,32 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
+  }
+
+  public static XdsClient createXdsClient(
+      List<String> serverUris,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock) {
+    return createXdsClient(
+        CommonBootstrapperTestUtils.buildBootStrap(serverUris),
+        xdsTransportFactory,
+        fakeClock,
+        new XdsClientMetricReporter() {});
+  }
+
+  /** Calls {@link CommonBootstrapperTestUtils#createXdsClient} with gRPC-specific values. */
+  public static XdsClient createXdsClient(
+      Bootstrapper.BootstrapInfo bootstrapInfo,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock,
+      XdsClientMetricReporter xdsClientMetricReporter) {
+    return CommonBootstrapperTestUtils.createXdsClient(
+          bootstrapInfo,
+          xdsTransportFactory,
+          fakeClock,
+          new ExponentialBackoffPolicy.Provider(),
+          MessagePrinter.INSTANCE,
+          xdsClientMetricReporter);
   }
 
   /**
