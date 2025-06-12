@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * Defines the Rate Limit Quota Service (RLQS).
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: envoy/service/rate_limit_quota/v3/rlqs.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class RateLimitQuotaServiceGrpc {
 

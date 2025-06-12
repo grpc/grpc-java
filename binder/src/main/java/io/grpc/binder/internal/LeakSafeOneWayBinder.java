@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
+import androidx.annotation.BinderThread;
 import io.grpc.Internal;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -58,6 +59,7 @@ public final class LeakSafeOneWayBinder extends Binder {
      * @return the value to return from {@link Binder#onTransact}. NB: "oneway" semantics mean this
      *     result will not delivered to the caller of {@link IBinder#transact}
      */
+    @BinderThread
     boolean handleTransaction(int code, Parcel data);
   }
 

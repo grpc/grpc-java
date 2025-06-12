@@ -100,19 +100,20 @@ model {
         all {
             if (toolChain in Gcc || toolChain in Clang) {
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "--std=c++0x"
+                cppCompiler.args "--std=c++14"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
                 if (osdetector.os == "osx") {
                     cppCompiler.args "-mmacosx-version-min=10.7", "-stdlib=libc++"
+                    linker.args "-framework", "CoreFoundation"
                     addLibraryIfNotLinked('protoc', linker.args)
                     addLibraryIfNotLinked('protobuf', linker.args)
                 } else if (osdetector.os == "windows") {
                     linker.args "-static", "-lprotoc", "-lprotobuf", "-static-libgcc", "-static-libstdc++",
                             "-s"
-		  } else if (osdetector.arch == "ppcle_64") {
-		      linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
-		  } else {
+                } else if (osdetector.arch == "ppcle_64") {
+                    linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-Wl,-Bdynamic", "-lpthread", "-s"
+                } else {
                     // Link protoc, protobuf, libgcc and libstdc++ statically.
                     // Link other (system) libraries dynamically.
                     // Clang under OSX doesn't support these options.
@@ -126,10 +127,12 @@ model {
                 cppCompiler.args "/EHsc", "/MT"
                 if (rootProject.hasProperty('vcProtobufInclude')) {
                     cppCompiler.args "/I${rootProject.vcProtobufInclude}"
-                }
-                linker.args "libprotobuf.lib", "libprotoc.lib"
+                } 
+                linker.args.add("libprotoc.lib")
+                linker.args.add("libprotobuf.lib")
                 if (rootProject.hasProperty('vcProtobufLibs')) {
-                    linker.args "/LIBPATH:${rootProject.vcProtobufLibs}"
+                    String libsList = rootProject.property('vcProtobufLibs') as String
+                    libsList.split(',').each() { lib -> linker.args.add(lib) }
                 }
             }
         }
@@ -184,7 +187,11 @@ protobuf {
             inputs.file javaPluginPath
         }
         ofSourceSet('test').configureEach {
-            plugins { grpc {} }
+            plugins {
+                grpc {
+                    option '@generated=javax'
+                }
+            }
         }
         ofSourceSet('testLite').configureEach {
             builtins {
@@ -193,7 +200,6 @@ protobuf {
             plugins {
                 grpc {
                     option 'lite'
-                    option '@generated=omit'
                 }
             }
         }
@@ -239,9 +245,10 @@ def checkArtifacts = tasks.register("checkArtifacts") {
             if (ret.exitValue != 0) {
                 throw new GradleException("dumpbin exited with " + ret.exitValue)
             }
-            def dlls = os.toString() =~ /Image has the following dependencies:\s+(.*)\s+Summary/
-            if (dlls[0][1] != "KERNEL32.dll") {
-                throw new Exception("unexpected dll deps: " + dlls[0][1]);
+            def dlls_match_results = os.toString() =~ /Image has the following dependencies:([\S\s]*)Summary/
+            def dlls =  dlls_match_results[0][1].trim().split("\\s+").sort()
+            if (dlls != ["KERNEL32.dll", "dbghelp.dll"]) {
+                throw new Exception("unexpected dll deps: " + dlls);
             }
             os.reset()
             ret = exec {

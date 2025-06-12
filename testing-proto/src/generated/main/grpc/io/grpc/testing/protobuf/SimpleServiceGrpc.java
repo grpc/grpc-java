@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A simple service for test.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/testing/protobuf/simpleservice.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class SimpleServiceGrpc {
 
@@ -351,8 +348,8 @@ public final class SimpleServiceGrpc {
      * Simple unary RPC.
      * </pre>
      */
-    public io.grpc.testing.protobuf.SimpleResponse unaryRpc(io.grpc.testing.protobuf.SimpleRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.protobuf.SimpleResponse unaryRpc(io.grpc.testing.protobuf.SimpleRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getUnaryRpcMethod(), getCallOptions(), request);
     }
 

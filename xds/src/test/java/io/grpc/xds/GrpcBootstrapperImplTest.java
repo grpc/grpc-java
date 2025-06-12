@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -40,10 +41,9 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -53,9 +53,6 @@ public class GrpcBootstrapperImplTest {
 
   private static final String BOOTSTRAP_FILE_PATH = "/fake/fs/path/bootstrap.json";
   private static final String SERVER_URI = "trafficdirector.googleapis.com:443";
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private final GrpcBootstrapperImpl bootstrapper = new GrpcBootstrapperImpl();
   private String originalBootstrapPathFromEnvVar;
@@ -236,7 +233,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void parseBootstrap_missingServerChannelCreds() throws XdsInitializationException {
+  public void parseBootstrap_missingServerChannelCreds() {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -246,13 +243,14 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: server " + SERVER_URI + " 'channel_creds' required");
   }
 
   @Test
-  public void parseBootstrap_unsupportedServerChannelCreds() throws XdsInitializationException {
+  public void parseBootstrap_unsupportedServerChannelCreds() {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -265,9 +263,10 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Server " + SERVER_URI + ": no supported channel credentials found");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Server " + SERVER_URI + ": no supported channel credentials found");
   }
 
   @Test
@@ -294,7 +293,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void parseBootstrap_noXdsServers() throws XdsInitializationException {
+  public void parseBootstrap_noXdsServers() {
     String rawData = "{\n"
         + "  \"node\": {\n"
         + "    \"id\": \"ENVOY_NODE_ID\",\n"
@@ -312,9 +311,10 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expect(XdsInitializationException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: 'xds_servers' does not exist.");
   }
 
   @Test
@@ -343,8 +343,9 @@ public class GrpcBootstrapperImplTest {
         + "}";
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    thrown.expectMessage("Invalid bootstrap: missing 'server_uri'");
-    bootstrapper.bootstrap();
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: missing 'server_uri'");
   }
 
   @Test
@@ -870,7 +871,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void badFederationConfig() throws Exception {
+  public void badFederationConfig() {
     String rawData = "{\n"
         + "  \"authorities\": {\n"
         + "    \"a.com\": {\n"
