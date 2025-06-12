@@ -18,6 +18,7 @@ package io.grpc.s2a;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -52,6 +53,7 @@ public final class S2AChannelCredentials {
   public static Builder newBuilder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     checkNotNull(s2aChannelCredentials, "S2A channel credentials must not be null");
+    checkState(isPlatformSupported());
     return new Builder(s2aAddress, s2aChannelCredentials);
   }
 
@@ -129,6 +131,21 @@ public final class S2AChannelCredentials {
       checkNotNull(s2aChannelPool, "s2aChannelPool");
       return S2AProtocolNegotiatorFactory.createClientFactory(localIdentity, s2aChannelPool, stub);
     }
+  }
+
+  /**
+   * S2A has a runtime dependency on netty-tcnative. This function returns true
+   * if netty-tcnative is supported on the current platform.
+   * 
+   * @return whether S2A is supported on current platform
+   */
+  private static boolean isPlatformSupported() {
+    if (System.getProperty("os.name").contains("Windows")
+          || (System.getProperty("os.name").contains("OS X")
+              && System.getProperty("os.arch").contains("x86_64"))) {
+      return false;
+    }
+    return true;
   }
 
   private S2AChannelCredentials() {}
