@@ -66,6 +66,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -176,6 +177,7 @@ public class CdsLoadBalancer2Test {
         .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
         .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+        .setNameResolverRegistry(new NameResolverRegistry())
         .build();
 
     xdsDepManager = new XdsDependencyManager(
@@ -183,8 +185,7 @@ public class CdsLoadBalancer2Test {
         syncContext,
         SERVER_NAME,
         SERVER_NAME,
-        nameResolverArgs,
-        fakeClock.getScheduledExecutorService());
+        nameResolverArgs);
 
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.of(
         SERVER_NAME, ControlPlaneRule.buildClientListener(SERVER_NAME, "my-route")));
