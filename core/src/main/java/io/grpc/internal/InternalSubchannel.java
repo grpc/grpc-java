@@ -345,9 +345,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     syncContext.throwIfNotInThisSynchronizationContext();
 
     if (state.getState() != newState.getState()) {
-      if (state.getState() == SHUTDOWN) {
-        throw new IllegalArgumentException("Cannot transition out of SHUTDOWN to " + newState);
-      }
+      Preconditions.checkState(state.getState() != SHUTDOWN,
+          "Cannot transition out of SHUTDOWN to %s", newState.getState());
       if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
         state = ConnectivityStateInfo.forNonError(IDLE);
       } else {
