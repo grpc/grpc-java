@@ -94,7 +94,6 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
-import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1653,18 +1652,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void onResult(final ResolutionResult resolutionResult) {
-      final class NamesResolved implements Runnable {
-
-        @Override
-        public void run() {
-          Status status = onResult2(resolutionResult);
-          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
-              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
-          resolutionResultListener.resolutionAttempted(status);
-        }
-      }
-
-      syncContext.execute(new NamesResolved());
+      syncContext.execute(() -> onResult2(resolutionResult));
     }
 
     @SuppressWarnings("ReferenceEquality")

@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -34,9 +33,6 @@ final class RetryingNameResolver extends ForwardingNameResolver {
   private final RetryScheduler retryScheduler;
   private final SynchronizationContext syncContext;
 
-  static final Attributes.Key<ResolutionResultListener> RESOLUTION_RESULT_LISTENER_KEY
-      = Attributes.Key.create(
-          "io.grpc.internal.RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY");
 
   /**
    * Creates a new {@link RetryingNameResolver}.
@@ -88,18 +84,7 @@ final class RetryingNameResolver extends ForwardingNameResolver {
 
     @Override
     public void onResult(ResolutionResult resolutionResult) {
-      // If the resolution result listener is already an attribute it indicates that a name resolver
-      // has already been wrapped with this class. This indicates a misconfiguration.
-      if (resolutionResult.getAttributes().get(RESOLUTION_RESULT_LISTENER_KEY) != null) {
-        throw new IllegalStateException(
-            "RetryingNameResolver can only be used once to wrap a NameResolver");
-      }
-
-      // To have retry behavior for name resolvers that haven't migrated to onResult2.
-      delegateListener.onResult(resolutionResult.toBuilder().setAttributes(
-              resolutionResult.getAttributes().toBuilder()
-                  .set(RESOLUTION_RESULT_LISTENER_KEY, new ResolutionResultListener()).build())
-          .build());
+      syncContext.execute(() -> onResult2(resolutionResult));
     }
 
     @Override
@@ -117,21 +102,6 @@ final class RetryingNameResolver extends ForwardingNameResolver {
     public void onError(Status error) {
       delegateListener.onError(error);
       syncContext.execute(() -> retryScheduler.schedule(new DelayedNameResolverRefresh()));
-    }
-  }
-
-  /**
-   * Simple callback class to store in {@link ResolutionResult} attributes so that
-   * ManagedChannel can indicate if the resolved addresses were accepted. Temporary until
-   * the Listener2.onResult() API can be changed to return a boolean for this purpose.
-   */
-  class ResolutionResultListener {
-    public void resolutionAttempted(Status successStatus) {
-      if (successStatus.isOk()) {
-        retryScheduler.reset();
-      } else {
-        retryScheduler.schedule(new DelayedNameResolverRefresh());
-      }
     }
   }
 }

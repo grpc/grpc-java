@@ -2212,6 +2212,23 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void cdsResponseWithEmptyAggregateCluster() {
+    DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
+        cdsResourceWatcher);
+    List<String> candidates = Arrays.asList();
+    Any clusterAggregate =
+        Any.pack(mf.buildAggregateCluster(CDS_RESOURCE, "round_robin", null, null, candidates));
+    call.sendResponse(CDS, clusterAggregate, VERSION_1, "0000");
+
+    // Client sent an ACK CDS request.
+    String errorMsg = "CDS response Cluster 'cluster.googleapis.com' validation error: "
+        + "Cluster cluster.googleapis.com: aggregate ClusterConfig.clusters must not be empty";
+    call.verifyRequestNack(CDS, CDS_RESOURCE, "", "0000", NODE, ImmutableList.of(errorMsg));
+    verify(cdsResourceWatcher).onError(errorCaptor.capture());
+    verifyStatusWithNodeId(errorCaptor.getValue(), Code.UNAVAILABLE, errorMsg);
+  }
+
+  @Test
   public void cdsResponseWithCircuitBreakers() {
     DiscoveryRpcCall call = startResourceWatcher(XdsClusterResource.getInstance(), CDS_RESOURCE,
         cdsResourceWatcher);

@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.xds.client.XdsClient.ResourceUpdate;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -34,8 +35,6 @@ import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsResourceType;
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,39 +55,43 @@ import javax.annotation.Nullable;
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   public static final XdsClusterResource CLUSTER_RESOURCE = XdsClusterResource.getInstance();
   public static final XdsEndpointResource ENDPOINT_RESOURCE = XdsEndpointResource.getInstance();
-  private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Matches C++
+  private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Specified by gRFC A37
   private final String listenerName;
   private final XdsClient xdsClient;
-  private final XdsConfigWatcher xdsConfigWatcher;
   private final SynchronizationContext syncContext;
   private final String dataPlaneAuthority;
+  private XdsConfigWatcher xdsConfigWatcher;
 
   private StatusOr<XdsConfig> lastUpdate = null;
   private final Map<XdsResourceType<?>, TypeWatchers<?>> resourceWatchers = new HashMap<>();
   private final Set<ClusterSubscription> subscriptions = new HashSet<>();
 
-  XdsDependencyManager(XdsClient xdsClient, XdsConfigWatcher xdsConfigWatcher,
+  XdsDependencyManager(XdsClient xdsClient,
                        SynchronizationContext syncContext, String dataPlaneAuthority,
                        String listenerName, NameResolver.Args nameResolverArgs,
                        ScheduledExecutorService scheduler) {
     this.listenerName = checkNotNull(listenerName, "listenerName");
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
-    this.xdsConfigWatcher = checkNotNull(xdsConfigWatcher, "xdsConfigWatcher");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.dataPlaneAuthority = checkNotNull(dataPlaneAuthority, "dataPlaneAuthority");
     checkNotNull(nameResolverArgs, "nameResolverArgs");
     checkNotNull(scheduler, "scheduler");
-
-    // start the ball rolling
-    syncContext.execute(() -> addWatcher(new LdsWatcher(listenerName)));
   }
 
   public static String toContextStr(String typeName, String resourceName) {
     return typeName + " resource " + resourceName;
   }
 
+  public void start(XdsConfigWatcher xdsConfigWatcher) {
+    checkState(this.xdsConfigWatcher == null, "dep manager may not be restarted");
+    this.xdsConfigWatcher = checkNotNull(xdsConfigWatcher, "xdsConfigWatcher");
+    // start the ball rolling
+    syncContext.execute(() -> addWatcher(new LdsWatcher(listenerName)));
+  }
+
   @Override
-  public Closeable subscribeToCluster(String clusterName) {
+  public XdsConfig.Subscription subscribeToCluster(String clusterName) {
+    checkState(this.xdsConfigWatcher != null, "dep manager must first be started");
     checkNotNull(clusterName, "clusterName");
     ClusterSubscription subscription = new ClusterSubscription(clusterName);
 
@@ -291,10 +294,17 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           addConfigForCluster(clusters, childCluster, ancestors, tracer);
           StatusOr<XdsConfig.XdsClusterConfig> config = clusters.get(childCluster);
           if (!config.hasValue()) {
-            clusters.put(clusterName, StatusOr.fromStatus(Status.INTERNAL.withDescription(
-                "Unable to get leaves for " + clusterName + ": "
-                + config.getStatus().getDescription())));
-            return;
+            // gRFC A37 says: If any of a CDS policy's watchers reports that the resource does not
+            // exist the policy should report that it is in TRANSIENT_FAILURE. If any of the
+            // watchers reports a transient ADS stream error, the policy should report that it is in
+            // TRANSIENT_FAILURE if it has never passed a config to its child.
+            //
+            // But there's currently disagreement about whether that is actually what we want, and
+            // that was not originally implemented in gRPC Java. So we're keeping Java's old
+            // behavior for now and only failing the "leaves" (which is a bit arbitrary for a
+            // cycle).
+            leafNames.add(childCluster);
+            continue;
           }
           XdsConfig.XdsClusterConfig.ClusterChild children = config.getValue().getChildren();
           if (children instanceof AggregateConfig) {
@@ -323,7 +333,13 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
             Status.INTERNAL.withDescription("Logical DNS in dependency manager unsupported")));
         break;
       default:
-        throw new IllegalStateException("Unexpected value: " + cdsUpdate.clusterType());
+        child = new EndpointConfig(StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
+              "Unknown type in cluster " + clusterName + " " + cdsUpdate.clusterType())));
+    }
+    if (clusters.containsKey(clusterName)) {
+      // If a cycle is detected, we'll have detected it while recursing, so now there will be a key
+      // present. We don't want to overwrite it with a non-error value.
+      return;
     }
     clusters.put(clusterName, StatusOr.fromValue(
         new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, child)));
@@ -406,7 +422,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     void onUpdate(StatusOr<XdsConfig> config);
   }
 
-  private final class ClusterSubscription implements Closeable {
+  private final class ClusterSubscription implements XdsConfig.Subscription {
     private final String clusterName;
     boolean closed; // Accessed from syncContext
 
@@ -419,7 +435,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
       releaseSubscription(this);
     }
   }
@@ -505,7 +521,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
       // Don't update configuration on error, if we've already received configuration
       if (!hasDataValue()) {
-        setDataAsStatus(Status.UNAVAILABLE.withDescription(
+        this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
             String.format("Error retrieving %s: %s: %s",
               toContextString(), error.getCode(), error.getDescription())));
         maybePublishConfig();
@@ -519,10 +535,24 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       }
 
       checkArgument(this.resourceName.equals(resourceName), "Resource name does not match");
-      setDataAsStatus(Status.UNAVAILABLE.withDescription(
+      this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
           toContextString() + " does not exist" + nodeInfo()));
       maybePublishConfig();
     }
+
+    @Override
+    public void onChanged(T update) {
+      checkNotNull(update, "update");
+      if (cancelled) {
+        return;
+      }
+
+      this.data = StatusOr.fromValue(update);
+      subscribeToChildren(update);
+      maybePublishConfig();
+    }
+
+    protected abstract void subscribeToChildren(T update);
 
     public void close() {
       cancelled = true;
@@ -542,20 +572,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return data != null && data.hasValue();
     }
 
-    String resourceName() {
-      return resourceName;
-    }
-
-    protected void setData(T data) {
-      checkNotNull(data, "data");
-      this.data = StatusOr.fromValue(data);
-    }
-
-    protected void setDataAsStatus(Status status) {
-      checkNotNull(status, "status");
-      this.data = StatusOr.fromStatus(status);
-    }
-
     public String toContextString() {
       return toContextStr(type.typeName(), resourceName);
     }
@@ -573,12 +589,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsListenerResource.LdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
-
+    public void subscribeToChildren(XdsListenerResource.LdsUpdate update) {
       HttpConnectionManager httpConnectionManager = update.httpConnectionManager();
       List<VirtualHost> virtualHosts;
       if (httpConnectionManager == null) {
@@ -595,9 +606,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       if (rdsName != null) {
         addRdsWatcher(rdsName);
       }
-
-      setData(update);
-      maybePublishConfig();
     }
 
     private String getRdsName(XdsListenerResource.LdsUpdate update) {
@@ -665,14 +673,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(RdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
-      setData(update);
+    public void subscribeToChildren(RdsUpdate update) {
       updateRoutes(update.virtualHosts);
-      maybePublishConfig();
     }
 
     @Override
@@ -690,31 +692,20 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsClusterResource.CdsUpdate update) {
-      checkNotNull(update, "update");
-      if (cancelled) {
-        return;
-      }
+    public void subscribeToChildren(XdsClusterResource.CdsUpdate update) {
       switch (update.clusterType()) {
         case EDS:
-          setData(update);
           addEdsWatcher(getEdsServiceName());
           break;
         case LOGICAL_DNS:
-          setData(update);
           // no eds needed
           break;
         case AGGREGATE:
-          setData(update);
           update.prioritizedClusterNames()
               .forEach(name -> addClusterWatcher(name));
           break;
         default:
-          Status error = Status.UNAVAILABLE.withDescription(
-              "unknown cluster type in " + resourceName() + " " + update.clusterType());
-          setDataAsStatus(error);
       }
-      maybePublishConfig();
     }
 
     public String getEdsServiceName() {
@@ -734,12 +725,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onChanged(XdsEndpointResource.EdsUpdate update) {
-      if (cancelled) {
-        return;
-      }
-      setData(checkNotNull(update, "update"));
-      maybePublishConfig();
-    }
+    public void subscribeToChildren(XdsEndpointResource.EdsUpdate update) {}
   }
 }
