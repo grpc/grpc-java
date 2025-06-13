@@ -189,7 +189,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This timer will be invoked periodically, according to configuration, and it will look for any
    * outlier subchannels.
    */
-  class DetectionTimer implements Runnable {
+  final class DetectionTimer implements Runnable {
 
     OutlierDetectionLoadBalancerConfig config;
     ChannelLogger logger;
@@ -217,7 +217,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This child helper wraps the provided helper so that it can hand out wrapped {@link
    * OutlierDetectionSubchannel}s and manage the address info map.
    */
-  class ChildHelper extends ForwardingLoadBalancerHelper {
+  final class ChildHelper extends ForwardingLoadBalancerHelper {
 
     private Helper delegate;
 
@@ -259,7 +259,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  class OutlierDetectionSubchannel extends ForwardingSubchannel {
+  final class OutlierDetectionSubchannel extends ForwardingSubchannel {
 
     private final Subchannel delegate;
     private EndpointTracker endpointTracker;
@@ -398,7 +398,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /**
      * Wraps the actual listener so that state changes from the actual one can be intercepted.
      */
-    class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
+    final class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
 
       private final SubchannelStateListener delegate;
 
@@ -428,7 +428,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This picker delegates the actual picking logic to a wrapped delegate, but associates a {@link
    * ClientStreamTracer} with each pick to track the results of each subchannel stream.
    */
-  class OutlierDetectionPicker extends SubchannelPicker {
+  final class OutlierDetectionPicker extends SubchannelPicker {
 
     private final SubchannelPicker delegate;
 
@@ -454,7 +454,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * Builds instances of a {@link ClientStreamTracer} that increments the call count in the
      * tracker for each closed stream.
      */
-    class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
+    final class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
 
       private final EndpointTracker tracker;
 
@@ -498,7 +498,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Tracks additional information about the endpoint needed for outlier detection.
    */
-  static class EndpointTracker {
+  static final class EndpointTracker {
 
     private OutlierDetectionLoadBalancerConfig config;
     // Marked as volatile to assure that when the inactive counter is swapped in as the new active
@@ -642,7 +642,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** Tracks both successful and failed call counts. */
-    private static class CallCounter {
+    private static final class CallCounter {
       AtomicLong successCount = new AtomicLong();
       AtomicLong failureCount = new AtomicLong();
 
@@ -663,7 +663,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Maintains a mapping from endpoint (a set of addresses) to their trackers.
    */
-  static class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
+  static final class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
     private final Map<Set<SocketAddress>, EndpointTracker> trackerMap;
 
     EndpointTrackerMap() {
@@ -784,7 +784,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * required rate is not fixed, but is based on the mean and standard deviation of the success
    * rates of all of the addresses.
    */
-  static class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -869,7 +869,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  static class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -970,7 +970,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
-    public static class Builder {
+    public static final class Builder {
       long intervalNanos = 10_000_000_000L; // 10s
       long baseEjectionTimeNanos = 30_000_000_000L; // 30s
       long maxEjectionTimeNanos = 300_000_000_000L; // 300s
@@ -1035,7 +1035,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** The configuration for success rate ejection. */
-    public static class SuccessRateEjection {
+    public static final class SuccessRateEjection {
 
       public final int stdevFactor;
       public final int enforcementPercentage;
@@ -1094,7 +1094,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** The configuration for failure percentage ejection. */
-    public static class FailurePercentageEjection {
+    public static final class FailurePercentageEjection {
       public final int threshold;
       public final int enforcementPercentage;
       public final int minimumHosts;
