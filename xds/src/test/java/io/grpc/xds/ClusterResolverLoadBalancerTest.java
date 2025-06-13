@@ -230,7 +230,7 @@ public class ClusterResolverLoadBalancerTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(5L), TimeUnit.SECONDS.toNanos(50L));
-    loadBalancer = new ClusterResolverLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
+    loadBalancer = new ClusterResolverLoadBalancer(helper, lbRegistry);
   }
 
   @After
