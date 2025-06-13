@@ -53,7 +53,7 @@ public final class S2AChannelCredentials {
   public static Builder newBuilder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     checkNotNull(s2aChannelCredentials, "S2A channel credentials must not be null");
-    checkState(isPlatformSupported());
+    checkState(isPlatformSupported(), "S2A is not suported on Windows or MacOS Intel");
     return new Builder(s2aAddress, s2aChannelCredentials);
   }
 
