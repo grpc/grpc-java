@@ -346,7 +346,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     if (state.getState() != newState.getState()) {
       Preconditions.checkState(state.getState() != SHUTDOWN,
-          "Cannot transition out of SHUTDOWN to " + newState);
+          "Cannot transition out of SHUTDOWN to %s", newState.getState());
       if (reconnectDisabled && newState.getState() == TRANSIENT_FAILURE) {
         state = ConnectivityStateInfo.forNonError(IDLE);
       } else {

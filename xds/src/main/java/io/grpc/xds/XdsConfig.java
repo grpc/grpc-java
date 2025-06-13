@@ -254,6 +254,12 @@ final class XdsConfig {
   }
 
   public interface XdsClusterSubscriptionRegistry {
-    Closeable subscribeToCluster(String clusterName);
+    Subscription subscribeToCluster(String clusterName);
+  }
+
+  public interface Subscription extends Closeable {
+    /** Release resources without throwing exceptions. */
+    @Override
+    void close();
   }
 }
