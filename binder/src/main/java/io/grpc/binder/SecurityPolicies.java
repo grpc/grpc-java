@@ -16,6 +16,9 @@
 
 package io.grpc.binder;
 
+import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.google.common.util.concurrent.Futures.immediateFuture;
+
 import android.annotation.SuppressLint;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
@@ -32,6 +35,9 @@ import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.Hashing;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
@@ -333,6 +339,9 @@ public final class SecurityPolicies {
    * Creates a {@link SecurityPolicy} that allows access if and only if *all* of the specified
    * {@code securityPolicies} allow access.
    *
+   * <p>If any of the policies is an {@link AsyncSecurityPolicy}, then all policies may be evaluated
+   * concurrently to speed up the success scenario.
+   *
    * @param securityPolicies the security policies that all must allow access.
    * @throws NullPointerException if any of the inputs are {@code null}.
    * @throws IllegalArgumentException if {@code securityPolicies} is empty.
@@ -341,10 +350,17 @@ public final class SecurityPolicies {
     Preconditions.checkNotNull(securityPolicies, "securityPolicies");
     Preconditions.checkArgument(securityPolicies.length > 0, "securityPolicies must not be empty");
 
-    return allOfSecurityPolicy(securityPolicies);
+    boolean anyAsync =
+        Arrays
+            .stream(securityPolicies)
+            .anyMatch(policy -> policy instanceof AsyncSecurityPolicy);
+
+    return anyAsync
+        ? allOfSecurityPolicyAsync(securityPolicies)
+        : allOfSecurityPolicySync(securityPolicies);
   }
 
-  private static SecurityPolicy allOfSecurityPolicy(SecurityPolicy... securityPolicies) {
+  private static SecurityPolicy allOfSecurityPolicySync(SecurityPolicy... securityPolicies) {
     return new SecurityPolicy() {
       @Override
       public Status checkAuthorization(int uid) {
@@ -356,6 +372,33 @@ public final class SecurityPolicies {
         }
 
         return Status.OK;
+      }
+    };
+  }
+
+  private static SecurityPolicy allOfSecurityPolicyAsync(SecurityPolicy... securityPolicies) {
+    return new AsyncSecurityPolicy() {
+      @Override
+      public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+        ImmutableList<ListenableFuture<Status>> allStatuses =
+            Arrays.stream(securityPolicies).map(policy -> {
+          AsyncSecurityPolicy asyncPolicy =
+              policy instanceof AsyncSecurityPolicy ? (AsyncSecurityPolicy) policy :
+                  new AsyncSecurityPolicy() {
+                    @Override
+                    public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                      return immediateFuture(policy.checkAuthorization(uid));
+                    }
+                  };
+          return asyncPolicy.checkAuthorizationAsync(uid);
+        }).collect(toImmutableList());
+        ListenableFuture<List<Status>> futureStatuses = Futures.allAsList(allStatuses);
+
+        return Futures
+            .transform(
+                futureStatuses,statuses ->
+                statuses.stream().filter(status -> !status.isOk()).findFirst().orElse(Status.OK),
+                MoreExecutors.directExecutor());
       }
     };
   }
