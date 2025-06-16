@@ -142,7 +142,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     // If outlier detection is actually configured, start a timer that will periodically try to
     // detect outliers.
     if (config.outlierDetectionEnabled()) {
-      Long initialDelayNanos;
+      long initialDelayNanos;
 
       if (detectionTimerStartNanos == null) {
         // On the first go we use the configured interval.
@@ -189,7 +189,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This timer will be invoked periodically, according to configuration, and it will look for any
    * outlier subchannels.
    */
-  class DetectionTimer implements Runnable {
+  final class DetectionTimer implements Runnable {
 
     OutlierDetectionLoadBalancerConfig config;
     ChannelLogger logger;
@@ -217,7 +217,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This child helper wraps the provided helper so that it can hand out wrapped {@link
    * OutlierDetectionSubchannel}s and manage the address info map.
    */
-  class ChildHelper extends ForwardingLoadBalancerHelper {
+  final class ChildHelper extends ForwardingLoadBalancerHelper {
 
     private Helper delegate;
 
@@ -259,7 +259,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  class OutlierDetectionSubchannel extends ForwardingSubchannel {
+  final class OutlierDetectionSubchannel extends ForwardingSubchannel {
 
     private final Subchannel delegate;
     private EndpointTracker endpointTracker;
@@ -398,7 +398,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /**
      * Wraps the actual listener so that state changes from the actual one can be intercepted.
      */
-    class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
+    final class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
 
       private final SubchannelStateListener delegate;
 
@@ -428,7 +428,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This picker delegates the actual picking logic to a wrapped delegate, but associates a {@link
    * ClientStreamTracer} with each pick to track the results of each subchannel stream.
    */
-  class OutlierDetectionPicker extends SubchannelPicker {
+  final class OutlierDetectionPicker extends SubchannelPicker {
 
     private final SubchannelPicker delegate;
 
@@ -454,7 +454,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * Builds instances of a {@link ClientStreamTracer} that increments the call count in the
      * tracker for each closed stream.
      */
-    class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
+    final class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
 
       private final EndpointTracker tracker;
 
@@ -498,7 +498,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Tracks additional information about the endpoint needed for outlier detection.
    */
-  static class EndpointTracker {
+  static final class EndpointTracker {
 
     private OutlierDetectionLoadBalancerConfig config;
     // Marked as volatile to assure that when the inactive counter is swapped in as the new active
@@ -642,7 +642,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** Tracks both successful and failed call counts. */
-    private static class CallCounter {
+    private static final class CallCounter {
       AtomicLong successCount = new AtomicLong();
       AtomicLong failureCount = new AtomicLong();
 
@@ -663,7 +663,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Maintains a mapping from endpoint (a set of addresses) to their trackers.
    */
-  static class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
+  static final class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
     private final Map<Set<SocketAddress>, EndpointTracker> trackerMap;
 
     EndpointTrackerMap() {
@@ -723,7 +723,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * that don't have ejected subchannels and uneject ones that have spent the maximum ejection
      * time allowed.
      */
-    void maybeUnejectOutliers(Long detectionTimerStartNanos) {
+    void maybeUnejectOutliers(long detectionTimerStartNanos) {
       for (EndpointTracker tracker : trackerMap.values()) {
         if (!tracker.subchannelsEjected()) {
           tracker.decrementEjectionTimeMultiplier();
@@ -784,7 +784,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * required rate is not fixed, but is based on the mean and standard deviation of the success
    * rates of all of the addresses.
    */
-  static class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -869,7 +869,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  static class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -951,64 +951,54 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    */
   public static final class OutlierDetectionLoadBalancerConfig {
 
-    public final Long intervalNanos;
-    public final Long baseEjectionTimeNanos;
-    public final Long maxEjectionTimeNanos;
-    public final Integer maxEjectionPercent;
+    public final long intervalNanos;
+    public final long baseEjectionTimeNanos;
+    public final long maxEjectionTimeNanos;
+    public final int maxEjectionPercent;
     public final SuccessRateEjection successRateEjection;
     public final FailurePercentageEjection failurePercentageEjection;
     public final Object childConfig;
 
-    private OutlierDetectionLoadBalancerConfig(Long intervalNanos,
-        Long baseEjectionTimeNanos,
-        Long maxEjectionTimeNanos,
-        Integer maxEjectionPercent,
-        SuccessRateEjection successRateEjection,
-        FailurePercentageEjection failurePercentageEjection,
-        Object childConfig) {
-      this.intervalNanos = intervalNanos;
-      this.baseEjectionTimeNanos = baseEjectionTimeNanos;
-      this.maxEjectionTimeNanos = maxEjectionTimeNanos;
-      this.maxEjectionPercent = maxEjectionPercent;
-      this.successRateEjection = successRateEjection;
-      this.failurePercentageEjection = failurePercentageEjection;
-      this.childConfig = childConfig;
+    private OutlierDetectionLoadBalancerConfig(Builder builder) {
+      this.intervalNanos = builder.intervalNanos;
+      this.baseEjectionTimeNanos = builder.baseEjectionTimeNanos;
+      this.maxEjectionTimeNanos = builder.maxEjectionTimeNanos;
+      this.maxEjectionPercent = builder.maxEjectionPercent;
+      this.successRateEjection = builder.successRateEjection;
+      this.failurePercentageEjection = builder.failurePercentageEjection;
+      this.childConfig = builder.childConfig;
     }
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
-    public static class Builder {
-      Long intervalNanos = 10_000_000_000L; // 10s
-      Long baseEjectionTimeNanos = 30_000_000_000L; // 30s
-      Long maxEjectionTimeNanos = 300_000_000_000L; // 300s
-      Integer maxEjectionPercent = 10;
+    public static final class Builder {
+      long intervalNanos = 10_000_000_000L; // 10s
+      long baseEjectionTimeNanos = 30_000_000_000L; // 30s
+      long maxEjectionTimeNanos = 300_000_000_000L; // 300s
+      int maxEjectionPercent = 10;
       SuccessRateEjection successRateEjection;
       FailurePercentageEjection failurePercentageEjection;
       Object childConfig;
 
       /** The interval between outlier detection sweeps. */
-      public Builder setIntervalNanos(Long intervalNanos) {
-        checkArgument(intervalNanos != null);
+      public Builder setIntervalNanos(long intervalNanos) {
         this.intervalNanos = intervalNanos;
         return this;
       }
 
       /** The base time an address is ejected for. */
-      public Builder setBaseEjectionTimeNanos(Long baseEjectionTimeNanos) {
-        checkArgument(baseEjectionTimeNanos != null);
+      public Builder setBaseEjectionTimeNanos(long baseEjectionTimeNanos) {
         this.baseEjectionTimeNanos = baseEjectionTimeNanos;
         return this;
       }
 
       /** The longest time an address can be ejected. */
-      public Builder setMaxEjectionTimeNanos(Long maxEjectionTimeNanos) {
-        checkArgument(maxEjectionTimeNanos != null);
+      public Builder setMaxEjectionTimeNanos(long maxEjectionTimeNanos) {
         this.maxEjectionTimeNanos = maxEjectionTimeNanos;
         return this;
       }
 
       /** The algorithm agnostic maximum percentage of addresses that can be ejected. */
-      public Builder setMaxEjectionPercent(Integer maxEjectionPercent) {
-        checkArgument(maxEjectionPercent != null);
+      public Builder setMaxEjectionPercent(int maxEjectionPercent) {
         this.maxEjectionPercent = maxEjectionPercent;
         return this;
       }
@@ -1040,64 +1030,57 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       /** Builds a new instance of {@link OutlierDetectionLoadBalancerConfig}. */
       public OutlierDetectionLoadBalancerConfig build() {
         checkState(childConfig != null);
-        return new OutlierDetectionLoadBalancerConfig(intervalNanos, baseEjectionTimeNanos,
-            maxEjectionTimeNanos, maxEjectionPercent, successRateEjection,
-            failurePercentageEjection, childConfig);
+        return new OutlierDetectionLoadBalancerConfig(this);
       }
     }
 
     /** The configuration for success rate ejection. */
-    public static class SuccessRateEjection {
+    public static final class SuccessRateEjection {
 
-      public final Integer stdevFactor;
-      public final Integer enforcementPercentage;
-      public final Integer minimumHosts;
-      public final Integer requestVolume;
+      public final int stdevFactor;
+      public final int enforcementPercentage;
+      public final int minimumHosts;
+      public final int requestVolume;
 
-      SuccessRateEjection(Integer stdevFactor, Integer enforcementPercentage, Integer minimumHosts,
-          Integer requestVolume) {
-        this.stdevFactor = stdevFactor;
-        this.enforcementPercentage = enforcementPercentage;
-        this.minimumHosts = minimumHosts;
-        this.requestVolume = requestVolume;
+      SuccessRateEjection(Builder builder) {
+        this.stdevFactor = builder.stdevFactor;
+        this.enforcementPercentage = builder.enforcementPercentage;
+        this.minimumHosts = builder.minimumHosts;
+        this.requestVolume = builder.requestVolume;
       }
 
       /** Builds new instances of {@link SuccessRateEjection}. */
       public static final class Builder {
 
-        Integer stdevFactor = 1900;
-        Integer enforcementPercentage = 100;
-        Integer minimumHosts = 5;
-        Integer requestVolume = 100;
+        int stdevFactor = 1900;
+        int enforcementPercentage = 100;
+        int minimumHosts = 5;
+        int requestVolume = 100;
 
         /** The product of this and the standard deviation of success rates determine the ejection
          * threshold.
          */
-        public Builder setStdevFactor(Integer stdevFactor) {
-          checkArgument(stdevFactor != null);
+        public Builder setStdevFactor(int stdevFactor) {
           this.stdevFactor = stdevFactor;
           return this;
         }
 
         /** Only eject this percentage of outliers. */
-        public Builder setEnforcementPercentage(Integer enforcementPercentage) {
-          checkArgument(enforcementPercentage != null);
+        public Builder setEnforcementPercentage(int enforcementPercentage) {
           checkArgument(enforcementPercentage >= 0 && enforcementPercentage <= 100);
           this.enforcementPercentage = enforcementPercentage;
           return this;
         }
 
         /** The minimum amount of hosts needed for success rate ejection. */
-        public Builder setMinimumHosts(Integer minimumHosts) {
-          checkArgument(minimumHosts != null);
+        public Builder setMinimumHosts(int minimumHosts) {
           checkArgument(minimumHosts >= 0);
           this.minimumHosts = minimumHosts;
           return this;
         }
 
         /** The minimum address request volume to be considered for success rate ejection. */
-        public Builder setRequestVolume(Integer requestVolume) {
-          checkArgument(requestVolume != null);
+        public Builder setRequestVolume(int requestVolume) {
           checkArgument(requestVolume >= 0);
           this.requestVolume = requestVolume;
           return this;
@@ -1105,53 +1088,48 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         /** Builds a new instance of {@link SuccessRateEjection}. */
         public SuccessRateEjection build() {
-          return new SuccessRateEjection(stdevFactor, enforcementPercentage, minimumHosts,
-              requestVolume);
+          return new SuccessRateEjection(this);
         }
       }
     }
 
     /** The configuration for failure percentage ejection. */
-    public static class FailurePercentageEjection {
-      public final Integer threshold;
-      public final Integer enforcementPercentage;
-      public final Integer minimumHosts;
-      public final Integer requestVolume;
+    public static final class FailurePercentageEjection {
+      public final int threshold;
+      public final int enforcementPercentage;
+      public final int minimumHosts;
+      public final int requestVolume;
 
-      FailurePercentageEjection(Integer threshold, Integer enforcementPercentage,
-          Integer minimumHosts, Integer requestVolume) {
-        this.threshold = threshold;
-        this.enforcementPercentage = enforcementPercentage;
-        this.minimumHosts = minimumHosts;
-        this.requestVolume = requestVolume;
+      FailurePercentageEjection(Builder builder) {
+        this.threshold = builder.threshold;
+        this.enforcementPercentage = builder.enforcementPercentage;
+        this.minimumHosts = builder.minimumHosts;
+        this.requestVolume = builder.requestVolume;
       }
 
       /** For building new {@link FailurePercentageEjection} instances. */
       public static class Builder {
-        Integer threshold = 85;
-        Integer enforcementPercentage = 100;
-        Integer minimumHosts = 5;
-        Integer requestVolume = 50;
+        int threshold = 85;
+        int enforcementPercentage = 100;
+        int minimumHosts = 5;
+        int requestVolume = 50;
 
         /** The failure percentage that will result in an address being considered an outlier. */
-        public Builder setThreshold(Integer threshold) {
-          checkArgument(threshold != null);
+        public Builder setThreshold(int threshold) {
           checkArgument(threshold >= 0 && threshold <= 100);
           this.threshold = threshold;
           return this;
         }
 
         /** Only eject this percentage of outliers. */
-        public Builder setEnforcementPercentage(Integer enforcementPercentage) {
-          checkArgument(enforcementPercentage != null);
+        public Builder setEnforcementPercentage(int enforcementPercentage) {
           checkArgument(enforcementPercentage >= 0 && enforcementPercentage <= 100);
           this.enforcementPercentage = enforcementPercentage;
           return this;
         }
 
         /** The minimum amount of host for failure percentage ejection to be enabled. */
-        public Builder setMinimumHosts(Integer minimumHosts) {
-          checkArgument(minimumHosts != null);
+        public Builder setMinimumHosts(int minimumHosts) {
           checkArgument(minimumHosts >= 0);
           this.minimumHosts = minimumHosts;
           return this;
@@ -1161,8 +1139,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
          * The request volume required for an address to be considered for failure percentage
          * ejection.
          */
-        public Builder setRequestVolume(Integer requestVolume) {
-          checkArgument(requestVolume != null);
+        public Builder setRequestVolume(int requestVolume) {
           checkArgument(requestVolume >= 0);
           this.requestVolume = requestVolume;
           return this;
@@ -1170,8 +1147,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
         /** Builds a new instance of {@link FailurePercentageEjection}. */
         public FailurePercentageEjection build() {
-          return new FailurePercentageEjection(threshold, enforcementPercentage, minimumHosts,
-              requestVolume);
+          return new FailurePercentageEjection(this);
         }
       }
     }

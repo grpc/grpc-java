@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/health/v1/health.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class HealthGrpc {
 
@@ -259,8 +256,8 @@ public final class HealthGrpc {
      * NOT_FOUND.
      * </pre>
      */
-    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.health.v1.HealthCheckResponse check(io.grpc.health.v1.HealthCheckRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getCheckMethod(), getCallOptions(), request);
     }
 

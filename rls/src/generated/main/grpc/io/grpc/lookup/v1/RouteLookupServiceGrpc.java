@@ -4,9 +4,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
 
 /**
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/lookup/v1/rls.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class RouteLookupServiceGrpc {
 
@@ -180,8 +177,8 @@ public final class RouteLookupServiceGrpc {
      * Lookup returns a target for a single key.
      * </pre>
      */
-    public io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.lookup.v1.RouteLookupResponse routeLookup(io.grpc.lookup.v1.RouteLookupRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getRouteLookupMethod(), getCallOptions(), request);
     }
   }

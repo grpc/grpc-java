@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.FilterRegistry.isEnabledGcpAuthnFilter;
 import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
 import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
 
@@ -312,6 +313,10 @@ final class GcpAuthenticationFilter implements Filter {
     public AudienceWrapper parse(Any any) throws ResourceInvalidException {
       Audience audience;
       try {
+        if (!isEnabledGcpAuthnFilter) {
+          throw new InvalidProtocolBufferException("Environment variable for GCP Authentication "
+              + "Filter is Not Set");
+        }
         audience = any.unpack(Audience.class);
       } catch (InvalidProtocolBufferException ex) {
         throw new ResourceInvalidException("Invalid Resource in address proto", ex);

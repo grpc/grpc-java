@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableList;
@@ -26,17 +27,13 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import java.util.List;
 import java.util.Map;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Tests for {@link PriorityLoadBalancerProvider}. */
 @RunWith(JUnit4.class)
 public class PriorityLoadBalancerProviderTest {
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   @SuppressWarnings("ExpectedExceptionChecker")
   @Test
@@ -48,8 +45,8 @@ public class PriorityLoadBalancerProviderTest {
                 newChildConfig(mock(LoadBalancerProvider.class), null), true));
     List<String> priorities = ImmutableList.of();
 
-    thrown.expect(IllegalArgumentException.class);
-    new PriorityLbConfig(childConfigs, priorities);
+    assertThrows(IllegalArgumentException.class,
+        () -> new PriorityLbConfig(childConfigs, priorities));
   }
 
   @SuppressWarnings("ExpectedExceptionChecker")
@@ -62,8 +59,8 @@ public class PriorityLoadBalancerProviderTest {
                 newChildConfig(mock(LoadBalancerProvider.class), null), true));
     List<String> priorities = ImmutableList.of("p0", "p1");
 
-    thrown.expect(IllegalArgumentException.class);
-    new PriorityLbConfig(childConfigs, priorities);
+    assertThrows(IllegalArgumentException.class,
+        () -> new PriorityLbConfig(childConfigs, priorities));
   }
 
   private Object newChildConfig(LoadBalancerProvider provider, Object config) {

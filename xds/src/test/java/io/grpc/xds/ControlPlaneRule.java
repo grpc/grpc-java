@@ -266,17 +266,17 @@ public class ControlPlaneRule extends TestWatcher {
   /**
    * Builds a new default EDS configuration.
    */
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
-                                                          int port) {
-    return buildClusterLoadAssignment(hostName, endpointHostname, port, EDS_NAME);
+  static ClusterLoadAssignment buildClusterLoadAssignment(
+          String hostAddress, String endpointHostname, int port) {
+    return buildClusterLoadAssignment(hostAddress, endpointHostname, port, EDS_NAME);
   }
 
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
-                                                          int port, String edsName) {
+  static ClusterLoadAssignment buildClusterLoadAssignment(
+          String hostAddress, String endpointHostname, int port, String edsName) {
 
     Address address = Address.newBuilder()
         .setSocketAddress(
-            SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
+            SocketAddress.newBuilder().setAddress(hostAddress).setPortValue(port).build()).build();
     LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(10))
         .setPriority(0)
@@ -297,17 +297,12 @@ public class ControlPlaneRule extends TestWatcher {
    * Builds a new client listener.
    */
   static Listener buildClientListener(String name) {
-    return buildClientListener(name, "terminal-filter");
+    return buildClientListener(name, RDS_NAME);
   }
 
-
-  static Listener buildClientListener(String name, String identifier) {
-    return buildClientListener(name, identifier, RDS_NAME);
-  }
-
-  static Listener buildClientListener(String name, String identifier, String rdsName) {
+  static Listener buildClientListener(String name, String rdsName) {
     HttpFilter httpFilter = HttpFilter.newBuilder()
-        .setName(identifier)
+        .setName("terminal-filter")
         .setTypedConfig(Any.pack(Router.newBuilder().build()))
         .setIsOptional(true)
         .build();

@@ -16,7 +16,6 @@
 
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -29,11 +28,9 @@ import android.os.Looper;
 import android.os.Parcel;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.ServerStream;
-import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.MockServerTransportListener;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
 import org.junit.Rule;
@@ -55,7 +52,7 @@ public final class BinderServerTransportTest {
   @Rule public MockitoRule mocks = MockitoJUnit.rule();
 
   private final ScheduledExecutorService executorService = new MainThreadScheduledExecutorService();
-  private final TestTransportListener transportListener = new TestTransportListener();
+  private MockServerTransportListener transportListener;
 
   @Mock IBinder mockBinder;
 
@@ -70,6 +67,7 @@ public final class BinderServerTransportTest {
             ImmutableList.of(),
             OneWayBinderProxy.IDENTITY_DECORATOR,
             mockBinder);
+    transportListener = new MockServerTransportListener(transport);
   }
 
   @Test
@@ -82,34 +80,6 @@ public final class BinderServerTransportTest {
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
     shadowOf(Looper.getMainLooper()).idle();
 
-    assertThat(transportListener.terminated).isTrue();
-  }
-
-  private static final class TestTransportListener implements ServerTransportListener {
-
-    public boolean ready;
-    public boolean terminated;
-
-    /**
-     * Called when a new stream was created by the remote client.
-     *
-     * @param stream the newly created stream.
-     * @param method the fully qualified method name being called on the server.
-     * @param headers containing metadata for the call.
-     */
-    @Override
-    public void streamCreated(ServerStream stream, String method, Metadata headers) {}
-
-    @Override
-    public Attributes transportReady(Attributes attributes) {
-      ready = true;
-      return attributes;
-    }
-
-    @Override
-    public void transportTerminated() {
-      checkState(!terminated, "Terminated twice");
-      terminated = true;
-    }
+    assertThat(transportListener.isTerminated()).isTrue();
   }
 }
