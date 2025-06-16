@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import com.google.common.primitives.UnsignedInts;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -203,7 +204,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     if (c.isEmpty()) {
       pos = 0;
     } else {
-      pos = (seed & 0x7FFF_FFFF) % c.size();
+      pos = UnsignedInts.remainder(seed, c.size());
     }
     return Iterables.concat(
         Iterables.skip(c, pos),
