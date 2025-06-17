@@ -102,7 +102,7 @@ For [Bazel](https://bazel.build), you can either
 https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.73.0
 
 Development snapshots are available in [Sonatypes's snapshot
-repository](https://oss.sonatype.org/content/repositories/snapshots/).
+repository](https://central.sonatype.com/repository/maven-snapshots/).
 
 Generated Code
 --------------
