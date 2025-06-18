@@ -268,6 +268,7 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void testFitToLimitUsingReSize() {
+
     Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
     Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
     Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
