@@ -27,6 +27,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.Empty;
 import io.grpc.CallOptions;
@@ -154,17 +155,20 @@ public final class BinderClientTransportTest {
             .setScheduledExecutorPool(executorServicePool)
             .setOffloadExecutorPool(offloadServicePool);
 
+    @CanIgnoreReturnValue
     public BinderClientTransportBuilder setSecurityPolicy(SecurityPolicy securityPolicy) {
       factoryBuilder.setSecurityPolicy(securityPolicy);
       return this;
     }
 
+    @CanIgnoreReturnValue
     public BinderClientTransportBuilder setBinderDecorator(
         OneWayBinderProxy.Decorator binderDecorator) {
       factoryBuilder.setBinderDecorator(binderDecorator);
       return this;
     }
 
+    @CanIgnoreReturnValue
     public BinderClientTransportBuilder setReadyTimeoutMillis(int timeoutMillis) {
       factoryBuilder.setReadyTimeoutMillis(timeoutMillis);
       return this;
