@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ticker;
 import com.google.common.collect.ForwardingMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -39,7 +40,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.TimeProvider;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -82,7 +82,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   private final SynchronizationContext syncContext;
   private final Helper childHelper;
   private final GracefulSwitchLoadBalancer switchLb;
-  private TimeProvider timeProvider;
+  private Ticker ticker;
   private final ScheduledExecutorService timeService;
   private ScheduledHandle detectionTimerHandle;
   private Long detectionTimerStartNanos;
@@ -95,14 +95,14 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Creates a new instance of {@link OutlierDetectionLoadBalancer}.
    */
-  public OutlierDetectionLoadBalancer(Helper helper, TimeProvider timeProvider) {
+  public OutlierDetectionLoadBalancer(Helper helper, Ticker ticker) {
     logger = helper.getChannelLogger();
     childHelper = new ChildHelper(checkNotNull(helper, "helper"));
     switchLb = new GracefulSwitchLoadBalancer(childHelper);
     endpointTrackerMap = new EndpointTrackerMap();
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.timeService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.timeProvider = timeProvider;
+    this.ticker = ticker;
     logger.log(ChannelLogLevel.DEBUG, "OutlierDetection lb created.");
   }
 
@@ -151,7 +151,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         // If a timer has started earlier we cancel it and use the difference between the start
         // time and now as the interval.
         initialDelayNanos = Math.max(0L,
-            config.intervalNanos - (timeProvider.currentTimeNanos() - detectionTimerStartNanos));
+            config.intervalNanos - (ticker.read() - detectionTimerStartNanos));
       }
 
       // If a timer has been previously created we need to cancel it and reset all the call counters
@@ -189,7 +189,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This timer will be invoked periodically, according to configuration, and it will look for any
    * outlier subchannels.
    */
-  class DetectionTimer implements Runnable {
+  final class DetectionTimer implements Runnable {
 
     OutlierDetectionLoadBalancerConfig config;
     ChannelLogger logger;
@@ -201,7 +201,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
 
     @Override
     public void run() {
-      detectionTimerStartNanos = timeProvider.currentTimeNanos();
+      detectionTimerStartNanos = ticker.read();
 
       endpointTrackerMap.swapCounters();
 
@@ -217,7 +217,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This child helper wraps the provided helper so that it can hand out wrapped {@link
    * OutlierDetectionSubchannel}s and manage the address info map.
    */
-  class ChildHelper extends ForwardingLoadBalancerHelper {
+  final class ChildHelper extends ForwardingLoadBalancerHelper {
 
     private Helper delegate;
 
@@ -259,7 +259,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  class OutlierDetectionSubchannel extends ForwardingSubchannel {
+  final class OutlierDetectionSubchannel extends ForwardingSubchannel {
 
     private final Subchannel delegate;
     private EndpointTracker endpointTracker;
@@ -398,7 +398,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     /**
      * Wraps the actual listener so that state changes from the actual one can be intercepted.
      */
-    class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
+    final class OutlierDetectionSubchannelStateListener implements SubchannelStateListener {
 
       private final SubchannelStateListener delegate;
 
@@ -428,7 +428,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * This picker delegates the actual picking logic to a wrapped delegate, but associates a {@link
    * ClientStreamTracer} with each pick to track the results of each subchannel stream.
    */
-  class OutlierDetectionPicker extends SubchannelPicker {
+  final class OutlierDetectionPicker extends SubchannelPicker {
 
     private final SubchannelPicker delegate;
 
@@ -454,7 +454,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
      * Builds instances of a {@link ClientStreamTracer} that increments the call count in the
      * tracker for each closed stream.
      */
-    class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
+    final class ResultCountingClientStreamTracerFactory extends ClientStreamTracer.Factory {
 
       private final EndpointTracker tracker;
 
@@ -498,7 +498,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Tracks additional information about the endpoint needed for outlier detection.
    */
-  static class EndpointTracker {
+  static final class EndpointTracker {
 
     private OutlierDetectionLoadBalancerConfig config;
     // Marked as volatile to assure that when the inactive counter is swapped in as the new active
@@ -638,11 +638,11 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
               config.baseEjectionTimeNanos * ejectionTimeMultiplier,
               maxEjectionDurationSecs);
 
-      return currentTimeNanos > maxEjectionTimeNanos;
+      return currentTimeNanos - maxEjectionTimeNanos > 0;
     }
 
     /** Tracks both successful and failed call counts. */
-    private static class CallCounter {
+    private static final class CallCounter {
       AtomicLong successCount = new AtomicLong();
       AtomicLong failureCount = new AtomicLong();
 
@@ -663,7 +663,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
   /**
    * Maintains a mapping from endpoint (a set of addresses) to their trackers.
    */
-  static class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
+  static final class EndpointTrackerMap extends ForwardingMap<Set<SocketAddress>, EndpointTracker> {
     private final Map<Set<SocketAddress>, EndpointTracker> trackerMap;
 
     EndpointTrackerMap() {
@@ -784,7 +784,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
    * required rate is not fixed, but is based on the mean and standard deviation of the success
    * rates of all of the addresses.
    */
-  static class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class SuccessRateOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -869,7 +869,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
   }
 
-  static class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
+  static final class FailurePercentageOutlierEjectionAlgorithm implements OutlierEjectionAlgorithm {
 
     private final OutlierDetectionLoadBalancerConfig config;
 
@@ -970,7 +970,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** Builds a new {@link OutlierDetectionLoadBalancerConfig}. */
-    public static class Builder {
+    public static final class Builder {
       long intervalNanos = 10_000_000_000L; // 10s
       long baseEjectionTimeNanos = 30_000_000_000L; // 30s
       long maxEjectionTimeNanos = 300_000_000_000L; // 300s
@@ -1035,7 +1035,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** The configuration for success rate ejection. */
-    public static class SuccessRateEjection {
+    public static final class SuccessRateEjection {
 
       public final int stdevFactor;
       public final int enforcementPercentage;
@@ -1094,7 +1094,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
     }
 
     /** The configuration for failure percentage ejection. */
-    public static class FailurePercentageEjection {
+    public static final class FailurePercentageEjection {
       public final int threshold;
       public final int enforcementPercentage;
       public final int minimumHosts;
