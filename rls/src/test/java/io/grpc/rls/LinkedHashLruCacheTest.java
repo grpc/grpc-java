@@ -33,6 +33,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -119,6 +120,7 @@ public class LinkedHashLruCacheTest {
     cache.cache(1, survivor);
 
     assertThat(cache.invalidate(0)).isEqualTo(toBeEvicted);
+
     verify(evictionListener).onEviction(0, toBeEvicted, EvictionType.EXPLICIT);
   }
 
@@ -142,7 +144,7 @@ public class LinkedHashLruCacheTest {
 
     // should remove MAX_SIZE-1 instead of MAX_SIZE because MAX_SIZE is accessed later
     verify(evictionListener)
-            .onEviction(eq(MAX_SIZE - 1), any(Entry.class), eq(EvictionType.EXPIRED));
+        .onEviction(eq(MAX_SIZE - 1), any(Entry.class), eq(EvictionType.EXPIRED));
     assertThat(cache.estimatedSize()).isEqualTo(MAX_SIZE);
   }
 
@@ -267,41 +269,60 @@ public class LinkedHashLruCacheTest {
   }
 
   @Test
-  public void testFitToLimitUsingReSize() {
+  public void testFitToLimitWithReSize() {
 
     Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
-    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
-    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20,1);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30,2);
 
     cache.cache(1, entry1);
     cache.cache(2, entry2);
     cache.cache(3, entry3);
 
     assertThat(cache.estimatedSize()).isEqualTo(2);
-    cache.resize(1);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(3);
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(5);
 
-    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(1);
+    cache.resize(2);
+    assertThat(cache.estimatedSize()).isEqualTo(1);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(2);
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(2);
+
     assertThat(cache.fitToLimit()).isEqualTo(false);
-    assertThat(cache.estimatedSizeBytes()).isEqualTo(1);
   }
 
   @Test
-  public void testFitToLimitWithEntry() {
+  public void testFitToLimitWithSpyCache() {
+    LinkedHashLruCache<Integer, Entry> spyCache = Mockito.spy(
+        new LinkedHashLruCache<Integer, Entry>(MAX_SIZE, evictionListener, fakeClock.getTicker()) {
+          @Override
+          protected boolean isExpired(Integer key, Entry value, long nowNanos) {
+            return value.expireTime - nowNanos <= 0;
+          }
+
+          @Override
+          protected int estimateSizeOf(Integer key, Entry value) {
+            return value.size;
+          }
+        }
+    );
+
     Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
     Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
     Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
-    Entry entry4 = new Entry("Entry4", ticker.read() + 20,2);
 
-    cache.cache(1, entry1);
-    cache.cache(2, entry2);
-    cache.cache(3, entry3);
+    spyCache.cache(1, entry1);
+    spyCache.cache(2, entry2);
+    spyCache.cache(3, entry3);
 
-    assertThat(cache.estimatedSize()).isEqualTo(2);
-    cache.cache(4, entry4);
+    assertThat(spyCache.estimatedSize()).isEqualTo(3);
+    assertThat(spyCache.estimatedSizeBytes()).isEqualTo(7);
+    assertThat(spyCache.estimatedMaxSizeBytes()).isEqualTo(5);
 
-    assertThat(cache.estimatedSize()).isEqualTo(3);
-    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(5);
-    assertThat(cache.fitToLimit()).isEqualTo(false);
-    assertThat(cache.estimatedSizeBytes()).isEqualTo(5);
+    assertThat(spyCache.fitToLimit()).isEqualTo(true);
+
+    assertThat(spyCache.estimatedSize()).isEqualTo(2);
+    assertThat(spyCache.estimatedSizeBytes()).isEqualTo(3);
+    assertThat(spyCache.estimatedMaxSizeBytes()).isEqualTo(5);
   }
 }
