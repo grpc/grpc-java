@@ -19,6 +19,9 @@ package io.grpc.rls;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Ticker;
@@ -33,7 +36,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -293,8 +295,12 @@ public class LinkedHashLruCacheTest {
 
   @Test
   public void testFitToLimitWithSpyCache() {
-    LinkedHashLruCache<Integer, Entry> spyCache = Mockito.spy(
-        new LinkedHashLruCache<Integer, Entry>(MAX_SIZE, evictionListener, fakeClock.getTicker()) {
+
+    LinkedHashLruCache<Integer, Entry> spyCache = spy(new LinkedHashLruCache<Integer, Entry>(
+            MAX_SIZE,
+            evictionListener,
+            fakeClock.getTicker()) {
+
           @Override
           protected boolean isExpired(Integer key, Entry value, long nowNanos) {
             return value.expireTime - nowNanos <= 0;
@@ -304,16 +310,32 @@ public class LinkedHashLruCacheTest {
           protected int estimateSizeOf(Integer key, Entry value) {
             return value.size;
           }
-        }
-    );
+    });
 
-    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
-    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
-    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+    ThreadLocal<Boolean> isCacheCall = ThreadLocal.withInitial(() -> false);
+    doAnswer(invocation -> {
+      if (isCacheCall.get()) {
+        return false;
+      }
+      return invocation.callRealMethod();
+    }).when(spyCache).shouldInvalidateEldestEntry(any(),any(),anyLong());
 
-    spyCache.cache(1, entry1);
-    spyCache.cache(2, entry2);
-    spyCache.cache(3, entry3);
+    Runnable cacheRunnable = () -> {
+      isCacheCall.set(true);
+      try {
+        Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
+        Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
+        Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+
+        spyCache.cache(1, entry1);
+        spyCache.cache(2, entry2);
+        spyCache.cache(3, entry3);
+      } finally {
+        isCacheCall.remove();
+      }
+    };
+
+    cacheRunnable.run();
 
     assertThat(spyCache.estimatedSize()).isEqualTo(3);
     assertThat(spyCache.estimatedSizeBytes()).isEqualTo(7);
