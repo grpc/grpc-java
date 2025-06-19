@@ -77,6 +77,13 @@ public final class ClientCalls {
    *
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
+   *
+   * <h3>Server errors</h3>
+   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
+   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be
+   * received by the {@link ClientCall}'s onClose, and UNKNOWN status code otherwise. Its
+   * description will be encoded to the stream trailer, but the cause (which may contain server
+   * application's information) will not.
    */
   public static <ReqT, RespT> void asyncUnaryCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -91,6 +98,13 @@ public final class ClientCalls {
    *
    * <p>If the provided {@code responseObserver} is an instance of {@link ClientResponseObserver},
    * {@code beforeStart()} will be called.
+   *
+   * <h3>Server errors</h3>
+   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
+   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be
+   * received by the {@link ClientCall}'s onClose, and UNKNOWN status code otherwise. Its
+   * description will be encoded to the stream trailer, but the cause (which may contain server
+   * application's information) will not.
    */
   public static <ReqT, RespT> void asyncServerStreamingCall(
       ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver) {
@@ -107,6 +121,23 @@ public final class ClientCalls {
    * {@code beforeStart()} will be called.
    *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
+   *
+   * <h3>Client errors</h3>
+   * onError called on the request stream observer will result in stream cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException} with the exception passed to onError set as the cause
+   * and the stream is considered closed. The server's request stream observer will receive an
+   * onError callback with a {@link io.grpc.StatusRuntimeException} for the cancellation with the
+   * message 'Client cancelled', and exception cause set to null because the actual exception
+   * passed by the client to onError is never actually transmitted to the server and the server
+   * just receives a RST_STREAM frame indicating cancellation by the client.
+   *
+   * <h3>Server errors</h3>
+   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
+   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be
+   * received by the {@link ClientCall}'s onClose, and UNKNOWN status code otherwise. Its
+   * description will be encoded to the stream trailer, but the cause (which may contain server
+   * application's information) will not.
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncClientStreamingCall(
       ClientCall<ReqT, RespT> call,
@@ -123,6 +154,23 @@ public final class ClientCalls {
    * {@code beforeStart()} will be called.
    *
    * @return request stream observer. It will extend {@link ClientCallStreamObserver}
+   *
+   * <h3>Client errors</h3>
+   * onError called on the request stream observer will result in stream cancellation. The response
+   * {@link StreamObserver} will be immediately notified of the cancellation with a
+   * {@link io.grpc.StatusRuntimeException} with the exception passed to onError set as the cause
+   * and the stream is considered closed. The server's request stream observer will receive an
+   * onError callback with a {@link io.grpc.StatusRuntimeException} for the cancellation with the
+   * message 'Client cancelled', and exception cause set to null because the actual exception
+   * passed by the client to onError is never actually transmitted to the server and the server
+   * just receives a RST_STREAM frame indicating cancellation by the client.
+   *
+   * <h3>Server errors</h3>
+   * If the throwable sent to the server's outbound {@link StreamObserver}'s onError
+   * is a {@link StatusException} or {@link StatusRuntimeException}, that status code will be
+   * received by the {@link ClientCall}'s onClose, and UNKNOWN status code otherwise. Its
+   * description will be encoded to the stream trailer, but the cause (which may contain server
+   * application's information) will not.
    */
   public static <ReqT, RespT> StreamObserver<ReqT> asyncBidiStreamingCall(
       ClientCall<ReqT, RespT> call, StreamObserver<RespT> responseObserver) {
