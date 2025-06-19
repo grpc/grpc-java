@@ -20,6 +20,7 @@ import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
+import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -165,6 +166,7 @@ public final class AndroidComponentAddress extends SocketAddress {
    *
    * <p>See {@link Intent#URI_ANDROID_APP_SCHEME} for details.
    */
+  @SuppressLint("InlinedApi")
   public String asAndroidAppUri() {
     Intent intentForUri = bindIntent;
     if (intentForUri.getPackage() == null) {
