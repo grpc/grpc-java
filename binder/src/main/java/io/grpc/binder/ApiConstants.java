@@ -18,6 +18,8 @@ package io.grpc.binder;
 
 import android.content.Intent;
 import android.os.UserHandle;
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.NameResolver;
 
@@ -43,4 +45,15 @@ public final class ApiConstants {
    */
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
+
+  /**
+   * Lets you override a Channel's pre-auth configuration (see {@link
+   * BinderChannelBuilder#preAuthorizeServers(boolean)} for a given {@link EquivalentAddressGroup}.
+   *
+   * <p>A {@link NameResolver} that discovers servers from an untrusted source like PackageManager
+   * can use this to force server pre-auth and prevent abuse.
+   */
+  @EquivalentAddressGroup.Attr
+  public static final Attributes.Key<Boolean> PRE_AUTH_SERVER_OVERRIDE =
+      Attributes.Key.create("pre-auth-server-override");
 }

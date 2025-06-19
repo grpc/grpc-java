@@ -72,6 +72,7 @@ dependencies {
     androidTestImplementation testFixtures(project(':grpc-core'))
 
     testFixturesImplementation libraries.guava.testlib
+    testFixturesImplementation testFixtures(project(':grpc-core'))
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
