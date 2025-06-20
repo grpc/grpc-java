@@ -19,17 +19,16 @@ package io.grpc.rls;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.anyLong;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -294,57 +293,66 @@ public class LinkedHashLruCacheTest {
   }
 
   @Test
-  public void testFitToLimitWithSpyCache() {
+  public void testFitToLimit() {
 
-    LinkedHashLruCache<Integer, Entry> spyCache = spy(new LinkedHashLruCache<Integer, Entry>(
+    TestFitToLimitEviction localCache = new TestFitToLimitEviction(
             MAX_SIZE,
             evictionListener,
-            fakeClock.getTicker()) {
+            fakeClock.getTicker()
+    );
 
-          @Override
-          protected boolean isExpired(Integer key, Entry value, long nowNanos) {
-            return value.expireTime - nowNanos <= 0;
-          }
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
 
-          @Override
-          protected int estimateSizeOf(Integer key, Entry value) {
-            return value.size;
-          }
-    });
+    localCache.cache(1, entry1);
+    localCache.cache(2, entry2);
+    localCache.cache(3, entry3);
 
-    ThreadLocal<Boolean> isCacheCall = ThreadLocal.withInitial(() -> false);
-    doAnswer(invocation -> {
-      if (isCacheCall.get()) {
-        return false;
-      }
-      return invocation.callRealMethod();
-    }).when(spyCache).shouldInvalidateEldestEntry(any(),any(),anyLong());
+    assertThat(localCache.estimatedSize()).isEqualTo(3);
+    assertThat(localCache.estimatedSizeBytes()).isEqualTo(7);
+    assertThat(localCache.estimatedMaxSizeBytes()).isEqualTo(5);
 
-    Runnable cacheRunnable = () -> {
-      isCacheCall.set(true);
-      try {
-        Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
-        Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
-        Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+    localCache.enableEviction();
 
-        spyCache.cache(1, entry1);
-        spyCache.cache(2, entry2);
-        spyCache.cache(3, entry3);
-      } finally {
-        isCacheCall.remove();
-      }
-    };
+    assertThat(localCache.fitToLimit()).isEqualTo(true);
 
-    cacheRunnable.run();
+    assertThat(localCache.values().contains(entry1)).isFalse();
+    assertThat(localCache.values().containsAll(Arrays.asList(entry2,entry3))).isTrue();
 
-    assertThat(spyCache.estimatedSize()).isEqualTo(3);
-    assertThat(spyCache.estimatedSizeBytes()).isEqualTo(7);
-    assertThat(spyCache.estimatedMaxSizeBytes()).isEqualTo(5);
+    assertThat(localCache.estimatedSize()).isEqualTo(2);
+    assertThat(localCache.estimatedSizeBytes()).isEqualTo(3);
+    assertThat(localCache.estimatedMaxSizeBytes()).isEqualTo(5);
+  }
 
-    assertThat(spyCache.fitToLimit()).isEqualTo(true);
+  private static class TestFitToLimitEviction extends LinkedHashLruCache<Integer, Entry> {
 
-    assertThat(spyCache.estimatedSize()).isEqualTo(2);
-    assertThat(spyCache.estimatedSizeBytes()).isEqualTo(3);
-    assertThat(spyCache.estimatedMaxSizeBytes()).isEqualTo(5);
+    private boolean allowEviction = false;
+
+    TestFitToLimitEviction(
+            long estimatedMaxSizeBytes,
+            @Nullable EvictionListener<Integer, Entry> evictionListener,
+            Ticker ticker) {
+      super(estimatedMaxSizeBytes, evictionListener, ticker);
+    }
+
+    @Override
+    protected boolean isExpired(Integer key, Entry value, long nowNanos) {
+      return value.expireTime - nowNanos <= 0;
+    }
+
+    @Override
+    protected int estimateSizeOf(Integer key, Entry value) {
+      return value.size;
+    }
+
+    @Override
+    protected boolean shouldInvalidateEldestEntry(Integer eldestKey, Entry eldestValue, long now) {
+      return allowEviction && super.shouldInvalidateEldestEntry(eldestKey, eldestValue, now);
+    }
+
+    public void enableEviction() {
+      allowEviction = true;
+    }
   }
 }
