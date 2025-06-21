@@ -17,7 +17,6 @@
 package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -38,9 +37,6 @@ public class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
   public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
     AuthRequest request = new AuthRequest(uid);
     pendingRequests.add(request);
-    request.resultFuture.addListener(() -> {
-      throw new IllegalStateException();
-    }, directExecutor());
     return request.resultFuture;
   }
 
