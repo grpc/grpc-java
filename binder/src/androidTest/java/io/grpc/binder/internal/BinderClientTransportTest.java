@@ -17,6 +17,7 @@
 package io.grpc.binder.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.content.Context;
 import android.os.DeadObjectException;
@@ -24,8 +25,6 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import com.google.common.util.concurrent.Futures;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.Empty;
@@ -38,13 +37,13 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.SecurityPolicy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlackHoleOneWayBinderProxy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
 import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
+import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
@@ -63,7 +62,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -189,7 +187,7 @@ public final class BinderClientTransportTest {
   private static void shutdownAndTerminate(ExecutorService executorService)
       throws InterruptedException {
     executorService.shutdownNow();
-    if (!executorService.awaitTermination(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+    if (!executorService.awaitTermination(TIMEOUT_SECONDS, SECONDS)) {
       throw new AssertionError("executor failed to terminate promptly");
     }
   }
@@ -371,17 +369,23 @@ public final class BinderClientTransportTest {
 
   @Test
   public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport =
         new BinderClientTransportBuilder()
-            .setSecurityPolicy(blockingSecurityPolicy)
+            .setSecurityPolicy(securityPolicy)
             .setReadyTimeoutMillis(1_234)
             .build();
     transport.start(transportListener).run();
+    // Take the next authRequest but don't respond to it, in order to trigger the ready timeout.
+    AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
+
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
-    blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.OK);
+
+    // If the transport gave up waiting on auth, it should cancel its request.
+    assertThat(authRequest.isCancelled()).isTrue();
   }
 
   @Test
@@ -389,8 +393,8 @@ public final class BinderClientTransportTest {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
     RuntimeException exception = new NullPointerException();
-    securityPolicy.setAuthorizationException(exception);
     transport.start(transportListener).run();
+    securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS).setResult(exception);
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.INTERNAL);
     assertThat(transportStatus.getCause()).isEqualTo(exception);
@@ -401,11 +405,25 @@ public final class BinderClientTransportTest {
   public void testAsyncSecurityPolicySuccess() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
-    securityPolicy.setAuthorizationResult(Status.PERMISSION_DENIED);
     transport.start(transportListener).run();
+    securityPolicy
+        .takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS)
+        .setResult(Status.PERMISSION_DENIED);
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
     transportListener.awaitTermination();
+  }
+
+  @Test
+  public void testAsyncSecurityPolicyCancelledUponExternalTermination() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
+    transport.start(transportListener).run();
+    AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
+    transport.shutdownNow(Status.UNAVAILABLE);
+    transportListener.awaitShutdown();
+    transportListener.awaitTermination();
+    assertThat(authRequest.isCancelled()).isTrue();
   }
 
   private static void startAndAwaitReady(
@@ -429,7 +447,7 @@ public final class BinderClientTransportTest {
     }
 
     public Status awaitShutdown() throws Exception {
-      return shutdownStatus.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      return shutdownStatus.get(TIMEOUT_SECONDS, SECONDS);
     }
 
     @Override
@@ -440,7 +458,7 @@ public final class BinderClientTransportTest {
     }
 
     public void awaitTermination() throws Exception {
-      isTerminated.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      isTerminated.get(TIMEOUT_SECONDS, SECONDS);
     }
 
     @Override
@@ -451,7 +469,7 @@ public final class BinderClientTransportTest {
     }
 
     public void awaitReady() throws Exception {
-      isReady.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      isReady.get(TIMEOUT_SECONDS, SECONDS);
     }
 
     @Override
@@ -565,27 +583,6 @@ public final class BinderClientTransportTest {
       } catch (InterruptedException e) {
         return Status.fromThrowable(e);
       }
-    }
-  }
-
-  /** An AsyncSecurityPolicy that lets a test specify the outcome of checkAuthorizationAsync(). */
-  static class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
-    private SettableFuture<Status> result = SettableFuture.create();
-
-    public void clearAuthorizationResult() {
-      result = SettableFuture.create();
-    }
-
-    public boolean setAuthorizationResult(Status status) {
-      return result.set(status);
-    }
-
-    public boolean setAuthorizationException(Throwable t) {
-      return result.setException(t);
-    }
-
-    public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-      return Futures.nonCancellationPropagating(result);
     }
   }
 }
