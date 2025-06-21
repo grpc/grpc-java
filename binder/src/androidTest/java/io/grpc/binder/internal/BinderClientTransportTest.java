@@ -420,7 +420,7 @@ public final class BinderClientTransportTest {
     transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
     transport.start(transportListener).run();
     AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
-    transport.shutdownNow(Status.UNAVAILABLE);
+    transport.shutdownNow(Status.UNAVAILABLE); // 'authRequest' remains unanswered!
     transportListener.awaitShutdown();
     transportListener.awaitTermination();
     assertThat(authRequest.isCancelled()).isTrue();
