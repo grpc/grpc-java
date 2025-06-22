@@ -296,6 +296,21 @@ public final class TlsChannelCredentials extends ChannelCredentials {
     }
 
     /**
+     * Use the provided certificate chain and possibly-encrypted private key as the client's
+     * identity. Generally they should be PEM-encoded and the key is a PKCS#8 key. If the private
+     * key is unencrypted, then password must be {@code null}.
+     */
+    public Builder keyManager(byte[] certChain, byte[] privateKey, String privateKeyPassword) {
+      byte[] certChainBytes = Arrays.copyOf(certChain, certChain.length);
+      byte[] privateKeyBytes = Arrays.copyOf(privateKey, privateKey.length);
+      clearKeyManagers();
+      this.certificateChain = certChainBytes;
+      this.privateKey = privateKeyBytes;
+      this.privateKeyPassword = privateKeyPassword;
+      return this;
+    }
+
+    /**
      * Have the provided key manager select the client's identity. Although multiple are allowed,
      * only the first instance implementing a particular interface is used. So generally there will
      * just be a single entry and it implements {@link javax.net.ssl.X509KeyManager}.
@@ -336,6 +351,18 @@ public final class TlsChannelCredentials extends ChannelCredentials {
      */
     public Builder trustManager(InputStream rootCerts) throws IOException {
       byte[] rootCertsBytes = ByteStreams.toByteArray(rootCerts);
+      clearTrustManagers();
+      this.rootCertificates = rootCertsBytes;
+      return this;
+    }
+
+    /**
+     * Use the provided root certificates to verify the server's identity instead of the system's
+     * default. Generally they should be PEM-encoded with all the certificates concatenated together
+     * (file header has "BEGIN CERTIFICATE", and would occur once per certificate).
+     */
+    public Builder trustManager(byte[] rootCerts) {
+      byte[] rootCertsBytes = Arrays.copyOf(rootCerts, rootCerts.length);
       clearTrustManagers();
       this.rootCertificates = rootCertsBytes;
       return this;
