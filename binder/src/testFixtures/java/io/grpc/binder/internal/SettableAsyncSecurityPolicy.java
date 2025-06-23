@@ -74,5 +74,10 @@ public class SettableAsyncSecurityPolicy extends AsyncSecurityPolicy {
     public void setResult(Throwable t) {
       checkState(resultFuture.setException(t));
     }
+
+    /** Tests if the future returned for this authorization request was cancelled by the caller. */
+    public boolean isCancelled() {
+      return resultFuture.isCancelled();
+    }
   }
 }

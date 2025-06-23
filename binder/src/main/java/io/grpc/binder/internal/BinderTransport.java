@@ -585,7 +585,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
     @GuardedBy("this")
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
-
+    @GuardedBy("this")
+    @Nullable private ListenableFuture<Status> authResultFuture; // null before we check auth.
     @GuardedBy("this")
     private ListenableFuture<Status> preAuthResultFuture;
 
@@ -813,7 +814,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       }
       if (preAuthResultFuture != null) {
         preAuthResultFuture.cancel(false);
-        preAuthResultFuture = null;
+      }
+      if (authResultFuture != null) {
+        authResultFuture.cancel(false);  // No effect if already complete.
       }
       serviceBinding.unbind();
       clientTransportListener.transportTerminated();
@@ -834,9 +837,10 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
         } else {
+          authResultFuture = checkServerAuthorizationAsync(remoteUid);
           Futures.addCallback(
-              checkServerAuthorizationAsync(remoteUid),
-              new FutureCallback<Status>() {
+              authResultFuture,
+          new FutureCallback<Status>() {
                 @Override
                 public void onSuccess(Status result) {
                   handleAuthResult(binder, result);
