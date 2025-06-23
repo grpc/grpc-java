@@ -109,17 +109,17 @@ XML="
 curl --fail-with-body -X POST -d "$XML" -u "$USERPASS" -H "Content-Type: application/xml" \
   "$STAGING_URL/profiles/$PROFILE_ID/finish"
 
+# TODO (okshiva): After 2-3 releases make it automatic.
 # After closing the repository on the staging API, we must manually trigger
 # its upload to the main Central Publisher Portal. We set publishing_type=automatic
 # to have it release automatically upon passing validation.
-echo "Triggering release of repository ${REPOID} to the Central Portal"
+# echo "Triggering release of repository ${REPOID} to the Central Portal"
 
-# The manual API endpoint requires a Bearer token, which is the base64 of user:pass.
-BEARER_TOKEN=$(echo -n "$USERPASS" | base64)
+# MANUAL_API_URL="https://ossrh-staging-api.central.sonatype.com/service/local/manual"
 
-curl --fail-with-body -X POST \
-  -H "Authorization: Bearer ${BEARER_TOKEN}" \
-  -H "Content-Type: application/json" \
-  "${MANUAL_API_URL}/upload/repository/${REPOID}?publishing_type=automatic"
+#curl --fail-with-body -X POST \
+#  -H "Authorization: Bearer ${USERPASS}" \
+#  -H "Content-Type: application/json" \
+#  "${MANUAL_API_URL}/upload/repository/${REPOID}?publishing_type=automatic"
 
-echo "Release triggered. Monitor progress at https://central.sonatype.com/publishing/deployments"
+# echo "Release triggered. Monitor progress at https://central.sonatype.com/publishing/deployments"
