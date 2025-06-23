@@ -157,14 +157,19 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       return fail(noneFoundError);
     }
 
-    // The LB policy config is provided in service_config.proto/JSON format.
-    NameResolver.ConfigOrError configOrError =
-        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-            Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()), lbRegistry);
-    if (configOrError.getError() != null) {
-      // Should be impossible, because XdsClusterResource validated this
-      return fail(Status.INTERNAL.withDescription(
-          errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
+    NameResolver.ConfigOrError configOrError;
+    if (clusterConfig.getChildren() instanceof EndpointConfig) {
+      // The LB policy config is provided in service_config.proto/JSON format.
+      configOrError =
+              GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()), lbRegistry);
+      if (configOrError.getError() != null) {
+        // Should be impossible, because XdsClusterResource validated this
+        return fail(Status.INTERNAL.withDescription(
+                errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
+      }
+    } else {
+
     }
 
     ClusterResolverConfig config = new ClusterResolverConfig(
