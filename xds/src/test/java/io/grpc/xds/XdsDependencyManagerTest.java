@@ -42,12 +42,19 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.grpc.BindableService;
 import io.grpc.ChannelLogger;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.StatusOrMatcher;
@@ -56,10 +63,12 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.testing.FakeNameResolverProvider;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceMetadata;
 import io.grpc.xds.client.XdsResourceType;
@@ -74,7 +83,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
@@ -121,6 +129,7 @@ public class XdsDependencyManagerTest {
   private final XdsTestControlPlaneService controlPlaneService = new XdsTestControlPlaneService();
   private final BindableService lrsService =
       XdsTestUtils.createLrsService(lrsEnded, loadReportCalls);
+  private final NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
@@ -138,11 +147,11 @@ public class XdsDependencyManagerTest {
       .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+      .setNameResolverRegistry(nameResolverRegistry)
       .build();
 
-  private final ScheduledExecutorService scheduler = fakeClock.getScheduledExecutorService();
   private XdsDependencyManager xdsDependencyManager = new XdsDependencyManager(
-      xdsClient, syncContext, serverName, serverName, nameResolverArgs, scheduler);
+      xdsClient, syncContext, serverName, serverName, nameResolverArgs);
 
   @Before
   public void setUp() throws Exception {
@@ -369,7 +378,7 @@ public class XdsDependencyManagerTest {
   public void testMissingLds() {
     String ldsName = "badLdsName";
     xdsDependencyManager = new XdsDependencyManager(xdsClient, syncContext,
-        serverName, ldsName, nameResolverArgs, scheduler);
+        serverName, ldsName, nameResolverArgs);
     xdsDependencyManager.start(xdsConfigWatcher);
 
     fakeClock.forwardTime(16, TimeUnit.SECONDS);
@@ -434,7 +443,7 @@ public class XdsDependencyManagerTest {
         "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
 
     xdsDependencyManager = new XdsDependencyManager(xdsClient, syncContext,
-        serverName, ldsResourceName, nameResolverArgs, scheduler);
+        serverName, ldsResourceName, nameResolverArgs);
     xdsDependencyManager.start(xdsConfigWatcher);
 
     verify(xdsConfigWatcher).onUpdate(
@@ -739,6 +748,75 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
+  public void testLogicalDns_success() {
+    FakeSocketAddress fakeAddress = new FakeSocketAddress();
+    nameResolverRegistry.register(new FakeNameResolverProvider(
+        "dns:///dns.example.com:1111", fakeAddress));
+    Cluster cluster = Cluster.newBuilder()
+        .setName(CLUSTER_NAME)
+        .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+        .setLoadAssignment(ClusterLoadAssignment.newBuilder()
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addLbEndpoints(LbEndpoint.newBuilder()
+              .setEndpoint(Endpoint.newBuilder()
+                .setAddress(Address.newBuilder()
+                  .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("dns.example.com")
+                    .setPortValue(1111)))))))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
+        ImmutableMap.of(CLUSTER_NAME, cluster));
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsConfig config = xdsUpdateCaptor.getValue().getValue();
+    XdsClusterConfig.ClusterChild clusterChild =
+        config.getClusters().get(CLUSTER_NAME).getValue().getChildren();
+    assertThat(clusterChild).isInstanceOf(XdsClusterConfig.EndpointConfig.class);
+    StatusOr<EdsUpdate> endpointOr = ((XdsClusterConfig.EndpointConfig) clusterChild).getEndpoint();
+    assertThat(endpointOr.getStatus()).isEqualTo(Status.OK);
+    assertThat(endpointOr.getValue()).isEqualTo(new EdsUpdate(
+        "fakeEds_logicalDns",
+        ImmutableMap.of(
+            Locality.create("", "", ""),
+            Endpoints.LocalityLbEndpoints.create(
+                Arrays.asList(Endpoints.LbEndpoint.create(
+                    new EquivalentAddressGroup(fakeAddress),
+                    1, true, "dns.example.com:1111", ImmutableMap.of())),
+                1, 0, ImmutableMap.of())),
+        Arrays.asList()));
+  }
+
+  @Test
+  public void testLogicalDns_noDnsNr() {
+    Cluster cluster = Cluster.newBuilder()
+        .setName(CLUSTER_NAME)
+        .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+        .setLoadAssignment(ClusterLoadAssignment.newBuilder()
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addLbEndpoints(LbEndpoint.newBuilder()
+              .setEndpoint(Endpoint.newBuilder()
+                .setAddress(Address.newBuilder()
+                  .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("dns.example.com")
+                    .setPortValue(1111)))))))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS,
+        ImmutableMap.of(CLUSTER_NAME, cluster));
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(xdsUpdateCaptor.capture());
+    XdsConfig config = xdsUpdateCaptor.getValue().getValue();
+    XdsClusterConfig.ClusterChild clusterChild =
+        config.getClusters().get(CLUSTER_NAME).getValue().getChildren();
+    assertThat(clusterChild).isInstanceOf(XdsClusterConfig.EndpointConfig.class);
+    StatusOr<EdsUpdate> endpointOr = ((XdsClusterConfig.EndpointConfig) clusterChild).getEndpoint();
+    assertThat(endpointOr.getStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(endpointOr.getStatus().getDescription())
+        .isEqualTo("Could not find dns name resolver");
+  }
+
+  @Test
   public void testCdsError() throws IOException {
     controlPlaneService.setXdsConfig(
         ADS_TYPE_URL_CDS, ImmutableMap.of(XdsTestUtils.CLUSTER_NAME,
@@ -943,4 +1021,6 @@ public class XdsDependencyManagerTest {
           && xdsConfig.getClusters().keySet().containsAll(expectedNames);
     }
   }
+
+  private static class FakeSocketAddress extends java.net.SocketAddress {}
 }

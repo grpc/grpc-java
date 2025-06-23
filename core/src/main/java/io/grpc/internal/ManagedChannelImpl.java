@@ -94,7 +94,6 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
-import io.grpc.internal.RetryingNameResolver.ResolutionResultListener;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -598,7 +597,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
-            .setMetricRecorder(this.metricRecorder);
+            .setMetricRecorder(this.metricRecorder)
+            .setNameResolverRegistry(builder.nameResolverRegistry);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -686,11 +686,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // We wrap the name resolver in a RetryingNameResolver to give it the ability to retry failures.
     // TODO: After a transition period, all NameResolver implementations that need retry should use
     //       RetryingNameResolver directly and this step can be removed.
-    NameResolver usedNameResolver = new RetryingNameResolver(resolver,
-          new BackoffPolicyRetryScheduler(new ExponentialBackoffPolicy.Provider(),
-              nameResolverArgs.getScheduledExecutorService(),
-              nameResolverArgs.getSynchronizationContext()),
-          nameResolverArgs.getSynchronizationContext());
+    NameResolver usedNameResolver = RetryingNameResolver.wrap(resolver, nameResolverArgs);
 
     if (overrideAuthority == null) {
       return usedNameResolver;
@@ -1653,18 +1649,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void onResult(final ResolutionResult resolutionResult) {
-      final class NamesResolved implements Runnable {
-
-        @Override
-        public void run() {
-          Status status = onResult2(resolutionResult);
-          ResolutionResultListener resolutionResultListener = resolutionResult.getAttributes()
-              .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY);
-          resolutionResultListener.resolutionAttempted(status);
-        }
-      }
-
-      syncContext.execute(new NamesResolved());
+      syncContext.execute(() -> onResult2(resolutionResult));
     }
 
     @SuppressWarnings("ReferenceEquality")
