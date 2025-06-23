@@ -19,6 +19,7 @@ package io.grpc.census;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.ClientInterceptor;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.opencensus.trace.Tracing;
@@ -31,7 +32,20 @@ import io.opencensus.trace.Tracing;
  */
 public final class GrpcCensus {
 
-  private GrpcCensus() {}
+  private final boolean statsEnabled;
+  private final boolean tracingEnabled;
+
+  private GrpcCensus(boolean statsEnabled, boolean tracingEnabled) {
+    this.statsEnabled = statsEnabled;
+    this.tracingEnabled = tracingEnabled;
+  }
+
+  /**
+   * Creates a new builder for {@link GrpcCensus}.
+   */
+  public static GrpcCensusBuilder builder() {
+    return new GrpcCensusBuilder();
+  }
 
   private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
     @Override
@@ -39,6 +53,38 @@ public final class GrpcCensus {
       return Stopwatch.createUnstarted();
     }
   };
+
+  /**
+   * Configures a {@link ServerBuilder} to enable census stats and tracing.
+   *
+   * @param serverBuilder The server builder to configure.
+   * @return The configured server builder.
+   */
+  public <T extends ServerBuilder<T>> T configureServerBuilder(T serverBuilder) {
+    if (statsEnabled) {
+      serverBuilder.addStreamTracerFactory(newServerStatsStreamTracerFactory());
+    }
+    if (tracingEnabled) {
+      serverBuilder.addStreamTracerFactory(newServerTracingStreamTracerFactory());
+    }
+    return serverBuilder;
+  }
+
+  /**
+   * Configures a {@link ManagedChannelBuilder} to enable census stats and tracing.
+   *
+   * @param channelBuilder The channel builder to configure.
+   * @return The configured channel builder.
+   */
+  public <T extends ManagedChannelBuilder<T>> T configureChannelBuilder(T channelBuilder) {
+    if (statsEnabled) {
+      channelBuilder.intercept(newClientStatsInterceptor());
+    }
+    if (tracingEnabled) {
+      channelBuilder.intercept(newClientTracingInterceptor());
+    }
+    return channelBuilder;
+  }
 
   /**
    * Returns a {@link ClientInterceptor} with default stats implementation.
@@ -93,21 +139,36 @@ public final class GrpcCensus {
   }
 
   /**
-   * Configures the given {@link ServerBuilder} with serverStreamTracerFactory for stats.
-   *
-   * @param serverBuilder             the server builder to configure
+   * Builder for {@link GrpcCensus}.
    */
-  public static void configureServerBuilderWithStatsTracer(ServerBuilder<?> serverBuilder) {
-    serverBuilder.addStreamTracerFactory(newServerStatsStreamTracerFactory());
-  }
+  public static final class GrpcCensusBuilder {
+    private boolean statsEnabled = true;
+    private boolean tracingEnabled = true;
 
-  /**
-   * Configures the given {@link ServerBuilder} with serverStreamTracerFactory for tracing.
-   *
-   * @param serverBuilder             the server builder to configure
-   */
-  public static void configureServerBuilderWithTracingTracer(ServerBuilder<?> serverBuilder) {
-    serverBuilder.addStreamTracerFactory(newServerTracingStreamTracerFactory());
-  }
+    private GrpcCensusBuilder() {
+    }
 
+    /**
+     * Disables stats collection.
+     */
+    public GrpcCensusBuilder disableStats() {
+      this.statsEnabled = false;
+      return this;
+    }
+
+    /**
+     * Disables tracing.
+     */
+    public GrpcCensusBuilder disableTracing() {
+      this.tracingEnabled = false;
+      return this;
+    }
+
+    /**
+     * Builds a new {@link GrpcCensus}.
+     */
+    public GrpcCensus build() {
+      return new GrpcCensus(statsEnabled, tracingEnabled);
+    }
+  }
 }
