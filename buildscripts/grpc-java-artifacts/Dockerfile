@@ -28,6 +28,6 @@ RUN mkdir -p "$ANDROID_HOME/cmdline-tools" && \
     yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses
 
 # Install Maven
-RUN curl -Ls https://dlcdn.apache.org/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz | \
+RUN curl -Ls https://archive.apache.org/dist/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz | \
     tar xz -C /var/local
 ENV PATH /var/local/apache-maven-3.8.8/bin:$PATH
