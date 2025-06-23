@@ -152,6 +152,7 @@ public class XdsDependencyManagerTest {
 
   private XdsDependencyManager xdsDependencyManager = new XdsDependencyManager(
       xdsClient, syncContext, serverName, serverName, nameResolverArgs);
+  private boolean savedEnableLogicalDns;
 
   @Before
   public void setUp() throws Exception {
@@ -168,6 +169,8 @@ public class XdsDependencyManagerTest {
     testWatcher = new TestWatcher();
     xdsConfigWatcher = mock(TestWatcher.class, delegatesTo(testWatcher));
     defaultXdsConfig = XdsTestUtils.getDefaultXdsConfig(serverName);
+
+    savedEnableLogicalDns = XdsDependencyManager.enableLogicalDns;
   }
 
   @After
@@ -180,6 +183,8 @@ public class XdsDependencyManagerTest {
     assertThat(adsEnded.get()).isTrue();
     assertThat(lrsEnded.get()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
+
+    XdsDependencyManager.enableLogicalDns = savedEnableLogicalDns;
   }
 
   @Test
@@ -749,6 +754,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testLogicalDns_success() {
+    XdsDependencyManager.enableLogicalDns = true;
     FakeSocketAddress fakeAddress = new FakeSocketAddress();
     nameResolverRegistry.register(new FakeNameResolverProvider(
         "dns:///dns.example.com:1111", fakeAddress));
@@ -789,6 +795,7 @@ public class XdsDependencyManagerTest {
 
   @Test
   public void testLogicalDns_noDnsNr() {
+    XdsDependencyManager.enableLogicalDns = true;
     Cluster cluster = Cluster.newBuilder()
         .setName(CLUSTER_NAME)
         .setType(Cluster.DiscoveryType.LOGICAL_DNS)
