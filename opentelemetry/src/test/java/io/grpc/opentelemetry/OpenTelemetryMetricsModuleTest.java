@@ -65,7 +65,6 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
-
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1028,7 +1027,7 @@ public class OpenTelemetryMetricsModuleTest {
             method.getFullMethodName(), emptyList());
 
     // Create a StreamInfo specifically for hedged attempts
-    final ClientStreamTracer.StreamInfo HEDGED_STREAM_INFO =
+    final ClientStreamTracer.StreamInfo hedgedStreamInfo =
         STREAM_INFO.toBuilder().setIsHedging(true).build();
 
     // --- First attempt starts ---
@@ -1038,12 +1037,12 @@ public class OpenTelemetryMetricsModuleTest {
     // --- Faking a hedged attempt ---
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS); // Hedging delay
     ClientStreamTracer hedgeTracer1 =
-        callAttemptsTracerFactory.newClientStreamTracer(HEDGED_STREAM_INFO, new Metadata());
+        callAttemptsTracerFactory.newClientStreamTracer(hedgedStreamInfo, new Metadata());
 
     // --- Faking a second hedged attempt ---
     fakeClock.forwardTime(20, TimeUnit.MILLISECONDS); // Another hedging delay
     ClientStreamTracer hedgeTracer2 =
-        callAttemptsTracerFactory.newClientStreamTracer(HEDGED_STREAM_INFO, new Metadata());
+        callAttemptsTracerFactory.newClientStreamTracer(hedgedStreamInfo, new Metadata());
 
     // --- Let the attempts resolve ---
     fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
@@ -1090,11 +1089,11 @@ public class OpenTelemetryMetricsModuleTest {
                 .hasHistogramSatisfying(
                     histogram ->
                         histogram.hasPointsSatisfying(
-                    point ->
-                        point
-                        .hasCount(1)
-                        .hasSum(0)
-                        .hasAttributes(finalAttributes)))
+                            point ->
+                                point
+                                    .hasCount(1)
+                                    .hasSum(0)
+                                    .hasAttributes(finalAttributes)))
         );
   }
 
