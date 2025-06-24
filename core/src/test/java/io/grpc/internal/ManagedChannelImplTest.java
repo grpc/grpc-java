@@ -3844,8 +3844,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
-    assertThat(resolvedAddresses.getAttributes()
-        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
@@ -3951,8 +3949,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
-    assertThat(resolvedAddresses.getAttributes()
-        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =

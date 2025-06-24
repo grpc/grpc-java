@@ -230,7 +230,8 @@ final class XdsNameResolver extends NameResolver {
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
 
-    resolveState = new ResolveState(ldsResourceName); // auto starts
+    resolveState = new ResolveState(ldsResourceName);
+    resolveState.start();
   }
 
   private static String expandPercentS(String template, String replacement) {
@@ -547,7 +548,7 @@ final class XdsNameResolver extends NameResolver {
             if (clusterRefs.get(cluster).refCount.get() != 0) {
               throw new AssertionError();
             }
-            clusterRefs.remove(cluster);
+            clusterRefs.remove(cluster).close();
             if (resolveState.lastConfigOrStatus.hasValue()) {
               updateResolutionResult(resolveState.lastConfigOrStatus.getValue());
             } else {
@@ -653,8 +654,12 @@ final class XdsNameResolver extends NameResolver {
     private ResolveState(String ldsResourceName) {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       xdsDependencyManager =
-          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName,
-              nameResolverArgs, scheduler);
+          new XdsDependencyManager(xdsClient, syncContext, authority, ldsResourceName,
+              nameResolverArgs);
+    }
+
+    void start() {
+      xdsDependencyManager.start(this);
     }
 
     private void shutdown() {
@@ -788,9 +793,13 @@ final class XdsNameResolver extends NameResolver {
           clusterRefs.get(cluster).refCount.incrementAndGet();
         } else {
           if (clusterNameMap.containsKey(cluster)) {
+            assert cluster.startsWith("cluster:");
+            XdsConfig.Subscription subscription =
+                xdsDependencyManager.subscribeToCluster(cluster.substring("cluster:".length()));
             clusterRefs.put(
                 cluster,
-                ClusterRefState.forCluster(new AtomicInteger(1), clusterNameMap.get(cluster)));
+                ClusterRefState.forCluster(
+                    new AtomicInteger(1), clusterNameMap.get(cluster), subscription));
           }
           if (rlsPluginConfigMap.containsKey(cluster)) {
             clusterRefs.put(
@@ -821,7 +830,7 @@ final class XdsNameResolver extends NameResolver {
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
-          clusterRefs.remove(cluster);
+          clusterRefs.remove(cluster).close();
           shouldUpdateResult = true;
         }
       }
@@ -874,7 +883,7 @@ final class XdsNameResolver extends NameResolver {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
           if (count == 0) {
-            clusterRefs.remove(cluster);
+            clusterRefs.remove(cluster).close();
           }
         }
         existingClusters = null;
@@ -960,15 +969,18 @@ final class XdsNameResolver extends NameResolver {
     final String traditionalCluster;
     @Nullable
     final RlsPluginConfig rlsPluginConfig;
+    @Nullable
+    final XdsConfig.Subscription subscription;
 
     private ClusterRefState(
         AtomicInteger refCount, @Nullable String traditionalCluster,
-        @Nullable RlsPluginConfig rlsPluginConfig) {
+        @Nullable RlsPluginConfig rlsPluginConfig, @Nullable XdsConfig.Subscription subscription) {
       this.refCount = refCount;
       checkArgument(traditionalCluster == null ^ rlsPluginConfig == null,
           "There must be exactly one non-null value in traditionalCluster and pluginConfig");
       this.traditionalCluster = traditionalCluster;
       this.rlsPluginConfig = rlsPluginConfig;
+      this.subscription = subscription;
     }
 
     private Map<String, ?> toLbPolicy() {
@@ -988,12 +1000,21 @@ final class XdsNameResolver extends NameResolver {
       }
     }
 
-    static ClusterRefState forCluster(AtomicInteger refCount, String name) {
-      return new ClusterRefState(refCount, name, null);
+    private void close() {
+      if (subscription != null) {
+        subscription.close();
+      }
     }
 
-    static ClusterRefState forRlsPlugin(AtomicInteger refCount, RlsPluginConfig rlsPluginConfig) {
-      return new ClusterRefState(refCount, null, rlsPluginConfig);
+    static ClusterRefState forCluster(
+        AtomicInteger refCount, String name, XdsConfig.Subscription subscription) {
+      return new ClusterRefState(refCount, name, null, checkNotNull(subscription, "subscription"));
+    }
+
+    static ClusterRefState forRlsPlugin(
+        AtomicInteger refCount,
+        RlsPluginConfig rlsPluginConfig) {
+      return new ClusterRefState(refCount, null, rlsPluginConfig, null);
     }
   }
 }
