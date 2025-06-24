@@ -272,9 +272,9 @@ public class LinkedHashLruCacheTest {
   @Test
   public void testFitToLimitWithReSize() {
 
-    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
-    Entry entry2 = new Entry("Entry2", ticker.read() + 20,1);
-    Entry entry3 = new Entry("Entry3", ticker.read() + 30,2);
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10, 4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20, 1);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30, 2);
 
     cache.cache(1, entry1);
     cache.cache(2, entry2);
@@ -301,9 +301,9 @@ public class LinkedHashLruCacheTest {
             fakeClock.getTicker()
     );
 
-    Entry entry1 = new Entry("Entry1", ticker.read() + 10,4);
-    Entry entry2 = new Entry("Entry2", ticker.read() + 20,2);
-    Entry entry3 = new Entry("Entry3", ticker.read() + 30,1);
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10, 4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20, 2);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30, 1);
 
     localCache.cache(1, entry1);
     localCache.cache(2, entry2);
@@ -318,7 +318,7 @@ public class LinkedHashLruCacheTest {
     assertThat(localCache.fitToLimit()).isEqualTo(true);
 
     assertThat(localCache.values().contains(entry1)).isFalse();
-    assertThat(localCache.values().containsAll(Arrays.asList(entry2,entry3))).isTrue();
+    assertThat(localCache.values().containsAll(Arrays.asList(entry2, entry3))).isTrue();
 
     assertThat(localCache.estimatedSize()).isEqualTo(2);
     assertThat(localCache.estimatedSizeBytes()).isEqualTo(3);
