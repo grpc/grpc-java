@@ -246,7 +246,7 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, upstreamTlsContext,
@@ -296,7 +296,7 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forLogicalDns(
             CLUSTER, "dns.example.com:1111", lrsServerInfo, 100L, upstreamTlsContext,
@@ -332,7 +332,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null)));
@@ -348,7 +348,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     childBalancer = Iterables.getOnlyElement(childBalancers);
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, 200L, null, Collections.emptyMap(), null)));
@@ -363,7 +363,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null)));
@@ -395,7 +395,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             clusterName, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null)));
@@ -462,7 +462,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     // Clusters are resolved recursively, later duplicates removed: [cluster3, cluster4, cluster2]
-    assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
+    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
             cluster3, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null),

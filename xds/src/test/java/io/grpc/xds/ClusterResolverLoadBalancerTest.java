@@ -244,7 +244,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersWithRingHashEndpointLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanism1), ringHash, false);
+        edsDiscoveryMechanism1, ringHash, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -310,7 +310,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersWithLeastRequestEndpointLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false);
+        edsDiscoveryMechanism1, leastRequest, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -357,7 +357,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void edsClustersEndpointHostname_addedToAddressAttribute() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest, false);
+        edsDiscoveryMechanismWithOutlierDetection, leastRequest, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
@@ -431,7 +431,7 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   public void endpointAddressRewritten_whenProxyMetadataIsInLocalityMetadata() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection), leastRequest, true);
+        edsDiscoveryMechanismWithOutlierDetection, leastRequest, true);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();

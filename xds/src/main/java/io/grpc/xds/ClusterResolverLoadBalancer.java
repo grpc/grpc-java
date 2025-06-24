@@ -185,21 +185,20 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       endpointLbConfig = config.lbConfig;
-      for (DiscoveryMechanism instance : config.discoveryMechanisms) {
-        clusters.add(instance.cluster);
-        ClusterState state;
-        if (instance.type == DiscoveryMechanism.Type.EDS) {
-          state = new EdsClusterState(instance.cluster, instance.edsServiceName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata, instance.outlierDetection);
-        } else {  // logical DNS
-          state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata);
-        }
-        clusterStates.put(instance.cluster, state);
-        state.start();
+      DiscoveryMechanism instance = config.discoveryMechanism;
+      clusters.add(instance.cluster);
+      ClusterState state;
+      if (instance.type == DiscoveryMechanism.Type.EDS) {
+        state = new EdsClusterState(instance.cluster, instance.edsServiceName,
+            instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+            instance.filterMetadata, instance.outlierDetection);
+      } else {  // logical DNS
+        state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
+            instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+            instance.filterMetadata);
       }
+      clusterStates.put(instance.cluster, state);
+      state.start();
       return Status.OK;
     }
 

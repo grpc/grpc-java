@@ -70,15 +70,15 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   }
 
   static final class ClusterResolverConfig {
-    // Ordered list of clusters to be resolved.
-    final List<DiscoveryMechanism> discoveryMechanisms;
+    // Clusters to be resolved.
+    final DiscoveryMechanism discoveryMechanism;
     // GracefulSwitch configuration
     final Object lbConfig;
     private final boolean isHttp11ProxyAvailable;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, Object lbConfig,
-        boolean isHttp11ProxyAvailable) {
-      this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
+    ClusterResolverConfig(DiscoveryMechanism discoveryMechanism, Object lbConfig,
+                          boolean isHttp11ProxyAvailable) {
+      this.discoveryMechanism = checkNotNull(discoveryMechanism, "discoveryMechanism");
       this.lbConfig = checkNotNull(lbConfig, "lbConfig");
       this.isHttp11ProxyAvailable = isHttp11ProxyAvailable;
     }
@@ -89,7 +89,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, lbConfig);
+      return Objects.hash(discoveryMechanism, lbConfig);
     }
 
     @Override
@@ -101,14 +101,14 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         return false;
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
-      return discoveryMechanisms.equals(that.discoveryMechanisms)
+      return discoveryMechanism.equals(that.discoveryMechanism)
           && lbConfig.equals(that.lbConfig);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("discoveryMechanisms", discoveryMechanisms)
+          .add("discoveryMechanism", discoveryMechanism)
           .add("lbConfig", lbConfig)
           .toString();
     }
