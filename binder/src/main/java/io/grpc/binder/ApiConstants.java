@@ -35,12 +35,15 @@ public final class ApiConstants {
   /**
    * Specifies the Android user in which target URIs should be resolved.
    *
-   * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all
-   * {@link io.grpc.NameResolverProvider}s producing {@link AndroidComponentAddress}es should let
-   * clients address servers in another Android user using this argument.
+   * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all {@link
+   * io.grpc.NameResolverProvider}s producing {@link AndroidComponentAddress}es should let clients
+   * address servers in another Android user using this argument.
    *
-   * <p>See also {@link AndroidComponentAddress#getTargetUser()}.
+   * <p>Connecting to a server in a different Android user is uncommon and can only be done by a
+   * "system app" client. See {@link AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for
+   * details.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
 }
