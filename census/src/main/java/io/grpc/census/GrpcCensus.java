@@ -19,6 +19,7 @@ package io.grpc.census;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.ClientInterceptor;
+import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
@@ -30,21 +31,22 @@ import io.opencensus.trace.Tracing;
  *  <p>GrpcCensus uses {@link io.opencensus.api.OpenCensus} APIs for instrumentation.
  *
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/12178")
 public final class GrpcCensus {
 
   private final boolean statsEnabled;
   private final boolean tracingEnabled;
 
-  private GrpcCensus(boolean statsEnabled, boolean tracingEnabled) {
-    this.statsEnabled = statsEnabled;
-    this.tracingEnabled = tracingEnabled;
+  private GrpcCensus(Builder builder) {
+    this.statsEnabled = builder.statsEnabled;
+    this.tracingEnabled = builder.tracingEnabled;
   }
 
   /**
    * Creates a new builder for {@link GrpcCensus}.
    */
-  public static GrpcCensusBuilder builder() {
-    return new GrpcCensusBuilder();
+  public static Builder newBuilder() {
+    return new Builder();
   }
 
   private static final Supplier<Stopwatch> STOPWATCH_SUPPLIER = new Supplier<Stopwatch>() {
@@ -89,7 +91,7 @@ public final class GrpcCensus {
   /**
    * Returns a {@link ClientInterceptor} with default stats implementation.
    */
-  public static ClientInterceptor newClientStatsInterceptor() {
+  private static ClientInterceptor newClientStatsInterceptor() {
     CensusStatsModule censusStats =
         new CensusStatsModule(
             STOPWATCH_SUPPLIER,
@@ -104,7 +106,7 @@ public final class GrpcCensus {
   /**
    * Returns a {@link ClientInterceptor} with default tracing implementation.
    */
-  public static ClientInterceptor newClientTracingInterceptor() {
+  private static ClientInterceptor newClientTracingInterceptor() {
     CensusTracingModule censusTracing =
         new CensusTracingModule(
             Tracing.getTracer(),
@@ -141,17 +143,17 @@ public final class GrpcCensus {
   /**
    * Builder for {@link GrpcCensus}.
    */
-  public static final class GrpcCensusBuilder {
+  public static final class Builder {
     private boolean statsEnabled = true;
     private boolean tracingEnabled = true;
 
-    private GrpcCensusBuilder() {
+    private Builder() {
     }
 
     /**
      * Disables stats collection.
      */
-    public GrpcCensusBuilder disableStats() {
+    public Builder disableStats() {
       this.statsEnabled = false;
       return this;
     }
@@ -159,7 +161,7 @@ public final class GrpcCensus {
     /**
      * Disables tracing.
      */
-    public GrpcCensusBuilder disableTracing() {
+    public Builder disableTracing() {
       this.tracingEnabled = false;
       return this;
     }
@@ -168,7 +170,7 @@ public final class GrpcCensus {
      * Builds a new {@link GrpcCensus}.
      */
     public GrpcCensus build() {
-      return new GrpcCensus(statsEnabled, tracingEnabled);
+      return new GrpcCensus(this);
     }
   }
 }
