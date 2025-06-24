@@ -353,8 +353,7 @@ final class OpenTelemetryMetricsModule {
         transparentRetriesPerCall.incrementAndGet();
       } else if (info.isHedging()) {
         hedgedAttemptsPerCall.incrementAndGet();
-      }
-      else {
+      } else {
         attemptsPerCall.incrementAndGet();
       }
       return newClientTracer(info);
@@ -466,7 +465,7 @@ final class OpenTelemetryMetricsModule {
       // Transparent Retry counts
       if (module.resource.clientCallTransparentRetriesCounter() != null
           && transparentRetriesPerCall.get() > 0) {
-        module.resource.clientCallRetriesCounter().record(
+        module.resource.clientCallTransparentRetriesCounter().record(
             transparentRetriesPerCall.get(), baseAttributes);
       }
 

@@ -256,8 +256,9 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.client.call.transparent_retries", enableMetrics, disableDefault)) {
-      builder.clientCallRetriesCounter(
+    if (isMetricEnabled("grpc.client.call.transparent_retries", enableMetrics,
+        disableDefault)) {
+      builder.clientCallTransparentRetriesCounter(
           meter.histogramBuilder(
                   "grpc.client.call.transparent_retries")
               .setUnit("{transparent_retry}")
@@ -269,7 +270,7 @@ public final class GrpcOpenTelemetry {
     }
 
     if (isMetricEnabled("grpc.client.call.hedges", enableMetrics, disableDefault)) {
-      builder.clientCallRetriesCounter(
+      builder.clientCallHedgesCounter(
           meter.histogramBuilder(
                   "grpc.client.call.hedges")
               .setUnit("{hedge}")

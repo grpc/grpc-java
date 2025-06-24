@@ -54,14 +54,18 @@ import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
+import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -94,6 +98,11 @@ public class OpenTelemetryMetricsModuleTest {
   private static final String CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE
       = "grpc.client.attempt.rcvd_total_compressed_message_size";
   private static final String CLIENT_CALL_DURATION = "grpc.client.call.duration";
+  private static final String CLIENT_CALL_RETRIES = "grpc.client.call.retries";
+  private static final String CLIENT_CALL_TRANSPARENT_RETRIES =
+      "grpc.client.call.transparent_retries";
+  private static final String CLIENT_CALL_HEDGES = "grpc.client.call.hedges";
+  private static final String CLIENT_CALL_RETRY_DELAY = "grpc.client.call.retry_delay";
   private static final String SERVER_CALL_COUNT = "grpc.server.call.started";
   private static final String SERVER_CALL_DURATION = "grpc.server.call.duration";
   private static final String SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE
@@ -194,7 +203,7 @@ public class OpenTelemetryMetricsModuleTest {
             }).build());
 
     final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<>();
-    ClientInterceptor callOptionsCatureInterceptor = new ClientInterceptor() {
+    ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -204,7 +213,7 @@ public class OpenTelemetryMetricsModuleTest {
     };
     Channel interceptedChannel =
         ClientInterceptors.intercept(
-            grpcServerRule.getChannel(), callOptionsCatureInterceptor,
+            grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
             module.getClientInterceptor("target:///"));
     ClientCall<String, String> call;
     call = interceptedChannel.newCall(method, CALL_OPTIONS);
@@ -378,6 +387,88 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
                                             0, 0, 0, 0, 0, 0, 0, 0, 0))));
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .extracting("name")
+        .doesNotContain(
+            CLIENT_CALL_RETRIES,
+            CLIENT_CALL_TRANSPARENT_RETRIES,
+            CLIENT_CALL_HEDGES,
+            CLIENT_CALL_RETRY_DELAY);
+  }
+
+  @Test
+  public void clientBasicMetrics_withRetryMetricsEnabled_shouldRecordZeroOrBeAbsent() {
+    // Explicitly enable the retry metrics
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    fakeClock.forwardTime(30, TimeUnit.MILLISECONDS);
+    tracer.outboundHeaders();
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    tracer.outboundMessage(0);
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasHistogramSatisfying(
+                    histogram ->
+                        histogram.hasPointsSatisfying(
+                            point ->
+                                point
+                                    .hasSum(0)
+                                    .hasCount(1)
+                                    .hasAttributes(finalAttributes)))
+
+        );
+
+    List<String> optionalMetricNames = Arrays.asList(
+        CLIENT_CALL_RETRIES,
+        CLIENT_CALL_TRANSPARENT_RETRIES,
+        CLIENT_CALL_HEDGES);
+
+    for (String metricName : optionalMetricNames) {
+      Optional<MetricData> metric = openTelemetryTesting.getMetrics().stream()
+          .filter(m -> m.getName().equals(metricName))
+          .findFirst();
+      if (metric.isPresent()) {
+        assertThat(metric.get())
+            .hasHistogramSatisfying(
+                histogram ->
+                    histogram.hasPointsSatisfying(
+                        point ->
+                            point
+                                .hasSum(0)
+                                .hasCount(1)
+                                .hasAttributes(finalAttributes)));
+      }
+    }
   }
 
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
@@ -829,6 +920,182 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasSum(33D)
                                             .hasAttributes(clientAttributes2)
                                             .hasBucketBoundaries(sizeBuckets))));
+  }
+
+  @Test
+  public void recordAttemptMetrics_withRetryMetricsEnabled() {
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+            method.getFullMethodName(), emptyList());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    fakeClock.forwardTime(154, TimeUnit.MILLISECONDS);
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    tracer.streamClosed(Status.NOT_FOUND);
+
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
+    fakeClock.forwardTime(32, MILLISECONDS);
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    fakeClock.forwardTime(10, MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
+    tracer.inboundWireSize(33);
+    fakeClock.forwardTime(24, MILLISECONDS);
+    tracer.streamClosed(Status.OK); // RPC succeeded
+
+    // --- The overall call ends ---
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    // Define attributes for assertions
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    // FINAL ASSERTION BLOCK
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            // Default metrics
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+
+            // --- Assertions for the retry metrics ---
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRIES)
+                .hasUnit("{retry}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(1) // We faked one standard retry
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_TRANSPARENT_RETRIES)
+                .hasUnit("{transparent_retry}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(2) // We faked two transparent retries
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasUnit("s")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(1.02) // 1000ms + 10ms + 10ms
+                        .hasAttributes(finalAttributes)))
+        );
+  }
+
+  @Test
+  public void recordAttemptMetrics_withHedgedCalls() {
+    // Enable the retry metrics, including hedges
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+            method.getFullMethodName(), emptyList());
+
+    // Create a StreamInfo specifically for hedged attempts
+    final ClientStreamTracer.StreamInfo HEDGED_STREAM_INFO =
+        STREAM_INFO.toBuilder().setIsHedging(true).build();
+
+    // --- First attempt starts ---
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    // --- Faking a hedged attempt ---
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS); // Hedging delay
+    ClientStreamTracer hedgeTracer1 =
+        callAttemptsTracerFactory.newClientStreamTracer(HEDGED_STREAM_INFO, new Metadata());
+
+    // --- Faking a second hedged attempt ---
+    fakeClock.forwardTime(20, TimeUnit.MILLISECONDS); // Another hedging delay
+    ClientStreamTracer hedgeTracer2 =
+        callAttemptsTracerFactory.newClientStreamTracer(HEDGED_STREAM_INFO, new Metadata());
+
+    // --- Let the attempts resolve ---
+    fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
+    // Initial attempt is cancelled because a hedge will succeed
+    tracer.streamClosed(Status.CANCELLED);
+    hedgeTracer1.streamClosed(Status.UNAVAILABLE); // First hedge fails
+
+    fakeClock.forwardTime(30, TimeUnit.MILLISECONDS);
+    hedgeTracer2.streamClosed(Status.OK); // Second hedge succeeds
+
+    // --- The overall call ends ---
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    // Define attributes for assertions
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    // FINAL ASSERTION BLOCK
+    // We expect 7 metrics: 5 default + hedges + retry_delay.
+    // Retries and transparent_retries are 0 and will not be reported.
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            // Default metrics
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+
+            // --- Assertions for the NEW metrics ---
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_HEDGES)
+                .hasUnit("{hedge}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(1)
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasUnit("s")
+                .hasHistogramSatisfying(
+                    histogram ->
+                        histogram.hasPointsSatisfying(
+                    point ->
+                        point
+                        .hasCount(1)
+                        .hasSum(0)
+                        .hasAttributes(finalAttributes)))
+        );
   }
 
   @Test
