@@ -44,6 +44,13 @@ public class ClientStreamListenerBase implements ClientStreamListener {
   }
 
   /**
+   * Return {@code true} if {@code #awaitClose} would return immediately with a status.
+   */
+  public boolean isClosed() {
+    return status.isDone();
+  }
+
+  /**
    * Returns response headers from the server or throws {@link
    * java.util.concurrent.TimeoutException} if they aren't delivered before the timeout.
    *

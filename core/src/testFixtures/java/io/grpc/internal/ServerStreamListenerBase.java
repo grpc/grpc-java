@@ -54,6 +54,10 @@ public class ServerStreamListenerBase implements ServerStreamListener {
     return halfClosedLatch.await(timeout, unit);
   }
 
+  public boolean isHalfClosed() {
+    return halfClosedLatch.getCount() == 0;
+  }
+
   public Status awaitClose(int timeout, TimeUnit unit) throws Exception {
     return status.get(timeout, unit);
   }
