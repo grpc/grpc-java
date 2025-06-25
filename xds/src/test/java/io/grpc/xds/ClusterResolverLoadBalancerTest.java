@@ -679,7 +679,7 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void edsCluster_allResourcesRevoked_shutDownChildLbPolicy() {
+  public void edsCluster_resourcesRevoked_shutDownChildLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
             edsDiscoveryMechanism1, roundRobin, false);
     deliverLbConfig(config);
@@ -699,11 +699,11 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(((PriorityLbConfig) childBalancer.config).priorities).hasSize(1);
     assertAddressesEqual(Arrays.asList(endpoint1), childBalancer.addresses);
 
-    xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME2);
+    xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
     verify(helper).updateBalancingState(
             eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status expectedError = Status.UNAVAILABLE.withDescription(
-            "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1, CLUSTER2));
+            "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1));
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -986,8 +986,8 @@ public class ClusterResolverLoadBalancerTest {
 
     xdsClient.deliverError(Status.RESOURCE_EXHAUSTED.withDescription("out of memory"));
     assertThat(childBalancer.upstreamError).isNotNull();  // last cluster's (DNS) error propagated
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNKNOWN);
-    assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("I am lost");
+    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("Unable to load EDS backend-service-foo.googleapis.com. xDS server returned: RESOURCE_EXHAUSTED: out of memory");
     assertThat(childBalancer.shutdown).isFalse();
     verify(helper, never()).updateBalancingState(
             eq(ConnectivityState.TRANSIENT_FAILURE), any(SubchannelPicker.class));
