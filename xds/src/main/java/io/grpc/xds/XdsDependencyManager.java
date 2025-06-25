@@ -82,6 +82,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
   private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = Locality.create("", "", "");
 
   private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Specified by gRFC A37
+
+  static boolean enableLogicalDns = false;
+
   private final String listenerName;
   private final XdsClient xdsClient;
   private final SynchronizationContext syncContext;
@@ -363,9 +366,14 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         }
         break;
       case LOGICAL_DNS:
-        TrackedWatcher<List<EquivalentAddressGroup>> dnsWatcher =
-            tracer.getWatcher(DNS_TYPE, cdsUpdate.dnsHostName());
-        child = new EndpointConfig(dnsToEdsUpdate(dnsWatcher.getData(), cdsUpdate.dnsHostName()));
+        if (enableLogicalDns) {
+          TrackedWatcher<List<EquivalentAddressGroup>> dnsWatcher =
+              tracer.getWatcher(DNS_TYPE, cdsUpdate.dnsHostName());
+          child = new EndpointConfig(dnsToEdsUpdate(dnsWatcher.getData(), cdsUpdate.dnsHostName()));
+        } else {
+          child = new EndpointConfig(StatusOr.fromStatus(
+              Status.INTERNAL.withDescription("Logical DNS in dependency manager unsupported")));
+        }
         break;
       default:
         child = new EndpointConfig(StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
@@ -806,7 +814,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           addEdsWatcher(getEdsServiceName());
           break;
         case LOGICAL_DNS:
-          addDnsWatcher(update.dnsHostName());
+          if (enableLogicalDns) {
+            addDnsWatcher(update.dnsHostName());
+          }
           break;
         case AGGREGATE:
           update.prioritizedClusterNames()
