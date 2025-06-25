@@ -18,7 +18,6 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.Bootstrapper.XDSTP_SCHEME;
 import static io.grpc.xds.client.BootstrapperImpl.XdsDataErrorHandlingEnabled;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
@@ -767,8 +766,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         respTimer.cancel();
       }
       respTimer = syncContext.schedule(
-          new ResourceNotFound(), timeoutSec, TimeUnit.SECONDS,
-          timeService);
+          new ResourceNotFound(), timeoutSec, TimeUnit.SECONDS, timeService);
     }
 
     void stopTimer() {
@@ -870,10 +868,12 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           }
           watchers.get(watcher).execute(() -> {
             try {
-              /*This will go after xdsClient watcher APIs are in.
-              watcher.onResourceChanged(StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
-                  "Resource " + resource + ": timeout obtaining resource from xDS server")));*/
-              watcher.onResourceDoesNotExist(resource);
+              if (resourceTimerIsTransientError) {
+                watcher.onError(Status.UNAVAILABLE.withDescription(
+                    "Timed out waiting for resource " + resource + " from xDS server"));
+              } else {
+                watcher.onResourceDoesNotExist(resource);
+              }
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
