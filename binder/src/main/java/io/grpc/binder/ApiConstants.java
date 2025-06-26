@@ -40,8 +40,8 @@ public final class ApiConstants {
    * address servers in another Android user using this argument.
    *
    * <p>Connecting to a server in a different Android user is uncommon and can only be done by a
-   * "system app" client. See {@link AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for
-   * details.
+   * "system app" client with special permissions. See {@link
+   * AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for details.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
