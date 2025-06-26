@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
@@ -151,9 +152,9 @@ public class CdsLoadBalancer2Test {
 
   @Before
   public void setUp() throws Exception {
+    lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
+    lbRegistry.register(new FakeLoadBalancerProvider(CDS_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
-    lbRegistry.register(new PriorityLoadBalancerProvider());
-    lbRegistry.register(new CdsLoadBalancerProvider());
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
     lbRegistry.register(
         new FakeLoadBalancerProvider("ring_hash_experimental", new RingHashLoadBalancerProvider()));
@@ -428,13 +429,24 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
-    PriorityLoadBalancerProvider.PriorityLbConfig childLbConfig = (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
+    PriorityLoadBalancerProvider.PriorityLbConfig childLbConfig =
+            (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
     assertThat(childLbConfig.priorities).hasSize(2);
     assertThat(childLbConfig.priorities.get(0)).isEqualTo(cluster1);
     assertThat(childLbConfig.priorities.get(1)).isEqualTo(cluster2);
     assertThat(childLbConfig.childConfigs).hasSize(2);
-    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig1 = childLbConfig.childConfigs.get(cluster2);
-    System.out.println(childConfig1);
+    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig1 =
+            childLbConfig.childConfigs.get(cluster1);
+    assertThat(childConfig1.toString()).isEqualTo("PriorityChildConfig{childConfig="
+            + "GracefulSwitchLoadBalancer.Config{childFactory=FakeLoadBalancerProvider{policy="
+            + "cds_experimental, priority=0, available=true}, childConfig=CdsConfig{name="
+            + "cluster-01.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
+            childLbConfig.childConfigs.get(cluster2);
+    assertThat(childConfig2.toString()).isEqualTo("PriorityChildConfig{childConfig="
+            + "GracefulSwitchLoadBalancer.Config{childFactory=FakeLoadBalancerProvider{policy="
+            + "cds_experimental, priority=1, available=true}, childConfig=CdsConfig{name="
+            + "cluster-02.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
   }
 
   @Test

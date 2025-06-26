@@ -24,7 +24,6 @@ import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static java.util.Objects.requireNonNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -33,12 +32,11 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.xds.PriorityLoadBalancerProvider;
-import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsConfig.Subscription;
@@ -47,13 +45,10 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Load balancer for cds_experimental LB policy. One instance per top-level cluster.
@@ -116,7 +111,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       // The LB policy config is provided in service_config.proto/JSON format.
       configOrError =
               GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()), lbRegistry);
+                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()),
+                      lbRegistry);
       if (configOrError.getError() != null) {
         // Should be impossible, because XdsClusterResource validated this
         return fail(Status.INTERNAL.withDescription(
@@ -155,7 +151,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         childLb = priorityLbProvider.newLoadBalancer(helper);
       }
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
-      for (String childCluster: requireNonNull(clusterConfig.getClusterResource().prioritizedClusterNames())) {
+      for (String childCluster: requireNonNull(
+              clusterConfig.getClusterResource().prioritizedClusterNames())) {
         priorityChildConfigs.put(childCluster,
                 new PriorityChildConfig(
                         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
@@ -165,8 +162,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
       childConfig = new PriorityLoadBalancerProvider.PriorityLbConfig(
               Collections.unmodifiableMap(priorityChildConfigs),
-              Collections.unmodifiableList(
-                      requireNonNull(clusterConfig.getClusterResource().prioritizedClusterNames())));
+              Collections.unmodifiableList(requireNonNull(
+                      clusterConfig.getClusterResource().prioritizedClusterNames())));
     } else {
       return fail(Status.INTERNAL.withDescription(
               errorPrefix() + "Unexpected cluster children type: "

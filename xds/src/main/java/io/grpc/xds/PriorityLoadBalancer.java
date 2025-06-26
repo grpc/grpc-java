@@ -88,7 +88,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     this.resolvedAddresses = resolvedAddresses;
     PriorityLbConfig config = (PriorityLbConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-      checkNotNull(config, "missing priority lb config");
+    checkNotNull(config, "missing priority lb config");
     priorityNames = config.priorities;
     priorityConfigs = config.childConfigs;
     Status status = Status.OK;

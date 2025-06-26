@@ -737,15 +737,15 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints1 =
-            LocalityLbEndpoints.create(
-                    Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-                            "hostname1", ImmutableMap.of())),
-                    10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
+        "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
-            LocalityLbEndpoints.create(
-                    Collections.singletonList(LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
-                            "hostname2", ImmutableMap.of())),
-                    10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
+        "hostname2", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
             EDS_SERVICE_NAME1,
             ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
@@ -764,15 +764,15 @@ public class ClusterResolverLoadBalancerTest {
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
     LocalityLbEndpoints localityLbEndpoints1 =
-            LocalityLbEndpoints.create(
-                    Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-                            "hostname1", ImmutableMap.of())),
-                    10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
+        "hostname1", ImmutableMap.of())),
+                 10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
-            LocalityLbEndpoints.create(
-                    Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
-                            "hostname2", ImmutableMap.of())),
-                    10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
+        "hostname2", ImmutableMap.of())),
+                 10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     String priority2 = CLUSTER1 + "[child2]";
     xdsClient.deliverClusterLoadAssignment(
             EDS_SERVICE_NAME1,
