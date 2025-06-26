@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static java.util.Objects.requireNonNull;
@@ -155,9 +156,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       for (String childCluster: requireNonNull(clusterConfig.getClusterResource().prioritizedClusterNames())) {
-        priorityChildConfigs.put(childCluster, new PriorityChildConfig(
-                GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-                        priorityLbProvider, getCdsPolicyConfig(childCluster)), false));
+        priorityChildConfigs.put(childCluster,
+                new PriorityChildConfig(
+                        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+                                lbRegistry.getProvider(CDS_POLICY_NAME),
+                                new CdsConfig(childCluster)),
+                        false));
       }
       childConfig = new PriorityLoadBalancerProvider.PriorityLbConfig(
               Collections.unmodifiableMap(priorityChildConfigs),
@@ -171,14 +175,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
     return childLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build());
-  }
-
-  private String getCdsPolicyConfig(String cluster) {
-    return String.format("{\n" +
-            "        \"cds_experimental\": {\n" +
-            "          \"cluster\": \"%s\"\n" +
-            "        }\n" +
-            "      }\n", cluster);
   }
 
   @Override

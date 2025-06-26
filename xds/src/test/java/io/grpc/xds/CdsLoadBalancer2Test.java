@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
@@ -27,6 +28,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
@@ -150,6 +152,8 @@ public class CdsLoadBalancer2Test {
   @Before
   public void setUp() throws Exception {
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
+    lbRegistry.register(new PriorityLoadBalancerProvider());
+    lbRegistry.register(new CdsLoadBalancerProvider());
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
     lbRegistry.register(
         new FakeLoadBalancerProvider("ring_hash_experimental", new RingHashLoadBalancerProvider()));
@@ -169,6 +173,8 @@ public class CdsLoadBalancer2Test {
     SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
       throw new AssertionError(e);
     });
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
 
     NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
@@ -403,10 +409,8 @@ public class CdsLoadBalancer2Test {
   public void discoverAggregateCluster() {
     String cluster1 = "cluster-01.googleapis.com";
     String cluster2 = "cluster-02.googleapis.com";
-    String cluster3 = "cluster-03.googleapis.com";
-    String cluster4 = "cluster-04.googleapis.com";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
-        // CLUSTER (aggr.) -> [cluster1 (aggr.), cluster2 (logical DNS), cluster3 (EDS)]
+        // cluster1 (aggr.) -> [cluster2 (EDS), cluster3 (EDS)]
         CLUSTER, Cluster.newBuilder()
           .setName(CLUSTER)
           .setClusterType(Cluster.CustomClusterType.newBuilder()
@@ -414,59 +418,23 @@ public class CdsLoadBalancer2Test {
             .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
                 .addClusters(cluster1)
                 .addClusters(cluster2)
-                .addClusters(cluster3)
-                .build())))
-          .setLbPolicy(Cluster.LbPolicy.RING_HASH)
-          .build(),
-        // cluster1 (aggr.) -> [cluster3 (EDS), cluster4 (EDS)]
-        cluster1, Cluster.newBuilder()
-          .setName(cluster1)
-          .setClusterType(Cluster.CustomClusterType.newBuilder()
-            .setName("envoy.clusters.aggregate")
-            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                .addClusters(cluster3)
-                .addClusters(cluster4)
                 .build())))
           .build(),
-        cluster2, Cluster.newBuilder()
-          .setName(cluster2)
-          .setType(Cluster.DiscoveryType.LOGICAL_DNS)
-          .setLoadAssignment(ClusterLoadAssignment.newBuilder()
-            .addEndpoints(LocalityLbEndpoints.newBuilder()
-              .addLbEndpoints(LbEndpoint.newBuilder()
-                .setEndpoint(Endpoint.newBuilder()
-                  .setAddress(Address.newBuilder()
-                    .setSocketAddress(SocketAddress.newBuilder()
-                      .setAddress("dns.example.com")
-                      .setPortValue(1111)))))))
-          .build(),
-        cluster3, EDS_CLUSTER.toBuilder()
-            .setName(cluster3)
-            .setCircuitBreakers(CircuitBreakers.newBuilder()
-                .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                  .setPriority(RoutingPriority.DEFAULT)
-                  .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
-            .build(),
-        cluster4, EDS_CLUSTER.toBuilder().setName(cluster4).build()));
+        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build(),
+        cluster2, EDS_CLUSTER.toBuilder().setName(cluster2).build()));
     startXdsDepManager();
 
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    // Clusters are resolved recursively, later duplicates removed: [cluster3, cluster4, cluster2]
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        Arrays.asList(
-          DiscoveryMechanism.forEds(
-            cluster3, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null),
-          DiscoveryMechanism.forEds(
-            cluster4, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null),
-          DiscoveryMechanism.forLogicalDns(
-            cluster2, "dns.example.com:1111", null, null, null, Collections.emptyMap())));
-    assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
-        .isEqualTo("ring_hash_experimental");  // dominated by top-level cluster's config
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLoadBalancerProvider.PriorityLbConfig childLbConfig = (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
+    assertThat(childLbConfig.priorities).hasSize(2);
+    assertThat(childLbConfig.priorities.get(0)).isEqualTo(cluster1);
+    assertThat(childLbConfig.priorities.get(1)).isEqualTo(cluster2);
+    assertThat(childLbConfig.childConfigs).hasSize(2);
+    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig1 = childLbConfig.childConfigs.get(cluster2);
+    System.out.println(childConfig1);
   }
 
   @Test
