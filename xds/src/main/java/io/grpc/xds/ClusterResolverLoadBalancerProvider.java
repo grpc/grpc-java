@@ -69,14 +69,14 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   }
 
   static final class ClusterResolverConfig {
-    // Clusters to be resolved.
+    // Cluster to be resolved.
     final DiscoveryMechanism discoveryMechanism;
     // GracefulSwitch configuration
     final Object lbConfig;
     private final boolean isHttp11ProxyAvailable;
 
     ClusterResolverConfig(DiscoveryMechanism discoveryMechanism, Object lbConfig,
-                          boolean isHttp11ProxyAvailable) {
+        boolean isHttp11ProxyAvailable) {
       this.discoveryMechanism = checkNotNull(discoveryMechanism, "discoveryMechanism");
       this.lbConfig = checkNotNull(lbConfig, "lbConfig");
       this.isHttp11ProxyAvailable = isHttp11ProxyAvailable;

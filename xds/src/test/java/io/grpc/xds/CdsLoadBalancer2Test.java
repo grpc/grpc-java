@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
@@ -152,8 +151,6 @@ public class CdsLoadBalancer2Test {
 
   @Before
   public void setUp() throws Exception {
-    lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
-    lbRegistry.register(new FakeLoadBalancerProvider(CDS_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
     lbRegistry.register(
@@ -162,7 +159,9 @@ public class CdsLoadBalancer2Test {
         new LeastRequestLoadBalancerProvider()));
     lbRegistry.register(new FakeLoadBalancerProvider("wrr_locality_experimental",
           new WrrLocalityLoadBalancerProvider()));
-    loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
 
     cleanupRule.register(InProcessServerBuilder
         .forName("control-plane.example.com")
@@ -407,11 +406,16 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  public void discoverAggregateCluster() {
+  public void discoverAggregateCluster_createsPriorityLbPolicy() {
+    lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
+
     String cluster1 = "cluster-01.googleapis.com";
     String cluster2 = "cluster-02.googleapis.com";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
-        // cluster1 (aggr.) -> [cluster2 (EDS), cluster3 (EDS)]
+        // CLUSTER (aggr.) -> [cluster1 (EDS), cluster2 (EDS)]
         CLUSTER, Cluster.newBuilder()
           .setName(CLUSTER)
           .setClusterType(Cluster.CustomClusterType.newBuilder()
@@ -438,15 +442,60 @@ public class CdsLoadBalancer2Test {
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig1 =
             childLbConfig.childConfigs.get(cluster1);
     assertThat(childConfig1.toString()).isEqualTo("PriorityChildConfig{childConfig="
-            + "GracefulSwitchLoadBalancer.Config{childFactory=FakeLoadBalancerProvider{policy="
-            + "cds_experimental, priority=0, available=true}, childConfig=CdsConfig{name="
-            + "cluster-01.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
+        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
+        + "name=cluster-01.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
             childLbConfig.childConfigs.get(cluster2);
     assertThat(childConfig2.toString()).isEqualTo("PriorityChildConfig{childConfig="
-            + "GracefulSwitchLoadBalancer.Config{childFactory=FakeLoadBalancerProvider{policy="
-            + "cds_experimental, priority=1, available=true}, childConfig=CdsConfig{name="
-            + "cluster-02.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
+        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
+        + "name=cluster-02.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+  }
+
+  @Test
+  // Both priorities will get tried using real priority LB policy.
+  public void discoverAggregateCluster_testChildCdsLbPolicyParsing() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
+
+    String cluster1 = "cluster-01.googleapis.com";
+    String cluster2 = "cluster-02.googleapis.com";
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        // CLUSTER (aggr.) -> [cluster1 (EDS), cluster2 (EDS)]
+        CLUSTER, Cluster.newBuilder()
+            .setName(CLUSTER)
+            .setClusterType(Cluster.CustomClusterType.newBuilder()
+                .setName("envoy.clusters.aggregate")
+                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                    .addClusters(cluster1)
+                    .addClusters(cluster2)
+                    .build())))
+            .build(),
+        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build(),
+        cluster2, EDS_CLUSTER.toBuilder().setName(cluster2).build()));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
+    assertThat(childBalancers).hasSize(2);
+    ClusterResolverConfig cluster1ResolverConfig =
+        (ClusterResolverConfig) childBalancers.get(0).config;
+    assertThat(cluster1ResolverConfig.discoveryMechanism.cluster)
+        .isEqualTo("cluster-01.googleapis.com");
+    assertThat(cluster1ResolverConfig.discoveryMechanism.type)
+        .isEqualTo(DiscoveryMechanism.Type.EDS);
+    assertThat(cluster1ResolverConfig.discoveryMechanism.edsServiceName)
+        .isEqualTo("backend-service-1.googleapis.com");
+    ClusterResolverConfig cluster2ResolverConfig =
+        (ClusterResolverConfig) childBalancers.get(1).config;
+    assertThat(cluster2ResolverConfig.discoveryMechanism.cluster)
+        .isEqualTo("cluster-02.googleapis.com");
+    assertThat(cluster2ResolverConfig.discoveryMechanism.type)
+        .isEqualTo(DiscoveryMechanism.Type.EDS);
+    assertThat(cluster2ResolverConfig.discoveryMechanism.edsServiceName)
+        .isEqualTo("backend-service-1.googleapis.com");
   }
 
   @Test
@@ -474,6 +523,11 @@ public class CdsLoadBalancer2Test {
 
   @Test
   public void aggregateCluster_noNonAggregateClusterExits_returnErrorPicker() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
+
     String cluster1 = "cluster-01.googleapis.com";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         // CLUSTER (aggr.) -> [cluster1 (missing)]

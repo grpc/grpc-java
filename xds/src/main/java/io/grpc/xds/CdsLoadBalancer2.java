@@ -23,7 +23,6 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static java.util.Objects.requireNonNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
@@ -64,14 +63,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private Subscription clusterSubscription;
   private LoadBalancer childLb;
 
-  CdsLoadBalancer2(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+    this.lbRegistry = lbRegistry;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -122,21 +116,21 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       DiscoveryMechanism instance;
       if (result.clusterType() == ClusterType.EDS) {
         instance = DiscoveryMechanism.forEds(
-                clusterName,
-                result.edsServiceName(),
-                result.lrsServerInfo(),
-                result.maxConcurrentRequests(),
-                result.upstreamTlsContext(),
-                result.filterMetadata(),
-                result.outlierDetection());
+            clusterName,
+            result.edsServiceName(),
+            result.lrsServerInfo(),
+            result.maxConcurrentRequests(),
+            result.upstreamTlsContext(),
+            result.filterMetadata(),
+            result.outlierDetection());
       } else {
         instance = DiscoveryMechanism.forLogicalDns(
-                clusterName,
-                result.dnsHostName(),
-                result.lrsServerInfo(),
-                result.maxConcurrentRequests(),
-                result.upstreamTlsContext(),
-                result.filterMetadata());
+            clusterName,
+            result.dnsHostName(),
+            result.lrsServerInfo(),
+            result.maxConcurrentRequests(),
+            result.upstreamTlsContext(),
+            result.filterMetadata());
       }
       childConfig = new ClusterResolverConfig(
               instance,
