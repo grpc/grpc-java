@@ -594,18 +594,18 @@ public class ClusterResolverLoadBalancerTest {
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_twoPriorities() {
     verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child1]", CLUSTER2 + "[child2]"),
-            ImmutableMap.of(locality1, createEndpoints(1),
-                    locality2, createEndpoints(2)
-            ));
+        ImmutableMap.of(locality1, createEndpoints(1),
+                locality2, createEndpoints(2)
+        ));
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_addOnePriority() {
     verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child2]"),
-            ImmutableMap.of(locality1, createEndpoints(1)),
-            ImmutableMap.of(locality2, createEndpoints(1)
-            ));
+        ImmutableMap.of(locality1, createEndpoints(1)),
+        ImmutableMap.of(locality2, createEndpoints(1)
+        ));
   }
 
   @Test
@@ -628,11 +628,11 @@ public class ClusterResolverLoadBalancerTest {
   public void edsUpdatePriorityName_mergeTwoPriorities() {
     verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child3]", CLUSTER2 + "[child1]"),
         ImmutableMap.of(locality1, createEndpoints(1),
-            locality3, createEndpoints(3),
-            locality2, createEndpoints(2)),
+          locality3, createEndpoints(3),
+          locality2, createEndpoints(2)),
         ImmutableMap.of(locality1, createEndpoints(2),
-            locality3, createEndpoints(1),
-            locality2, createEndpoints(1)
+          locality3, createEndpoints(1),
+          locality2, createEndpoints(1)
         ));
   }
 
@@ -657,30 +657,30 @@ public class ClusterResolverLoadBalancerTest {
     xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
 
     verify(helper).updateBalancingState(
-            eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(
-            pickerCaptor.getValue(),
-            Status.UNAVAILABLE.withDescription(
-                    "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1)),
-            null);
+        pickerCaptor.getValue(),
+        Status.UNAVAILABLE.withDescription(
+                "No usable endpoint from cluster(s): " + Arrays.asList(CLUSTER1)),
+        null);
   }
 
   @Test
   public void edsCluster_resourcesRevoked_shutDownChildLbPolicy() {
     ClusterResolverConfig config = new ClusterResolverConfig(
-            edsDiscoveryMechanism1, roundRobin, false);
+        edsDiscoveryMechanism1, roundRobin, false);
     deliverLbConfig(config);
     assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
     assertThat(childBalancers).isEmpty();
     reset(helper);
     EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
     LocalityLbEndpoints localityLbEndpoints1 =
-            LocalityLbEndpoints.create(
-                    Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
-                            "hostname1", ImmutableMap.of())),
-                    10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
+        LocalityLbEndpoints.create(
+            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
+        "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
-            EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints1));
+        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints1));
     assertThat(childBalancers).hasSize(1);  // child LB policy created
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(((PriorityLbConfig) childBalancer.config).priorities).hasSize(1);
@@ -710,7 +710,7 @@ public class ClusterResolverLoadBalancerTest {
             "hostname2", ImmutableMap.of())),
             10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
-            EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
+        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.addresses).hasSize(1);
     assertAddressesEqual(Collections.singletonList(endpoint2), childBalancer.addresses);
@@ -734,8 +734,8 @@ public class ClusterResolverLoadBalancerTest {
         "hostname2", ImmutableMap.of())),
             10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     xdsClient.deliverClusterLoadAssignment(
-            EDS_SERVICE_NAME1,
-            ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+        EDS_SERVICE_NAME1,
+        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
 
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
@@ -753,13 +753,13 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-        "hostname1", ImmutableMap.of())),
-                 10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
+      "hostname1", ImmutableMap.of())),
+            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
-        "hostname2", ImmutableMap.of())),
-                 10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
+      "hostname2", ImmutableMap.of())),
+           10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     String priority2 = CLUSTER1 + "[child2]";
     xdsClient.deliverClusterLoadAssignment(
         EDS_SERVICE_NAME1,
