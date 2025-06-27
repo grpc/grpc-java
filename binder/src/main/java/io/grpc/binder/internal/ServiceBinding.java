@@ -257,42 +257,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     return (int) userHandle.getClass().getDeclaredMethod("getIdentifier").invoke(userHandle);
   }
 
-  private static ResolveInfo resolveServiceAsUser(
-      PackageManager packageManager, Intent bindIntent, int flags, UserHandle targetUserHandle)
-      throws ReflectiveOperationException {
-    Method resolveService;
-    Object[] args;
-    if (targetUserHandle == null) {
-      resolveService =
-          packageManager.getClass().getMethod("resolveService", Intent.class, int.class);
-      args = new Object[] {bindIntent, flags};
-    } else {
-      resolveService =
-          packageManager
-              .getClass()
-              .getMethod("resolveServiceAsUser", Intent.class, int.class, int.class);
-      args = new Object[] {bindIntent, flags, getIdentifier(targetUserHandle)};
-    }
-    return (ResolveInfo) resolveService.invoke(packageManager, args);
-  }
-
-  @AnyThread
-  public ServiceInfo resolve() {
-    checkState(sourceContext != null);
-    try {
-      ResolveInfo resolveInfo =
-          resolveServiceAsUser(sourceContext.getPackageManager(), bindIntent, 0, targetUserHandle);
-      return resolveInfo != null ? resolveInfo.serviceInfo : null;
-    } catch (ReflectiveOperationException e) {
-      throw Status.fromThrowable(e).asRuntimeException();
-    }
-  }
-
-  // Sadly we must call this system API reflectively since it isn't part of the Android SDK.
-  private static int getIdentifier(UserHandle userHandle) throws ReflectiveOperationException {
-    return (int) userHandle.getClass().getMethod("getIdentifier").invoke(userHandle);
-  }
-
   // Sadly we must call this system API reflectively since it isn't part of the Android SDK.
   private static ResolveInfo resolveServiceAsUser(
       PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {

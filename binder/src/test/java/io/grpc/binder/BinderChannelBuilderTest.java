@@ -42,17 +42,4 @@ public final class BinderChannelBuilderTest {
       // Expected.
     }
   }
-
-  @Test
-  public void preAuthorizeTargetUris() {
-    BinderChannelBuilder builder = BinderChannelBuilder.forTarget("foo://bar", appContext);
-    assertThat(builder.transportFactoryBuilder.getPreAuthorizeServers()).isTrue();
-  }
-
-  @Test
-  public void noPreAuthorizeDirectAddresses() {
-    // TODO(jdcormie): Turn this on by default in a future release.
-    BinderChannelBuilder builder = BinderChannelBuilder.forAddress(addr, appContext);
-    assertThat(builder.transportFactoryBuilder.getPreAuthorizeServers()).isFalse();
-  }
 }
