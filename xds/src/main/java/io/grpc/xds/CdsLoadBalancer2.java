@@ -18,13 +18,15 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
+import static java.util.Objects.requireNonNull;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -33,6 +35,7 @@ import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsConfig.Subscription;
@@ -41,10 +44,10 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Load balancer for cds_experimental LB policy. One instance per top-level cluster.
@@ -60,14 +63,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private Subscription clusterSubscription;
   private LoadBalancer childLb;
 
-  CdsLoadBalancer2(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+    this.lbRegistry = lbRegistry;
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -91,7 +89,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       if (clusterSubscription == null) {
         // Should be impossible, because XdsDependencyManager wouldn't have generated this
         return fail(Status.INTERNAL.withDescription(
-            errorPrefix() + "Unable to find non-dynamic root cluster"));
+            errorPrefix() + "Unable to find non-dynamic cluster"));
       }
       // The dynamic cluster must not have loaded yet
       return Status.OK;
@@ -100,42 +98,25 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       return fail(clusterConfigOr.getStatus());
     }
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
-    List<String> leafNames;
-    if (clusterConfig.getChildren() instanceof AggregateConfig) {
-      leafNames = ((AggregateConfig) clusterConfig.getChildren()).getLeafNames();
-    } else if (clusterConfig.getChildren() instanceof EndpointConfig) {
-      leafNames = ImmutableList.of(clusterName);
-    } else {
-      return fail(Status.INTERNAL.withDescription(
-          errorPrefix() + "Unexpected cluster children type: "
-          + clusterConfig.getChildren().getClass()));
-    }
-    if (leafNames.isEmpty()) {
-      // Should be impossible, because XdsClusterResource validated this
-      return fail(Status.UNAVAILABLE.withDescription(
-          errorPrefix() + "Zero leaf clusters for root cluster " + clusterName));
-    }
 
-    Status noneFoundError = Status.INTERNAL
-        .withDescription(errorPrefix() + "No leaves and no error; this is a bug");
-    List<DiscoveryMechanism> instances = new ArrayList<>();
-    for (String leafName : leafNames) {
-      StatusOr<XdsClusterConfig> leafConfigOr = xdsConfig.getClusters().get(leafName);
-      if (!leafConfigOr.hasValue()) {
-        noneFoundError = leafConfigOr.getStatus();
-        continue;
+    NameResolver.ConfigOrError configOrError;
+    Object childConfig;
+    if (clusterConfig.getChildren() instanceof EndpointConfig) {
+      // The LB policy config is provided in service_config.proto/JSON format.
+      configOrError =
+              GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()),
+                      lbRegistry);
+      if (configOrError.getError() != null) {
+        // Should be impossible, because XdsClusterResource validated this
+        return fail(Status.INTERNAL.withDescription(
+                errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
       }
-      if (!(leafConfigOr.getValue().getChildren() instanceof EndpointConfig)) {
-        noneFoundError = Status.INTERNAL.withDescription(
-            errorPrefix() + "Unexpected child " + leafName + " cluster children type: "
-            + leafConfigOr.getValue().getChildren().getClass());
-        continue;
-      }
-      CdsUpdate result = leafConfigOr.getValue().getClusterResource();
+      CdsUpdate result = clusterConfig.getClusterResource();
       DiscoveryMechanism instance;
       if (result.clusterType() == ClusterType.EDS) {
         instance = DiscoveryMechanism.forEds(
-            leafName,
+            clusterName,
             result.edsServiceName(),
             result.lrsServerInfo(),
             result.maxConcurrentRequests(),
@@ -144,38 +125,47 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             result.outlierDetection());
       } else {
         instance = DiscoveryMechanism.forLogicalDns(
-            leafName,
+            clusterName,
             result.dnsHostName(),
             result.lrsServerInfo(),
             result.maxConcurrentRequests(),
             result.upstreamTlsContext(),
             result.filterMetadata());
       }
-      instances.add(instance);
-    }
-    if (instances.isEmpty()) {
-      return fail(noneFoundError);
-    }
-
-    // The LB policy config is provided in service_config.proto/JSON format.
-    NameResolver.ConfigOrError configOrError =
-        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-            Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()), lbRegistry);
-    if (configOrError.getError() != null) {
-      // Should be impossible, because XdsClusterResource validated this
+      childConfig = new ClusterResolverConfig(
+              instance,
+              configOrError.getConfig(),
+              clusterConfig.getClusterResource().isHttp11ProxyAvailable());
+      if (childLb == null) {
+        childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
+      }
+    } else if (clusterConfig.getChildren() instanceof AggregateConfig) {
+      LoadBalancerProvider priorityLbProvider = lbRegistry.getProvider(PRIORITY_POLICY_NAME);
+      if (childLb == null) {
+        childLb = priorityLbProvider.newLoadBalancer(helper);
+      }
+      Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
+      for (String childCluster: requireNonNull(
+              clusterConfig.getClusterResource().prioritizedClusterNames())) {
+        priorityChildConfigs.put(childCluster,
+                new PriorityChildConfig(
+                        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+                                lbRegistry.getProvider(CDS_POLICY_NAME),
+                                new CdsConfig(childCluster)),
+                        false));
+      }
+      childConfig = new PriorityLoadBalancerProvider.PriorityLbConfig(
+              Collections.unmodifiableMap(priorityChildConfigs),
+              Collections.unmodifiableList(requireNonNull(
+                      clusterConfig.getClusterResource().prioritizedClusterNames())));
+    } else {
       return fail(Status.INTERNAL.withDescription(
-          errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
+              errorPrefix() + "Unexpected cluster children type: "
+                      + clusterConfig.getChildren().getClass()));
     }
 
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        Collections.unmodifiableList(instances),
-        configOrError.getConfig(),
-        clusterConfig.getClusterResource().isHttp11ProxyAvailable());
-    if (childLb == null) {
-      childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
-    }
     return childLb.acceptResolvedAddresses(
-        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build());
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build());
   }
 
   @Override
