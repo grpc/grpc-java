@@ -753,12 +753,12 @@ public class ClusterResolverLoadBalancerTest {
     LocalityLbEndpoints localityLbEndpoints1 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-      "hostname1", ImmutableMap.of())),
+        "hostname1", ImmutableMap.of())),
             10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
     LocalityLbEndpoints localityLbEndpoints2 =
         LocalityLbEndpoints.create(
             Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
-      "hostname2", ImmutableMap.of())),
+        "hostname2", ImmutableMap.of())),
            10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
     String priority2 = CLUSTER1 + "[child2]";
     xdsClient.deliverClusterLoadAssignment(
