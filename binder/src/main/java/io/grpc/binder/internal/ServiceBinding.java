@@ -37,6 +37,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import java.lang.reflect.Method;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -90,6 +91,8 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   private final int bindFlags;
   private final Observer observer;
   private final Executor mainThreadExecutor;
+
+  private static volatile Method queryIntentServicesAsUserMethod;
 
   @GuardedBy("this")
   private State state;
@@ -253,19 +256,41 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     }
   }
 
-  private static int getIdentifier(UserHandle userHandle) throws ReflectiveOperationException {
-    return (int) userHandle.getClass().getDeclaredMethod("getIdentifier").invoke(userHandle);
-  }
-
-  // Sadly we must call this system API reflectively since it isn't part of the Android SDK.
+  // Sadly the PackageManager#resolveServiceAsUser() API we need isn't part of the SDK or even a
+  // @SystemApi as of this writing. Modern Android prevents even system apps from calling it, by any
+  // means (https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces).
+  // So instead we call queryIntentServicesAsUser(), which does more than we need but *is* a
+  // @SystemApi in all the SDK versions where we support cross-user Channels.
+  @Nullable
   private static ResolveInfo resolveServiceAsUser(
       PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
+    List<ResolveInfo> results =
+        queryIntentServicesAsUser(packageManager, intent, flags, targetUserHandle);
+    // The first query result is "what would be returned by resolveService", per the javadoc.
+    return (results != null && !results.isEmpty()) ? results.get(0) : null;
+  }
+
+  // The cross-user Channel feature requires the client to be a system app so we assume @SystemApi
+  // queryIntentServicesAsUser() is visible to us at runtime. It would be visible at build time too,
+  // if our host system app were written to call it directly. We only have to use reflection here
+  // because grpc-java is a library built outside the Android source tree where the compiler can't
+  // see the "non-SDK" @SystemApis that we need.
+  @Nullable
+  @SuppressWarnings("unchecked") // Safe by PackageManager#queryIntentServicesAsUser spec in AOSP.
+  private static List<ResolveInfo> queryIntentServicesAsUser(
+      PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
     try {
-      return (ResolveInfo)
-          packageManager
-              .getClass()
-              .getMethod("resolveServiceAsUser", Intent.class, int.class, int.class)
-              .invoke(packageManager, intent, flags, getIdentifier(targetUserHandle));
+      if (queryIntentServicesAsUserMethod == null) {
+        synchronized (ServiceBinding.class) {
+          if (queryIntentServicesAsUserMethod == null) {
+            queryIntentServicesAsUserMethod =
+                PackageManager.class.getMethod(
+                    "queryIntentServicesAsUser", Intent.class, int.class, UserHandle.class);
+          }
+        }
+      }
+      return (List<ResolveInfo>)
+          queryIntentServicesAsUserMethod.invoke(packageManager, intent, flags, targetUserHandle);
     } catch (ReflectiveOperationException e) {
       throw new VerifyException(e);
     }

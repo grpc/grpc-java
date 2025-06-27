@@ -17,7 +17,6 @@
 package io.grpc.binder;
 
 import android.content.Intent;
-import android.content.pm.ServiceInfo;
 import android.os.UserHandle;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -38,11 +37,13 @@ public final class ApiConstants {
   /**
    * Specifies the Android user in which target URIs should be resolved.
    *
-   * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all
-   * {@link io.grpc.NameResolverProvider}s producing {@link AndroidComponentAddress}es should let
-   * clients address servers in another Android user using this argument.
+   * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all {@link
+   * io.grpc.NameResolverProvider}s producing {@link AndroidComponentAddress}es should let clients
+   * address servers in another Android user using this argument.
    *
-   * <p>See also {@link AndroidComponentAddress#getTargetUser()}.
+   * <p>Connecting to a server in a different Android user is uncommon and can only be done by a
+   * "system app" client with special permissions. See {@link
+   * AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for details.
    */
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
@@ -57,11 +58,4 @@ public final class ApiConstants {
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<Boolean> PRE_AUTH_SERVER_OVERRIDE =
       Attributes.Key.create("pre-auth-server-override");
-
-  /**
-   * The authentic ServiceInfo for an {@link io.grpc.EquivalentAddressGroup} of {@link
-   * AndroidComponentAddress}es, in case a {@link NameResolver} has already looked it up.
-   */
-  public static final Attributes.Key<ServiceInfo> TARGET_SERVICE_INFO =
-      Attributes.Key.create("target-service-info");
 }

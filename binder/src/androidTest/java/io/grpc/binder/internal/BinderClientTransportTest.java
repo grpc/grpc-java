@@ -58,8 +58,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -185,7 +187,7 @@ public final class BinderClientTransportTest {
 
   @After
   public void tearDown() throws Exception {
-    blockingSecurityPolicy.setAuthorizationResult(Status.ABORTED);
+    blockingSecurityPolicy.provideNextCheckAuthorizationResult(Status.ABORTED);
     transport.shutdownNow(Status.OK);
     HostServices.awaitServiceShutdown();
     shutdownAndTerminate(executorServicePool.getObject());

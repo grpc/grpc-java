@@ -46,7 +46,6 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -208,7 +207,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     serverPkgInfo.applicationInfo.uid = 22222; // UID of the server *app*, which can be different.
     shadowOf(application.getPackageManager()).installPackage(serverPkgInfo);
     shadowOf(application.getPackageManager()).addOrUpdateService(serviceInfo);
-    server = newServer(Collections.emptyList());
+    server = newServer(ImmutableList.of());
     server.start(serverListener);
 
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
