@@ -58,7 +58,7 @@ public final class AndroidComponentAddress extends SocketAddress {
   @Nullable
   private final UserHandle targetUser; // null means the same user that hosts this process.
 
-  protected AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
+  private AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
     checkArgument(
         bindIntent.getComponent() != null || bindIntent.getPackage() != null,
         "'bindIntent' must be explicit. Specify either a package or ComponentName.");

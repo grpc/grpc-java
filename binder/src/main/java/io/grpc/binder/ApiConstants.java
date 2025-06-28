@@ -45,6 +45,7 @@ public final class ApiConstants {
    * "system app" client with special permissions. See {@link
    * AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for details.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
   public static final NameResolver.Args.Key<UserHandle> TARGET_ANDROID_USER =
       NameResolver.Args.Key.create("target-android-user");
 
