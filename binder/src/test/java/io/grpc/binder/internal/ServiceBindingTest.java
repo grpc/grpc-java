@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -27,6 +28,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.UserHandle;
@@ -34,6 +36,7 @@ import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.internal.Bindable.Observer;
 import java.util.Arrays;
@@ -59,6 +62,7 @@ public final class ServiceBindingTest {
 
   private Application appContext;
   private ComponentName serviceComponent;
+  private ServiceInfo serviceInfo = new ServiceInfo();
   private ShadowApplication shadowApplication;
   private TestObserver observer;
   private ServiceBinding binding;
@@ -67,13 +71,17 @@ public final class ServiceBindingTest {
   public void setUp() {
     appContext = ApplicationProvider.getApplicationContext();
     serviceComponent = new ComponentName("DUMMY", "SERVICE");
+    serviceInfo.packageName = serviceComponent.getPackageName();
+    serviceInfo.name = serviceComponent.getClassName();
     observer = new TestObserver();
 
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
 
     // Don't call onServiceDisconnected() upon unbindService(), just like the real Android doesn't.
     shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
+    shadowApplication.setBindServiceCallsOnServiceConnectedDirectly(false);
 
     binding = newBuilder().build();
     shadowOf(getMainLooper()).idle();
@@ -277,6 +285,49 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  public void testResolve() throws Exception {
+    serviceInfo.processName = "x"; // ServiceInfo has no equals() so look for one distinctive field.
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.processName).isEqualTo(serviceInfo.processName);
+  }
+
+  @Test
+  @Config(sdk = 33)
+  public void testResolveWithTargetUserHandle() throws Exception {
+    serviceInfo.processName = "x"; // ServiceInfo has no equals() so look for one distinctive field.
+    // Robolectric just ignores the user arg to resolveServiceAsUser() so this is all we can do.
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.processName).isEqualTo(serviceInfo.processName);
+  }
+
+  @Test
+  public void testResolveNonExistentServiceThrows() throws Exception {
+    ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
+    binding = newBuilder().setTargetComponent(doesNotExistService).build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+    assertThat(statusException.getStatus().getDescription()).contains("does.not.exist");
+  }
+
+  @Test
+  @Config(sdk = 33)
+  public void testResolveNonExistentServiceWithTargetUserThrows() throws Exception {
+    ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
+    binding =
+        newBuilder()
+            .setTargetUserHandle(generateUserHandle(/* userId= */ 12345))
+            .setTargetComponent(doesNotExistService)
+            .build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+    assertThat(statusException.getStatus().getDescription()).contains("does.not.exist");
+    assertThat(statusException.getStatus().getDescription()).contains("12345");
+  }
+
+  @Test
   @Config(sdk = 30)
   public void testBindWithDeviceAdmin() throws Exception {
     String deviceAdminClassName = "DevicePolicyAdmin";
@@ -284,7 +335,7 @@ public final class ServiceBindingTest {
     allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
+            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* uid= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
