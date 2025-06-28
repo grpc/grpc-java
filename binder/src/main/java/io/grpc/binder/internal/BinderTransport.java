@@ -54,7 +54,6 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.AndroidComponentAddress;
-import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
@@ -81,7 +80,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -589,7 +587,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     @GuardedBy("this")
     @Nullable private ListenableFuture<Status> authResultFuture; // null before we check auth.
     @GuardedBy("this")
-    @Nullable private ListenableFuture<Status> preAuthResultFuture; // null before we check auth.
+    @Nullable private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
 
     /**
      * Constructs a new transport instance.

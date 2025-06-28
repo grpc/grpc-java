@@ -53,9 +53,9 @@ interface Bindable {
    * <p>Resolving an untrusted address before binding to it lets you screen out problematic servers
    * before giving them a chance to run. However, note that the identity/existence of the resolved
    * Service can change between the time this method returns and the time you actually bind/connect
-   * to it. For example, suppose the target package gets uninstalled right after this method
-   * returns. In {@link Observer#onBound}, you should verify that the server you resolved is the
-   * same one you connected to.
+   * to it. For example, suppose the target package gets uninstalled or upgraded right after this
+   * method returns. In {@link Observer#onBound}, you should verify that the server you resolved is
+   * the same one you connected to.
    */
   @AnyThread
   ServiceInfo resolve() throws StatusException;

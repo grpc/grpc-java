@@ -335,7 +335,7 @@ public final class ServiceBindingTest {
     allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
+            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* uid= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();

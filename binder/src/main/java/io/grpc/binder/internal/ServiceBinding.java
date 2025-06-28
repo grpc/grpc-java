@@ -26,6 +26,7 @@ import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.UserHandle;
 import androidx.annotation.AnyThread;
@@ -301,10 +302,19 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public ServiceInfo resolve() throws StatusException {
     checkState(sourceContext != null);
     PackageManager packageManager = sourceContext.getPackageManager();
+    int flags = 0;
+    if (Build.VERSION.SDK_INT >= 29) {
+      // Use the current locked/unlocked state of 'targetUserHandle' to filter <service> matches.
+      // Callers want to resolve 'bindIntent' the same way a follow-up call to bind() will. And
+      // if the target user is locked, bindService() ignores matches that can't presently be created
+      // due to directBootAware=false. Of course this filter races against a concurrent unlock, but
+      // that's no different than the other resolve/connect races our callers must already handle.
+      flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
+    }
     ResolveInfo resolveInfo =
         targetUserHandle != null
-            ? resolveServiceAsUser(packageManager, bindIntent, 0, targetUserHandle)
-            : packageManager.resolveService(bindIntent, 0);
+            ? resolveServiceAsUser(packageManager, bindIntent, flags, targetUserHandle)
+            : packageManager.resolveService(bindIntent, flags);
     if (resolveInfo == null) {
       throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
           .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")

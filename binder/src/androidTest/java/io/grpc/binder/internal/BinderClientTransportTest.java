@@ -394,7 +394,6 @@ public final class BinderClientTransportTest {
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
-
     // If the transport gave up waiting on auth, it should cancel its request.
     assertThat(authRequest.isCancelled()).isTrue();
   }
@@ -409,14 +408,13 @@ public final class BinderClientTransportTest {
             .setReadyTimeoutMillis(1_234)
             .build();
     transport.start(transportListener).run();
-    // Take the pre-auth request but don't respond to it, in order to trigger the ready timeout.
+    // Take the next authRequest but don't respond to it, in order to trigger the ready timeout.
     AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
 
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
-
     // If the transport gave up waiting on auth, it should cancel its request.
     assertThat(preAuthRequest.isCancelled()).isTrue();
   }
@@ -492,31 +490,15 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testAsyncSecurityPolicyAuthCancelledUponExternalTermination() throws Exception {
+  public void testAsyncSecurityPolicyCancelledUponExternalTermination() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder()
-        .setPreAuthorizeServer(false)
-        .setSecurityPolicy(securityPolicy).build();
+    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
     transport.start(transportListener).run();
     AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
     transport.shutdownNow(Status.UNAVAILABLE); // 'authRequest' remains unanswered!
     transportListener.awaitShutdown();
     transportListener.awaitTermination();
     assertThat(authRequest.isCancelled()).isTrue();
-  }
-
-  @Test
-  public void testAsyncSecurityPolicyPreAuthCancelledUponExternalTermination() throws Exception {
-    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder()
-        .setPreAuthorizeServer(true)
-        .setSecurityPolicy(securityPolicy).build();
-    transport.start(transportListener).run();
-    AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
-    transport.shutdownNow(Status.UNAVAILABLE); // 'preAuthRequest' remains unanswered!
-    transportListener.awaitShutdown();
-    transportListener.awaitTermination();
-    assertThat(preAuthRequest.isCancelled()).isTrue();
   }
 
   private static void startAndAwaitReady(
