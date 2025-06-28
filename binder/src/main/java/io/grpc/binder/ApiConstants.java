@@ -57,6 +57,7 @@ public final class ApiConstants {
    * can use this to force server pre-auth and prevent abuse.
    */
   @EquivalentAddressGroup.Attr
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12191")
   public static final Attributes.Key<Boolean> PRE_AUTH_SERVER_OVERRIDE =
       Attributes.Key.create("pre-auth-server-override");
 }

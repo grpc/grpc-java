@@ -302,7 +302,7 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * Clients that require a particular behavior should configure it explicitly using this method
    * rather than relying on the default.
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/00000")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12191")
   public BinderChannelBuilder preAuthorizeServers(boolean preAuthorize) {
     transportFactoryBuilder.setPreAuthorizeServers(preAuthorize);
     return this;
