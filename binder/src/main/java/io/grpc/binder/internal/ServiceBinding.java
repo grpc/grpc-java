@@ -304,11 +304,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     PackageManager packageManager = sourceContext.getPackageManager();
     int flags = 0;
     if (Build.VERSION.SDK_INT >= 29) {
-      // Use the current locked/unlocked state of 'targetUserHandle' to filter <service> matches.
-      // Callers want to resolve 'bindIntent' the same way a follow-up call to bind() will. And
-      // if the target user is locked, bindService() ignores matches that can't presently be created
-      // due to directBootAware=false. Of course this filter races against a concurrent unlock, but
-      // that's no different than the other resolve/connect races our callers must already handle.
+      // Filter out non-'directBootAware' <service>s when 'targetUserHandle' is locked. Here's why:
+      // Callers want 'bindIntent' to #resolve() to the same thing a follow-up call to #bind() will.
+      // But bindService() *always* ignores services that can't presently be created for lack of
+      // 'directBootAware'-ness. This flag explicitly tells resolveService() to act the same way.
       flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
     }
     ResolveInfo resolveInfo =
