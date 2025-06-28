@@ -44,13 +44,12 @@ public class BinderClientTransportBuilder {
     return this;
   }
 
-  public BinderClientTransportBuilder setClientTransportOptions(ClientTransportOptions options) {
+  public BinderClientTransportBuilder setOptions(ClientTransportOptions options) {
     this.options = checkNotNull(options);
     return this;
   }
 
-  public BinderClientTransportBuilder setClientTransportFactory(
-      BinderClientTransportFactory factory) {
+  public BinderClientTransportBuilder setFactory(BinderClientTransportFactory factory) {
     this.factory = checkNotNull(factory);
     return this;
   }

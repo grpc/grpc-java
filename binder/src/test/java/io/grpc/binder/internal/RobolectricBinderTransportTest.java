@@ -175,7 +175,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
   BinderClientTransportBuilder newClientTransportBuilder() {
     return new BinderClientTransportBuilder()
-        .setClientTransportFactory(newClientTransportFactoryBuilder().buildClientTransportFactory())
+        .setFactory(newClientTransportFactoryBuilder().buildClientTransportFactory())
         .setServerAddress(server.getListenSocketAddress());
   }
 
@@ -187,7 +187,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
     return newClientTransportBuilder()
         .setServerAddress(server.getListenSocketAddress())
-        .setClientTransportOptions(options)
+        .setOptions(options)
         .build();
   }
 
@@ -213,7 +213,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     client =
         newClientTransportBuilder()
-            .setClientTransportFactory(
+            .setFactory(
                 newClientTransportFactoryBuilder()
                     .setSecurityPolicy(securityPolicy)
                     .buildClientTransportFactory())
@@ -243,10 +243,15 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     options.setEagAttributes(
         Attributes.newBuilder().set(ApiConstants.PRE_AUTH_SERVER_OVERRIDE, true).build());
     client =
-        newClientTransportFactoryBuilder()
-            .setSecurityPolicy(securityPolicy)
-            .buildClientTransportFactory()
-            .newClientTransport(server.getListenSocketAddress(), options, null);
+        newClientTransportBuilder()
+            .setOptions(options)
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setPreAuthorizeServers(preAuthServersParam) // To be overridden.
+                    .setSecurityPolicy(securityPolicy)
+                    .buildClientTransportFactory()
+            )
+            .build();
     runIfNotNull(client.start(mockClientTransportListener));
 
     AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_MS, MILLISECONDS);
