@@ -249,8 +249,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
                 newClientTransportFactoryBuilder()
                     .setPreAuthorizeServers(preAuthServersParam) // To be overridden.
                     .setSecurityPolicy(securityPolicy)
-                    .buildClientTransportFactory()
-            )
+                    .buildClientTransportFactory())
             .build();
     runIfNotNull(client.start(mockClientTransportListener));
 

@@ -586,8 +586,10 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
     @GuardedBy("this")
     @Nullable private ListenableFuture<Status> authResultFuture; // null before we check auth.
+
     @GuardedBy("this")
-    @Nullable private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
+    @Nullable
+    private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
 
     /**
      * Constructs a new transport instance.
@@ -812,7 +814,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
         readyTimeoutFuture = null;
       }
       if (preAuthResultFuture != null) {
-        preAuthResultFuture.cancel(false);  // No effect if already complete.
+        preAuthResultFuture.cancel(false); // No effect if already complete.
       }
       if (authResultFuture != null) {
         authResultFuture.cancel(false);  // No effect if already complete.
