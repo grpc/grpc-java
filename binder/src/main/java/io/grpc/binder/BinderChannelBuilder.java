@@ -285,10 +285,11 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * <p>Android users can be tricked into installing a malicious app with the same package name as a
    * legitimate server. That's why we don't send calls to a server until it has been authorized by
    * an appropriate {@link SecurityPolicy}. But merely binding to a malicious server can enable
-   * "keep-alive" and "background activity launch" abuse, even if security policy ultimately causes
-   * the grpc connection to fail. Pre-authorization is especially important for security when the
-   * server's address isn't known in advance but rather resolved via target URI or discovered by
-   * other means.
+   * "keep-alive" and "background activity launch" abuse, even if it's ultimately unauthorized.
+   * Pre-authorization mitigates these threats by performing a preliminary {@link SecurityPolicy}
+   * check against a server app's PackageManager-registered identity without actually creating an
+   * instance of it. This is especially important for security when the server's direct address
+   * isn't known in advance but rather resolved via target URI or discovered by other means.
    *
    * <p>Note that, unlike ordinary authorization, pre-authorization is performed against the server
    * app's UID, not the UID of the process hosting the bound Service. These can be different, most
