@@ -80,7 +80,7 @@ def _path_ignoring_repository(f):
 def _java_rpc_library_impl(ctx):
     if len(ctx.attr.srcs) != 1:
         fail("Exactly one src value supported", "srcs")
-    if ctx.attr.srcs[0].label.package != ctx.label.package:
+    if ctx.attr.srcs[0].label.package != ctx.label.package and (ctx.attr.srcs[0].label.workspace_name == "" or ctx.label.workspace_name == ""):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
