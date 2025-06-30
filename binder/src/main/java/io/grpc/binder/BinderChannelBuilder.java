@@ -242,9 +242,9 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * specify a {@link UserHandle}. If neither the Channel nor the {@link AndroidComponentAddress}
    * specifies a target user, the {@link UserHandle} of the current process will be used.
    *
-   * <p>Targeting a Service in a different Android user is uncommon and requires special permissions
-   * normally reserved for system apps. See {@link android.content.Context#bindServiceAsUser} for
-   * details.
+   * <p>Connecting to a server in a different Android user is uncommon and can only be done by a
+   * "system app" client with special permissions. See {@link
+   * AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for details.
    *
    * @deprecated This method's name is misleading because it implies an impersonated client identity
    *     when it's actually specifying part of the server's location. It's also no longer necessary

@@ -512,8 +512,8 @@ public final class ChannelzGrpc {
      * created). This does not include subchannels nor non-top level channels.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetTopChannelsResponse getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetTopChannelsResponse getTopChannels(io.grpc.channelz.v1.GetTopChannelsRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetTopChannelsMethod(), getCallOptions(), request);
     }
 
@@ -522,8 +522,8 @@ public final class ChannelzGrpc {
      * Gets all servers that exist in the process.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetServersResponse getServers(io.grpc.channelz.v1.GetServersRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetServersResponse getServers(io.grpc.channelz.v1.GetServersRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetServersMethod(), getCallOptions(), request);
     }
 
@@ -532,8 +532,8 @@ public final class ChannelzGrpc {
      * Returns a single Server, or else a NOT_FOUND code.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetServerResponse getServer(io.grpc.channelz.v1.GetServerRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetServerResponse getServer(io.grpc.channelz.v1.GetServerRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetServerMethod(), getCallOptions(), request);
     }
 
@@ -542,8 +542,8 @@ public final class ChannelzGrpc {
      * Gets all server sockets that exist in the process.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetServerSocketsResponse getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetServerSocketsResponse getServerSockets(io.grpc.channelz.v1.GetServerSocketsRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetServerSocketsMethod(), getCallOptions(), request);
     }
 
@@ -552,8 +552,8 @@ public final class ChannelzGrpc {
      * Returns a single Channel, or else a NOT_FOUND code.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetChannelResponse getChannel(io.grpc.channelz.v1.GetChannelRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetChannelResponse getChannel(io.grpc.channelz.v1.GetChannelRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetChannelMethod(), getCallOptions(), request);
     }
 
@@ -562,8 +562,8 @@ public final class ChannelzGrpc {
      * Returns a single Subchannel, or else a NOT_FOUND code.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetSubchannelResponse getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetSubchannelResponse getSubchannel(io.grpc.channelz.v1.GetSubchannelRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetSubchannelMethod(), getCallOptions(), request);
     }
 
@@ -572,8 +572,8 @@ public final class ChannelzGrpc {
      * Returns a single Socket or else a NOT_FOUND code.
      * </pre>
      */
-    public io.grpc.channelz.v1.GetSocketResponse getSocket(io.grpc.channelz.v1.GetSocketRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.channelz.v1.GetSocketResponse getSocket(io.grpc.channelz.v1.GetSocketRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getGetSocketMethod(), getCallOptions(), request);
     }
   }
