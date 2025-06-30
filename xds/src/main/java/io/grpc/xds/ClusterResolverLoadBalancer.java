@@ -168,8 +168,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private final class ClusterResolverLbState extends LoadBalancer {
     private final Helper helper;
-    private final List<String> clusters = new ArrayList<>();
     private final Map<String, ClusterState> clusterStates = new HashMap<>();
+    private String cluster;
     private Object endpointLbConfig;
     private ResolvedAddresses resolvedAddresses;
     private LoadBalancer childLb;
@@ -186,7 +186,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       endpointLbConfig = config.lbConfig;
       DiscoveryMechanism instance = config.discoveryMechanism;
-      clusters.add(instance.cluster);
+      cluster = instance.cluster;
       ClusterState state;
       if (instance.type == DiscoveryMechanism.Type.EDS) {
         state = new EdsClusterState(instance.cluster, instance.edsServiceName,
@@ -228,24 +228,22 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
 
       Status endpointNotFound = Status.OK;
-      for (String cluster : clusters) {
-        ClusterState state = clusterStates.get(cluster);
-        // Propagate endpoints to the child LB policy only after all clusters have been resolved.
-        if (!state.resolved && state.status.isOk()) {
-          return;
-        }
-        if (state.result != null) {
-          addresses.addAll(state.result.addresses);
-          priorityChildConfigs.putAll(state.result.priorityChildConfigs);
-          priorities.addAll(state.result.priorities);
-        } else {
-          endpointNotFound = state.status;
-        }
+      ClusterState state = clusterStates.get(cluster);
+      // Propagate endpoints to the child LB policy only after all clusters have been resolved.
+      if (!state.resolved && state.status.isOk()) {
+        return;
+      }
+      if (state.result != null) {
+        addresses.addAll(state.result.addresses);
+        priorityChildConfigs.putAll(state.result.priorityChildConfigs);
+        priorities.addAll(state.result.priorities);
+      } else {
+        endpointNotFound = state.status;
       }
       if (addresses.isEmpty()) {
         if (endpointNotFound.isOk()) {
           endpointNotFound = Status.UNAVAILABLE.withDescription(
-              "No usable endpoint from cluster(s): " + clusters);
+              "No usable endpoint from cluster(s): " + cluster);
         } else {
           endpointNotFound =
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
@@ -273,22 +271,13 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     private void handleEndpointResolutionError() {
-      boolean allInError = true;
-      Status error = null;
-      for (String cluster : clusters) {
-        ClusterState state = clusterStates.get(cluster);
-        if (state.status.isOk()) {
-          allInError = false;
-        } else {
-          error = state.status;
-        }
-      }
-      if (allInError) {
+      ClusterState state = clusterStates.get(cluster);
+      if (!state.status.isOk()) {
         if (childLb != null) {
-          childLb.handleNameResolutionError(error);
+          childLb.handleNameResolutionError(state.status);
         } else {
           helper.updateBalancingState(
-              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(state.status)));
         }
       }
     }
