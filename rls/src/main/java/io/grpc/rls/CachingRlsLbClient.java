@@ -255,6 +255,13 @@ final class CachingRlsLbClient {
     }
   }
 
+  Status acceptResolvedAddressFactory(ResolvedAddressFactory childLbResolvedAddressFactory) {
+    synchronized (lock) {
+      return refCountedChildPolicyWrapperFactory.acceptResolvedAddressFactory(
+          childLbResolvedAddressFactory);
+    }
+  }
+
   /**
    * Convert the status to UNAVAILABLE and enhance the error message.
    * @param status status as provided by server
