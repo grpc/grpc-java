@@ -506,6 +506,8 @@ public class PickFirstLeafLoadBalancerTest {
 
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
     verifyNoMoreInteractions(mockHelper);
 
     // subchannel  |  state    |   health
@@ -525,6 +527,8 @@ public class PickFirstLeafLoadBalancerTest {
         .getSubchannel()).isSameInstanceAs(mockSubchannel1);
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
     verifyNoMoreInteractions(mockHelper);
 
     healthListener2.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
@@ -618,6 +622,8 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
   }
@@ -650,6 +656,8 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -684,6 +692,8 @@ public class PickFirstLeafLoadBalancerTest {
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     verify(mockHelper, atLeast(0)).getSynchronizationContext();
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
     verifyNoMoreInteractions(mockHelper);
     assertEquals(error, pickerCaptor.getValue().pickSubchannel(mockArgs).getStatus());
 
@@ -1859,6 +1869,8 @@ public class PickFirstLeafLoadBalancerTest {
     // No new connections are requested, subchannels responsible for completing their own backoff
     verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verify(mockHelper, atLeast(0)).getMetricRecorder();
+    verify(mockHelper, atLeast(0)).getChannelTarget();
     verifyNoMoreInteractions(mockHelper);
 
     // First connection attempt is successful
@@ -2920,6 +2932,11 @@ public class PickFirstLeafLoadBalancerTest {
 
     @Override
     public String getAuthority() {
+      return null;
+    }
+
+    @Override
+    public String getChannelTarget() {
       return null;
     }
 
