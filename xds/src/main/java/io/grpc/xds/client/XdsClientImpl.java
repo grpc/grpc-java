@@ -18,7 +18,7 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.BootstrapperImpl.XdsDataErrorHandlingEnabled;
+import static io.grpc.xds.client.BootstrapperImpl.xdsDataErrorHandlingEnabled;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 
@@ -741,7 +741,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         return;
       }
       ServerInfo serverInfo = activeCpc.getServerInfo();
-      int timeoutSec = XdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError()
+      int timeoutSec = xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError()
           ? EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC : INITIAL_RESOURCE_FETCH_TIMEOUT_SEC;
 
       class ResourceNotFound implements Runnable {
@@ -845,7 +845,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled = serverInfo.ignoreResourceDeletion();
       boolean resourceTimerIsTransientError =
-          XdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError();
+          xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError();
       if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,

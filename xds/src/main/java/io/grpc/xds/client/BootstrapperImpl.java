@@ -62,7 +62,8 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   @VisibleForTesting
   static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
 
-  static boolean XdsDataErrorHandlingEnabled
+  @VisibleForTesting
+  public static boolean xdsDataErrorHandlingEnabled
       = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING, false);
 
   protected final XdsLogger logger;
@@ -262,7 +263,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
-        resourceTimerIsTransientError = XdsDataErrorHandlingEnabled
+        resourceTimerIsTransientError = xdsDataErrorHandlingEnabled
             && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
       }
       servers.add(
