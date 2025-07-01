@@ -89,6 +89,10 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
   }
 
+  public boolean isUsingSystemRootCerts() {
+    return this.isUsingSystemRootCerts;
+  }
+
   private static CertificateProviderInfo getCertProviderConfig(
       @Nullable Map<String, CertificateProviderInfo> certProviders, String pluginInstanceName) {
     return certProviders != null ? certProviders.get(pluginInstanceName) : null;

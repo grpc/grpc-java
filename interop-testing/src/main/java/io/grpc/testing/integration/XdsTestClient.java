@@ -452,12 +452,14 @@ public final class XdsTestClient {
 
       private void handleRpcCompleted(long requestId, RpcType rpcType, String hostname,
           Set<XdsStatsWatcher> watchers) {
+        logger.info("RPC completed");
         statsAccumulator.recordRpcFinished(rpcType, Status.OK);
         notifyWatchers(watchers, rpcType, requestId, hostname);
       }
 
       private void handleRpcError(long requestId, RpcType rpcType, Status status,
           Set<XdsStatsWatcher> watchers) {
+        logger.info("RPC error with status " + status);
         statsAccumulator.recordRpcFinished(rpcType, status);
         notifyWatchers(watchers, rpcType, requestId, null);
       }

@@ -651,7 +651,11 @@ final class ProtocolNegotiators {
     @Override
     @IgnoreJRERequirement
     protected void handlerAdded0(ChannelHandlerContext ctx) {
-      sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      /*if (host.equals("psm-grpc-server")) {
+        sslEngine = sslContext.newEngine(ctx.alloc(), "kannanj-psm-server-20250604-1226-8bkw5-830293263384.us-east7.run.app", 443);
+      } else {*/
+        sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      // }
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
       sslEngine.setSSLParameters(sslParams);

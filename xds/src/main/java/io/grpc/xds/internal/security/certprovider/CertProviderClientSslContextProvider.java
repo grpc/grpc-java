@@ -30,7 +30,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
-final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
+public final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
 
   CertProviderClientSslContextProvider(
       Node node,
