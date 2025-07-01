@@ -279,6 +279,35 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     return this;
   }
 
+  /**
+   * Checks servers against this Channel's {@link SecurityPolicy} *before* binding.
+   *
+   * <p>Android users can be tricked into installing a malicious app with the same package name as a
+   * legitimate server. That's why we don't send calls to a server until it has been authorized by
+   * an appropriate {@link SecurityPolicy}. But merely binding to a malicious server can enable
+   * "keep-alive" and "background activity launch" abuse, even if it's ultimately unauthorized.
+   * Pre-authorization mitigates these threats by performing a preliminary {@link SecurityPolicy}
+   * check against a server app's PackageManager-registered identity without actually creating an
+   * instance of it. This is especially important for security when the server's direct address
+   * isn't known in advance but rather resolved via target URI or discovered by other means.
+   *
+   * <p>Note that, unlike ordinary authorization, pre-authorization is performed against the server
+   * app's UID, not the UID of the process hosting the bound Service. These can be different, most
+   * commonly due to services that set `android:isolatedProcess=true`.
+   *
+   * <p>Pre-authorization is strongly recommended but it remains optional for now because of this
+   * behavior change and the small performance cost.
+   *
+   * <p>The default value of this property is false but it will become true in a future release.
+   * Clients that require a particular behavior should configure it explicitly using this method
+   * rather than relying on the default.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12191")
+  public BinderChannelBuilder preAuthorizeServers(boolean preAuthorize) {
+    transportFactoryBuilder.setPreAuthorizeServers(preAuthorize);
+    return this;
+  }
+
   @Override
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(
