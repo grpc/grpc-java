@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
 import static io.grpc.xds.XdsClusterResource.TRANSPORT_SOCKET_NAME_HTTP11_PROXY;
 import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -154,9 +155,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -173,9 +172,6 @@ public class GrpcXdsClientImplDataTest {
   private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
       "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
 
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
@@ -1082,6 +1078,30 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  public void parseLocalityLbEndpoints_onlyPermitIp() {
+    io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
+        io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints.newBuilder()
+            .setLocality(Locality.newBuilder()
+                .setRegion("region-foo").setZone("zone-foo").setSubZone("subZone-foo"))
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(100))  // locality weight
+            .setPriority(1)
+            .addLbEndpoints(io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                    .setAddress(Address.newBuilder()
+                        .setSocketAddress(
+                            SocketAddress.newBuilder()
+                                .setAddress("example.com").setPortValue(8888))))
+                .setHealthStatus(io.envoyproxy.envoy.config.core.v3.HealthStatus.HEALTHY)
+                .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(20)))  // endpoint weight
+            .build();
+    ResourceInvalidException ex = assertThrows(
+        ResourceInvalidException.class,
+        () -> XdsEndpointResource.parseLocalityLbEndpoints(proto));
+    assertThat(ex.getMessage()).contains("IP");
+    assertThat(ex.getMessage()).contains("example.com");
+  }
+
+  @Test
   public void parseLocalityLbEndpoints_treatUnknownHealthAsHealthy()
       throws ResourceInvalidException {
     io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints proto =
@@ -1572,11 +1592,12 @@ public class GrpcXdsClientImplDataTest {
       throws ResourceInvalidException {
     @SuppressWarnings("deprecation")
     HttpConnectionManager hcm = HttpConnectionManager.newBuilder().setXffNumTrustedHops(2).build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("HttpConnectionManager with xff_num_trusted_hops unsupported");
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class,
+        () -> XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("HttpConnectionManager with xff_num_trusted_hops unsupported");
   }
 
   @Test
@@ -1586,12 +1607,13 @@ public class GrpcXdsClientImplDataTest {
     HttpConnectionManager hcm = HttpConnectionManager.newBuilder()
         .addOriginalIpDetectionExtensions(TypedExtensionConfig.newBuilder().build())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("HttpConnectionManager with original_ip_detection_extensions unsupported");
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry, false, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry, false, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("HttpConnectionManager with original_ip_detection_extensions unsupported");
   }
-  
+
   @Test
   public void parseHttpConnectionManager_missingRdsAndInlinedRouteConfiguration()
       throws ResourceInvalidException {
@@ -1604,11 +1626,12 @@ public class GrpcXdsClientImplDataTest {
                 HttpFilter.newBuilder().setName("terminal").setTypedConfig(
                     Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("HttpConnectionManager neither has inlined route_config nor RDS");
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("HttpConnectionManager neither has inlined route_config nor RDS");
   }
 
   @Test
@@ -1623,11 +1646,12 @@ public class GrpcXdsClientImplDataTest {
                 HttpFilter.newBuilder().setName("terminal").setTypedConfig(
                         Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("HttpConnectionManager contains duplicate HttpFilter: envoy.filter.foo");
   }
 
   @Test
@@ -1641,11 +1665,12 @@ public class GrpcXdsClientImplDataTest {
                 HttpFilter.newBuilder().setName("envoy.filter.bar").setIsOptional(true)
                     .setTypedConfig(Any.pack(HTTPFault.newBuilder().build())))
                     .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("The last HttpFilter must be a terminal filter: envoy.filter.bar");
-    XdsListenerResource.parseHttpConnectionManager(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
             hcm, filterRegistry,
-            true /* does not matter */, getXdsResourceTypeArgs(true));
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("The last HttpFilter must be a terminal filter: envoy.filter.bar");
   }
 
   @Test
@@ -1659,11 +1684,12 @@ public class GrpcXdsClientImplDataTest {
                     .addHttpFilters(
                             HttpFilter.newBuilder().setName("envoy.filter.foo").setIsOptional(true))
                     .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("A terminal HttpFilter must be the last filter: terminal");
-    XdsListenerResource.parseHttpConnectionManager(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
             hcm, filterRegistry,
-            true, getXdsResourceTypeArgs(true));
+            true, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("A terminal HttpFilter must be the last filter: terminal");
   }
 
   @Test
@@ -1675,11 +1701,12 @@ public class GrpcXdsClientImplDataTest {
                     .addHttpFilters(
                             HttpFilter.newBuilder().setName("envoy.filter.bar").setIsOptional(true))
                     .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("The last HttpFilter must be a terminal filter: envoy.filter.bar");
-    XdsListenerResource.parseHttpConnectionManager(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
             hcm, filterRegistry,
-            true /* does not matter */, getXdsResourceTypeArgs(true));
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("The last HttpFilter must be a terminal filter: envoy.filter.bar");
   }
 
   @Test
@@ -1687,11 +1714,12 @@ public class GrpcXdsClientImplDataTest {
     HttpConnectionManager hcm =
             HttpConnectionManager.newBuilder()
                     .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Missing HttpFilter in HttpConnectionManager.");
-    XdsListenerResource.parseHttpConnectionManager(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
             hcm, filterRegistry,
-            true /* does not matter */, getXdsResourceTypeArgs(true));
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Missing HttpFilter in HttpConnectionManager.");
   }
 
   @Test
@@ -1815,12 +1843,12 @@ public class GrpcXdsClientImplDataTest {
                     Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
 
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Multiple ClusterSpecifierPlugins with the same name: rls-plugin-1");
-
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Multiple ClusterSpecifierPlugins with the same name: rls-plugin-1");
   }
 
   @Test
@@ -1867,12 +1895,12 @@ public class GrpcXdsClientImplDataTest {
                     Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
 
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ClusterSpecifierPlugin for [invalid-plugin-name] not found");
-
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .contains("ClusterSpecifierPlugin for [invalid-plugin-name] not found");
   }
 
 
@@ -2001,12 +2029,12 @@ public class GrpcXdsClientImplDataTest {
                 HttpFilter.newBuilder().setName("terminal").setTypedConfig(
                     Any.pack(Router.newBuilder().build())).setIsOptional(true))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseHttpConnectionManager(
+            hcm3, filterRegistry,
+            true /* does not matter */, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo(
         "HttpConnectionManager contains invalid RDS: must specify ADS or self ConfigSource");
-    XdsListenerResource.parseHttpConnectionManager(
-        hcm3, filterRegistry,
-        true /* does not matter */, getXdsResourceTypeArgs(true));
   }
 
   @Test
@@ -2096,11 +2124,10 @@ public class GrpcXdsClientImplDataTest {
                 .setTypedConfig(Any.pack(StringValue.of("unregistered"))))
             .build();
 
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsRouteConfigureResource.parseClusterSpecifierPlugin(pluginProto, registry));
+    assertThat(e).hasMessageThat().isEqualTo(
         "Unsupported ClusterSpecifierPlugin type: type.googleapis.com/google.protobuf.StringValue");
-
-    XdsRouteConfigureResource.parseClusterSpecifierPlugin(pluginProto, registry);
   }
 
   @Test
@@ -2297,11 +2324,11 @@ public class GrpcXdsClientImplDataTest {
             Cluster.TransportSocketMatch.newBuilder().setName("match1").build())
         .build();
 
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.processCluster(cluster, null, LRS_SERVER_INFO,
+            LoadBalancerRegistry.getDefaultRegistry()));
+    assertThat(e).hasMessageThat().isEqualTo(
         "Cluster cluster-foo.googleapis.com: transport-socket-matches not supported.");
-    XdsClusterResource.processCluster(cluster, null, LRS_SERVER_INFO,
-        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -2346,12 +2373,12 @@ public class GrpcXdsClientImplDataTest {
         .setLbPolicy(LbPolicy.ROUND_ROBIN)
         .build();
 
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.processCluster(cluster3, null, LRS_SERVER_INFO,
+            LoadBalancerRegistry.getDefaultRegistry()));
+    assertThat(e).hasMessageThat().isEqualTo(
         "Cluster cluster-foo.googleapis.com: field eds_cluster_config must be set to indicate to"
             + " use EDS over ADS or self ConfigSource");
-    XdsClusterResource.processCluster(cluster3, null, LRS_SERVER_INFO,
-        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Test
@@ -2620,10 +2647,11 @@ public class GrpcXdsClientImplDataTest {
             .setName("listener1")
             .setTrafficDirection(TrafficDirection.OUTBOUND)
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Listener listener1 with invalid traffic direction: OUTBOUND");
-    XdsListenerResource.parseServerSideListener(
-        listener, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listener, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Listener listener1 with invalid traffic direction: OUTBOUND");
   }
 
   @Test
@@ -2644,10 +2672,11 @@ public class GrpcXdsClientImplDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addListenerFilters(ListenerFilter.newBuilder().build())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Listener listener1 cannot have listener_filters");
-    XdsListenerResource.parseServerSideListener(
-        listener, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(listener, null, filterRegistry, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Listener listener1 cannot have listener_filters");
   }
 
   @Test
@@ -2658,10 +2687,11 @@ public class GrpcXdsClientImplDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .setUseOriginalDst(BoolValue.of(true))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Listener listener1 cannot have use_original_dst set to true");
-    XdsListenerResource.parseServerSideListener(
-        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(listener, null, filterRegistry, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Listener listener1 cannot have use_original_dst set to true");
   }
 
   @Test
@@ -2674,11 +2704,10 @@ public class GrpcXdsClientImplDataTest {
                 .setSocketAddress(
                     SocketAddress.newBuilder()))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Invalid address: Empty address is not allowed.");
-
-    XdsListenerResource.parseServerSideListener(
-        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listener, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo("Invalid address: Empty address is not allowed.");
   }
 
   @Test
@@ -2692,11 +2721,10 @@ public class GrpcXdsClientImplDataTest {
                     SocketAddress.newBuilder()
                         .setAddress("172.14.14.5").setNamedPort("")))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("NAMED_PORT is not supported in gRPC.");
-
-    XdsListenerResource.parseServerSideListener(
-        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listener, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo("NAMED_PORT is not supported in gRPC.");
   }
 
   @Test
@@ -2742,10 +2770,11 @@ public class GrpcXdsClientImplDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("FilterChainMatch must be unique. Found duplicate:");
-    XdsListenerResource.parseServerSideListener(
-        listener, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listener, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .startsWith("FilterChainMatch must be unique. Found duplicate:");
   }
 
   @Test
@@ -2791,10 +2820,11 @@ public class GrpcXdsClientImplDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addAllFilterChains(Arrays.asList(filterChain1, filterChain2))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("FilterChainMatch must be unique. Found duplicate:");
-    XdsListenerResource.parseServerSideListener(
-        listener,null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listener, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .startsWith("FilterChainMatch must be unique. Found duplicate:");
   }
 
   @Test
@@ -2854,12 +2884,12 @@ public class GrpcXdsClientImplDataTest {
             .setFilterChainMatch(FilterChainMatch.getDefaultInstance())
             .setTransportSocket(TransportSocket.getDefaultInstance())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseFilterChain(
+            filterChain, "filter-chain-foo", null, filterRegistry, null, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
-    XdsListenerResource.parseFilterChain(
-        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
-        getXdsResourceTypeArgs(true));
   }
 
   @Test
@@ -2873,12 +2903,12 @@ public class GrpcXdsClientImplDataTest {
             .setTransportSocket(TransportSocket.getDefaultInstance())
             .addAllFilters(Arrays.asList(filter, filter))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseFilterChain(
+            filterChain, "filter-chain-foo", null, filterRegistry, null, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo(
         "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
-    XdsListenerResource.parseFilterChain(
-        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
-        getXdsResourceTypeArgs(true));
   }
 
   @Test
@@ -2891,13 +2921,13 @@ public class GrpcXdsClientImplDataTest {
             .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter)
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseFilterChain(
+            filterChain, "filter-chain-foo", null, filterRegistry, null, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo(
         "FilterChain filter-chain-foo contains filter envoy.http_connection_manager "
             + "without typed_config");
-    XdsListenerResource.parseFilterChain(
-        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
-        getXdsResourceTypeArgs(true));
   }
 
   @Test
@@ -2914,13 +2944,13 @@ public class GrpcXdsClientImplDataTest {
             .setTransportSocket(TransportSocket.getDefaultInstance())
             .addFilters(filter)
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseFilterChain(
+            filterChain, "filter-chain-foo", null, filterRegistry, null, null,
+            getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat().isEqualTo(
         "FilterChain filter-chain-foo contains filter unsupported with unsupported "
             + "typed_config type unsupported-type-url");
-    XdsListenerResource.parseFilterChain(
-        filterChain, "filter-chain-foo", null, filterRegistry, null, null,
-        getXdsResourceTypeArgs(true));
   }
 
   @Test
@@ -2996,53 +3026,55 @@ public class GrpcXdsClientImplDataTest {
             .setTrafficDirection(TrafficDirection.INBOUND)
             .addAllFilterChains(Arrays.asList(filterChain0, filterChain1))
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("Filter chain names must be unique. Found duplicate: filter_chain");
-    XdsListenerResource.parseServerSideListener(
-        listenerProto, null, filterRegistry, null, getXdsResourceTypeArgs(true));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsListenerResource.parseServerSideListener(
+            listenerProto, null, filterRegistry, null, getXdsResourceTypeArgs(true)));
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Filter chain names must be unique. Found duplicate: filter_chain");
   }
 
   @Test
-  public void validateCommonTlsContext_tlsParams() throws ResourceInvalidException {
+  public void validateCommonTlsContext_tlsParams() {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
             .setTlsParams(TlsParameters.getDefaultInstance())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context with tls_params is not supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo("common-tls-context with tls_params is not supported");
   }
 
   @Test
-  public void validateCommonTlsContext_customHandshaker() throws ResourceInvalidException {
+  public void validateCommonTlsContext_customHandshaker() {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
             .setCustomHandshaker(TypedExtensionConfig.getDefaultInstance())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context with custom_handshaker is not supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "common-tls-context with custom_handshaker is not supported");
   }
 
   @Test
-  public void validateCommonTlsContext_validationContext() throws ResourceInvalidException {
+  public void validateCommonTlsContext_validationContext() {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
             .setValidationContext(CertificateValidationContext.getDefaultInstance())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
-        + "in upstream-tls-context");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "ca_certificate_provider_instance or system_root_certs is required "
+            + "in upstream-tls-context");
   }
 
   @Test
-  public void validateCommonTlsContext_validationContextSdsSecretConfig()
-      throws ResourceInvalidException {
+  public void validateCommonTlsContext_validationContextSdsSecretConfig() {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setValidationContextSdsSecretConfig(SdsSecretConfig.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
         "common-tls-context with validation_context_sds_secret_config is not supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -3050,10 +3082,10 @@ public class GrpcXdsClientImplDataTest {
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, true));
+    assertThat(e).hasMessageThat().isEqualTo(
         "tls_certificate_provider_instance is required in downstream-tls-context");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, true);
   }
 
   @Test
@@ -3085,11 +3117,11 @@ public class GrpcXdsClientImplDataTest {
         .setTlsCertificateProviderInstance(
             CertificateProviderPluginInstance.newBuilder().setInstanceName("bad-name"))
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext,
+            ImmutableSet.of("name1", "name2"), true));
+    assertThat(e).hasMessageThat().isEqualTo(
         "CertificateProvider instance name 'bad-name' not defined in the bootstrap file.");
-    XdsClusterResource
-        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
   }
 
   @Test
@@ -3197,11 +3229,11 @@ public class GrpcXdsClientImplDataTest {
                 .setCaCertificateProviderInstance(CertificateProviderPluginInstance.newBuilder()
                   .setInstanceName("bad-name"))))
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext,
+            ImmutableSet.of("name1", "name2"), false));
+    assertThat(e).hasMessageThat().isEqualTo(
         "ca_certificate_provider_instance name 'bad-name' not defined in the bootstrap file.");
-    XdsClusterResource
-        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), false);
   }
 
 
@@ -3210,9 +3242,9 @@ public class GrpcXdsClientImplDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
             .addTlsCertificates(TlsCertificate.getDefaultInstance())
             .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("tls_certificate_provider_instance is unset");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo("tls_certificate_provider_instance is unset");
   }
 
   @Test
@@ -3221,10 +3253,10 @@ public class GrpcXdsClientImplDataTest {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .addTlsCertificateSdsSecretConfigs(SdsSecretConfig.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
         "tls_certificate_provider_instance is unset");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -3232,10 +3264,11 @@ public class GrpcXdsClientImplDataTest {
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("ca_certificate_provider_instance or system_root_certs is required "
-        + "in upstream-tls-context");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "ca_certificate_provider_instance or system_root_certs is required "
+            + "in upstream-tls-context");
   }
 
   @Test
@@ -3245,11 +3278,11 @@ public class GrpcXdsClientImplDataTest {
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false));
+    assertThat(e).hasMessageThat().isEqualTo(
         "ca_certificate_provider_instance or system_root_certs is required in "
             + "upstream-tls-context");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, null, false);
   }
 
   @Test
@@ -3267,9 +3300,10 @@ public class GrpcXdsClientImplDataTest {
         .setTlsCertificateProviderInstance(
             CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("match_subject_alt_names only allowed in upstream_tls_context");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), true);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), true));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "match_subject_alt_names only allowed in upstream_tls_context");
   }
 
   @Test
@@ -3284,10 +3318,10 @@ public class GrpcXdsClientImplDataTest {
                     .addVerifyCertificateSpki("foo")))
         .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("verify_certificate_spki in default_validation_context is not "
-        + "supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "verify_certificate_spki in default_validation_context is not supported");
   }
 
   @Test
@@ -3302,10 +3336,10 @@ public class GrpcXdsClientImplDataTest {
                     .addVerifyCertificateHash("foo")))
         .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("verify_certificate_hash in default_validation_context is not "
-        + "supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "verify_certificate_hash in default_validation_context is not supported");
   }
 
   @Test
@@ -3321,11 +3355,11 @@ public class GrpcXdsClientImplDataTest {
         .setTlsCertificateProviderInstance(
             CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false));
+    assertThat(e).hasMessageThat().isEqualTo(
         "require_signed_certificate_timestamp in default_validation_context is not "
             + "supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
   }
 
   @Test
@@ -3340,9 +3374,9 @@ public class GrpcXdsClientImplDataTest {
                     .setCrl(DataSource.getDefaultInstance())))
         .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("crl in default_validation_context is not supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false));
+    assertThat(e).hasMessageThat().isEqualTo("crl in default_validation_context is not supported");
   }
 
   @Test
@@ -3357,18 +3391,19 @@ public class GrpcXdsClientImplDataTest {
                     .setCustomValidatorConfig(TypedExtensionConfig.getDefaultInstance())))
         .setTlsCertificateProviderInstance(CertificateProviderPluginInstance.getDefaultInstance())
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("custom_validator_config in default_validation_context is not "
-        + "supported");
-    XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsClusterResource.validateCommonTlsContext(commonTlsContext, ImmutableSet.of(""), false));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "custom_validator_config in default_validation_context is not supported");
   }
 
   @Test
   public void validateDownstreamTlsContext_noCommonTlsContext() throws ResourceInvalidException {
     DownstreamTlsContext downstreamTlsContext = DownstreamTlsContext.getDefaultInstance();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context is required in downstream-tls-context");
-    XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext, null);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext, null));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "common-tls-context is required in downstream-tls-context");
   }
 
   @Test
@@ -3385,9 +3420,11 @@ public class GrpcXdsClientImplDataTest {
         .setCommonTlsContext(commonTlsContext)
         .setRequireSni(BoolValue.of(true))
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("downstream-tls-context with require-sni is not supported");
-    XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext, ImmutableSet.of(""));
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext,
+            ImmutableSet.of("")));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "downstream-tls-context with require-sni is not supported");
   }
 
   @Test
@@ -3404,18 +3441,20 @@ public class GrpcXdsClientImplDataTest {
         .setCommonTlsContext(commonTlsContext)
         .setOcspStaplePolicy(DownstreamTlsContext.OcspStaplePolicy.STRICT_STAPLING)
         .build();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage(
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+        XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext,
+            ImmutableSet.of("")));
+    assertThat(e).hasMessageThat().isEqualTo(
         "downstream-tls-context with ocsp_staple_policy value STRICT_STAPLING is not supported");
-    XdsListenerResource.validateDownstreamTlsContext(downstreamTlsContext, ImmutableSet.of(""));
   }
 
   @Test
   public void validateUpstreamTlsContext_noCommonTlsContext() throws ResourceInvalidException {
     UpstreamTlsContext upstreamTlsContext = UpstreamTlsContext.getDefaultInstance();
-    thrown.expect(ResourceInvalidException.class);
-    thrown.expectMessage("common-tls-context is required in upstream-tls-context");
-    XdsClusterResource.validateUpstreamTlsContext(upstreamTlsContext, null);
+    ResourceInvalidException e = assertThrows(ResourceInvalidException.class, () ->
+            XdsClusterResource.validateUpstreamTlsContext(upstreamTlsContext, null));
+    assertThat(e).hasMessageThat().isEqualTo(
+        "common-tls-context is required in upstream-tls-context");
   }
 
   @Test

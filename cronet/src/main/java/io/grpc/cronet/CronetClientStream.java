@@ -362,7 +362,6 @@ class CronetClientStream extends AbstractClientStream {
   private void setGrpcHeaders(BidirectionalStream.Builder builder) {
     // Psuedo-headers are set by cronet.
     // All non-pseudo headers must come after pseudo headers.
-    // TODO(ericgribkoff): remove this and set it on CronetEngine after crbug.com/588204 gets fixed.
     builder.addHeader(USER_AGENT_KEY.name(), userAgent);
     builder.addHeader(CONTENT_TYPE_KEY.name(), GrpcUtil.CONTENT_TYPE_GRPC);
     builder.addHeader("te", GrpcUtil.TE_TRAILERS);

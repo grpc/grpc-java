@@ -248,8 +248,8 @@ public final class ClientStatusDiscoveryServiceGrpc {
 
     /**
      */
-    public io.envoyproxy.envoy.service.status.v3.ClientStatusResponse fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.envoyproxy.envoy.service.status.v3.ClientStatusResponse fetchClientStatus(io.envoyproxy.envoy.service.status.v3.ClientStatusRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getFetchClientStatusMethod(), getCallOptions(), request);
     }
   }

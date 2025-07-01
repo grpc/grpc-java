@@ -21,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.74.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.75.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     plugins.withId("com.android.base") {
         android {
@@ -408,11 +408,11 @@ subprojects {
                         url = new File(rootProject.repositoryDir).toURI()
                     } else {
                         String stagingUrl
+                        String baseUrl = "https://ossrh-staging-api.central.sonatype.com/service/local"
                         if (rootProject.hasProperty('repositoryId')) {
-                            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                                    rootProject.repositoryId
+                            stagingUrl = "${baseUrl}/staging/deployByRepositoryId/" + rootProject.repositoryId
                         } else {
-                            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
+                            stagingUrl = "${baseUrl}/staging/deploy/maven2/"
                         }
                         credentials {
                             if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
@@ -421,7 +421,7 @@ subprojects {
                             }
                         }
                         def releaseUrl = stagingUrl
-                        def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
+                        def snapshotUrl = 'https://central.sonatype.com/repository/maven-snapshots/'
                         url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
                     }
                 }
