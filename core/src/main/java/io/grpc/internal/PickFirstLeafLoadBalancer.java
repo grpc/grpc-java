@@ -32,6 +32,8 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LongCounterMetricInstrument;
+import io.grpc.MetricInstrumentRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.Inet4Address;
@@ -57,6 +59,9 @@ import javax.annotation.Nullable;
  * list and sticking to the first that works.
  */
 final class PickFirstLeafLoadBalancer extends LoadBalancer {
+  private static final LongCounterMetricInstrument DISCONNECTIONS;
+  private static final LongCounterMetricInstrument CONNECTION_ATTEMPTS_SUCCEEDED;
+  private static final LongCounterMetricInstrument CONNECTION_ATTEMPTS_FAILED;
   private static final Logger log = Logger.getLogger(PickFirstLeafLoadBalancer.class.getName());
   @VisibleForTesting
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
@@ -77,6 +82,33 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @Nullable
   private ScheduledHandle reconnectTask = null;
   private final boolean serializingRetries = isSerializingRetries();
+
+  // The metric instruments are only registered once and shared by all instances of this LB.
+  static {
+    MetricInstrumentRegistry metricInstrumentRegistry
+        = MetricInstrumentRegistry.getDefaultRegistry();
+    DISCONNECTIONS = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.pick_first.disconnections",
+        "EXPERIMENTAL. Number of times the selected subchannel becomes disconnected",
+        "{disconnection}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList(),
+        false);
+    CONNECTION_ATTEMPTS_SUCCEEDED = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.pick_first.connection_attempts_succeeded",
+        "EXPERIMENTAL. Number of successful connection attempts",
+        "{attempt}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList(),
+        false);
+    CONNECTION_ATTEMPTS_FAILED = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.pick_first.connection_attempts_failed",
+        "EXPERIMENTAL. Number of failed connection attempts",
+        "{attempt}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList(),
+        false);
+  }
 
   PickFirstLeafLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -276,6 +308,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       }
     }
 
+    // if the previous state was ready, count it as a disconnection
+    if (rawConnectivityState == READY || concludedState == READY)  {
+      helper.getMetricRecorder().addLongCounter(DISCONNECTIONS, 1,
+          Collections.singletonList(helper.getChannelTarget()),
+          Collections.emptyList());
+    }
+
     switch (newState) {
       case IDLE:
         // Shutdown when ready: connect from beginning when prompted
@@ -293,11 +332,17 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         shutdownRemaining(subchannelData);
         addressIndex.seekTo(getAddress(subchannelData.subchannel));
         rawConnectivityState = READY;
+        helper.getMetricRecorder().addLongCounter(CONNECTION_ATTEMPTS_SUCCEEDED, 1,
+            Collections.singletonList(helper.getChannelTarget()),
+            Collections.emptyList());
         updateHealthCheckedState(subchannelData);
         break;
 
       case TRANSIENT_FAILURE:
         // If we are looking at current channel, request a connection if possible
+        helper.getMetricRecorder().addLongCounter(CONNECTION_ATTEMPTS_FAILED, 1,
+            Collections.singletonList(helper.getChannelTarget()),
+            Collections.emptyList());
         if (addressIndex.isValid()
             && subchannels.get(addressIndex.getCurrentAddress()) == subchannelData) {
           if (addressIndex.increment()) {
