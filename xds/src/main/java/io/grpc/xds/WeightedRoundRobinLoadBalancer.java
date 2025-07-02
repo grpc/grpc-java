@@ -719,6 +719,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     final long oobReportingPeriodNanos;
     final long weightUpdatePeriodNanos;
     final float errorUtilizationPenalty;
+    final SlowStartConfig slowStartConfig;
 
     public static Builder newBuilder() {
       return new Builder();
@@ -729,13 +730,15 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
                                                  boolean enableOobLoadReport,
                                                  long oobReportingPeriodNanos,
                                                  long weightUpdatePeriodNanos,
-                                                 float errorUtilizationPenalty) {
+                                                 float errorUtilizationPenalty,
+                                                 SlowStartConfig slowStartConfig) {
       this.blackoutPeriodNanos = blackoutPeriodNanos;
       this.weightExpirationPeriodNanos = weightExpirationPeriodNanos;
       this.enableOobLoadReport = enableOobLoadReport;
       this.oobReportingPeriodNanos = oobReportingPeriodNanos;
       this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
+      this.slowStartConfig = slowStartConfig;
     }
 
     static final class Builder {
@@ -745,6 +748,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       long oobReportingPeriodNanos = 10_000_000_000L; // 10s
       long weightUpdatePeriodNanos = 1_000_000_000L; // 1s
       float errorUtilizationPenalty = 1.0F;
+      SlowStartConfig slowStartConfig = SlowStartConfig.newBuilder().build();
 
       private Builder() {
 
@@ -782,10 +786,16 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         return this;
       }
 
+      @SuppressWarnings("UnusedReturnValue")
+      Builder setSlowStartConfig(SlowStartConfig slowStartConfig) {
+        this.slowStartConfig = slowStartConfig;
+        return this;
+      }
+
       WeightedRoundRobinLoadBalancerConfig build() {
         return new WeightedRoundRobinLoadBalancerConfig(blackoutPeriodNanos,
                 weightExpirationPeriodNanos, enableOobLoadReport, oobReportingPeriodNanos,
-                weightUpdatePeriodNanos, errorUtilizationPenalty);
+                weightUpdatePeriodNanos, errorUtilizationPenalty, slowStartConfig);
       }
     }
   }

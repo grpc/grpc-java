@@ -30,6 +30,7 @@ import io.envoyproxy.envoy.config.cluster.v3.Cluster.RingHashLbConfig;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
 import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.common.v3.SlowStartConfig;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.pick_first.v3.PickFirst;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
@@ -92,6 +93,14 @@ class LoadBalancerConfigFactory {
 
   static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
 
+  static final String AGGRESSION = "aggression";
+
+  static final String SLOW_START_WINDOW = "slowStartWindow";
+
+  static final String MIN_WEIGHT_PERCENT = "minWeightPercent";
+
+  static final String SLOW_START_CONFIG = "slowStartConfig";
+
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
    * Cluster}.
@@ -138,7 +147,8 @@ class LoadBalancerConfigFactory {
                                                         String oobReportingPeriod,
                                                         Boolean enableOobLoadReport,
                                                         String weightUpdatePeriod,
-                                                        Float errorUtilizationPenalty) {
+                                                        Float errorUtilizationPenalty,
+                                                        ImmutableMap<String, ?> slowStartConfig) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
     if (blackoutPeriod != null) {
       configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
@@ -158,8 +168,27 @@ class LoadBalancerConfigFactory {
     if (errorUtilizationPenalty != null) {
       configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
     }
+    if (slowStartConfig != null) {
+      configBuilder.put(SLOW_START_CONFIG, slowStartConfig);
+    }
     return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
         configBuilder.buildOrThrow());
+  }
+
+  private static ImmutableMap<String, ?> buildSlowStartConfig(Double minWeightPercent,
+                                                                Double aggression,
+                                                                String slowStartWindow) {
+    ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
+    if (minWeightPercent != null) {
+      configBuilder.put(MIN_WEIGHT_PERCENT, minWeightPercent);
+    }
+    if (aggression != null) {
+      configBuilder.put(AGGRESSION, aggression);
+    }
+    if (slowStartWindow != null) {
+      configBuilder.put(SLOW_START_WINDOW, slowStartWindow);
+    }
+    return configBuilder.buildOrThrow();
   }
 
   /**
@@ -293,9 +322,24 @@ class LoadBalancerConfigFactory {
             wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
             wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
             wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null,
-            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null);
+            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null,
+            wrr.hasSlowStartConfig() ? convertSlotStartConfig(wrr.getSlowStartConfig()) : null);
       } catch (IllegalArgumentException ex) {
         throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
+            + ex.getMessage());
+      }
+    }
+
+    private static ImmutableMap<String, ?> convertSlotStartConfig(
+        SlowStartConfig config) throws ResourceInvalidException {
+      try {
+        return buildSlowStartConfig(
+            config.hasMinWeightPercent() ? config.getMinWeightPercent().getValue() : null,
+            config.hasAggression() ? config.getAggression().getDefaultValue() : null,
+            config.hasSlowStartWindow() ? Durations.toString(config.getSlowStartWindow()) : null
+        );
+      } catch (IllegalArgumentException ex) {
+        throw new ResourceInvalidException("Invalid duration in slow start slowStart: "
             + ex.getMessage());
       }
     }

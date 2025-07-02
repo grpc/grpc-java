@@ -78,6 +78,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
     Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
+    Map<String, ?> slowStartConfig = JsonUtil.getObject(rawConfig, "slowStartConfig");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
             WeightedRoundRobinLoadBalancerConfig.newBuilder();
@@ -102,6 +103,27 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     if (errorUtilizationPenalty != null) {
       configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
     }
+    if (slowStartConfig != null) {
+      configBuilder.setSlowStartConfig(parseSlowStartConfig(slowStartConfig));
+    }
     return ConfigOrError.fromConfig(configBuilder.build());
+  }
+
+  private SlowStartConfig parseSlowStartConfig(Map<String, ?> rawConfig) {
+    Double minWeightPercent = JsonUtil.getNumberAsDouble(rawConfig, "minWeightPercent");
+    Double aggression = JsonUtil.getNumberAsDouble(rawConfig, "aggression");
+    Long slowStartWindowNanos = JsonUtil.getStringAsDuration(rawConfig, "slowStartWindow");
+
+    SlowStartConfig.Builder configBuilder = SlowStartConfig.newBuilder();
+    if (slowStartWindowNanos != null) {
+      configBuilder.setSlowStartWindowNanos(slowStartWindowNanos);
+    }
+    if (aggression != null) {
+      configBuilder.setAggression(aggression);
+    }
+    if (minWeightPercent != null) {
+      configBuilder.setMinWeightPercent(minWeightPercent);
+    }
+    return configBuilder.build();
   }
 }
