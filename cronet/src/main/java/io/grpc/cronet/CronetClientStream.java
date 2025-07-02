@@ -59,7 +59,6 @@ import org.chromium.net.UrlResponseInfo;
  * Client stream for the cronet transport.
  */
 class CronetClientStream extends AbstractClientStream {
-  private static final int READ_BUFFER_CAPACITY = 4 * 1024;
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
 
@@ -69,6 +68,12 @@ class CronetClientStream extends AbstractClientStream {
 
   static final CallOptions.Key<Collection<Object>> CRONET_ANNOTATIONS_KEY =
       CallOptions.Key.create("cronet-annotations");
+  /**
+   * Sets the read buffer size which the GRPC layer will use to read data from Cronet. Higher buffer
+   * size leads to less overhead but more memory consumption. The current default value is 4KB.
+   */
+  static final CallOptions.Key<Integer> CRONET_READ_BUFFER_SIZE_KEY =
+      CallOptions.Key.createWithDefault("cronet-read-buffer-size", 4 * 1024);
 
   private final String url;
   private final String userAgent;
@@ -85,6 +90,8 @@ class CronetClientStream extends AbstractClientStream {
   private final Collection<Object> annotations;
   private final TransportState state;
   private final Sink sink = new Sink();
+  @VisibleForTesting
+  final int readBufferSize;
   private StreamBuilderFactory streamFactory;
 
   CronetClientStream(
@@ -120,6 +127,7 @@ class CronetClientStream extends AbstractClientStream {
     this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
     this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer,
             callOptions);
+    this.readBufferSize = callOptions.getOption(CRONET_READ_BUFFER_SIZE_KEY);
 
     // Tests expect the "plain" deframer behavior, not MigratingDeframer
     // https://github.com/grpc/grpc-java/issues/7140
@@ -309,7 +317,7 @@ class CronetClientStream extends AbstractClientStream {
         if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
           Log.v(LOG_TAG, "BidirectionalStream.read");
         }
-        stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+        stream.read(ByteBuffer.allocateDirect(readBufferSize));
       }
     }
 
@@ -429,7 +437,7 @@ class CronetClientStream extends AbstractClientStream {
         Log.v(LOG_TAG, "BidirectionalStream.read");
       }
       reportHeaders(info.getAllHeadersAsList(), false);
-      stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+      stream.read(ByteBuffer.allocateDirect(readBufferSize));
     }
 
     @Override
