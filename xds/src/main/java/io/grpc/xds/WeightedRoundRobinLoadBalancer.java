@@ -68,7 +68,11 @@ import java.util.logging.Logger;
  *           "\"oobReportingPeriod\":\"10s\"," +
  *           "\"weightExpirationPeriod\":\"180s\"," +
  *           "\"errorUtilizationPenalty\":\"1.0\"," +
- *           "\"weightUpdatePeriod\":\"1s\"}}]}";
+ *           "\"weightUpdatePeriod\":\"1s\"," +
+ *           "\"slowStartConfig\":{" +
+ *               "\"minWeightPercent\":10.0," +
+ *               "\"aggression\":1.0," +
+ *               "\"slowStartWindow\":\"30s\"}}}]}";
  *        serviceConfig = (Map<String, ?>) JsonParser.parse(wrrConfig);
  *        channel = ManagedChannelBuilder.forTarget("test:///lb.test.grpc.io")
  *            .defaultServiceConfig(serviceConfig)
@@ -90,6 +94,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
   private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
   private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_STALE_COUNTER;
+  private static final LongCounterMetricInstrument ENDPOINT_SLOW_START_COUNTER;
   private static final DoubleHistogramMetricInstrument ENDPOINT_WEIGHTS_HISTOGRAM;
   private static final Logger log = Logger.getLogger(
       WeightedRoundRobinLoadBalancer.class.getName());
@@ -129,6 +134,14 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         "grpc.lb.wrr.endpoint_weight_stale",
         "EXPERIMENTAL. Number of endpoints from each scheduler update whose latest weight is "
             + "older than the expiration period",
+        "{endpoint}",
+        Lists.newArrayList("grpc.target"),
+        Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
+        false);
+    ENDPOINT_SLOW_START_COUNTER = metricInstrumentRegistry.registerLongCounter(
+        "grpc.lb.wrr.endpoints_in_slow_start",
+        "EXPERIMENTAL. Number of endpoints from each scheduler update that "
+            + "are in slow start window",
         "{endpoint}",
         Lists.newArrayList("grpc.target"),
         Lists.newArrayList("grpc.lb.locality", "grpc.lb.backend_service"),
@@ -243,16 +256,21 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private void updateWeight(WeightedRoundRobinPicker picker) {
     Helper helper = getHelper();
     float[] newWeights = new float[picker.children.size()];
+    float[] newScales = new float[picker.children.size()];
     AtomicInteger staleEndpoints = new AtomicInteger();
     AtomicInteger notYetUsableEndpoints = new AtomicInteger();
+    AtomicInteger slowStartEndpoints = new AtomicInteger();
     for (int i = 0; i < picker.children.size(); i++) {
       double newWeight = ((WeightedChildLbState) picker.children.get(i)).getWeight(staleEndpoints,
           notYetUsableEndpoints);
+      double newScale = ((WeightedChildLbState) picker.children.get(i))
+          .getScale(slowStartEndpoints);
       helper.getMetricRecorder()
           .recordDoubleHistogram(ENDPOINT_WEIGHTS_HISTOGRAM, newWeight,
               ImmutableList.of(helper.getChannelTarget()),
               ImmutableList.of(locality, backendService));
       newWeights[i] = newWeight > 0 ? (float) newWeight : 0.0f;
+      newScales[i] = newScale > 0 ? (float) newScale : 1.0f;
     }
 
     if (staleEndpoints.get() > 0) {
@@ -267,7 +285,13 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
               ImmutableList.of(helper.getChannelTarget()),
               ImmutableList.of(locality, backendService));
     }
-    boolean weightsEffective = picker.updateWeight(newWeights);
+    if (slowStartEndpoints.get() > 0) {
+      helper.getMetricRecorder()
+          .addLongCounter(ENDPOINT_SLOW_START_COUNTER, slowStartEndpoints.get(),
+              ImmutableList.of(helper.getChannelTarget()),
+              ImmutableList.of(locality, backendService));
+    }
+    boolean weightsEffective = picker.updateWeight(newWeights, newScales);
     if (!weightsEffective) {
       helper.getMetricRecorder()
           .addLongCounter(RR_FALLBACK_COUNTER, 1, ImmutableList.of(helper.getChannelTarget()),
@@ -289,6 +313,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     private final Set<WrrSubchannel> subchannels = new HashSet<>();
     private volatile long lastUpdated;
     private volatile long nonEmptySince;
+    private volatile long readySince;
     private volatile double weight = 0;
 
     private OrcaReportListener orcaReportListener;
@@ -317,6 +342,25 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         return 0;
       } else {
         return weight;
+      }
+    }
+
+    private double getScale(AtomicInteger slowStartEndpoints) {
+      if (config == null || config.slowStartConfig == null) {
+        return 1;
+      }
+      long slowStartWindowNanos = config.slowStartConfig.slowStartWindowNanos;
+      if (slowStartWindowNanos <= 0) {
+        return 1;
+      }
+      long now = ticker.nanoTime();
+      if (now - readySince >= slowStartWindowNanos) {
+        return 1;
+      } else {
+        slowStartEndpoints.incrementAndGet();
+        double timeFactor = Math.max(now - readySince, 1.0) / slowStartWindowNanos;
+        double weightPercent = Math.pow(timeFactor, 1.0 / config.slowStartConfig.aggression);
+        return Math.max(config.slowStartConfig.minWeightPercent / 100.0, weightPercent);
       }
     }
 
@@ -439,6 +483,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         public void onSubchannelState(ConnectivityStateInfo newState) {
           if (newState.getState().equals(ConnectivityState.READY)) {
             owner.nonEmptySince = infTime;
+            owner.readySince = ticker.nanoTime();
           }
           listener.onSubchannelState(newState);
         }
@@ -517,8 +562,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     }
 
     /** Returns {@code true} if weights are different than round_robin. */
-    private boolean updateWeight(float[] newWeights) {
-      this.scheduler = new StaticStrideScheduler(newWeights, sequence);
+    private boolean updateWeight(float[] newWeights, float[] newScales) {
+      this.scheduler = new StaticStrideScheduler(newWeights, newScales, sequence);
       return !this.scheduler.usesRoundRobin();
     }
 
@@ -604,7 +649,7 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
     private static final double K_MAX_RATIO = 10;
     private static final double K_MIN_RATIO = 0.1;
 
-    StaticStrideScheduler(float[] weights, AtomicInteger sequence) {
+    StaticStrideScheduler(float[] weights, float[] scales, AtomicInteger sequence) {
       checkArgument(weights.length >= 1, "Couldn't build scheduler: requires at least one weight");
       int numChannels = weights.length;
       int numWeightedChannels = 0;
@@ -643,12 +688,14 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       int weightLowerBound = (int) Math.ceil(scalingFactor * unscaledMeanWeight * K_MIN_RATIO);
       short[] scaledWeights = new short[numChannels];
       for (int i = 0; i < numChannels; i++) {
+        double curScalingFactor = scalingFactor * scales[i];
+        int weight;
         if (weights[i] <= 0) {
-          scaledWeights[i] = (short) Math.round(scalingFactor * unscaledMeanWeight);
+          weight = (int) Math.round(curScalingFactor * unscaledMeanWeight);
         } else {
-          int weight = (int) Math.round(scalingFactor * Math.min(weights[i], unscaledMaxWeight));
-          scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
+          weight = (int) Math.round(curScalingFactor * Math.min(weights[i], unscaledMaxWeight));
         }
+        scaledWeights[i] = (short) Math.max(weight, weightLowerBound);
       }
 
       this.scaledWeights = scaledWeights;
