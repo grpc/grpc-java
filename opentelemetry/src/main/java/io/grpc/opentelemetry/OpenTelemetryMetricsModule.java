@@ -71,6 +71,7 @@ import javax.annotation.Nullable;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
+  private static final double NANOS_PER_SEC = 1_000_000_000.0;
   public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
       ImmutableSet.of(
           "grpc.client.attempt.started",
@@ -292,9 +293,12 @@ final class OpenTelemetryMetricsModule {
     private final String fullMethodName;
     private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
     private Status status;
+    private long retryDelayNanos;
     private long callLatencyNanos;
     private final Object lock = new Object();
     private final AtomicLong attemptsPerCall = new AtomicLong();
+    private final AtomicLong hedgedAttemptsPerCall = new AtomicLong();
+    private final AtomicLong transparentRetriesPerCall = new AtomicLong();
     @GuardedBy("lock")
     private int activeStreams;
     @GuardedBy("lock")
@@ -331,6 +335,7 @@ final class OpenTelemetryMetricsModule {
         }
         if (++activeStreams == 1 && attemptStopwatch.isRunning()) {
           attemptStopwatch.stop();
+          retryDelayNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
       }
       // Skip recording for the first time, since it is already recorded in
@@ -344,7 +349,11 @@ final class OpenTelemetryMetricsModule {
           module.resource.clientAttemptCountCounter().add(1, attribute);
         }
       }
-      if (!info.isTransparentRetry()) {
+      if (info.isTransparentRetry()) {
+        transparentRetriesPerCall.incrementAndGet();
+      } else if (info.isHedging()) {
+        hedgedAttemptsPerCall.incrementAndGet();
+      } else {
         attemptsPerCall.incrementAndGet();
       }
       return newClientTracer(info);
@@ -407,14 +416,65 @@ final class OpenTelemetryMetricsModule {
         tracer.recordFinishedAttempt();
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
-      io.opentelemetry.api.common.Attributes attribute =
-          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
-              TARGET_KEY, target,
-              STATUS_KEY, status.getCode().toString());
 
+      // Base attributes
+      io.opentelemetry.api.common.Attributes baseAttributes =
+          io.opentelemetry.api.common.Attributes.of(
+              METHOD_KEY, fullMethodName,
+              TARGET_KEY, target
+          );
+
+      // Duration
       if (module.resource.clientCallDurationCounter() != null) {
-        module.resource.clientCallDurationCounter()
-            .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
+        module.resource.clientCallDurationCounter().record(
+            callLatencyNanos * SECONDS_PER_NANO,
+            baseAttributes.toBuilder()
+                .put(STATUS_KEY, status.getCode().toString())
+                .build()
+        );
+      }
+
+      // Retry counts
+      if (module.resource.clientCallRetriesCounter() != null) {
+
+        long retriesPerCall = 0;
+        long attempts = attemptsPerCall.get();
+        if (attempts > 0) {
+          retriesPerCall = attempts - 1;
+        }
+
+        if (retriesPerCall > 0) {
+          module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
+        }
+      }
+
+      // Hedge counts
+      if (module.resource.clientCallHedgesCounter() != null) {
+
+        long hedgesPerCall = 0;
+        long attempts = hedgedAttemptsPerCall.get();
+        if (attempts > 0) {
+          hedgesPerCall = attempts - 1;
+        }
+
+        if (hedgesPerCall > 0) {
+          module.resource.clientCallHedgesCounter().record(hedgesPerCall, baseAttributes);
+        }
+      }
+
+      // Transparent Retry counts
+      if (module.resource.clientCallTransparentRetriesCounter() != null
+          && transparentRetriesPerCall.get() > 0) {
+        module.resource.clientCallTransparentRetriesCounter().record(
+            transparentRetriesPerCall.get(), baseAttributes);
+      }
+
+      // Retry delay
+      if (module.resource.clientCallRetryDelayCounter() != null) {
+        module.resource.clientCallRetryDelayCounter().record(
+            retryDelayNanos / NANOS_PER_SEC,
+            baseAttributes
+        );
       }
     }
   }

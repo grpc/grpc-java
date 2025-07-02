@@ -132,12 +132,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
     private final CallOptions callOptions;
     private final int previousAttempts;
     private final boolean isTransparentRetry;
+    private final boolean isHedging;
 
     StreamInfo(
-        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry) {
+        CallOptions callOptions, int previousAttempts, boolean isTransparentRetry,
+        boolean isHedging) {
       this.callOptions = checkNotNull(callOptions, "callOptions");
       this.previousAttempts = previousAttempts;
       this.isTransparentRetry = isTransparentRetry;
+      this.isHedging = isHedging;
     }
 
     /**
@@ -166,6 +169,15 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
 
     /**
+     * Whether the stream is hedging.
+     *
+     * @since 1.74.0
+     */
+    public boolean isHedging() {
+      return isHedging;
+    }
+
+    /**
      * Converts this StreamInfo into a new Builder.
      *
      * @since 1.21.0
@@ -174,7 +186,9 @@ public abstract class ClientStreamTracer extends StreamTracer {
       return new Builder()
           .setCallOptions(callOptions)
           .setPreviousAttempts(previousAttempts)
-          .setIsTransparentRetry(isTransparentRetry);
+          .setIsTransparentRetry(isTransparentRetry)
+          .setIsHedging(isHedging);
+
     }
 
     /**
@@ -192,6 +206,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
           .add("callOptions", callOptions)
           .add("previousAttempts", previousAttempts)
           .add("isTransparentRetry", isTransparentRetry)
+          .add("isHedging", isHedging)
           .toString();
     }
 
@@ -204,6 +219,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
       private CallOptions callOptions = CallOptions.DEFAULT;
       private int previousAttempts;
       private boolean isTransparentRetry;
+      private boolean isHedging;
 
       Builder() {
       }
@@ -237,10 +253,20 @@ public abstract class ClientStreamTracer extends StreamTracer {
       }
 
       /**
+       * Sets whether the stream is hedging.
+       *
+       * @since 1.74.0
+       */
+      public Builder setIsHedging(boolean isHedging) {
+        this.isHedging = isHedging;
+        return this;
+      }
+
+      /**
        * Builds a new StreamInfo.
        */
       public StreamInfo build() {
-        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry);
+        return new StreamInfo(callOptions, previousAttempts, isTransparentRetry, isHedging);
       }
     }
   }

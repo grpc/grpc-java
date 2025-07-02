@@ -266,7 +266,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry);
+    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry,
+        isHedging);
     return sub;
   }
 
@@ -276,7 +277,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    */
   abstract ClientStream newSubstream(
       Metadata headers, ClientStreamTracer.Factory tracerFactory, int previousAttempts,
-      boolean isTransparentRetry);
+      boolean isTransparentRetry, boolean isHedging);
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
   @VisibleForTesting
