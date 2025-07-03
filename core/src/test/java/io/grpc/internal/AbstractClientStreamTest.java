@@ -466,6 +466,24 @@ public class AbstractClientStreamTest {
   }
 
   @Test
+  public void setDeadline_thePastBecomesPositive() {
+    AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
+    ClientStream stream = new BaseAbstractClientStream(
+        allocator, new BaseTransportState(statsTraceCtx, transportTracer), sink, statsTraceCtx,
+        transportTracer);
+
+    stream.setDeadline(Deadline.after(-1, TimeUnit.NANOSECONDS));
+    stream.start(mockListener);
+
+    ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
+    verify(sink).writeHeaders(headersCaptor.capture(), ArgumentMatchers.<byte[]>any());
+
+    Metadata headers = headersCaptor.getValue();
+    assertThat(headers.get(Metadata.Key.of("grpc-timeout", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("1n");
+  }
+
+  @Test
   public void appendTimeoutInsight() {
     InsightBuilder insight = new InsightBuilder();
     AbstractClientStream stream =
