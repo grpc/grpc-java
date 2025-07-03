@@ -23,6 +23,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.UserHandle;
 import androidx.annotation.AnyThread;
@@ -183,18 +184,22 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           bindResult = context.bindService(bindIntent, conn, flags);
           break;
         case BIND_SERVICE_AS_USER:
-          bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          }
           break;
         case DEVICE_POLICY_BIND_SEVICE_ADMIN:
           DevicePolicyManager devicePolicyManager =
-              (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-          bindResult =
-              devicePolicyManager.bindDeviceAdminServiceAsUser(
-                  channelCredentials.getDevicePolicyAdminComponentName(),
-                  bindIntent,
-                  conn,
-                  flags,
-                  targetUserHandle);
+                  (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            bindResult =
+                    devicePolicyManager.bindDeviceAdminServiceAsUser(
+                            channelCredentials.getDevicePolicyAdminComponentName(),
+                            bindIntent,
+                            conn,
+                            flags,
+                            targetUserHandle);
+          }
           break;
       }
       if (!bindResult) {
