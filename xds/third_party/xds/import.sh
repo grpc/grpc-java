@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from one of the google internal CLs
-VERSION=024c85f92f20cab567a83acc50934c7f9711d124
+VERSION=2ac532fd44436293585084f8d94c6bdb17835af0
 DOWNLOAD_URL="https://github.com/cncf/xds/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="xds-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}"
@@ -38,6 +38,7 @@ xds/annotations/v3/sensitive.proto
 xds/annotations/v3/status.proto
 xds/annotations/v3/versioning.proto
 xds/core/v3/authority.proto
+xds/core/v3/cidr.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto
 xds/core/v3/extension.proto
