@@ -98,8 +98,8 @@ public class GrpcUtilTest {
     GrpcUtil.TimeoutMarshaller marshaller =
             new GrpcUtil.TimeoutMarshaller();
     // nanos
-    assertEquals("0n", marshaller.toAsciiString(0L));
-    assertEquals(0L, (long) marshaller.parseAsciiString("0n"));
+    assertEquals("1n", marshaller.toAsciiString(1L));
+    assertEquals(1L, (long) marshaller.parseAsciiString("1n"));
 
     assertEquals("99999999n", marshaller.toAsciiString(99999999L));
     assertEquals(99999999L, (long) marshaller.parseAsciiString("99999999n"));

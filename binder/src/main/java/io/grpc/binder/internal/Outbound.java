@@ -19,7 +19,6 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import android.os.Parcel;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
@@ -397,8 +396,7 @@ abstract class Outbound {
     @GuardedBy("this")
     void setDeadline(Deadline deadline) {
       headers.discardAll(TIMEOUT_KEY);
-      long effectiveTimeoutNanos = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-      headers.put(TIMEOUT_KEY, effectiveTimeoutNanos);
+      headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
     }
   }
 
