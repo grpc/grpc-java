@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import io.grpc.LongCounterMetricInstrument;
+import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
 
@@ -27,7 +28,7 @@ public final class SubchannelMetrics {
   private static final LongCounterMetricInstrument disconnections;
   private static final LongCounterMetricInstrument connectionAttemptsSucceeded;
   private static final LongCounterMetricInstrument connectionAttemptsFailed;
-  private static final LongCounterMetricInstrument openConnections;
+  private static final LongUpDownCounterMetricInstrument openConnections;
   private final MetricRecorder metricRecorder;
 
   public SubchannelMetrics(MetricRecorder metricRecorder) {
@@ -64,7 +65,7 @@ public final class SubchannelMetrics {
         false
     );
 
-    openConnections = metricInstrumentRegistry.registerLongCounter(
+    openConnections = metricInstrumentRegistry.registerLongUpDownCounter(
         "grpc.subchannel.open_connections",
         "EXPERIMENTAL. Number of open connections.",
         "{connection}",
@@ -80,7 +81,7 @@ public final class SubchannelMetrics {
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.backendService, labelSet.locality));
     metricRecorder
-        .addLongCounter(openConnections, 1,
+        .addLongUpDownCounter(openConnections, 1,
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
   }
@@ -98,7 +99,7 @@ public final class SubchannelMetrics {
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.backendService, labelSet.locality, labelSet.disconnectError));
     metricRecorder
-        .addLongCounter(openConnections, -11,
+        .addLongUpDownCounter(openConnections, -1,
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
   }
