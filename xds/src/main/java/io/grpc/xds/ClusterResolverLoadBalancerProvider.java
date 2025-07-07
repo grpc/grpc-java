@@ -137,6 +137,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       @Nullable
       final OutlierDetection outlierDetection;
       final Map<String, Struct> filterMetadata;
+      @Nullable
+      final  BackendMetricPropagation backendMetricPropagation;
 
       enum Type {
         EDS,
@@ -146,7 +148,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       private DiscoveryMechanism(String cluster, Type type, @Nullable String edsServiceName,
           @Nullable String dnsHostName, @Nullable ServerInfo lrsServerInfo,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection) {
+          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
         this.cluster = checkNotNull(cluster, "cluster");
         this.type = checkNotNull(type, "type");
         this.edsServiceName = edsServiceName;
@@ -156,27 +159,30 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         this.tlsContext = tlsContext;
         this.filterMetadata = ImmutableMap.copyOf(checkNotNull(filterMetadata, "filterMetadata"));
         this.outlierDetection = outlierDetection;
+        this.backendMetricPropagation = backendMetricPropagation;
       }
 
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
-          OutlierDetection outlierDetection) {
+          OutlierDetection outlierDetection, @Nullable BackendMetricPropagation backendMetricPropagation) {
         return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerInfo,
-            maxConcurrentRequests, tlsContext, filterMetadata, outlierDetection);
+            maxConcurrentRequests, tlsContext, filterMetadata, outlierDetection, backendMetricPropagation);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata) {
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
         return new DiscoveryMechanism(cluster, Type.LOGICAL_DNS, null, dnsHostName,
-            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null);
+            lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null,
+            backendMetricPropagation);
       }
 
       @Override
       public int hashCode() {
         return Objects.hash(cluster, type, lrsServerInfo, maxConcurrentRequests, tlsContext,
-            edsServiceName, dnsHostName, filterMetadata, outlierDetection);
+            edsServiceName, dnsHostName, filterMetadata, outlierDetection, backendMetricPropagation);
       }
 
       @Override
