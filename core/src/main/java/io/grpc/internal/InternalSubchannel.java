@@ -588,6 +588,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
+      subchannelMetrics.recordConnectionAttemptSucceeded(
+          buildLabelSet(null, extractSecurityLevel()));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -624,6 +626,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
+      subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet("Peer Pressure", null));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -678,6 +681,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       for (ClientTransportFilter filter : transportFilters) {
         filter.transportTerminated(transport.getAttributes());
       }
+      subchannelMetrics.recordDisconnection(buildLabelSet("Peer Pressure",
+          null));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -867,6 +872,17 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
     return buffer.toString();
   }
+
+  private OtelMetricsAttributes buildLabelSet(String disconnectError, String secLevel) {
+    return new OtelMetricsAttributes(
+        target,
+        backendService,
+        locality,
+        disconnectError,
+        secLevel != null ? secLevel : securityLevel
+    );
+  }
+
 
   @VisibleForTesting
   static final class TransportLogger extends ChannelLogger {
