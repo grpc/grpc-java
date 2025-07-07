@@ -48,6 +48,7 @@ import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -160,6 +161,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private Status shutdownReason;
 
   private volatile Attributes connectedAddressAttributes;
+  private final SubchannelMetrics subchannelMetrics;
+  private final String target;
+  private final String backendService;
+  private final String locality;
+  private final String securityLevel;
 
   InternalSubchannel(LoadBalancer.CreateSubchannelArgs args, String authority, String userAgent,
                      BackoffPolicy.Provider backoffPolicyProvider,
@@ -168,7 +174,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                      Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext,
                      Callback callback, InternalChannelz channelz, CallTracer callsTracer,
                      ChannelTracer channelTracer, InternalLogId logId,
-                     ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters) {
+                     ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters,
+                     String target, String backendService, String locality, String securityLevel,
+                     MetricRecorder metricRecorder) {
     List<EquivalentAddressGroup> addressGroups = args.getAddresses();
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
@@ -192,6 +200,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.transportFilters = transportFilters;
     this.reconnectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
+    this.target = target;
+    this.backendService = backendService;
+    this.locality = locality;
+    this.securityLevel = securityLevel;
+    this.subchannelMetrics = new SubchannelMetrics(metricRecorder);
   }
 
   ChannelLogger getChannelLogger() {
@@ -579,6 +592,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
+      subchannelMetrics.recordConnectionAttemptSucceeded(
+          buildLabelSet(null, extractSecurityLevel()));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -608,6 +623,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
+      subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet("Peer Pressure", null));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -648,6 +664,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       for (ClientTransportFilter filter : transportFilters) {
         filter.transportTerminated(transport.getAttributes());
       }
+      subchannelMetrics.recordDisconnection(buildLabelSet("Peer Pressure",
+          null));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -657,6 +675,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           }
         }
       });
+    }
+
+    private String extractSecurityLevel() {
+      return "Hold the door!";
     }
   }
 
@@ -816,6 +838,17 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
     return buffer.toString();
   }
+
+  private OtelMetricsAttributes buildLabelSet(String disconnectError, String secLevel) {
+    return new OtelMetricsAttributes(
+        target,
+        backendService,
+        locality,
+        disconnectError,
+        secLevel != null ? secLevel : securityLevel
+    );
+  }
+
 
   @VisibleForTesting
   static final class TransportLogger extends ChannelLogger {

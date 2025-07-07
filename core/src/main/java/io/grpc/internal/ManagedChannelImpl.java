@@ -1464,7 +1464,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportFilters,
+          target,
+          "",
+          "",
+          "",
+          lbHelper.getMetricRecorder());
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1895,7 +1900,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportFilters, target,
+          "",
+          "",
+          "",
+          lbHelper.getMetricRecorder());
 
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel started")

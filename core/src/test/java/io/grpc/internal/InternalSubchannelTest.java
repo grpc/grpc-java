@@ -48,6 +48,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
@@ -1446,7 +1447,13 @@ public class InternalSubchannelTest {
         subchannelTracer,
         logId,
         new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()),
-          Collections.emptyList());
+        Collections.emptyList(),
+        "",
+        "",
+        "",
+        "",
+        new MetricRecorder() {}
+    );
   }
 
   private void assertNoCallbackInvoke() {
