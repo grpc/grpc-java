@@ -50,8 +50,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
-import io.grpc.Status;
 import io.grpc.SecurityLevel;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
@@ -627,8 +627,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
       subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet(
-          getAttributeOrDefault(addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-          getAttributeOrDefault(addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
           null, null
           ));
       syncContext.execute(new Runnable() {
