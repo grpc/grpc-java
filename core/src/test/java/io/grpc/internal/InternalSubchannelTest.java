@@ -1449,9 +1449,6 @@ public class InternalSubchannelTest {
         new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()),
         Collections.emptyList(),
         "",
-        "",
-        "",
-        "",
         new MetricRecorder() {}
     );
   }
