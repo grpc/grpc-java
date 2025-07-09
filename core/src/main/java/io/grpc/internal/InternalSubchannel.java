@@ -589,8 +589,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
       subchannelMetrics.recordConnectionAttemptSucceeded(buildLabelSet(
-          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
-          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
           null,
           extractSecurityLevel(
               addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
@@ -632,10 +634,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
       subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet(
-          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
-          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          getAttributeOrDefault(addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+          getAttributeOrDefault(addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
           null, null
-      ));
+          ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -691,8 +693,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
         filter.transportTerminated(transport.getAttributes());
       }
       subchannelMetrics.recordDisconnection(buildLabelSet(
-          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
-          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
           "Peer Pressure",
           extractSecurityLevel(
               addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
