@@ -21,12 +21,10 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
-import static java.util.Objects.requireNonNull;
 
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -47,6 +45,7 @@ import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -65,7 +64,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    this.lbRegistry = lbRegistry;
+    this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -140,13 +139,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
         childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
       }
     } else if (clusterConfig.getChildren() instanceof AggregateConfig) {
-      LoadBalancerProvider priorityLbProvider = lbRegistry.getProvider(PRIORITY_POLICY_NAME);
       if (childLb == null) {
-        childLb = priorityLbProvider.newLoadBalancer(helper);
+        childLb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
       }
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
-      for (String childCluster: requireNonNull(
-              clusterConfig.getClusterResource().prioritizedClusterNames())) {
+      List<String> leafClusters = ((AggregateConfig) clusterConfig.getChildren()).getLeafNames();
+      for (String childCluster: leafClusters) {
         priorityChildConfigs.put(childCluster,
                 new PriorityChildConfig(
                         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
@@ -155,9 +153,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                         false));
       }
       childConfig = new PriorityLoadBalancerProvider.PriorityLbConfig(
-              Collections.unmodifiableMap(priorityChildConfigs),
-              Collections.unmodifiableList(requireNonNull(
-                      clusterConfig.getClusterResource().prioritizedClusterNames())));
+              Collections.unmodifiableMap(priorityChildConfigs), leafClusters);
     } else {
       return fail(Status.INTERNAL.withDescription(
               errorPrefix() + "Unexpected cluster children type: "

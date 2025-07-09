@@ -414,19 +414,51 @@ public class CdsLoadBalancer2Test {
 
     String cluster1 = "cluster-01.googleapis.com";
     String cluster2 = "cluster-02.googleapis.com";
+    String cluster3 = "cluster-03.googleapis.com";
+    String cluster4 = "cluster-04.googleapis.com";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
-        // CLUSTER (aggr.) -> [cluster1 (EDS), cluster2 (EDS)]
+        // CLUSTER (aggr.) -> [cluster1 (aggr.), cluster2 (logical DNS), cluster3 (EDS)]
         CLUSTER, Cluster.newBuilder()
-          .setName(CLUSTER)
-          .setClusterType(Cluster.CustomClusterType.newBuilder()
-            .setName("envoy.clusters.aggregate")
-            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                .addClusters(cluster1)
-                .addClusters(cluster2)
-                .build())))
-          .build(),
-        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build(),
-        cluster2, EDS_CLUSTER.toBuilder().setName(cluster2).build()));
+            .setName(CLUSTER)
+            .setClusterType(Cluster.CustomClusterType.newBuilder()
+                .setName("envoy.clusters.aggregate")
+                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                    .addClusters(cluster1)
+                    .addClusters(cluster2)
+                    .addClusters(cluster3)
+                    .build())))
+            .setLbPolicy(Cluster.LbPolicy.RING_HASH)
+            .build(),
+        // cluster1 (aggr.) -> [cluster3 (EDS), cluster4 (EDS)]
+        cluster1, Cluster.newBuilder()
+            .setName(cluster1)
+            .setClusterType(Cluster.CustomClusterType.newBuilder()
+                .setName("envoy.clusters.aggregate")
+                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                    .addClusters(cluster3)
+                    .addClusters(cluster4)
+                    .build())))
+            .build(),
+        cluster2, Cluster.newBuilder()
+            .setName(cluster2)
+            .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+            .setLoadAssignment(ClusterLoadAssignment.newBuilder()
+                .addEndpoints(LocalityLbEndpoints.newBuilder()
+                    .addLbEndpoints(LbEndpoint.newBuilder()
+                        .setEndpoint(Endpoint.newBuilder()
+                            .setAddress(Address.newBuilder()
+                                .setSocketAddress(SocketAddress.newBuilder()
+                                    .setAddress("dns.example.com")
+                                    .setPortValue(1111)))))))
+            .build(),
+        cluster3, EDS_CLUSTER.toBuilder()
+            .setName(cluster3)
+            .setCircuitBreakers(CircuitBreakers.newBuilder()
+                .addThresholds(CircuitBreakers.Thresholds.newBuilder()
+                    .setPriority(RoutingPriority.DEFAULT)
+                    .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
+            .build(),
+        cluster4, EDS_CLUSTER.toBuilder().setName(cluster4).build()));
     startXdsDepManager();
 
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
@@ -435,16 +467,23 @@ public class CdsLoadBalancer2Test {
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLoadBalancerProvider.PriorityLbConfig childLbConfig =
             (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
-    assertThat(childLbConfig.priorities).hasSize(2);
-    assertThat(childLbConfig.priorities.get(0)).isEqualTo(cluster1);
-    assertThat(childLbConfig.priorities.get(1)).isEqualTo(cluster2);
-    assertThat(childLbConfig.childConfigs).hasSize(2);
-    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig1 =
-            childLbConfig.childConfigs.get(cluster1);
-    assertThat(childConfig1.toString()).isEqualTo("PriorityChildConfig{childConfig="
+    assertThat(childLbConfig.priorities).hasSize(3);
+    assertThat(childLbConfig.priorities.get(0)).isEqualTo(cluster3);
+    assertThat(childLbConfig.priorities.get(1)).isEqualTo(cluster4);
+    assertThat(childLbConfig.priorities.get(2)).isEqualTo(cluster2);
+    assertThat(childLbConfig.childConfigs).hasSize(3);
+    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig3 =
+            childLbConfig.childConfigs.get(cluster3);
+    assertThat(childConfig3.toString()).isEqualTo("PriorityChildConfig{childConfig="
         + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
         + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
-        + "name=cluster-01.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+        + "name=cluster-03.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+    PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig4 =
+        childLbConfig.childConfigs.get(cluster4);
+    assertThat(childConfig4.toString()).isEqualTo("PriorityChildConfig{childConfig="
+        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
+        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
+        + "name=cluster-04.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
             childLbConfig.childConfigs.get(cluster2);
     assertThat(childConfig2.toString()).isEqualTo("PriorityChildConfig{childConfig="
