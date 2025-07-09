@@ -92,7 +92,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
 
-    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    // Check weather or not this is a petiole policy, which is based off of an address attribute
     Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
     this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
