@@ -49,7 +49,9 @@ import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricRecorder;
+import io.grpc.NameResolver;
 import io.grpc.Status;
+import io.grpc.SecurityLevel;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.net.SocketAddress;
@@ -163,9 +165,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private volatile Attributes connectedAddressAttributes;
   private final SubchannelMetrics subchannelMetrics;
   private final String target;
-  private final String backendService;
-  private final String locality;
-  private final String securityLevel;
 
   InternalSubchannel(LoadBalancer.CreateSubchannelArgs args, String authority, String userAgent,
                      BackoffPolicy.Provider backoffPolicyProvider,
@@ -175,7 +174,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                      Callback callback, InternalChannelz channelz, CallTracer callsTracer,
                      ChannelTracer channelTracer, InternalLogId logId,
                      ChannelLogger channelLogger, List<ClientTransportFilter> transportFilters,
-                     String target, String backendService, String locality, String securityLevel,
+                     String target,
                      MetricRecorder metricRecorder) {
     List<EquivalentAddressGroup> addressGroups = args.getAddresses();
     Preconditions.checkNotNull(addressGroups, "addressGroups");
@@ -201,9 +200,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.transportFilters = transportFilters;
     this.reconnectDisabled = args.getOption(LoadBalancer.DISABLE_SUBCHANNEL_RECONNECT_KEY);
     this.target = target;
-    this.backendService = backendService;
-    this.locality = locality;
-    this.securityLevel = securityLevel;
     this.subchannelMetrics = new SubchannelMetrics(metricRecorder);
   }
 
@@ -592,8 +588,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
-      subchannelMetrics.recordConnectionAttemptSucceeded(
-          buildLabelSet(null, extractSecurityLevel()));
+      subchannelMetrics.recordConnectionAttemptSucceeded(buildLabelSet(
+          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
+          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          null,
+          extractSecurityLevel(
+              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
+      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -623,7 +624,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
-      subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet("Peer Pressure", null));
+      subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet(
+          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
+          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          null, null
+      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -664,8 +669,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       for (ClientTransportFilter filter : transportFilters) {
         filter.transportTerminated(transport.getAttributes());
       }
-      subchannelMetrics.recordDisconnection(buildLabelSet("Peer Pressure",
-          null));
+      subchannelMetrics.recordDisconnection(buildLabelSet(
+          addressIndex.getCurrentEagAttributes().get(NameResolver.ATTR_BACKEND_SERVICE),
+          addressIndex.getCurrentEagAttributes().get(LoadBalancer.ATTR_LOCALITY_NAME),
+          "Peer Pressure",
+          extractSecurityLevel(
+              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
+      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -677,8 +687,20 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       });
     }
 
-    private String extractSecurityLevel() {
-      return "Hold the door!";
+    private String extractSecurityLevel(SecurityLevel securityLevel) {
+      if (securityLevel == null) {
+        return "none";
+      }
+      switch (securityLevel) {
+        case NONE:
+          return "none";
+        case INTEGRITY:
+          return "integrity_only";
+        case PRIVACY_AND_INTEGRITY:
+          return "privacy_and_integrity";
+        default:
+          throw new IllegalArgumentException("Unknown SecurityLevel: " + securityLevel);
+      }
     }
   }
 
@@ -839,13 +861,14 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     return buffer.toString();
   }
 
-  private OtelMetricsAttributes buildLabelSet(String disconnectError, String secLevel) {
+  private OtelMetricsAttributes buildLabelSet(String backendService, String locality,
+                                              String disconnectError, String securityLevel) {
     return new OtelMetricsAttributes(
         target,
         backendService,
         locality,
         disconnectError,
-        secLevel != null ? secLevel : securityLevel
+        securityLevel
     );
   }
 
