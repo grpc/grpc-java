@@ -254,7 +254,7 @@ public class WrrLocalityLoadBalancerTest {
     }
 
     Attributes.Builder attrBuilder = Attributes.newBuilder()
-        .set(XdsAttributes.ATTR_LOCALITY_NAME, locality);
+        .set(LoadBalancer.ATTR_LOCALITY_NAME, locality);
     if (localityWeight != null) {
       attrBuilder.set(XdsAttributes.ATTR_LOCALITY_WEIGHT, localityWeight);
     }
