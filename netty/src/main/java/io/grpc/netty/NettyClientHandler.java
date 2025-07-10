@@ -738,14 +738,19 @@ class NettyClientHandler extends AbstractNettyHandler {
 
                 // Attach the client stream to the HTTP/2 stream object as user data.
                 stream.setHttp2Stream(http2Stream);
+                promise.setSuccess();
+              } else {
+                // Otherwise, the stream has been cancelled and Netty is sending a
+                // RST_STREAM frame which causes it to purge pending writes from the
+                // flow-controller and delete the http2Stream. The stream listener has already
+                // been notified of cancellation so there is nothing to do.
+                //
+                // This process has been observed to fail in some circumstances, leaving listeners
+                // unanswered. Ensure that some exception has been delivered consistent with the
+                // implied RST_STREAM result above.
+                Status status = Status.INTERNAL.withDescription("unknown stream for connection");
+                promise.setFailure(status.asRuntimeException());
               }
-              // Otherwise, the stream has been cancelled and Netty is sending a
-              // RST_STREAM frame which causes it to purge pending writes from the
-              // flow-controller and delete the http2Stream. The stream listener has already
-              // been notified of cancellation so there is nothing to do.
-
-              // Just forward on the success status to the original promise.
-              promise.setSuccess();
             } else {
               Throwable cause = future.cause();
               if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
