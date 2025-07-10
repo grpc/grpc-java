@@ -51,7 +51,7 @@ public final class ApiConstants {
 
   /**
    * Lets you override a Channel's pre-auth configuration (see {@link
-   * BinderChannelBuilder#preAuthorizeServers(boolean)} for a given {@link EquivalentAddressGroup}.
+   * BinderChannelBuilder#preAuthorizeServers(boolean)}) for a given {@link EquivalentAddressGroup}.
    *
    * <p>A {@link NameResolver} that discovers servers from an untrusted source like PackageManager
    * can use this to force server pre-auth and prevent abuse.
