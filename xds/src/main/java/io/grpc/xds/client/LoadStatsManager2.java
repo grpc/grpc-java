@@ -25,6 +25,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Internal;
 import io.grpc.Status;
+import io.grpc.xds.BackendMetricPropagation;
 import io.grpc.xds.client.Stats.BackendLoadMetricStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
@@ -98,13 +99,20 @@ public final class LoadStatsManager2 {
 
   /**
    * Gets or creates the stats object for recording loads for the specified locality (in the
-   * specified cluster with edsServiceName). The returned object is reference counted and the
-   * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
+   * specified cluster with edsServiceName) with the specified backend metric propagation
+   * configuration. The returned object is reference counted and the caller should
+   * use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
    * when it is safe to discard the future stats for the locality.
    */
   @VisibleForTesting
   public synchronized ClusterLocalityStats getClusterLocalityStats(
       String cluster, @Nullable String edsServiceName, Locality locality) {
+    return getClusterLocalityStats(cluster, edsServiceName, locality, null);
+  }
+
+  public synchronized ClusterLocalityStats getClusterLocalityStats(
+      String cluster, @Nullable String edsServiceName, Locality locality,
+      @Nullable BackendMetricPropagation backendMetricPropagation) {
     if (!allLoadStats.containsKey(cluster)) {
       allLoadStats.put(
           cluster,
@@ -122,7 +130,7 @@ public final class LoadStatsManager2 {
       localityStats.put(
           locality,
           ReferenceCounted.wrap(new ClusterLocalityStats(
-              cluster, edsServiceName, locality, stopwatchSupplier.get())));
+              cluster, edsServiceName, locality, stopwatchSupplier.get(), backendMetricPropagation)));
     }
     ReferenceCounted<ClusterLocalityStats> ref = localityStats.get(locality);
     ref.retain();
@@ -325,6 +333,8 @@ public final class LoadStatsManager2 {
     private final String edsServiceName;
     private final Locality locality;
     private final Stopwatch stopwatch;
+    @Nullable
+    private final BackendMetricPropagation backendMetricPropagation;
     private final AtomicLong callsInProgress = new AtomicLong();
     private final AtomicLong callsSucceeded = new AtomicLong();
     private final AtomicLong callsFailed = new AtomicLong();
@@ -333,11 +343,12 @@ public final class LoadStatsManager2 {
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
-        Stopwatch stopwatch) {
+        Stopwatch stopwatch, BackendMetricPropagation backendMetricPropagation) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.locality = checkNotNull(locality, "locality");
       this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+      this.backendMetricPropagation = backendMetricPropagation;
       stopwatch.reset().start();
     }
 
@@ -367,15 +378,85 @@ public final class LoadStatsManager2 {
      * requests counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
      * increments the finished requests counter and adds the {@code value} to the existing
      * {@link BackendLoadMetricStats}.
+     * Metrics are filtered based on the backend metric propagation configuration if configured.
      */
     public synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
+      // If no propagation configuration is set, use the old behavior (propagate everything)
+      // Otherwise, filter based on the configuration
       namedMetrics.forEach((name, value) -> {
-        if (!loadMetricStatsMap.containsKey(name)) {
-          loadMetricStatsMap.put(name, new BackendLoadMetricStats(1, value));
-        } else {
-          loadMetricStatsMap.get(name).addMetricValueAndIncrementRequestsFinished(value);
+        if (backendMetricPropagation == null
+            || backendMetricPropagation.shouldPropagateNamedMetric(name)) {
+          String prefixedName = (backendMetricPropagation == null) ? name : "named_metrics." + name;
+          if (!loadMetricStatsMap.containsKey(prefixedName)) {
+            loadMetricStatsMap.put(prefixedName, new BackendLoadMetricStats(1, value));
+          } else {
+            loadMetricStatsMap.get(prefixedName).addMetricValueAndIncrementRequestsFinished(value);
+          }
         }
       });
+    }
+
+    /**
+     * Records top-level ORCA metrics (CPU, memory, application utilization) for per-call load
+     * reporting. Metrics are filtered based on the backend metric propagation configuration
+     * if configured.
+     *
+     * @param cpuUtilization CPU utilization metric value
+     * @param memUtilization Memory utilization metric value
+     * @param applicationUtilization Application utilization metric value
+     */
+    public synchronized void recordTopLevelMetrics(double cpuUtilization, double memUtilization,
+        double applicationUtilization) {
+      // If no propagation configuration is set, use the old behavior (propagate everything)
+      // Otherwise, filter based on the configuration
+
+      if (cpuUtilization > 0) {
+        boolean shouldPropagate = true;
+        if (backendMetricPropagation != null) {
+          shouldPropagate = backendMetricPropagation.propagateCpuUtilization;
+        }
+
+        if (shouldPropagate) {
+          String metricName = "cpu_utilization";
+          if (!loadMetricStatsMap.containsKey(metricName)) {
+            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, cpuUtilization));
+          } else {
+            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(cpuUtilization);
+          }
+        }
+      }
+
+      if (memUtilization > 0) {
+        boolean shouldPropagate = true;
+        if (backendMetricPropagation != null) {
+          shouldPropagate = backendMetricPropagation.propagateMemUtilization;
+        }
+
+        if (shouldPropagate) {
+          String metricName = "mem_utilization";
+          if (!loadMetricStatsMap.containsKey(metricName)) {
+            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, memUtilization));
+          } else {
+            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(memUtilization);
+          }
+        }
+      }
+
+      if (applicationUtilization > 0) {
+        boolean shouldPropagate = true;
+        if (backendMetricPropagation != null) {
+          shouldPropagate = backendMetricPropagation.propagateApplicationUtilization;
+        }
+
+        if (shouldPropagate) {
+          String metricName = "application_utilization";
+          if (!loadMetricStatsMap.containsKey(metricName)) {
+            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, applicationUtilization));
+          } else {
+            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(applicationUtilization);
+          }
+        }
+      }
     }
 
     /**

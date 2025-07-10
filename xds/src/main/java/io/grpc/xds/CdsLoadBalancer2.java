@@ -141,7 +141,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             result.maxConcurrentRequests(),
             result.upstreamTlsContext(),
             result.filterMetadata(),
-            result.outlierDetection());
+            result.outlierDetection(),
+            result.backendMetricPropagation());
       } else {
         instance = DiscoveryMechanism.forLogicalDns(
             leafName,
@@ -149,7 +150,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             result.lrsServerInfo(),
             result.maxConcurrentRequests(),
             result.upstreamTlsContext(),
-            result.filterMetadata());
+            result.filterMetadata(),
+            result.backendMetricPropagation());
       }
       instances.add(instance);
     }
