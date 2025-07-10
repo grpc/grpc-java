@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package xds.type.matcher.v3;
 
-import "xds/annotations/v3/status.proto";
 import "xds/core/v3/extension.proto";
 import "xds/type/matcher/v3/string.proto";
 
@@ -21,8 +20,6 @@ option go_package = "github.com/cncf/xds/go/xds/type/matcher/v3";
 // As an on_no_match might result in another matching tree being evaluated, this process
 // might repeat several times until the final OnMatch (or no match) is decided.
 message Matcher {
-  option (xds.annotations.v3.message_status).work_in_progress = true;
-
   // What to do if a match is successful.
   message OnMatch {
     oneof on_match {
@@ -38,6 +35,14 @@ message Matcher {
       // Protocol-specific action to take.
       core.v3.TypedExtensionConfig action = 2;
     }
+
+    // If true and the Matcher matches, the action will be taken but the caller
+    // will behave as if the Matcher did not match. A subsequent matcher or
+    // on_no_match action will be used instead.
+    // This field is not supported in all contexts in which the matcher API is
+    // used. If this field is set in a context in which it's not supported,
+    // the resource will be rejected.
+    bool keep_matching = 3;
   }
 
   // A linear list of field matchers.
