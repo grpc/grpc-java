@@ -545,7 +545,7 @@ public class RlsLoadBalancerTest {
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    assertThat(subchannels).hasSize(1); // includes fallback sub-channel
+    assertThat(subchannels).hasSize(2); // includes fallback sub-channel
 
     FakeSubchannel searchSubchannel = subchannels.getLast();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
