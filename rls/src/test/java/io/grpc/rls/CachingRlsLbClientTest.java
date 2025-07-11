@@ -169,6 +169,7 @@ public class CachingRlsLbClientTest {
   private CachingRlsLbClient rlsLbClient;
   private Map<String, ?> rlsChannelServiceConfig;
   private String rlsChannelOverriddenAuthority;
+  private boolean isAlreadyClosed = false;
 
   private void setUpRlsLbClient() {
     fakeThrottler.resetCounts();
@@ -191,7 +192,9 @@ public class CachingRlsLbClientTest {
 
   @After
   public void tearDown() throws Exception {
-    rlsLbClient.close();
+    if (!isAlreadyClosed) {
+      rlsLbClient.close();
+    }
     assertWithMessage(
             "On client shut down, RlsLoadBalancer must shut down with all its child loadbalancers.")
         .that(lbProvider.loadBalancers).isEmpty();
@@ -702,6 +705,7 @@ public class CachingRlsLbClientTest {
     // Shutdown
     rlsLbClient.close();
     verify(mockGaugeRegistration).close();
+    isAlreadyClosed = true;
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {
