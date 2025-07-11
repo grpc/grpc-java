@@ -651,12 +651,14 @@ public final class GrpcUtil {
   static class TimeoutMarshaller implements Metadata.AsciiMarshaller<Long> {
 
     @Override
-    public String toAsciiString(Long timeoutNanos) {
+    public String toAsciiString(Long timeoutNanosObject) {
       long cutoff = 100000000;
+      // Timeout checking is inherently racy. RPCs with timeouts in the past ideally don't even get
+      // here, but if the timeout is expired assume that happened recently and adjust it to the
+      // smallest allowed timeout
+      long timeoutNanos = Math.max(1, timeoutNanosObject);
       TimeUnit unit = TimeUnit.NANOSECONDS;
-      if (timeoutNanos < 0) {
-        throw new IllegalArgumentException("Timeout too small");
-      } else if (timeoutNanos < cutoff) {
+      if (timeoutNanos < cutoff) {
         return timeoutNanos + "n";
       } else if (timeoutNanos < cutoff * 1000L) {
         return unit.toMicros(timeoutNanos) + "u";
