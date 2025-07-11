@@ -229,8 +229,12 @@ final class CachingRlsLbClient {
             new BackoffRefreshListener());
     // TODO(creamsoup) wait until lb is ready
     String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
-    logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
-    fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
+    if (defaultTarget != null && !defaultTarget.isEmpty()) {
+      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
+      fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
+    } else {
+      fallbackChildPolicyWrapper = null;
+    }
 
     gaugeRegistration = helper.getMetricRecorder()
         .registerBatchCallback(new BatchCallback() {
