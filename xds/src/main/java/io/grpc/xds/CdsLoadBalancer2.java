@@ -57,14 +57,15 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
+  private final GracefulSwitchLoadBalancer delegate;
   // Following fields are effectively final.
   private String clusterName;
   private Subscription clusterSubscription;
-  private LoadBalancer childLb;
 
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+    this.delegate = new GracefulSwitchLoadBalancer(helper);
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -99,7 +100,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
 
     NameResolver.ConfigOrError configOrError;
-    Object childConfig;
+    Object gracefulConfig;
     if (clusterConfig.getChildren() instanceof EndpointConfig) {
       // The LB policy config is provided in service_config.proto/JSON format.
       configOrError =
@@ -131,17 +132,13 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             result.upstreamTlsContext(),
             result.filterMetadata());
       }
-      childConfig = new ClusterResolverConfig(
+      gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME),
+          new ClusterResolverConfig(
               instance,
               configOrError.getConfig(),
-              clusterConfig.getClusterResource().isHttp11ProxyAvailable());
-      if (childLb == null) {
-        childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
-      }
+              clusterConfig.getClusterResource().isHttp11ProxyAvailable()));
     } else if (clusterConfig.getChildren() instanceof AggregateConfig) {
-      if (childLb == null) {
-        childLb = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
-      }
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       List<String> leafClusters = ((AggregateConfig) clusterConfig.getChildren()).getLeafNames();
       for (String childCluster: leafClusters) {
@@ -152,23 +149,25 @@ final class CdsLoadBalancer2 extends LoadBalancer {
                                 new CdsConfig(childCluster)),
                         false));
       }
-      childConfig = new PriorityLoadBalancerProvider.PriorityLbConfig(
-              Collections.unmodifiableMap(priorityChildConfigs), leafClusters);
+      gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          lbRegistry.getProvider(PRIORITY_POLICY_NAME),
+          new PriorityLoadBalancerProvider.PriorityLbConfig(
+              Collections.unmodifiableMap(priorityChildConfigs), leafClusters));
     } else {
       return fail(Status.INTERNAL.withDescription(
               errorPrefix() + "Unexpected cluster children type: "
                       + clusterConfig.getChildren().getClass()));
     }
 
-    return childLb.acceptResolvedAddresses(
-        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(childConfig).build());
+    return delegate.acceptResolvedAddresses(
+        resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(gracefulConfig).build());
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (childLb != null) {
-      childLb.handleNameResolutionError(error);
+    if (delegate != null) {
+      delegate.handleNameResolutionError(error);
     } else {
       helper.updateBalancingState(
           TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
@@ -178,10 +177,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (childLb != null) {
-      childLb.shutdown();
-      childLb = null;
-    }
+    delegate.shutdown();
     if (clusterSubscription != null) {
       clusterSubscription.close();
       clusterSubscription = null;
@@ -190,10 +186,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
   @CheckReturnValue // don't forget to return up the stack after the fail call
   private Status fail(Status error) {
-    if (childLb != null) {
-      childLb.shutdown();
-      childLb = null;
-    }
+    delegate.shutdown();
     helper.updateBalancingState(
         TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     return Status.OK; // XdsNameResolver isn't a polling NR, so this value doesn't matter

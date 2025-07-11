@@ -617,8 +617,8 @@ public class CdsLoadBalancer2Test {
     loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("unreachable"));
     assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("unreachable");
-    verify(helper, never()).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.CONNECTING), any(SubchannelPicker.class));
   }
 
   @Test
