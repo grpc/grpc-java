@@ -201,7 +201,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_serverStatusCodeConversion() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -236,7 +242,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -393,7 +405,13 @@ public class RlsLoadBalancerTest {
   public void lb_working_withDefaultTarget_noRlsResponse() throws Exception {
     fakeThrottler.nextResult = true;
 
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -535,7 +553,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_nameResolutionFailed() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
