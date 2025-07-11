@@ -18,7 +18,6 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.io.ByteStreams;
@@ -939,8 +938,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @Override
       public void setDeadline(Deadline deadline) {
         headers.discardAll(TIMEOUT_KEY);
-        long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-        headers.put(TIMEOUT_KEY, effectiveTimeout);
+        headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
       }
 
       @Override
