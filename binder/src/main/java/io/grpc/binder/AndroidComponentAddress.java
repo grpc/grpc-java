@@ -17,6 +17,7 @@
 package io.grpc.binder;
 
 import static android.content.Intent.URI_ANDROID_APP_SCHEME;
+import static android.content.Intent.URI_INTENT_SCHEME;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -24,6 +25,7 @@ import android.annotation.SuppressLint;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.UserHandle;
 import com.google.common.base.Objects;
 import io.grpc.ExperimentalApi;
@@ -166,7 +168,6 @@ public final class AndroidComponentAddress extends SocketAddress {
    *
    * <p>See {@link Intent#URI_ANDROID_APP_SCHEME} for details.
    */
-  @SuppressLint("InlinedApi")
   public String asAndroidAppUri() {
     Intent intentForUri = bindIntent;
     if (intentForUri.getPackage() == null) {
@@ -174,7 +175,10 @@ public final class AndroidComponentAddress extends SocketAddress {
       // factory methods. Oddly, a ComponentName is not enough.
       intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
     }
-    return intentForUri.toUri(URI_ANDROID_APP_SCHEME);
+    return intentForUri.toUri(
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
+            ? URI_ANDROID_APP_SCHEME
+            : URI_INTENT_SCHEME);
   }
 
   @Override
