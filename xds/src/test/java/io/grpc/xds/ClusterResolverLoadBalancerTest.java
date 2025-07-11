@@ -661,7 +661,7 @@ public class ClusterResolverLoadBalancerTest {
     assertPicker(
         pickerCaptor.getValue(),
         Status.UNAVAILABLE.withDescription(
-                "No usable endpoint from cluster(s): " + CLUSTER1),
+                "No usable endpoint from cluster: " + CLUSTER1),
         null);
   }
 
@@ -690,7 +690,7 @@ public class ClusterResolverLoadBalancerTest {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status expectedError = Status.UNAVAILABLE.withDescription(
-        "No usable endpoint from cluster(s): " + CLUSTER1);
+        "No usable endpoint from cluster: " + CLUSTER1);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -789,7 +789,7 @@ public class ClusterResolverLoadBalancerTest {
     assertPicker(
         pickerCaptor.getValue(),
         Status.UNAVAILABLE.withDescription(
-            "No usable endpoint from cluster(s): " + CLUSTER1),
+            "No usable endpoint from cluster: " + CLUSTER1),
         null);
   }
 
