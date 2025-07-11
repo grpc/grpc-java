@@ -55,6 +55,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
   final long readyTimeoutMillis;
+  final boolean preAuthorizeServers; // TODO(jdcormie): Default to true.
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -75,6 +76,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
     readyTimeoutMillis = builder.readyTimeoutMillis;
+    preAuthorizeServers = builder.preAuthorizeServers;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
@@ -128,6 +130,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
     long readyTimeoutMillis = 60_000;
+    boolean preAuthorizeServers;
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -214,6 +217,12 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      */
     public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
       this.readyTimeoutMillis = readyTimeoutMillis;
+      return this;
+    }
+
+    /** Whether to check server addresses against the SecurityPolicy *before* binding to them. */
+    public Builder setPreAuthorizeServers(boolean preAuthorizeServers) {
+      this.preAuthorizeServers = preAuthorizeServers;
       return this;
     }
   }
