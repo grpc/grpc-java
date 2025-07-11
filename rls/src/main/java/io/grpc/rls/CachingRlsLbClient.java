@@ -132,6 +132,7 @@ final class CachingRlsLbClient {
   @GuardedBy("lock")
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
   private final ChannelLogger logger;
+  private final ChildPolicyWrapper fallbackChildPolicyWrapper;
 
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
@@ -226,6 +227,14 @@ final class CachingRlsLbClient {
             lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
             childLbHelperProvider,
             new BackoffRefreshListener());
+    // TODO(creamsoup) wait until lb is ready
+    String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
+    if (defaultTarget != null && !defaultTarget.isEmpty()) {
+      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
+      fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
+    } else {
+      fallbackChildPolicyWrapper = null;
+    }
 
     gaugeRegistration = helper.getMetricRecorder()
         .registerBatchCallback(new BatchCallback() {
@@ -1022,12 +1031,8 @@ final class CachingRlsLbClient {
       }
     }
 
-    private ChildPolicyWrapper fallbackChildPolicyWrapper;
-
     /** Uses Subchannel connected to default target. */
     private PickResult useFallback(PickSubchannelArgs args) {
-      // TODO(creamsoup) wait until lb is ready
-      startFallbackChildPolicy();
       SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
       if (picker == null) {
         return PickResult.withNoResult();
@@ -1049,17 +1054,6 @@ final class CachingRlsLbClient {
         return "drop";
       } else {
         return "fail";
-      }
-    }
-
-    private void startFallbackChildPolicy() {
-      String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
-      synchronized (lock) {
-        if (fallbackChildPolicyWrapper != null) {
-          return;
-        }
-        logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
-        fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
       }
     }
 
