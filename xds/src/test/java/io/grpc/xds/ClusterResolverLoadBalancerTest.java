@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
@@ -1197,6 +1198,27 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("unreachable");
     verify(helper, never()).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
+  }
+
+  @Test
+  public void config_equalsTester() {
+    new EqualsTester()
+        .addEqualityGroup(
+            new ClusterResolverConfig(
+                Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false),
+            new ClusterResolverConfig(
+                Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false))
+        .addEqualityGroup(new ClusterResolverConfig(
+            Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false))
+        .addEqualityGroup(new ClusterResolverConfig(
+            Collections.singletonList(edsDiscoveryMechanism1), leastRequest, true))
+        .addEqualityGroup(new ClusterResolverConfig(
+            Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection),
+            leastRequest,
+            false))
+        .addEqualityGroup(new ClusterResolverConfig(
+            Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), leastRequest, false))
+        .testEquals();
   }
 
   private void deliverLbConfig(ClusterResolverConfig config) {
