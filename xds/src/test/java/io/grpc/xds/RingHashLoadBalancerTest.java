@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Iterables;
 import com.google.common.primitives.UnsignedInteger;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
@@ -1111,6 +1112,19 @@ public class RingHashLoadBalancerTest {
           picker.pickSubchannel(getDefaultPickSubchannelArgs(random.nextLong())).getSubchannel());
     }
     assertThat(picks).containsExactly(subchannel1);
+  }
+
+  @Test
+  public void config_equalsTester() {
+    new EqualsTester()
+        .addEqualityGroup(
+            new RingHashConfig(1, 2, "headerA"),
+            new RingHashConfig(1, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 1, "headerA"))
+        .addEqualityGroup(new RingHashConfig(2, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 2, "headerB"))
+        .addEqualityGroup(new RingHashConfig(1, 2, ""))
+        .testEquals();
   }
 
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,

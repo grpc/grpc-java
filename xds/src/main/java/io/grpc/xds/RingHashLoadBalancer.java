@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -521,6 +522,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       this.minRingSize = minRingSize;
       this.maxRingSize = maxRingSize;
       this.requestHashHeader = requestHashHeader;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof RingHashConfig)) {
+        return false;
+      }
+      RingHashConfig that = (RingHashConfig) o;
+      return this.minRingSize == that.minRingSize
+          && this.maxRingSize == that.maxRingSize
+          && Objects.equals(this.requestHashHeader, that.requestHashHeader);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(minRingSize, maxRingSize, requestHashHeader);
     }
 
     @Override
