@@ -23,6 +23,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
@@ -51,9 +52,24 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
     return XdsLbPolicies.CDS_POLICY_NAME;
   }
 
+  private final LoadBalancerRegistry loadBalancerRegistry;
+
+  public CdsLoadBalancerProvider() {
+    this.loadBalancerRegistry = null;
+  }
+
+  public CdsLoadBalancerProvider(LoadBalancerRegistry loadBalancerRegistry) {
+    this.loadBalancerRegistry = loadBalancerRegistry;
+  }
+
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new CdsLoadBalancer2(helper);
+    LoadBalancerRegistry loadBalancerRegistry = this.loadBalancerRegistry;
+    if (loadBalancerRegistry == null) {
+      loadBalancerRegistry = LoadBalancerRegistry.getDefaultRegistry();
+    }
+
+    return new CdsLoadBalancer2(helper, loadBalancerRegistry);
   }
 
   @Override
