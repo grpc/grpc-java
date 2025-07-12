@@ -96,15 +96,13 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private ScheduledFuture<?> scheduleDeadlineIfNeeded(
       ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
     Deadline contextDeadline = context.getDeadline();
-    if (deadline == null && contextDeadline == null) {
-      return null;
-    }
-    long remainingNanos = Long.MAX_VALUE;
-    if (deadline != null) {
+    String deadlineName;
+    long remainingNanos;
+    if (deadline != null && isAbeforeB(deadline, contextDeadline)) {
+      deadlineName = "CallOptions";
       remainingNanos = deadline.timeRemaining(NANOSECONDS);
-    }
-
-    if (contextDeadline != null && contextDeadline.timeRemaining(NANOSECONDS) < remainingNanos) {
+    } else if (contextDeadline != null) {
+      deadlineName = "Context";
       remainingNanos = contextDeadline.timeRemaining(NANOSECONDS);
       if (logger.isLoggable(Level.FINE)) {
         StringBuilder builder =
@@ -121,29 +119,29 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
         logger.fine(builder.toString());
       }
-    }
-
-    long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
-    long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
-    final StringBuilder buf = new StringBuilder();
-    String deadlineName = isAbeforeB(contextDeadline, deadline) ? "Context" : "CallOptions";
-    if (remainingNanos < 0) {
-      buf.append("ClientCall started after ");
-      buf.append(deadlineName);
-      buf.append(" deadline was exceeded. Deadline has been exceeded for ");
     } else {
-      buf.append("Deadline ");
-      buf.append(deadlineName);
-      buf.append(" will be exceeded in ");
+      return null;
     }
-    buf.append(seconds);
-    buf.append(String.format(Locale.US, ".%09d", nanos));
-    buf.append("s. ");
 
     /* Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
       @Override
       public void run() {
+        long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
+        long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
+        StringBuilder buf = new StringBuilder();
+        if (remainingNanos < 0) {
+          buf.append("ClientCall started after ");
+          buf.append(deadlineName);
+          buf.append(" deadline was exceeded. Deadline has been exceeded for ");
+        } else {
+          buf.append("Deadline ");
+          buf.append(deadlineName);
+          buf.append(" was exceeded after ");
+        }
+        buf.append(seconds);
+        buf.append(String.format(Locale.US, ".%09d", nanos));
+        buf.append("s");
         cancel(
             Status.DEADLINE_EXCEEDED.withDescription(buf.toString()),
             // We should not cancel the call if the realCall is set because there could be a
