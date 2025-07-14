@@ -201,8 +201,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           DevicePolicyManager devicePolicyManager =
                   (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            bindResult =
-                    devicePolicyManager.bindDeviceAdminServiceAsUser(
+            bindResult = devicePolicyManager.bindDeviceAdminServiceAsUser(
                             channelCredentials.getDevicePolicyAdminComponentName(),
                             bindIntent,
                             conn,
@@ -268,9 +267,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   // @SystemApi in all the SDK versions where we support cross-user Channels.
   @Nullable
   private static ResolveInfo resolveServiceAsUser(
-          PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
+      PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
     List<ResolveInfo> results =
-            queryIntentServicesAsUser(packageManager, intent, flags, targetUserHandle);
+        queryIntentServicesAsUser(packageManager, intent, flags, targetUserHandle);
     // The first query result is "what would be returned by resolveService", per the javadoc.
     return (results != null && !results.isEmpty()) ? results.get(0) : null;
   }
@@ -283,19 +282,19 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @Nullable
   @SuppressWarnings("unchecked") // Safe by PackageManager#queryIntentServicesAsUser spec in AOSP.
   private static List<ResolveInfo> queryIntentServicesAsUser(
-          PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
+      PackageManager packageManager, Intent intent, int flags, UserHandle targetUserHandle) {
     try {
       if (queryIntentServicesAsUserMethod == null) {
         synchronized (ServiceBinding.class) {
           if (queryIntentServicesAsUserMethod == null) {
             queryIntentServicesAsUserMethod =
-                    PackageManager.class.getMethod(
-                            "queryIntentServicesAsUser", Intent.class, int.class, UserHandle.class);
+                PackageManager.class.getMethod(
+                    "queryIntentServicesAsUser", Intent.class, int.class, UserHandle.class);
           }
         }
       }
       return (List<ResolveInfo>)
-              queryIntentServicesAsUserMethod.invoke(packageManager, intent, flags, targetUserHandle);
+          queryIntentServicesAsUserMethod.invoke(packageManager, intent, flags, targetUserHandle);
     } catch (ReflectiveOperationException e) {
       throw new VerifyException(e);
     }
@@ -315,13 +314,13 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
     }
     ResolveInfo resolveInfo =
-            targetUserHandle != null
-                    ? resolveServiceAsUser(packageManager, bindIntent, flags, targetUserHandle)
-                    : packageManager.resolveService(bindIntent, flags);
+        targetUserHandle != null
+            ? resolveServiceAsUser(packageManager, bindIntent, flags, targetUserHandle)
+            : packageManager.resolveService(bindIntent, flags);
     if (resolveInfo == null) {
       throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
-              .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
-              .asException();
+          .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
+          .asException();
     }
     return resolveInfo.serviceInfo;
   }

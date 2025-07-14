@@ -176,9 +176,9 @@ public final class AndroidComponentAddress extends SocketAddress {
       intentForUri = intentForUri.cloneFilter().setPackage(getComponent().getPackageName());
     }
     return intentForUri.toUri(
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
-            ? URI_ANDROID_APP_SCHEME
-            : URI_INTENT_SCHEME);
+              Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
+              ? URI_ANDROID_APP_SCHEME
+              : URI_INTENT_SCHEME);
   }
 
   @Override
