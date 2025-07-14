@@ -89,7 +89,8 @@ public final class CronetClientTransportTest {
             false,
             TransportTracer.getDefaultFactory().create(),
             false,
-            false);
+            false,
+            4 * 1024);
     Runnable callback = transport.start(clientTransportListener);
     assertNotNull(callback);
     callback.run();
