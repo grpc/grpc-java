@@ -207,7 +207,14 @@ public class DnsNameResolverTest {
 
     // In practice the DNS name resolver provider always wraps the resolver in a
     // RetryingNameResolver which adds retry capabilities to it. We use the same setup here.
-    return (RetryingNameResolver) RetryingNameResolver.wrap(dnsResolver, args);
+    return new RetryingNameResolver(
+        dnsResolver,
+        new BackoffPolicyRetryScheduler(
+            new ExponentialBackoffPolicy.Provider(),
+            fakeExecutor.getScheduledExecutorService(),
+            syncContext
+        ),
+        syncContext);
   }
 
   @Before

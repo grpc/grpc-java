@@ -597,8 +597,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setChannelLogger(channelLogger)
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
-            .setMetricRecorder(this.metricRecorder)
-            .setNameResolverRegistry(builder.nameResolverRegistry);
+            .setMetricRecorder(this.metricRecorder);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -686,7 +685,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // We wrap the name resolver in a RetryingNameResolver to give it the ability to retry failures.
     // TODO: After a transition period, all NameResolver implementations that need retry should use
     //       RetryingNameResolver directly and this step can be removed.
-    NameResolver usedNameResolver = RetryingNameResolver.wrap(resolver, nameResolverArgs);
+    NameResolver usedNameResolver = new RetryingNameResolver(resolver,
+          new BackoffPolicyRetryScheduler(new ExponentialBackoffPolicy.Provider(),
+              nameResolverArgs.getScheduledExecutorService(),
+              nameResolverArgs.getSynchronizationContext()),
+          nameResolverArgs.getSynchronizationContext());
 
     if (overrideAuthority == null) {
       return usedNameResolver;
