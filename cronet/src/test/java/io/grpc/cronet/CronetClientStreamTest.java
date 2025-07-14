@@ -127,7 +127,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT,
             transportTracer,
             false,
-            false);
+            false,
+            4 * 1024);
     callback.setStream(clientStream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -591,7 +592,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT.withOption(CronetClientStream.CRONET_ANNOTATION_KEY, annotation),
             transportTracer,
             false,
-            false);
+            false,
+            4 * 1024);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -626,7 +628,8 @@ public final class CronetClientStreamTest {
             callOptions,
             transportTracer,
             false,
-            false);
+            false,
+            4 * 1024);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
             any(String.class), any(BidirectionalStream.Callback.class), any(Executor.class)))
@@ -666,7 +669,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT,
             transportTracer,
             true,
-            false);
+            false,
+            4 * 1024);
     callback.setStream(stream);
     BidirectionalStream.Builder getBuilder =
         mock(BidirectionalStream.Builder.class);
@@ -723,7 +727,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT,
             transportTracer,
             true,
-            true);
+            true,
+            4 * 1024);
     callback.setStream(stream);
     BidirectionalStream.Builder builder =
         mock(BidirectionalStream.Builder.class);
@@ -755,7 +760,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT,
             transportTracer,
             true,
-            true);
+            true,
+            4 * 1024);
     callback.setStream(stream);
     BidirectionalStream.Builder builder =
         mock(BidirectionalStream.Builder.class);
@@ -795,7 +801,8 @@ public final class CronetClientStreamTest {
             CallOptions.DEFAULT,
             transportTracer,
             false,
-            false);
+            false,
+            4 * 1024);
     callback.setStream(stream);
     BidirectionalStream.Builder builder =
         mock(BidirectionalStream.Builder.class);
