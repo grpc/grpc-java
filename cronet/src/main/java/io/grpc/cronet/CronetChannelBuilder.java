@@ -54,6 +54,8 @@ import org.chromium.net.CronetEngine;
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
 public final class CronetChannelBuilder extends ForwardingChannelBuilder2<CronetChannelBuilder> {
 
+  private static final int DEFAULT_READ_BUFFER_SIZE = 4 * 1024;
+
   /** BidirectionalStream.Builder factory used for getting the gRPC BidirectionalStream. */
   public static abstract class StreamBuilderFactory {
     public abstract BidirectionalStream.Builder newBidirectionalStreamBuilder(
@@ -109,6 +111,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
   private boolean trafficStatsUidSet;
   private int trafficStatsUid;
   private Network network;
+  private int readBufferSize = DEFAULT_READ_BUFFER_SIZE;
 
   private CronetChannelBuilder(String host, int port, CronetEngine cronetEngine) {
     final class CronetChannelTransportFactoryBuilder implements ClientTransportFactoryBuilder {
@@ -139,6 +142,15 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
   public CronetChannelBuilder maxMessageSize(int maxMessageSize) {
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be >= 0");
     this.maxMessageSize = maxMessageSize;
+    return this;
+  }
+
+  /**
+   * Sets the buffer size to read from the network. Default to {@link #DEFAULT_READ_BUFFER_SIZE}.
+   */
+  public CronetChannelBuilder readBufferSize(int readBufferSize) {
+    checkArgument(readBufferSize >= 0, "readBufferSize must be >= 0");
+    this.readBufferSize = readBufferSize;
     return this;
   }
 
@@ -226,7 +238,8 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
             trafficStatsTag,
             trafficStatsUidSet,
             trafficStatsUid,
-            network),
+            network,
+            readBufferSize),
         MoreExecutors.directExecutor(),
         scheduledExecutorService,
         maxMessageSize,
@@ -247,6 +260,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
     private final boolean usingSharedScheduler;
     private final boolean useGetForSafeMethods;
     private final boolean usePutForIdempotentMethods;
+    private final int readBufferSize;
 
     private CronetTransportFactory(
         StreamBuilderFactory streamFactory,
@@ -256,7 +270,8 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
         boolean alwaysUsePut,
         TransportTracer transportTracer,
         boolean useGetForSafeMethods,
-        boolean usePutForIdempotentMethods) {
+        boolean usePutForIdempotentMethods,
+        int readBufferSize) {
       usingSharedScheduler = timeoutService == null;
       this.timeoutService = usingSharedScheduler
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
@@ -267,6 +282,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
       this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
       this.useGetForSafeMethods = useGetForSafeMethods;
       this.usePutForIdempotentMethods = usePutForIdempotentMethods;
+      this.readBufferSize = readBufferSize;
     }
 
     @Override
@@ -275,7 +291,8 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       return new CronetClientTransport(streamFactory, inetSocketAddr, options.getAuthority(),
           options.getUserAgent(), options.getEagAttributes(), executor, maxMessageSize,
-          alwaysUsePut, transportTracer, useGetForSafeMethods, usePutForIdempotentMethods);
+          alwaysUsePut, transportTracer, useGetForSafeMethods, usePutForIdempotentMethods,
+          readBufferSize);
     }
 
     @Override
