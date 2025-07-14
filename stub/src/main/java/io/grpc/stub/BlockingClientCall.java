@@ -87,7 +87,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read() throws InterruptedException, StatusException {
     try {
-      return read(true, 0, TimeUnit.NANOSECONDS);
+      return read(true, 0);
     } catch (TimeoutException e) {
       throw new AssertionError("should never happen", e);
     }
@@ -106,14 +106,12 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException,
       StatusException {
-    return read(false, timeout, unit);
+    long end = System.nanoTime() + unit.toNanos(timeout);
+    return read(false, end);
   }
 
-  private RespT read(boolean waitForever, long timeout, TimeUnit unit)
+  private RespT read(boolean waitForever, long end)
       throws InterruptedException, TimeoutException, StatusException {
-    long start = System.nanoTime();
-    long end = start + unit.toNanos(timeout);
-
     Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
     executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
     RespT bufferedValue = buffer.poll();
@@ -182,7 +180,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request) throws InterruptedException, StatusException {
     try {
-      return write(true, request, Integer.MAX_VALUE, TimeUnit.DAYS);
+      return write(true, request, 0);
     } catch (TimeoutException e) {
       throw new RuntimeException(e); // should never happen
     }
@@ -211,17 +209,16 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException, StatusException {
-    return write(false, request, timeout, unit);
+    long end = System.nanoTime() + unit.toNanos(timeout);
+    return write(false, request, end);
   }
 
-  private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
+  private boolean write(boolean waitForever, ReqT request, long end)
       throws InterruptedException, TimeoutException, StatusException {
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
     }
-
-    long end = System.nanoTime() + unit.toNanos(timeout);
 
     Predicate<BlockingClientCall<ReqT, RespT>> predicate =
         (x) -> x.call.isReady() || x.closedStatus != null;
