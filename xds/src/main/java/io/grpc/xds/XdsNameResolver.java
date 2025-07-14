@@ -230,8 +230,7 @@ final class XdsNameResolver extends NameResolver {
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
 
-    resolveState = new ResolveState(ldsResourceName);
-    resolveState.start();
+    resolveState = new ResolveState(ldsResourceName); // auto starts
   }
 
   private static String expandPercentS(String template, String replacement) {
@@ -654,12 +653,8 @@ final class XdsNameResolver extends NameResolver {
     private ResolveState(String ldsResourceName) {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       xdsDependencyManager =
-          new XdsDependencyManager(xdsClient, syncContext, authority, ldsResourceName,
+          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName,
               nameResolverArgs, scheduler);
-    }
-
-    void start() {
-      xdsDependencyManager.start(this);
     }
 
     private void shutdown() {

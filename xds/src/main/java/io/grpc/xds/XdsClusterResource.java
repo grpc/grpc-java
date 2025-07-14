@@ -172,9 +172,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
         lbConfig.getRawConfigValue());
     if (configOrError.getError() != null) {
-      throw new ResourceInvalidException(
-          "Failed to parse lb config for cluster '" + cluster.getName() + "': "
-          + configOrError.getError());
+      throw new ResourceInvalidException(structOrError.getErrorDetail());
     }
 
     updateBuilder.lbPolicyConfig(lbPolicyConfig);
@@ -210,10 +208,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           TYPE_URL_CLUSTER_CONFIG, null);
     } catch (InvalidProtocolBufferException e) {
       return StructOrError.fromError("Cluster " + clusterName + ": malformed ClusterConfig: " + e);
-    }
-    if (clusterConfig.getClustersList().isEmpty()) {
-      return StructOrError.fromError("Cluster " + clusterName
-          + ": aggregate ClusterConfig.clusters must not be empty");
     }
     return StructOrError.fromStruct(CdsUpdate.forAggregate(
         clusterName, clusterConfig.getClustersList()));
