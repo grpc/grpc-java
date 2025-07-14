@@ -655,7 +655,7 @@ final class XdsNameResolver extends NameResolver {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       xdsDependencyManager =
           new XdsDependencyManager(xdsClient, syncContext, authority, ldsResourceName,
-              nameResolverArgs);
+              nameResolverArgs, scheduler);
     }
 
     void start() {

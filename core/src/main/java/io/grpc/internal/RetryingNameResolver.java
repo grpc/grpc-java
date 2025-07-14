@@ -27,21 +27,12 @@ import io.grpc.SynchronizationContext;
  *
  * <p>The {@link NameResolver} used with this
  */
-public final class RetryingNameResolver extends ForwardingNameResolver {
-  public static NameResolver wrap(NameResolver retriedNameResolver, Args args) {
-    // For migration, this might become conditional
-    return new RetryingNameResolver(
-        retriedNameResolver,
-        new BackoffPolicyRetryScheduler(
-            new ExponentialBackoffPolicy.Provider(),
-            args.getScheduledExecutorService(),
-            args.getSynchronizationContext()),
-        args.getSynchronizationContext());
-  }
+final class RetryingNameResolver extends ForwardingNameResolver {
 
   private final NameResolver retriedNameResolver;
   private final RetryScheduler retryScheduler;
   private final SynchronizationContext syncContext;
+
 
   /**
    * Creates a new {@link RetryingNameResolver}.

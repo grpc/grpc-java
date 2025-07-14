@@ -23,27 +23,18 @@ import static io.grpc.xds.client.XdsClient.ResourceUpdate;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.RetryingNameResolver;
-import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
-import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsResourceType;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -53,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
@@ -63,7 +55,7 @@ import javax.annotation.Nullable;
  */
 final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegistry {
   private enum TrackedWatcherTypeEnum {
-    LDS, RDS, CDS, EDS, DNS
+    LDS, RDS, CDS, EDS
   }
 
   private static final TrackedWatcherType<XdsListenerResource.LdsUpdate> LDS_TYPE =
@@ -74,19 +66,12 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       new TrackedWatcherType<>(TrackedWatcherTypeEnum.CDS);
   private static final TrackedWatcherType<XdsEndpointResource.EdsUpdate> EDS_TYPE =
       new TrackedWatcherType<>(TrackedWatcherTypeEnum.EDS);
-  private static final TrackedWatcherType<List<EquivalentAddressGroup>> DNS_TYPE =
-      new TrackedWatcherType<>(TrackedWatcherTypeEnum.DNS);
-
-  // DNS-resolved endpoints do not have the definition of the locality it belongs to, just hardcode
-  // to an empty locality.
-  private static final Locality LOGICAL_DNS_CLUSTER_LOCALITY = Locality.create("", "", "");
 
   private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Specified by gRFC A37
   private final String listenerName;
   private final XdsClient xdsClient;
   private final SynchronizationContext syncContext;
   private final String dataPlaneAuthority;
-  private final NameResolver.Args nameResolverArgs;
   private XdsConfigWatcher xdsConfigWatcher;
 
   private StatusOr<XdsConfig> lastUpdate = null;
@@ -94,17 +79,16 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       new EnumMap<>(TrackedWatcherTypeEnum.class);
   private final Set<ClusterSubscription> subscriptions = new HashSet<>();
 
-  XdsDependencyManager(
-      XdsClient xdsClient,
-      SynchronizationContext syncContext,
-      String dataPlaneAuthority,
-      String listenerName,
-      NameResolver.Args nameResolverArgs) {
+  XdsDependencyManager(XdsClient xdsClient,
+                       SynchronizationContext syncContext, String dataPlaneAuthority,
+                       String listenerName, NameResolver.Args nameResolverArgs,
+                       ScheduledExecutorService scheduler) {
     this.listenerName = checkNotNull(listenerName, "listenerName");
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.dataPlaneAuthority = checkNotNull(dataPlaneAuthority, "dataPlaneAuthority");
-    this.nameResolverArgs = checkNotNull(nameResolverArgs, "nameResolverArgs");
+    checkNotNull(nameResolverArgs, "nameResolverArgs");
+    checkNotNull(scheduler, "scheduler");
   }
 
   public static String toContextStr(String typeName, String resourceName) {
@@ -134,18 +118,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     });
 
     return subscription;
-  }
-
-  /**
-   * For all logical dns clusters refresh their results.
-   */
-  public void requestReresolution() {
-    syncContext.execute(() -> {
-      for (TrackedWatcher<List<EquivalentAddressGroup>> watcher : getWatchers(DNS_TYPE).values()) {
-        DnsWatcher dnsWatcher = (DnsWatcher) watcher;
-        dnsWatcher.refresh();
-      }
-    });
   }
 
   private <T extends ResourceUpdate> void addWatcher(
@@ -363,9 +335,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         }
         break;
       case LOGICAL_DNS:
-        TrackedWatcher<List<EquivalentAddressGroup>> dnsWatcher =
-            tracer.getWatcher(DNS_TYPE, cdsUpdate.dnsHostName());
-        child = new EndpointConfig(dnsToEdsUpdate(dnsWatcher.getData(), cdsUpdate.dnsHostName()));
+        // TODO get the resolved endpoint configuration
+        child = new EndpointConfig(StatusOr.fromStatus(
+            Status.INTERNAL.withDescription("Logical DNS in dependency manager unsupported")));
         break;
       default:
         child = new EndpointConfig(StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
@@ -378,24 +350,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
     clusters.put(clusterName, StatusOr.fromValue(
         new XdsConfig.XdsClusterConfig(clusterName, cdsUpdate, child)));
-  }
-
-  private static StatusOr<XdsEndpointResource.EdsUpdate> dnsToEdsUpdate(
-      StatusOr<List<EquivalentAddressGroup>> dnsData, String dnsHostName) {
-    if (!dnsData.hasValue()) {
-      return StatusOr.fromStatus(dnsData.getStatus());
-    }
-
-    List<Endpoints.LbEndpoint> endpoints = new ArrayList<>();
-    for (EquivalentAddressGroup eag : dnsData.getValue()) {
-      endpoints.add(Endpoints.LbEndpoint.create(eag, 1, true, dnsHostName, ImmutableMap.of()));
-    }
-    LocalityLbEndpoints lbEndpoints =
-        LocalityLbEndpoints.create(endpoints, 1, 0, ImmutableMap.of());
-    return StatusOr.fromValue(new XdsEndpointResource.EdsUpdate(
-        "fakeEds_logicalDns",
-        Collections.singletonMap(LOGICAL_DNS_CLUSTER_LOCALITY, lbEndpoints),
-        new ArrayList<>()));
   }
 
   private void addRdsWatcher(String resourceName) {
@@ -420,17 +374,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     addWatcher(CDS_TYPE, new CdsWatcher(clusterName));
-  }
-
-  private void addDnsWatcher(String dnsHostName) {
-    syncContext.throwIfNotInThisSynchronizationContext();
-    if (getWatchers(DNS_TYPE).containsKey(dnsHostName)) {
-      return;
-    }
-
-    DnsWatcher watcher = new DnsWatcher(dnsHostName, nameResolverArgs);
-    getWatchers(DNS_TYPE).put(dnsHostName, watcher);
-    watcher.start();
   }
 
   private void updateRoutes(List<VirtualHost> virtualHosts) {
@@ -466,33 +409,6 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     return clusters;
-  }
-
-  private static NameResolver createNameResolver(
-      String dnsHostName,
-      NameResolver.Args nameResolverArgs) {
-    URI uri;
-    try {
-      uri = new URI("dns", "", "/" + dnsHostName, null);
-    } catch (URISyntaxException e) {
-      return new FailingNameResolver(
-          Status.INTERNAL.withDescription("Bug, invalid URI creation: " + dnsHostName)
-            .withCause(e));
-    }
-
-    NameResolverProvider provider =
-        nameResolverArgs.getNameResolverRegistry().getProviderForScheme("dns");
-    if (provider == null) {
-      return new FailingNameResolver(
-          Status.INTERNAL.withDescription("Could not find dns name resolver"));
-    }
-
-    NameResolver bareResolver = provider.newNameResolver(uri, nameResolverArgs);
-    if (bareResolver == null) {
-      return new FailingNameResolver(
-          Status.INTERNAL.withDescription("DNS name resolver provider returned null: " + uri));
-    }
-    return RetryingNameResolver.wrap(bareResolver, nameResolverArgs);
   }
 
   private static class TypeWatchers<T> {
@@ -806,7 +722,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           addEdsWatcher(getEdsServiceName());
           break;
         case LOGICAL_DNS:
-          addDnsWatcher(update.dnsHostName());
+          // no eds needed
           break;
         case AGGREGATE:
           update.prioritizedClusterNames()
@@ -834,102 +750,5 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Override
     public void subscribeToChildren(XdsEndpointResource.EdsUpdate update) {}
-  }
-
-  private final class DnsWatcher implements TrackedWatcher<List<EquivalentAddressGroup>> {
-    private final NameResolver resolver;
-    @Nullable
-    private StatusOr<List<EquivalentAddressGroup>> data;
-    private boolean cancelled;
-
-    public DnsWatcher(String dnsHostName, NameResolver.Args nameResolverArgs) {
-      this.resolver = createNameResolver(dnsHostName, nameResolverArgs);
-    }
-
-    public void start() {
-      resolver.start(new NameResolverListener());
-    }
-
-    public void refresh() {
-      if (cancelled) {
-        return;
-      }
-      resolver.refresh();
-    }
-
-    @Override
-    @Nullable
-    public StatusOr<List<EquivalentAddressGroup>> getData() {
-      return data;
-    }
-
-    @Override
-    public void close() {
-      if (cancelled) {
-        return;
-      }
-      cancelled = true;
-      resolver.shutdown();
-    }
-
-    private class NameResolverListener extends NameResolver.Listener2 {
-      @Override
-      public void onResult(final NameResolver.ResolutionResult resolutionResult) {
-        syncContext.execute(() -> onResult2(resolutionResult));
-      }
-
-      @Override
-      public Status onResult2(final NameResolver.ResolutionResult resolutionResult) {
-        if (cancelled) {
-          return Status.OK;
-        }
-        data = resolutionResult.getAddressesOrError();
-        maybePublishConfig();
-        return resolutionResult.getAddressesOrError().getStatus();
-      }
-
-      @Override
-      public void onError(final Status error) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (cancelled) {
-              return;
-            }
-            // DnsNameResolver cannot distinguish between address-not-found and transient errors.
-            // Assume it is a transient error.
-            // TODO: Once the resolution note API is available, don't throw away the error if
-            // hasDataValue(); pass it as the note instead
-            if (!hasDataValue()) {
-              data = StatusOr.fromStatus(error);
-              maybePublishConfig();
-            }
-          }
-        });
-      }
-    }
-  }
-
-  private static final class FailingNameResolver extends NameResolver {
-    private final Status status;
-
-    public FailingNameResolver(Status status) {
-      checkNotNull(status, "status");
-      checkArgument(!status.isOk(), "Status must not be OK");
-      this.status = status;
-    }
-
-    @Override
-    public void start(Listener2 listener) {
-      listener.onError(status);
-    }
-
-    @Override
-    public String getServiceAuthority() {
-      return "bug-if-you-see-this-authority";
-    }
-
-    @Override
-    public void shutdown() {}
   }
 }

@@ -303,7 +303,6 @@ public abstract class NameResolver {
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
     @Nullable private final MetricRecorder metricRecorder;
-    @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
     private Args(Builder builder) {
@@ -317,7 +316,6 @@ public abstract class NameResolver {
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
       this.metricRecorder = builder.metricRecorder;
-      this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
@@ -449,18 +447,6 @@ public abstract class NameResolver {
       return metricRecorder;
     }
 
-    /**
-     * Returns the {@link NameResolverRegistry} that the Channel uses to look for {@link
-     * NameResolver}s.
-     *
-     * @since 1.74.0
-     */
-    public NameResolverRegistry getNameResolverRegistry() {
-      if (nameResolverRegistry == null) {
-        throw new IllegalStateException("NameResolverRegistry is not set in Builder");
-      }
-      return nameResolverRegistry;
-    }
 
     @Override
     public String toString() {
@@ -475,7 +461,6 @@ public abstract class NameResolver {
           .add("executor", executor)
           .add("overrideAuthority", overrideAuthority)
           .add("metricRecorder", metricRecorder)
-          .add("nameResolverRegistry", nameResolverRegistry)
           .toString();
     }
 
@@ -495,7 +480,6 @@ public abstract class NameResolver {
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
-      builder.setNameResolverRegistry(nameResolverRegistry);
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
@@ -524,7 +508,6 @@ public abstract class NameResolver {
       private Executor executor;
       private String overrideAuthority;
       private MetricRecorder metricRecorder;
-      private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
 
       Builder() {
@@ -628,16 +611,6 @@ public abstract class NameResolver {
        */
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
         this.metricRecorder = metricRecorder;
-        return this;
-      }
-
-      /**
-       * See {@link Args#getNameResolverRegistry}.  This is an optional field.
-       *
-       * @since 1.74.0
-       */
-      public Builder setNameResolverRegistry(NameResolverRegistry registry) {
-        this.nameResolverRegistry = registry;
         return this;
       }
 
