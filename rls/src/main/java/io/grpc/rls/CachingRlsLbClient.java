@@ -230,7 +230,6 @@ final class CachingRlsLbClient {
     // TODO(creamsoup) wait until lb is ready
     String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
     if (defaultTarget != null && !defaultTarget.isEmpty()) {
-      logger.log(ChannelLogLevel.DEBUG, "starting fallback to {0}", defaultTarget);
       fallbackChildPolicyWrapper = refCountedChildPolicyWrapperFactory.createOrGet(defaultTarget);
     } else {
       fallbackChildPolicyWrapper = null;

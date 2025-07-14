@@ -169,7 +169,6 @@ public class CachingRlsLbClientTest {
   private CachingRlsLbClient rlsLbClient;
   private Map<String, ?> rlsChannelServiceConfig;
   private String rlsChannelOverriddenAuthority;
-  private boolean isAlreadyClosed = false;
 
   private void setUpRlsLbClient() {
     fakeThrottler.resetCounts();
@@ -192,7 +191,7 @@ public class CachingRlsLbClientTest {
 
   @After
   public void tearDown() throws Exception {
-    if (!isAlreadyClosed) {
+    if (rlsLbClient != null) {
       rlsLbClient.close();
     }
     assertWithMessage(
@@ -704,8 +703,8 @@ public class CachingRlsLbClientTest {
 
     // Shutdown
     rlsLbClient.close();
+    rlsLbClient = null;
     verify(mockGaugeRegistration).close();
-    isAlreadyClosed = true;
   }
 
   private static RouteLookupConfig getRouteLookupConfig() {
