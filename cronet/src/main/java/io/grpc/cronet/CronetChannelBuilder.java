@@ -238,15 +238,15 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
             trafficStatsTag,
             trafficStatsUidSet,
             trafficStatsUid,
-            network,
-            readBufferSize),
+            network),
         MoreExecutors.directExecutor(),
         scheduledExecutorService,
         maxMessageSize,
         alwaysUsePut,
         transportTracerFactory.create(),
         useGetForSafeMethods,
-        usePutForIdempotentMethods);
+        usePutForIdempotentMethods,
+        readBufferSize);
   }
 
   @VisibleForTesting
