@@ -1081,7 +1081,7 @@ public class OpenTelemetryMetricsModuleTest {
                 .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
                     point -> point
                         .hasCount(1)
-                        .hasSum(1)
+                        .hasSum(2)
                         .hasAttributes(finalAttributes))),
             metric -> assertThat(metric)
                 .hasName(CLIENT_CALL_RETRY_DELAY)

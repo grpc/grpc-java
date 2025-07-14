@@ -436,13 +436,7 @@ final class OpenTelemetryMetricsModule {
 
       // Retry counts
       if (module.resource.clientCallRetriesCounter() != null) {
-
-        long retriesPerCall = 0;
-        long attempts = attemptsPerCall.get();
-        if (attempts > 0) {
-          retriesPerCall = attempts - 1;
-        }
-
+        long retriesPerCall = attemptsPerCall.get() - 1 >= 0 ? attemptsPerCall.get() - 1 : 0;
         if (retriesPerCall > 0) {
           module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
         }
@@ -450,15 +444,9 @@ final class OpenTelemetryMetricsModule {
 
       // Hedge counts
       if (module.resource.clientCallHedgesCounter() != null) {
-
-        long hedgesPerCall = 0;
-        long attempts = hedgedAttemptsPerCall.get();
-        if (attempts > 0) {
-          hedgesPerCall = attempts - 1;
-        }
-
-        if (hedgesPerCall > 0) {
-          module.resource.clientCallHedgesCounter().record(hedgesPerCall, baseAttributes);
+        if (hedgedAttemptsPerCall.get() > 0) {
+          module.resource.clientCallHedgesCounter()
+              .record(hedgedAttemptsPerCall.get(), baseAttributes);
         }
       }
 
