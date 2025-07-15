@@ -454,6 +454,26 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   }
 
   @Test
+  public void receivedAbruptGoAwayShouldFailRacingQueuedIoStreamid() throws Exception {
+    // Purposefully avoid flush(), since we want the write to not actually complete.
+    // EmbeddedChannel doesn't support flow control, so this is the next closest approximation.
+    ChannelFuture future = channel().write(
+        newCreateStreamCommand(grpcHeaders, streamTransportState));
+    // Read a GOAWAY that indicates our stream can't be sent
+    channelRead(goAwayFrame(0, 0 /* NO_ERROR */, Unpooled.copiedBuffer("this is a test", UTF_8)));
+
+    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
+    verify(streamListener).closed(captor.capture(), same(REFUSED),
+        ArgumentMatchers.<Metadata>notNull());
+    assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
+    assertEquals(
+        "Abrupt GOAWAY closed sent stream. HTTP/2 error code: NO_ERROR, "
+          + "debug data: this is a test",
+        captor.getValue().getDescription());
+    assertTrue(future.isDone());
+  }
+
+  @Test
   public void receivedGoAway_shouldFailBufferedStreamsExceedingMaxConcurrentStreams()
       throws Exception {
     NettyClientStream.TransportState streamTransportState1 = new TransportStateImpl(
