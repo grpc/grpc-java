@@ -238,6 +238,8 @@ public abstract class NameResolver {
      * Handles updates on resolved addresses and attributes.  If
      * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be
      * called.
+     * New implementations should prefer overriding onResult2. This method exists to facilitate
+     * older implementations using {@link Listener} to migrate to {@link Listener2}.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
@@ -247,6 +249,9 @@ public abstract class NameResolver {
     /**
      * Handles a name resolving error from the resolver. The listener is responsible for eventually
      * invoking {@link NameResolver#refresh()} to re-attempt resolution.
+     * New implementations should prefer overriding onResult2 which will have the address
+     * resolution error in {@link ResolutionResult}'s addressesOrError. This method exists to
+     * facilitate older implementations using {@link Listener} to migrate to {@link Listener2}.
      *
      * @param error a non-OK status
      * @since 1.21.0
@@ -255,9 +260,13 @@ public abstract class NameResolver {
     public abstract void onError(Status error);
 
     /**
-     * Handles updates on resolved addresses and attributes.
+     * Handles updates on resolved addresses and attributes. Must be called from
+     * {@link SynchronizationContext}.
      *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @param resolutionResult the resolved server addresses or error in address resolution,
+     *     attributes, and Service Config or error
+     * @return status indicating whether the resolutionResult was accepted by the listener,
+     *     typically the result from a load balancer.
      * @since 1.66
      */
     public Status onResult2(ResolutionResult resolutionResult) {
