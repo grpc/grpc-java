@@ -773,6 +773,19 @@ class NettyClientHandler extends AbstractNettyHandler {
             }
           }
         });
+    // When the HEADERS are not buffered because of MAX_CONCURRENT_STREAMS in
+    // StreamBufferingEncoder, the stream is created immediately even if the bytes of the HEADERS
+    // are delayed because the OS may have too much buffered and isn't accepting the write. The
+    // write promise is also delayed until flush(). However, we need to associate the netty stream
+    // with the transport state so that goingAway() and forcefulClose() and able to notify the
+    // stream of failures.
+    //
+    // This leaves a hole when MAX_CONCURRENT_STREAMS is reached, as http2Stream will be null, but
+    // it is better than nothing.
+    Http2Stream http2Stream = connection().stream(streamId);
+    if (http2Stream != null) {
+      http2Stream.setProperty(streamKey, stream);
+    }
   }
 
   /**
