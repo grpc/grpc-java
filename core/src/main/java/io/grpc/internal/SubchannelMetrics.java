@@ -39,7 +39,7 @@ public final class SubchannelMetrics {
     MetricInstrumentRegistry metricInstrumentRegistry
         = MetricInstrumentRegistry.getDefaultRegistry();
     disconnections = metricInstrumentRegistry.registerLongCounter(
-        "grpc.subchannel.disconnections1",
+        "grpc.subchannel.disconnections",
         "EXPERIMENTAL. Number of times the selected subchannel becomes disconnected",
         "{disconnection}",
         Lists.newArrayList("grpc.target"),
