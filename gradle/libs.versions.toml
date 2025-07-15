@@ -29,11 +29,7 @@ commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
-# error-prone 2.31.0+ blocked on https://github.com/grpc/grpc-java/issues/10152
-# It breaks Bazel (ArrayIndexOutOfBoundsException in turbine) and Dexing ("D8:
-# java.lang.NullPointerException"). We can trivially upgrade the Bazel CI to
-# 6.3.0+ (https://github.com/bazelbuild/bazel/issues/18743).
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.30.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.36.0"
 # error-prone 2.32.0+ require Java 17+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.51.0"
@@ -45,7 +41,7 @@ google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.24.1
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.21.2"
 # 2.12.1 requires error_prone_annotations:2.36.0 but we are stuck with 2.30.0
 gson = "com.google.code.gson:gson:2.11.0"
-# 33.4.0 requires com.google.errorprone:error_prone_annotations:2.36.0 but we are stuck with 2.30.0 (see above)
+# 33.4.8-jre requires com.google.errorprone:error_prone_annotations:2.36.0
 guava = "com.google.guava:guava:33.4.8-jre"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = "com.google.guava:guava-testlib:33.4.8-jre"
