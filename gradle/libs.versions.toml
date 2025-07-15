@@ -41,10 +41,10 @@ google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.24.1
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.21.2"
 # 2.12.1 requires error_prone_annotations:2.36.0 but we are stuck with 2.30.0
 gson = "com.google.code.gson:gson:2.11.0"
-# 33.4.8-jre requires com.google.errorprone:error_prone_annotations:2.36.0
-guava = "com.google.guava:guava:33.4.8-jre"
+# 33.4.8 requires com.google.errorprone:error_prone_annotations:2.36.0
+guava = "com.google.guava:guava:33.4.8-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
-guava-testlib = "com.google.guava:guava-testlib:33.4.8-jre"
+guava-testlib = "com.google.guava:guava-testlib:33.4.8-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
 guava-jre = "com.google.guava:guava:33.4.8-jre"
