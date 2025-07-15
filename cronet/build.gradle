@@ -46,6 +46,7 @@ dependencies {
             libraries.cronet.api
     implementation project(':grpc-core')
     implementation libraries.guava
+    implementation 'org.checkerframework:checker-qual:3.49.5'
     testImplementation project(':grpc-testing')
 
     testImplementation libraries.cronet.embedded
