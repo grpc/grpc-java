@@ -146,7 +146,7 @@ import org.mockito.verification.VerificationMode;
 public abstract class GrpcXdsClientImplTestBase {
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
-  private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
+  private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
@@ -311,7 +311,7 @@ public abstract class GrpcXdsClientImplTestBase {
       if (serverInfo.target().equals(SERVER_URI)) {
         return new GrpcXdsTransport(channel);
       }
-      if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
+      if (serverInfo.target().equals(SERVER_URI_CUSTOM_AUTHORITY)) {
         if (channelForCustomAuthority == null) {
           channelForCustomAuthority = cleanupRule.register(
               InProcessChannelBuilder.forName(serverName).directExecutor().build());
@@ -359,7 +359,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
@@ -3217,7 +3217,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
@@ -4334,7 +4334,7 @@ public abstract class GrpcXdsClientImplTestBase {
             AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                 ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
             "",
             AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
