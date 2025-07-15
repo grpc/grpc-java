@@ -640,6 +640,15 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
               addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
           null, null
           ));
+      subchannelMetrics.recordDisconnection(buildLabelSet(
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+          getAttributeOrDefault(
+              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
+          "Peer Pressure",
+          extractSecurityLevel(
+              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
+      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -694,15 +703,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       for (ClientTransportFilter filter : transportFilters) {
         filter.transportTerminated(transport.getAttributes());
       }
-      subchannelMetrics.recordDisconnection(buildLabelSet(
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-          "Peer Pressure",
-          extractSecurityLevel(
-              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
-      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
