@@ -2239,7 +2239,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
+            + " Deadline CallOptions was exceeded after 0.000004000s"));
   }
 
   @Test
