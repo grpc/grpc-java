@@ -17,6 +17,8 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -157,52 +159,19 @@ public final class PendingAuthListenerTest {
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
         ClientCall<ReqT, RespT> delegate = next.newCall(method, callOptions);
-        return new ClientCall<ReqT, RespT>() {
+        return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(delegate){
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
-            Listener<RespT> listenerWrapper = new Listener<RespT>() {
-              @Override
-              public void onHeaders(Metadata headers) {
-                responseListener.onHeaders(headers);
-              }
-
-              @Override
-              public void onMessage(RespT message) {
-                responseListener.onMessage(message);
-              }
-
-              @Override
-              public void onReady() {
-                responseListener.onReady();
-              }
-
-              @Override
-              public void onClose(Status status, Metadata trailers) {
-                responseListener.onClose(status, trailers);
-                closed.set(true);
-              }
-            };
-            delegate.start(listenerWrapper, headers);
-          }
-
-          @Override
-          public void request(int numMessages) {
-            delegate.request(numMessages);
-          }
-
-          @Override
-          public void cancel(@Nullable String message, @Nullable Throwable cause) {
-            delegate.cancel(message, cause);
-          }
-
-          @Override
-          public void halfClose() {
-            delegate.halfClose();
-          }
-
-          @Override
-          public void sendMessage(ReqT message) {
-            delegate.sendMessage(message);
+            ClientCall.Listener<RespT> wrappedListener =
+                new ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT>(
+                    responseListener){
+                      @Override
+                      public void onClose(Status status, Metadata trailers) {
+                        super.onClose(status, trailers);
+                        closed.set(true);
+                      }
+                    };
+            super.start(wrappedListener, headers);
           }
         };
       }
@@ -217,6 +186,7 @@ public final class PendingAuthListenerTest {
     // Assert
     assertThat(closed.get()).isTrue();
   }
+
 
   private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
     public static final StringMarshaller INSTANCE = new StringMarshaller();
