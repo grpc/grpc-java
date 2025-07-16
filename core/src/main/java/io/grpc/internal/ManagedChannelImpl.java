@@ -1970,6 +1970,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void requestConnection() {
       syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
+      if (shutdown) {
+        return;
+      }
       subchannel.obtainActiveTransport();
     }
 
