@@ -35,6 +35,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.TestMethodDescriptors;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -126,15 +127,10 @@ public final class PendingAuthListenerTest {
   @Test
   public void whenStartCallFails_closesTheCallWithInternalStatus() throws Exception {
     // Arrange
-    String name = "test_server";
+    String name = TestMethodDescriptors.SERVICE_NAME;
     AtomicBoolean closed = new AtomicBoolean(false);
-    MethodDescriptor<String, String> method =
-        MethodDescriptor
-            .newBuilder(StringMarshaller.INSTANCE, StringMarshaller.INSTANCE)
-            .setFullMethodName("test_server/method")
-            .setType(MethodDescriptor.MethodType.UNARY)
-            .build();
-    ServerCallHandler<String, String> callHandler =
+    MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
+    ServerCallHandler<Void, Void> callHandler =
         ServerCalls.asyncUnaryCall((req, respObserver) -> {
           throw new IllegalStateException("ooops");
         });
@@ -181,28 +177,9 @@ public final class PendingAuthListenerTest {
 
     // Act
     assertThrows(StatusRuntimeException.class, () -> ClientCalls.blockingUnaryCall(channel,
-        method, CallOptions.DEFAULT.withDeadlineAfter(Duration.ofSeconds(5)), "foo"));
+        method, CallOptions.DEFAULT.withDeadlineAfter(Duration.ofSeconds(5)), /* request= */ (Void)null));
 
     // Assert
     assertThat(closed.get()).isTrue();
-  }
-
-
-  private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
-    public static final StringMarshaller INSTANCE = new StringMarshaller();
-
-    @Override
-    public InputStream stream(String value) {
-      return new ByteArrayInputStream(value.getBytes(UTF_8));
-    }
-
-    @Override
-    public String parse(InputStream stream) {
-      try {
-        return new String(ByteStreams.toByteArray(stream), UTF_8);
-      } catch (IOException ex) {
-        throw new RuntimeException(ex);
-      }
-    }
   }
 }
