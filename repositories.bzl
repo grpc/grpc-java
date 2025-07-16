@@ -102,7 +102,7 @@ def grpc_java_repositories(bzlmod = False):
         http_archive(
             name = "com_github_cncf_xds",
             strip_prefix = "xds-2ac532fd44436293585084f8d94c6bdb17835af0",
-            sha256 = "9eb19bf85caba07019ec2a37116ad83d60e662f6e715002d21b89a34e981e281",
+            sha256 = "790c4c83b6950bb602fec221f6a529d9f368cdc8852aae7d2592d0d04b015f37",
             urls = [
                 "https://github.com/cncf/xds/archive/2ac532fd44436293585084f8d94c6bdb17835af0.tar.gz",
             ],
