@@ -260,7 +260,7 @@ public class RingHashLoadBalancerTest {
   private void verifyConnection(int times) {
     for (int i = 0; i < times; i++) {
       Subchannel connectOnce = connectionRequestedQueue.poll();
-      assertWithMessage("Null connection is at (%s) of (%s)", i, times)
+      assertWithMessage("Expected %s new connections, but found %s", times, i)
           .that(connectOnce).isNotNull();
       clearInvocations(connectOnce);
     }
@@ -647,7 +647,7 @@ public class RingHashLoadBalancerTest {
         getSubchannel(servers, 2),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(0);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();

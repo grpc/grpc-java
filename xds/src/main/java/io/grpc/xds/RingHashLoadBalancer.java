@@ -437,7 +437,9 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
           if (subchannelView.connectivityState == IDLE) {
             syncContext.execute(() -> {
-              childLbState.getLb().requestConnection();
+              if (childLbState.getCurrentState() == IDLE) {
+                childLbState.getLb().requestConnection();
+              }
             });
 
             return PickResult.withNoResult(); // Indicates that this should be retried after backoff
@@ -455,10 +457,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
             return childLbState.getCurrentPicker().pickSubchannel(args);
           }
           if (!requestedConnection && subchannelView.connectivityState == IDLE) {
-            syncContext.execute(
-                () -> {
-                  childLbState.getLb().requestConnection();
-                });
+            syncContext.execute(() -> {
+              if (childLbState.getCurrentState() == IDLE) {
+                childLbState.getLb().requestConnection();
+              }
+            });
             requestedConnection = true;
           }
         }

@@ -1189,6 +1189,10 @@ public abstract class LoadBalancer {
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
      *
+     * <p>Work added to the synchronization context might not run immediately, so LB implementations
+     * must be careful to ensure that any assumptions still hold when it is executed. In particular,
+     * the LB might have been shut down or subchannels might have changed state.
+     *
      * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
      * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
      * convenience.
