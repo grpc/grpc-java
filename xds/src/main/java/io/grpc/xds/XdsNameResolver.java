@@ -823,9 +823,6 @@ final class XdsNameResolver extends NameResolver {
       if (shouldUpdateResult && routingConfig != null) {
         updateResolutionResult(xdsConfig);
         shouldUpdateResult = false;
-      } else {
-        // Need to update at least once
-        shouldUpdateResult = true;
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
@@ -996,8 +993,7 @@ final class XdsNameResolver extends NameResolver {
             .put("routeLookupConfig", rlsPluginConfig.config())
             .put(
                 "childPolicy",
-                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of(
-                    "is_dynamic", true))))
+                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of())))
             .put("childPolicyConfigTargetFieldName", "cluster")
             .buildOrThrow();
         return ImmutableMap.of("rls_experimental", rlsConfig);

@@ -79,9 +79,7 @@ final class RlsLoadBalancer extends LoadBalancer {
       //  not required.
       this.lbPolicyConfiguration = lbPolicyConfiguration;
     }
-    return routeLookupClient.acceptResolvedAddressFactory(
-        new ChildLbResolvedAddressFactory(
-            resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes()));
+    return Status.OK;
   }
 
   @Override

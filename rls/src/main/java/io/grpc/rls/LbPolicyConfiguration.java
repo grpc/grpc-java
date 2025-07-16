@@ -31,7 +31,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
@@ -212,7 +211,7 @@ final class LbPolicyConfiguration {
     private final ChildLoadBalancerHelperProvider childLbHelperProvider;
     private final ChildLbStatusListener childLbStatusListener;
     private final ChildLoadBalancingPolicy childPolicy;
-    private ResolvedAddressFactory childLbResolvedAddressFactory;
+    private final ResolvedAddressFactory childLbResolvedAddressFactory;
 
     public RefCountedChildPolicyWrapperFactory(
         ChildLoadBalancingPolicy childPolicy,
@@ -228,19 +227,6 @@ final class LbPolicyConfiguration {
 
     void init() {
       childLbHelperProvider.init();
-    }
-
-    Status acceptResolvedAddressFactory(ResolvedAddressFactory childLbResolvedAddressFactory) {
-      this.childLbResolvedAddressFactory = childLbResolvedAddressFactory;
-      Status status = Status.OK;
-      for (RefCountedChildPolicyWrapper wrapper : childPolicyMap.values()) {
-        Status newStatus =
-            wrapper.childPolicyWrapper.acceptResolvedAddressFactory(childLbResolvedAddressFactory);
-        if (!newStatus.isOk()) {
-          status = newStatus;
-        }
-      }
-      return status;
     }
 
     ChildPolicyWrapper createOrGet(String target) {
@@ -291,7 +277,6 @@ final class LbPolicyConfiguration {
     private final String target;
     private final ChildPolicyReportingHelper helper;
     private final LoadBalancer lb;
-    private final Object childLbConfig;
     private volatile SubchannelPicker picker;
     private ConnectivityState state;
 
@@ -310,24 +295,19 @@ final class LbPolicyConfiguration {
               .parseLoadBalancingPolicyConfig(
                   childPolicy.getEffectiveChildPolicy(target));
       this.lb = lbProvider.newLoadBalancer(helper);
-      this.childLbConfig = lbConfig.getConfig();
       helper.getChannelLogger().log(
-          ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", childLbConfig);
+          ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", lbConfig.getConfig());
       helper.getSynchronizationContext().execute(
           new Runnable() {
             @Override
             public void run() {
-              if (!acceptResolvedAddressFactory(childLbResolvedAddressFactory).isOk()) {
+              if (!lb.acceptResolvedAddresses(
+                  childLbResolvedAddressFactory.create(lbConfig.getConfig())).isOk()) {
                 helper.refreshNameResolution();
               }
               lb.requestConnection();
             }
           });
-    }
-
-    Status acceptResolvedAddressFactory(ResolvedAddressFactory childLbResolvedAddressFactory) {
-      helper.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
-      return lb.acceptResolvedAddresses(childLbResolvedAddressFactory.create(childLbConfig));
     }
 
     String getTarget() {
