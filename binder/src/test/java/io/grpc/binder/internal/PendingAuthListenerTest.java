@@ -27,8 +27,8 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
+import java.io.IOException;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -42,6 +42,9 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public final class PendingAuthListenerTest {
+
+  private static final MethodDescriptor<Void, Void> TEST_METHOD =
+      TestMethodDescriptors.voidMethod();
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
@@ -105,16 +108,32 @@ public final class PendingAuthListenerTest {
   @Test
   public void whenStartCallFails_closesTheCallWithInternalStatus() throws Exception {
     // Arrange
-    String name = TestMethodDescriptors.SERVICE_NAME;
-    AtomicBoolean closed = new AtomicBoolean(false);
-    MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
     ServerCallHandler<Void, Void> callHandler =
         ServerCalls.asyncUnaryCall(
             (req, respObserver) -> {
               throw new IllegalStateException("ooops");
             });
+    ManagedChannel channel = startServer(callHandler);
+
+    // Act
+    StatusRuntimeException ex =
+        assertThrows(
+            StatusRuntimeException.class,
+            () ->
+                ClientCalls.blockingUnaryCall(
+                    channel,
+                    TEST_METHOD,
+                    CallOptions.DEFAULT.withDeadlineAfter(Duration.ofSeconds(5)),
+                    /* request= */ null));
+
+    // Assert
+    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
+  }
+
+  private ManagedChannel startServer(ServerCallHandler<Void, Void> callHandler) throws IOException {
+    String name = TestMethodDescriptors.SERVICE_NAME;
     ServerServiceDefinition serviceDef =
-        ServerServiceDefinition.builder(name).addMethod(method, callHandler).build();
+        ServerServiceDefinition.builder(name).addMethod(TEST_METHOD, callHandler).build();
     Server server =
         InProcessServerBuilder.forName(name)
             .addService(serviceDef)
@@ -150,35 +169,17 @@ public final class PendingAuthListenerTest {
                       public void start(Listener<RespT> responseListener, Metadata headers) {
                         ClientCall.Listener<RespT> wrappedListener =
                             new ForwardingClientCallListener.SimpleForwardingClientCallListener<
-                                RespT>(responseListener) {
-                              @Override
-                              public void onClose(Status status, Metadata trailers) {
-                                super.onClose(status, trailers);
-                                closed.set(true);
-                              }
-                            };
+                                RespT>(responseListener) {};
                         super.start(wrappedListener, headers);
                       }
                     };
                   }
                 })
             .build();
+
     grpcCleanupRule.register(server);
     grpcCleanupRule.register(channel);
 
-    // Act
-    StatusRuntimeException ex =
-        assertThrows(
-            StatusRuntimeException.class,
-            () ->
-                ClientCalls.blockingUnaryCall(
-                    channel,
-                    method,
-                    CallOptions.DEFAULT.withDeadlineAfter(Duration.ofSeconds(5)),
-                    /* request= */ null));
-
-    // Assert
-    assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(closed.get()).isTrue();
+    return channel;
   }
 }
