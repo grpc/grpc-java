@@ -18,7 +18,6 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.BootstrapperImpl.xdsDataErrorHandlingEnabled;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 
@@ -68,7 +67,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   public static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
-  public static final int EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC = 30;
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -740,9 +738,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         // When client becomes ready, it triggers a restartTimer for all relevant subscribers.
         return;
       }
-      ServerInfo serverInfo = activeCpc.getServerInfo();
-      int timeoutSec = xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError()
-          ? EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC : INITIAL_RESOURCE_FETCH_TIMEOUT_SEC;
 
       class ResourceNotFound implements Runnable {
         @Override
@@ -766,7 +761,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         respTimer.cancel();
       }
       respTimer = syncContext.schedule(
-          new ResourceNotFound(), timeoutSec, TimeUnit.SECONDS, timeService);
+          new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
+          timeService);
     }
 
     void stopTimer() {
@@ -844,8 +840,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // Ignore deletion of State of the World resources when this feature is on,
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled = serverInfo.ignoreResourceDeletion();
-      boolean resourceTimerIsTransientError =
-          xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError();
       if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
@@ -860,20 +854,14 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (!absent) {
         data = null;
         absent = true;
-        metadata = resourceTimerIsTransientError ? ResourceMetadata.newResourceMetadataTimeout() :
-            ResourceMetadata.newResourceMetadataDoesNotExist();
+        metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
         for (ResourceWatcher<T> watcher : watchers.keySet()) {
           if (processingTracker != null) {
             processingTracker.startTask();
           }
           watchers.get(watcher).execute(() -> {
             try {
-              if (resourceTimerIsTransientError) {
-                watcher.onError(Status.UNAVAILABLE.withDescription(
-                    "Timed out waiting for resource " + resource + " from xDS server"));
-              } else {
-                watcher.onResourceDoesNotExist(resource);
-              }
+              watcher.onResourceDoesNotExist(resource);
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
