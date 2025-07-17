@@ -201,7 +201,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_serverStatusCodeConversion() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -236,7 +242,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_working_withDefaultTarget_rlsResponding() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -257,7 +269,7 @@ public class RlsLoadBalancerTest {
     inOrder.verifyNoMoreInteractions();
 
     assertThat(res.getStatus().isOk()).isTrue();
-    assertThat(subchannels).hasSize(1);
+    assertThat(subchannels).hasSize(2); // includes fallback sub-channel
     FakeSubchannel searchSubchannel = subchannels.getLast();
     assertThat(subchannelIsReady(searchSubchannel)).isFalse();
 
@@ -277,7 +289,7 @@ public class RlsLoadBalancerTest {
     // other rls picker itself is ready due to first channel.
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
-    assertThat(subchannels).hasSize(2);
+    assertThat(subchannels).hasSize(3); // includes fallback sub-channel
     FakeSubchannel rescueSubchannel = subchannels.getLast();
 
     // search subchannel is down, rescue subchannel is connecting
@@ -393,7 +405,13 @@ public class RlsLoadBalancerTest {
   public void lb_working_withDefaultTarget_noRlsResponse() throws Exception {
     fakeThrottler.nextResult = true;
 
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -535,7 +553,13 @@ public class RlsLoadBalancerTest {
 
   @Test
   public void lb_nameResolutionFailed() throws Exception {
-    deliverResolvedAddresses();
+    helper.getSynchronizationContext().execute(() -> {
+      try {
+        deliverResolvedAddresses();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
     InOrder inOrder = inOrder(helper);
     inOrder.verify(helper)
         .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
@@ -545,7 +569,7 @@ public class RlsLoadBalancerTest {
     assertThat(subchannelIsReady(res.getSubchannel())).isFalse();
 
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
-    assertThat(subchannels).hasSize(1);
+    assertThat(subchannels).hasSize(2); // includes fallback sub-channel
 
     FakeSubchannel searchSubchannel = subchannels.getLast();
     searchSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
