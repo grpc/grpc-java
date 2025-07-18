@@ -82,13 +82,6 @@ final class XdsAttributes {
       Attributes.Key.create("io.grpc.xds.XdsAttributes.locality");
 
   /**
-   * The name of the locality that this EquivalentAddressGroup is in.
-   */
-  @EquivalentAddressGroup.Attr
-  static final Attributes.Key<String> ATTR_LOCALITY_NAME =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.localityName");
-
-  /**
    * Endpoint weight for load balancing purposes.
    */
   @EquivalentAddressGroup.Attr
