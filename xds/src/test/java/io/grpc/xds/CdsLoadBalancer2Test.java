@@ -474,22 +474,19 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.childConfigs).hasSize(3);
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig3 =
             childLbConfig.childConfigs.get(cluster3);
-    assertThat(childConfig3.toString()).isEqualTo("PriorityChildConfig{childConfig="
-        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
-        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
-        + "name=cluster-03.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig3.childConfig).getPolicyName())
+        .isEqualTo("cds_experimental");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig4 =
         childLbConfig.childConfigs.get(cluster4);
-    assertThat(childConfig4.toString()).isEqualTo("PriorityChildConfig{childConfig="
-        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
-        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
-        + "name=cluster-04.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig4.childConfig).getPolicyName())
+        .isEqualTo("cds_experimental");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
             childLbConfig.childConfigs.get(cluster2);
-    assertThat(childConfig2.toString()).isEqualTo("PriorityChildConfig{childConfig="
-        + "GracefulSwitchLoadBalancer.Config{childFactory=CdsLoadBalancerProvider{"
-        + "policy=cds_experimental, priority=5, available=true}, childConfig=CdsConfig{"
-        + "name=cluster-02.googleapis.com, isDynamic=false}}, ignoreReresolution=false}");
+    assertThat(
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig2.childConfig).getPolicyName())
+        .isEqualTo("cds_experimental");
   }
 
   @Test

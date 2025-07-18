@@ -57,7 +57,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private final XdsLogger logger;
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
-  private final GracefulSwitchLoadBalancer delegate;
+  private GracefulSwitchLoadBalancer delegate;
   // Following fields are effectively final.
   private String clusterName;
   private Subscription clusterSubscription;
@@ -182,6 +182,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       clusterSubscription.close();
       clusterSubscription = null;
     }
+    delegate = new GracefulSwitchLoadBalancer(helper);
   }
 
   @CheckReturnValue // don't forget to return up the stack after the fail call
