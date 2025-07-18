@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import io.grpc.xds.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -384,6 +385,23 @@ public abstract class XdsClient {
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
       Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Adds load stats for the specified locality (in the specified cluster with edsServiceName) by
+   * using the returned object to record RPCs. Load stats recorded with the returned object will
+   * be reported to the load reporting server. The returned object is reference counted and the
+   * caller should use {@link LoadStatsManager2.ClusterLocalityStats#release} to release its
+   * <i>hard</i> reference when it is safe to stop reporting RPC loads for the specified locality
+   * in the future.
+   *
+   * @param backendMetricPropagation Configuration for which backend metrics should be propagated
+   *     to LRS load reports. If null, all metrics will be propagated (legacy behavior).
+   */
+  public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
+      Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      Locality locality, @Nullable BackendMetricPropagation backendMetricPropagation) {
     throw new UnsupportedOperationException();
   }
 
