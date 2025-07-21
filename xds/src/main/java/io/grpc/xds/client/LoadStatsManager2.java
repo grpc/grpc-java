@@ -25,7 +25,6 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Internal;
 import io.grpc.Status;
-import io.grpc.xds.BackendMetricPropagation;
 import io.grpc.xds.client.Stats.BackendLoadMetricStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
@@ -129,8 +128,8 @@ public final class LoadStatsManager2 {
     if (!localityStats.containsKey(locality)) {
       localityStats.put(
           locality,
-          ReferenceCounted.wrap(new ClusterLocalityStats(
-              cluster, edsServiceName, locality, stopwatchSupplier.get(), backendMetricPropagation)));
+          ReferenceCounted.wrap(new ClusterLocalityStats(cluster, edsServiceName,
+              locality, stopwatchSupplier.get(), backendMetricPropagation)));
     }
     ReferenceCounted<ClusterLocalityStats> ref = localityStats.get(locality);
     ref.retain();
@@ -421,7 +420,8 @@ public final class LoadStatsManager2 {
           if (!loadMetricStatsMap.containsKey(metricName)) {
             loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, cpuUtilization));
           } else {
-            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(cpuUtilization);
+            loadMetricStatsMap.get(metricName)
+                .addMetricValueAndIncrementRequestsFinished(cpuUtilization);
           }
         }
       }
@@ -437,7 +437,8 @@ public final class LoadStatsManager2 {
           if (!loadMetricStatsMap.containsKey(metricName)) {
             loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, memUtilization));
           } else {
-            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(memUtilization);
+            loadMetricStatsMap.get(metricName)
+                .addMetricValueAndIncrementRequestsFinished(memUtilization);
           }
         }
       }
@@ -451,9 +452,11 @@ public final class LoadStatsManager2 {
         if (shouldPropagate) {
           String metricName = "application_utilization";
           if (!loadMetricStatsMap.containsKey(metricName)) {
-            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, applicationUtilization));
+            loadMetricStatsMap.put(
+                metricName, new BackendLoadMetricStats(1, applicationUtilization));
           } else {
-            loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(applicationUtilization);
+            loadMetricStatsMap.get(metricName)
+                .addMetricValueAndIncrementRequestsFinished(applicationUtilization);
           }
         }
       }

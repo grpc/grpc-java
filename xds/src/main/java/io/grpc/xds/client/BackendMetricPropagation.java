@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -55,7 +55,8 @@ public final class BackendMetricPropagation {
    * @param metricSpecs list of metric specification strings from CDS resource
    * @return BackendMetricPropagation instance
    */
-  public static BackendMetricPropagation fromMetricSpecs(@Nullable java.util.List<String> metricSpecs) {
+  public static BackendMetricPropagation fromMetricSpecs(
+      @Nullable java.util.List<String> metricSpecs) {
     if (metricSpecs == null || metricSpecs.isEmpty()) {
       return new BackendMetricPropagation(false, false, false, false, ImmutableSet.of());
     }
@@ -89,7 +90,6 @@ public final class BackendMetricPropagation {
               namedMetricKeysBuilder.add(metricKey);
             }
           }
-          break;
       }
     }
 
@@ -107,4 +107,4 @@ public final class BackendMetricPropagation {
   public boolean shouldPropagateNamedMetric(String metricKey) {
     return propagateAllNamedMetrics || namedMetricKeys.contains(metricKey);
   }
-} 
+}

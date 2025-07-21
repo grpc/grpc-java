@@ -55,6 +55,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
@@ -191,7 +192,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (instance.type == DiscoveryMechanism.Type.EDS) {
           state = new EdsClusterState(instance.cluster, instance.edsServiceName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata, instance.outlierDetection, instance.backendMetricPropagation);
+              instance.filterMetadata, instance.outlierDetection,
+              instance.backendMetricPropagation);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
@@ -803,7 +805,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   private static Map<String, PriorityChildConfig> generateEdsBasedPriorityChildConfigs(
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-      Map<String, Struct> filterMetadata, @Nullable BackendMetricPropagation backendMetricPropagation,
+      Map<String, Struct> filterMetadata,
+      @Nullable BackendMetricPropagation backendMetricPropagation,
       @Nullable OutlierDetection outlierDetection, Object endpointLbConfig,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights, List<DropOverload> dropOverloads) {
@@ -811,7 +814,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerInfo, maxConcurrentRequests,
-              dropOverloads, endpointLbConfig, tlsContext, filterMetadata, backendMetricPropagation);
+              dropOverloads, endpointLbConfig, tlsContext,
+              filterMetadata, backendMetricPropagation);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(

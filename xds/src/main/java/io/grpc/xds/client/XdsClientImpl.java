@@ -37,7 +37,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.TimeProvider;
-import io.grpc.xds.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient.ResourceStore;
@@ -409,16 +408,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
       final ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
-    LoadStatsManager2 loadStatsManager = loadStatsManagerMap.get(serverInfo);
-    LoadStatsManager2.ClusterLocalityStats loadCounter =
-        loadStatsManager.getClusterLocalityStats(clusterName, edsServiceName, locality);
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        serverLrsClientMap.get(serverInfo).startLoadReporting();
-      }
-    });
-    return loadCounter;
+    return addClusterLocalityStats(serverInfo, clusterName, edsServiceName, locality, null);
   }
 
   @Override

@@ -27,7 +27,6 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
-import io.grpc.xds.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -385,7 +384,7 @@ public abstract class XdsClient {
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
       Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
-    throw new UnsupportedOperationException();
+    return addClusterLocalityStats(serverInfo, clusterName, edsServiceName, locality, null);
   }
 
   /**

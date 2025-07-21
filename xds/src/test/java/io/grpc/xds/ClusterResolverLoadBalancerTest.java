@@ -139,16 +139,16 @@ public class ClusterResolverLoadBalancerTest {
       FailurePercentageEjection.create(100, 100, 100, 100));
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          Collections.emptyMap(), null);
+          Collections.emptyMap(), null, null);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
       DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
-          Collections.emptyMap(), null);
+          Collections.emptyMap(), null, null);
   private final DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          Collections.emptyMap(), outlierDetection);
+          Collections.emptyMap(), outlierDetection, null);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
       DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null,
-          Collections.emptyMap());
+          Collections.emptyMap(), null);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {

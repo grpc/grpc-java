@@ -29,6 +29,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.util.List;
 import java.util.Map;
@@ -138,7 +139,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       final OutlierDetection outlierDetection;
       final Map<String, Struct> filterMetadata;
       @Nullable
-      final  BackendMetricPropagation backendMetricPropagation;
+      final BackendMetricPropagation backendMetricPropagation;
 
       enum Type {
         EDS,
@@ -165,9 +166,11 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       static DiscoveryMechanism forEds(String cluster, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
-          OutlierDetection outlierDetection, @Nullable BackendMetricPropagation backendMetricPropagation) {
-        return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName, null, lrsServerInfo,
-            maxConcurrentRequests, tlsContext, filterMetadata, outlierDetection, backendMetricPropagation);
+          OutlierDetection outlierDetection,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
+        return new DiscoveryMechanism(cluster, Type.EDS, edsServiceName,
+            null, lrsServerInfo, maxConcurrentRequests, tlsContext,
+            filterMetadata, outlierDetection, backendMetricPropagation);
       }
 
       static DiscoveryMechanism forLogicalDns(String cluster, String dnsHostName,
@@ -182,7 +185,8 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
       @Override
       public int hashCode() {
         return Objects.hash(cluster, type, lrsServerInfo, maxConcurrentRequests, tlsContext,
-            edsServiceName, dnsHostName, filterMetadata, outlierDetection, backendMetricPropagation);
+            edsServiceName, dnsHostName, filterMetadata,
+            outlierDetection, backendMetricPropagation);
       }
 
       @Override

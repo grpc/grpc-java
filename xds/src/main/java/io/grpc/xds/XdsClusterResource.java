@@ -47,10 +47,10 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -336,7 +336,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
-              outlierDetection, isHttp11ProxyAvailable, backendMetricPropagation));
+          outlierDetection, isHttp11ProxyAvailable, backendMetricPropagation));
     } else if (type.equals(Cluster.DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -372,7 +372,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           Locale.US, "%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
           clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests,
-              upstreamTlsContext, isHttp11ProxyAvailable, backendMetricPropagation));
+          upstreamTlsContext, isHttp11ProxyAvailable, backendMetricPropagation));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
