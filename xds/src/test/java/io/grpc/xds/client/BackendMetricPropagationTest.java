@@ -113,11 +113,11 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_malformedAndUnknownSpecs_areIgnored() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         asList(
-            "cpu_utilization",      // valid
+            "cpu_utilization",
             null,                   // ignored
-            "disk_utilization",     // ignored
-            "named_metrics.",       // ignored, empty key
-            "named_metrics.valid"   // valid
+            "disk_utilization",
+            "named_metrics.",       // empty key
+            "named_metrics.valid"
         ));
 
     assertThat(config.propagateCpuUtilization).isTrue();
