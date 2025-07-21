@@ -33,6 +33,7 @@ public class BackendMetricPropagationTest {
   @Test
   public void fromMetricSpecs_nullInput() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(null);
+
     assertThat(config.propagateCpuUtilization).isFalse();
     assertThat(config.propagateMemUtilization).isFalse();
     assertThat(config.propagateApplicationUtilization).isFalse();
@@ -42,6 +43,7 @@ public class BackendMetricPropagationTest {
   @Test
   public void fromMetricSpecs_emptyInput() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(ImmutableList.of());
+
     assertThat(config.propagateCpuUtilization).isFalse();
     assertThat(config.propagateMemUtilization).isFalse();
     assertThat(config.propagateApplicationUtilization).isFalse();
@@ -52,6 +54,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_partialStandardMetrics() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("cpu_utilization", "mem_utilization"));
+
     assertThat(config.propagateCpuUtilization).isTrue();
     assertThat(config.propagateMemUtilization).isTrue();
     assertThat(config.propagateApplicationUtilization).isFalse();
@@ -62,6 +65,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_allStandardMetrics() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("cpu_utilization", "mem_utilization", "application_utilization"));
+
     assertThat(config.propagateCpuUtilization).isTrue();
     assertThat(config.propagateMemUtilization).isTrue();
     assertThat(config.propagateApplicationUtilization).isTrue();
@@ -72,6 +76,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_wildcardNamedMetrics() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("named_metrics.*"));
+
     assertThat(config.propagateCpuUtilization).isFalse();
     assertThat(config.propagateMemUtilization).isFalse();
     assertThat(config.propagateApplicationUtilization).isFalse();
@@ -83,6 +88,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_specificNamedMetrics() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("named_metrics.foo", "named_metrics.bar"));
+
     assertThat(config.shouldPropagateNamedMetric("foo")).isTrue();
     assertThat(config.shouldPropagateNamedMetric("bar")).isTrue();
     assertThat(config.shouldPropagateNamedMetric("baz")).isFalse();
@@ -93,6 +99,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_mixedStandardAndNamed() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("cpu_utilization", "named_metrics.foo", "named_metrics.bar"));
+
     assertThat(config.propagateCpuUtilization).isTrue();
     assertThat(config.propagateMemUtilization).isFalse();
     assertThat(config.shouldPropagateNamedMetric("foo")).isTrue();
@@ -104,6 +111,7 @@ public class BackendMetricPropagationTest {
   public void fromMetricSpecs_wildcardAndSpecificNamedMetrics() {
     BackendMetricPropagation config = BackendMetricPropagation.fromMetricSpecs(
         ImmutableList.of("named_metrics.foo", "named_metrics.*"));
+
     assertThat(config.shouldPropagateNamedMetric("foo")).isTrue();
     assertThat(config.shouldPropagateNamedMetric("bar")).isTrue();
     assertThat(config.shouldPropagateNamedMetric("any_other_key")).isTrue();
@@ -135,6 +143,7 @@ public class BackendMetricPropagationTest {
             "named_metrics.foo",
             "cpu_utilization",
             "named_metrics.foo"));
+
     assertThat(config.propagateCpuUtilization).isTrue();
     assertThat(config.shouldPropagateNamedMetric("foo")).isTrue();
     assertThat(config.shouldPropagateNamedMetric("bar")).isFalse();
