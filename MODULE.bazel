@@ -55,7 +55,7 @@ bazel_dep(name = "grpc", repo_name = "com_github_grpc_grpc", version = "1.56.3.b
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
 bazel_dep(name = "rules_cc", version = "0.0.9")
-bazel_dep(name = "rules_java", version = "8.14.0")
+bazel_dep(name = "rules_java", version = "5.3.5")
 bazel_dep(name = "rules_go", repo_name = "io_bazel_rules_go", version = "0.46.0")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
