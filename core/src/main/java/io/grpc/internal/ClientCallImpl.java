@@ -250,7 +250,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       stream = clientStreamProvider.newStream(method, callOptions, headers, context);
     } else {
       ClientStreamTracer[] tracers =
-          GrpcUtil.getClientStreamTracers(callOptions, headers, 0, false);
+          GrpcUtil.getClientStreamTracers(callOptions, headers, 0,
+              false, false);
       String deadlineName = contextIsDeadlineSource ? "Context" : "CallOptions";
       Long nameResolutionDelay = callOptions.getOption(NAME_RESOLUTION_DELAYED);
       String description = String.format(
