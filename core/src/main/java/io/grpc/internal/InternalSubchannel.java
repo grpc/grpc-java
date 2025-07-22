@@ -588,15 +588,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     @Override
     public void transportReady() {
       channelLogger.log(ChannelLogLevel.INFO, "READY");
-      subchannelMetrics.recordConnectionAttemptSucceeded(buildLabelSet(
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-          null,
-          extractSecurityLevel(
-              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
-      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -633,22 +624,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
-      subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet(
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-          null, null
-          ));
-      subchannelMetrics.recordDisconnection(buildLabelSet(
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-          getAttributeOrDefault(
-              addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-          "Peer Pressure",
-          extractSecurityLevel(
-              addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
-      ));
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
