@@ -168,7 +168,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private final class ClusterResolverLbState extends LoadBalancer {
     private final Helper helper;
-    private final Map<String, ClusterState> clusterStates = new HashMap<>();
+    private ClusterState clusterState;
     private String cluster;
     private Object endpointLbConfig;
     private ResolvedAddresses resolvedAddresses;
@@ -187,18 +187,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       endpointLbConfig = config.lbConfig;
       DiscoveryMechanism instance = config.discoveryMechanism;
       cluster = instance.cluster;
-      ClusterState state;
       if (instance.type == DiscoveryMechanism.Type.EDS) {
-        state = new EdsClusterState(instance.cluster, instance.edsServiceName,
+        clusterState = new EdsClusterState(instance.cluster, instance.edsServiceName,
             instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
             instance.filterMetadata, instance.outlierDetection);
       } else {  // logical DNS
-        state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
+        clusterState = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
             instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
             instance.filterMetadata);
       }
-      clusterStates.put(instance.cluster, state);
-      state.start();
+      clusterState.start();
       return Status.OK;
     }
 
@@ -214,9 +212,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
     @Override
     public void shutdown() {
-      for (ClusterState state : clusterStates.values()) {
-        state.shutdown();
-      }
+      clusterState.shutdown();
       if (childLb != null) {
         childLb.shutdown();
       }
@@ -228,17 +224,16 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
 
       Status endpointNotFound = Status.OK;
-      ClusterState state = clusterStates.get(cluster);
       // Propagate endpoints to the child LB policy only after all clusters have been resolved.
-      if (!state.resolved && state.status.isOk()) {
+      if (!clusterState.resolved && clusterState.status.isOk()) {
         return;
       }
-      if (state.result != null) {
-        addresses.addAll(state.result.addresses);
-        priorityChildConfigs.putAll(state.result.priorityChildConfigs);
-        priorities.addAll(state.result.priorities);
+      if (clusterState.result != null) {
+        addresses.addAll(clusterState.result.addresses);
+        priorityChildConfigs.putAll(clusterState.result.priorityChildConfigs);
+        priorities.addAll(clusterState.result.priorities);
       } else {
-        endpointNotFound = state.status;
+        endpointNotFound = clusterState.status;
       }
       if (addresses.isEmpty()) {
         if (endpointNotFound.isOk()) {
@@ -271,13 +266,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     private void handleEndpointResolutionError() {
-      ClusterState state = clusterStates.get(cluster);
-      if (!state.status.isOk()) {
+      if (!clusterState.status.isOk()) {
         if (childLb != null) {
-          childLb.handleNameResolutionError(state.status);
+          childLb.handleNameResolutionError(clusterState.status);
         } else {
           helper.updateBalancingState(
-              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(state.status)));
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(clusterState.status)));
         }
       }
     }
@@ -294,10 +288,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void refreshNameResolution() {
-        for (ClusterState state : clusterStates.values()) {
-          if (state instanceof LogicalDnsClusterState) {
-            ((LogicalDnsClusterState) state).refresh();
-          }
+        if (clusterState instanceof LogicalDnsClusterState) {
+          ((LogicalDnsClusterState) clusterState).refresh();
         }
       }
 
