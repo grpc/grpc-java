@@ -252,7 +252,7 @@ public class CdsLoadBalancer2Test {
             CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, upstreamTlsContext,
             Collections.emptyMap(), io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
                 null, null, null, null, SuccessRateEjection.create(null, null, null, null),
-                FailurePercentageEjection.create(null, null, null, null)))));
+                FailurePercentageEjection.create(null, null, null, null)), null)));
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("wrr_locality_experimental");
@@ -300,7 +300,7 @@ public class CdsLoadBalancer2Test {
         Arrays.asList(
           DiscoveryMechanism.forLogicalDns(
             CLUSTER, "dns.example.com:1111", lrsServerInfo, 100L, upstreamTlsContext,
-            Collections.emptyMap())));
+            Collections.emptyMap(), null)));
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("wrr_locality_experimental");
@@ -335,7 +335,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null)));
+            CLUSTER, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null, null)));
 
     cluster = EDS_CLUSTER.toBuilder()
         .setCircuitBreakers(CircuitBreakers.newBuilder()
@@ -351,7 +351,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, 200L, null, Collections.emptyMap(), null)));
+            CLUSTER, EDS_SERVICE_NAME, null, 200L, null, Collections.emptyMap(), null, null)));
   }
 
   @Test
@@ -366,7 +366,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null)));
+            CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null, null)));
 
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
 
@@ -398,7 +398,7 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
-            clusterName, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null)));
+            clusterName, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null, null)));
 
     assertThat(this.lastXdsConfig.getClusters()).containsKey(clusterName);
     shutdownLoadBalancer();
@@ -465,11 +465,11 @@ public class CdsLoadBalancer2Test {
     assertThat(childLbConfig.discoveryMechanisms).isEqualTo(
         Arrays.asList(
           DiscoveryMechanism.forEds(
-            cluster3, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null),
+            cluster3, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null, null),
           DiscoveryMechanism.forEds(
-            cluster4, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null),
+            cluster4, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null, null),
           DiscoveryMechanism.forLogicalDns(
-            cluster2, "dns.example.com:1111", null, null, null, Collections.emptyMap())));
+            cluster2, "dns.example.com:1111", null, null, null, Collections.emptyMap(), null)));
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("ring_hash_experimental");  // dominated by top-level cluster's config

@@ -55,6 +55,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
@@ -191,11 +192,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
         if (instance.type == DiscoveryMechanism.Type.EDS) {
           state = new EdsClusterState(instance.cluster, instance.edsServiceName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata, instance.outlierDetection);
+              instance.filterMetadata, instance.outlierDetection,
+              instance.backendMetricPropagation);
         } else {  // logical DNS
           state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
               instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata);
+              instance.filterMetadata, instance.backendMetricPropagation);
         }
         clusterStates.put(instance.cluster, state);
         state.start();
@@ -334,6 +336,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       protected final Map<String, Struct> filterMetadata;
       @Nullable
       protected final OutlierDetection outlierDetection;
+      @Nullable
+      protected final BackendMetricPropagation backendMetricPropagation;
       // Resolution status, may contain most recent error encountered.
       protected Status status = Status.OK;
       // True if has received resolution result.
@@ -346,13 +350,15 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private ClusterState(String name, @Nullable ServerInfo lrsServerInfo,
           @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
-          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection) {
+          Map<String, Struct> filterMetadata, @Nullable OutlierDetection outlierDetection,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
         this.name = name;
         this.lrsServerInfo = lrsServerInfo;
         this.maxConcurrentRequests = maxConcurrentRequests;
         this.tlsContext = tlsContext;
         this.filterMetadata = ImmutableMap.copyOf(filterMetadata);
         this.outlierDetection = outlierDetection;
+        this.backendMetricPropagation = backendMetricPropagation;
       }
 
       abstract void start();
@@ -371,9 +377,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       private EdsClusterState(String name, @Nullable String edsServiceName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
           @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
-          @Nullable OutlierDetection outlierDetection) {
+          @Nullable OutlierDetection outlierDetection,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
         super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
-            outlierDetection);
+            outlierDetection, backendMetricPropagation);
         this.edsServiceName = edsServiceName;
       }
 
@@ -470,8 +477,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             Map<String, PriorityChildConfig> priorityChildConfigs =
                 generateEdsBasedPriorityChildConfigs(
                     name, edsServiceName, lrsServerInfo, maxConcurrentRequests, tlsContext,
-                    filterMetadata, outlierDetection, endpointLbConfig, lbRegistry,
-                    prioritizedLocalityWeights, dropOverloads);
+                    filterMetadata, backendMetricPropagation, outlierDetection,
+                    endpointLbConfig, lbRegistry, prioritizedLocalityWeights, dropOverloads);
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityChildConfigs,
@@ -585,8 +592,10 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       private LogicalDnsClusterState(String name, String dnsHostName,
           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
-          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata) {
-        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata, null);
+          @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
+          @Nullable BackendMetricPropagation backendMetricPropagation) {
+        super(name, lrsServerInfo, maxConcurrentRequests, tlsContext,
+            filterMetadata, null, backendMetricPropagation);
         this.dnsHostName = checkNotNull(dnsHostName, "dnsHostName");
         nameResolverFactory =
             checkNotNull(helper.getNameResolverRegistry().asFactory(), "nameResolverFactory");
@@ -688,7 +697,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             }
             PriorityChildConfig priorityChildConfig = generateDnsBasedPriorityChildConfig(
                     name, lrsServerInfo, maxConcurrentRequests, tlsContext, filterMetadata,
-                    lbRegistry, Collections.<DropOverload>emptyList());
+                    backendMetricPropagation, lbRegistry, Collections.<DropOverload>emptyList());
             status = Status.OK;
             resolved = true;
             result = new ClusterResolutionResult(addresses, priorityName, priorityChildConfig);
@@ -772,13 +781,14 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   private static PriorityChildConfig generateDnsBasedPriorityChildConfig(
       String cluster, @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
       @Nullable UpstreamTlsContext tlsContext, Map<String, Struct> filterMetadata,
+      @Nullable BackendMetricPropagation backendMetricPropagation,
       LoadBalancerRegistry lbRegistry, List<DropOverload> dropOverloads) {
     // Override endpoint-level LB policy with pick_first for logical DNS cluster.
     Object endpointLbConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
         lbRegistry.getProvider("pick_first"), null);
     ClusterImplConfig clusterImplConfig =
         new ClusterImplConfig(cluster, null, lrsServerInfo, maxConcurrentRequests,
-            dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
+            dropOverloads, endpointLbConfig, tlsContext, filterMetadata, backendMetricPropagation);
     LoadBalancerProvider clusterImplLbProvider =
         lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
     Object clusterImplPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
@@ -796,6 +806,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       String cluster, @Nullable String edsServiceName, @Nullable ServerInfo lrsServerInfo,
       @Nullable Long maxConcurrentRequests, @Nullable UpstreamTlsContext tlsContext,
       Map<String, Struct> filterMetadata,
+      @Nullable BackendMetricPropagation backendMetricPropagation,
       @Nullable OutlierDetection outlierDetection, Object endpointLbConfig,
       LoadBalancerRegistry lbRegistry, Map<String,
       Map<Locality, Integer>> prioritizedLocalityWeights, List<DropOverload> dropOverloads) {
@@ -803,7 +814,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     for (String priority : prioritizedLocalityWeights.keySet()) {
       ClusterImplConfig clusterImplConfig =
           new ClusterImplConfig(cluster, edsServiceName, lrsServerInfo, maxConcurrentRequests,
-              dropOverloads, endpointLbConfig, tlsContext, filterMetadata);
+              dropOverloads, endpointLbConfig, tlsContext,
+              filterMetadata, backendMetricPropagation);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
