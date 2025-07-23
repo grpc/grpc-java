@@ -656,7 +656,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             addressIndex.increment();
-            // Continue reconnecting with remaining addresses.
+            // Continue to reconnect if there are still addresses to try.
             if (!addressIndex.isValid()) {
               pendingTransport = null;
               addressIndex.reset();
