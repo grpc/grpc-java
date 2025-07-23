@@ -201,8 +201,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
   }
 
   /**
-   * Prevents creating any new streams. Buffered streams are not failed and may still proceed
-   * when {@link #reprocess} is called. The delayed transport will be terminated when there is no
+   * Prevents creating any new streams.  Buffered streams are not failed and may still proceed
+   * when {@link #reprocess} is called.  The delayed transport will be terminated when there is no
    * more buffered streams.
    */
   @Override
