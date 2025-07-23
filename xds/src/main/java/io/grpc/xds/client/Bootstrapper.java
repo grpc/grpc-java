@@ -57,22 +57,50 @@ public abstract class Bootstrapper {
   public abstract static class ServerInfo {
     public abstract String target();
 
-    public abstract Object implSpecificConfig();
+    public abstract Object implSpecificChannelCredConfig();
+
+    @Nullable public abstract Object implSpecificCallCredConfig();
 
     public abstract boolean ignoreResourceDeletion();
 
     public abstract boolean isTrustedXdsServer();
 
     @VisibleForTesting
-    public static ServerInfo create(String target, @Nullable Object implSpecificConfig) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig, false, false);
+    public static ServerInfo create(
+        String target,
+        @Nullable Object implSpecificChannelCredConfig) {
+      return new AutoValue_Bootstrapper_ServerInfo(
+          target,
+          implSpecificChannelCredConfig,
+          null,
+          false,
+          false);
+    }
+  
+    @VisibleForTesting
+    public static ServerInfo create(
+        String target,
+        @Nullable Object implSpecificChannelCredConfig,
+        @Nullable Object implSpecificCallCredConfig) {
+      return new AutoValue_Bootstrapper_ServerInfo(
+          target,
+          implSpecificChannelCredConfig,
+          implSpecificCallCredConfig,
+          false,
+          false);
     }
 
     @VisibleForTesting
     public static ServerInfo create(
-        String target, Object implSpecificConfig, boolean ignoreResourceDeletion,
+        String target,
+        Object implSpecificChannelCredConfig,
+        @Nullable Object implSpecificCallCredConfig,
+        boolean ignoreResourceDeletion,
         boolean isTrustedXdsServer) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
+      return new AutoValue_Bootstrapper_ServerInfo(
+          target,
+          implSpecificChannelCredConfig,
+          implSpecificCallCredConfig,
           ignoreResourceDeletion, isTrustedXdsServer);
     }
   }

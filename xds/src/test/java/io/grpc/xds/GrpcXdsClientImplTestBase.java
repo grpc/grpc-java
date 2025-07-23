@@ -346,7 +346,11 @@ public abstract class GrpcXdsClientImplTestBase {
       }
     };
 
-    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+    xdsServerInfo = ServerInfo.create(
+        SERVER_URI,
+        CHANNEL_CREDENTIALS,
+        null,
+        ignoreResourceDeletion(),
         true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
@@ -4219,8 +4223,12 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private BootstrapInfo buildBootStrap(String serverUri) {
 
-    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
-        ignoreResourceDeletion(), true);
+    ServerInfo xdsServerInfo = ServerInfo.create(
+        serverUri,
+        CHANNEL_CREDENTIALS,
+        null,
+        ignoreResourceDeletion(),
+        true);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))
