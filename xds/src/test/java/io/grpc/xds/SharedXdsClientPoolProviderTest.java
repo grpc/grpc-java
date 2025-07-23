@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
+import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallCredentials;
 import io.grpc.Grpc;
@@ -37,6 +38,7 @@ import io.grpc.Server;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.alts.JwtTokenFileCallCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.SharedXdsClientPoolProvider.RefCountedXdsClientObjectPool;
@@ -47,10 +49,16 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsInitializationException;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -60,6 +68,8 @@ import org.mockito.junit.MockitoRule;
 /** Tests for {@link SharedXdsClientPoolProvider}. */
 @RunWith(JUnit4.class)
 public class SharedXdsClientPoolProviderTest {
+  @Rule
+  public TemporaryFolder tempFolder = new TemporaryFolder();
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   @Rule
@@ -73,6 +83,24 @@ public class SharedXdsClientPoolProviderTest {
   @Mock
   private GrpcBootstrapperImpl bootstrapper;
   @Mock private ResourceWatcher<LdsUpdate> ldsResourceWatcher;
+
+  // TODO (zgoda): How to include this method in alts/testFixtures. Running into build issues atm
+  public static File createValidJwtToken(TemporaryFolder tempFolder, Long expTime)
+        throws Exception {
+    File jwtToken = tempFolder.newFile(new String("jwt.token"));
+    FileOutputStream outputStream = new FileOutputStream(jwtToken);
+    String content =
+        BaseEncoding.base64().encode(
+            new String("{\"typ\": \"JWT\", \"alg\": \"HS256\"}").getBytes(StandardCharsets.UTF_8))
+        + "."
+        + BaseEncoding.base64().encode(
+            String.format("{\"exp\": %d}", expTime).getBytes(StandardCharsets.UTF_8))
+        + "."
+        + BaseEncoding.base64().encode(new String("signature").getBytes(StandardCharsets.UTF_8));
+    outputStream.write(content.getBytes(StandardCharsets.UTF_8));
+    outputStream.close();
+    return jwtToken;
+  }
 
   @Test
   public void noServer() throws XdsInitializationException {
@@ -207,6 +235,56 @@ public class SharedXdsClientPoolProviderTest {
     // Wait for xDS server to get the request and verify that it received the CallCredentials
     assertThat(callCredentialsInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
         .isEqualTo("Bearer token");
+
+    // Clean up
+    xdsClientPool.returnObject(xdsClient);
+    xdsServer.shutdownNow();
+  }
+
+  @Test
+  public void xdsClient_usesJwtTokenFileCallCredentials() throws Exception {
+    GrpcBootstrapperImpl.xdsBootstrapCallCredsEnabled = true;
+
+    Long givenExpTimeInSeconds = Instant.now().getEpochSecond() + TimeUnit.HOURS.toSeconds(1);
+    File jwtToken = createValidJwtToken(tempFolder, givenExpTimeInSeconds);
+    String jwtTokenContent = new String(
+        Files.readAllBytes(jwtToken.toPath()),
+        StandardCharsets.UTF_8);
+
+    // Set up fake xDS server
+    XdsTestControlPlaneService fakeXdsService = new XdsTestControlPlaneService();
+    CallCredsServerInterceptor callCredentialsInterceptor = new CallCredsServerInterceptor();
+    Server xdsServer =
+        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+            .addService(fakeXdsService)
+            .intercept(callCredentialsInterceptor)
+            .build()
+            .start();
+    String xdsServerUri = "localhost:" + xdsServer.getPort();
+
+    // Set up bootstrap & xDS client pool provider
+    ServerInfo server = ServerInfo.create(
+        xdsServerUri,
+        InsecureChannelCredentials.create(),
+        JwtTokenFileCallCredentials.create(jwtToken.toString()));
+    BootstrapInfo bootstrapInfo =
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
+    when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);
+    SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider(bootstrapper);
+
+    // Create xDS client that uses the JwtTokenFileCallCredentials on the transport
+    ObjectPool<XdsClient> xdsClientPool =
+        provider.getOrCreate(
+            "target",
+            metricRecorder,
+            JwtTokenFileCallCredentials.create(jwtToken.toString()));
+    XdsClient xdsClient = xdsClientPool.getObject();
+    xdsClient.watchXdsResource(
+        XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
+
+    // Wait for xDS server to get the request and verify that it received the CallCredentials
+    assertThat(callCredentialsInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
+        .isEqualTo("Bearer " + jwtTokenContent);
 
     // Clean up
     xdsClientPool.returnObject(xdsClient);
