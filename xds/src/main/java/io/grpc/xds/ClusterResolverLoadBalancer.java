@@ -428,7 +428,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
                           .set(XdsAttributes.ATTR_LOCALITY, locality)
-                          .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                          .set(LoadBalancer.ATTR_LOCALITY_NAME, localityName)
                           .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
                           .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
@@ -679,7 +679,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
               Attributes attr = eag.getAttributes().toBuilder()
                       .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
-                      .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                      .set(LoadBalancer.ATTR_LOCALITY_NAME, localityName)
                       .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
                       .build();
               eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
