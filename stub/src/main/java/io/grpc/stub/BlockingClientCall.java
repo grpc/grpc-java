@@ -106,14 +106,14 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException,
       StatusException {
-    long end = System.nanoTime() + unit.toNanos(timeout);
-    return read(false, end);
+    long endNanoTime = System.nanoTime() + unit.toNanos(timeout);
+    return read(false, endNanoTime);
   }
 
-  private RespT read(boolean waitForever, long end)
+  private RespT read(boolean waitForever, long endNanoTime)
       throws InterruptedException, TimeoutException, StatusException {
     Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
-    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
+    executor.waitAndDrainWithTimeout(waitForever, endNanoTime, predicate, this);
     RespT bufferedValue = buffer.poll();
 
     if (logger.isLoggable(Level.FINER)) {
@@ -209,11 +209,11 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException, StatusException {
-    long end = System.nanoTime() + unit.toNanos(timeout);
-    return write(false, request, end);
+    long endNanoTime = System.nanoTime() + unit.toNanos(timeout);
+    return write(false, request, endNanoTime);
   }
 
-  private boolean write(boolean waitForever, ReqT request, long end)
+  private boolean write(boolean waitForever, ReqT request, long endNanoTime)
       throws InterruptedException, TimeoutException, StatusException {
 
     if (writeClosed) {
@@ -222,7 +222,7 @@ public final class BlockingClientCall<ReqT, RespT> {
 
     Predicate<BlockingClientCall<ReqT, RespT>> predicate =
         (x) -> x.call.isReady() || x.closedStatus != null;
-    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
+    executor.waitAndDrainWithTimeout(waitForever, endNanoTime, predicate, this);
     Status savedClosedStatus = closedStatus;
     if (savedClosedStatus == null) {
       call.sendMessage(request);
