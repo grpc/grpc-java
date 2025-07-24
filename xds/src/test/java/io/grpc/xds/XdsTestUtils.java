@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -39,7 +38,6 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.Route;
-import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
@@ -306,20 +304,7 @@ public class XdsTestUtils {
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
                                                     String clusterName) {
-    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder =
-        io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
-            .setName(rdsName)
-            .addDomains(authority)
-            .addRoutes(
-                Route.newBuilder()
-                    .setMatch(
-                        RouteMatch.newBuilder().setPrefix("/").build())
-                    .setRoute(
-                        RouteAction.newBuilder().setCluster(clusterName)
-                            .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                            .build()));
-    io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+    return ControlPlaneRule.buildRouteConfiguration(authority, rdsName, clusterName);
   }
 
   static Cluster buildAggCluster(String name, List<String> childNames) {
