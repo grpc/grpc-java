@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The gRPC Authors
+ * Copyright 2025 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,25 +18,36 @@ package io.grpc.xds.internal;
 
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
+import io.grpc.alts.JwtTokenFileCallCredentials;
+import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.File;
 import java.util.Map;
 
 /**
- * A wrapper class that supports {@link InsecureChannelCredentials} for Xds
- * by implementing {@link XdsCredentialsProvider}.
+ * A wrapper class that supports {@link JwtTokenFileXdsCredentialsProvider} for
+ * Xds by implementing {@link XdsCredentialsProvider}.
  */
-public final class InsecureXdsCredentialsProvider extends XdsCredentialsProvider {
-  private static final String CREDS_NAME = "insecure";
+public class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProvider {
+  private static final String CREDS_NAME = "jwt_token_file";
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    return InsecureChannelCredentials.create();
+    return null;
   }
 
   @Override
   protected CallCredentials newCallCredentials(Map<String, ?> jsonConfig) {
-    return null;
+    if (jsonConfig == null) {
+      return null;
+    }
+
+    String jwtTokenPath = JsonUtil.getString(jsonConfig, getName());
+    if (jwtTokenPath == null || !new File(jwtTokenPath).isFile()) {
+      return null;
+    }
+
+    return JwtTokenFileCallCredentials.create(jwtTokenPath);
   }
 
   @Override
