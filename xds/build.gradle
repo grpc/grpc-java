@@ -17,12 +17,11 @@ sourceSets {
             srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
         }
         proto {
+            srcDir 'third_party/cel-spec/src/main/proto'
             srcDir 'third_party/envoy/src/main/proto'
+            srcDir 'third_party/googleapis/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
             srcDir 'third_party/xds/src/main/proto'
-            srcDir 'third_party/cel-spec/src/main/proto'
-            srcDir 'third_party/googleapis/src/main/proto'
-            srcDir 'third_party/istio/src/main/proto'
         }
     }
     main {
@@ -186,6 +185,7 @@ tasks.named("shadowJar").configure {
         include(project(':grpc-xds'))
     }
     // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
+    // Keep in sync with BUILD.bazel's JAR_JAR_RULES
     relocate 'com.github.udpa', "${prefixName}.shaded.com.github.udpa"
     relocate 'com.github.xds', "${prefixName}.shaded.com.github.xds"
     relocate 'com.google.api.expr', "${prefixName}.shaded.com.google.api.expr"

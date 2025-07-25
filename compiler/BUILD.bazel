@@ -18,6 +18,7 @@ cc_binary(
 
 java_library(
     name = "java_grpc_library_deps__do_not_reference",
+    visibility = ["//xds:__pkg__"],
     exports = [
         "//api",
         "//protobuf",

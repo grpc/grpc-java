@@ -87,38 +87,11 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-util": "@io_grpc_grpc_java//util",
 }
 
-def grpc_java_repositories(bzlmod = False):
+def grpc_java_repositories():
     """Imports dependencies for grpc-java."""
-    if not bzlmod and not native.existing_rule("dev_cel"):
-        http_archive(
-            name = "dev_cel",
-            strip_prefix = "cel-spec-0.15.0",
-            sha256 = "3ee09eb69dbe77722e9dee23dc48dc2cd9f765869fcf5ffb1226587c81791a0b",
-            urls = [
-                "https://github.com/google/cel-spec/archive/refs/tags/v0.15.0.tar.gz",
-            ],
-        )
-    if not native.existing_rule("com_github_cncf_xds"):
-        http_archive(
-            name = "com_github_cncf_xds",
-            strip_prefix = "xds-2ac532fd44436293585084f8d94c6bdb17835af0",
-            sha256 = "790c4c83b6950bb602fec221f6a529d9f368cdc8852aae7d2592d0d04b015f37",
-            urls = [
-                "https://github.com/cncf/xds/archive/2ac532fd44436293585084f8d94c6bdb17835af0.tar.gz",
-            ],
-        )
-    if not bzlmod and not native.existing_rule("com_github_grpc_grpc"):
-        http_archive(
-            name = "com_github_grpc_grpc",
-            strip_prefix = "grpc-1.46.0",
-            sha256 = "67423a4cd706ce16a88d1549297023f0f9f0d695a96dd684adc21e67b021f9bc",
-            urls = [
-                "https://github.com/grpc/grpc/archive/v1.46.0.tar.gz",
-            ],
-        )
-    if not bzlmod and not native.existing_rule("com_google_protobuf"):
+    if not native.existing_rule("com_google_protobuf"):
         com_google_protobuf()
-    if not bzlmod and not native.existing_rule("com_google_googleapis"):
+    if not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
             sha256 = "49930468563dd48283e8301e8d4e71436bf6d27ac27c235224cc1a098710835d",
@@ -127,25 +100,14 @@ def grpc_java_repositories(bzlmod = False):
                 "https://github.com/googleapis/googleapis/archive/ca1372c6d7bcb199638ebfdb40d2b2660bab7b88.tar.gz",
             ],
         )
-    if not bzlmod and not native.existing_rule("io_bazel_rules_go"):
-        http_archive(
-            name = "io_bazel_rules_go",
-            sha256 = "ab21448cef298740765f33a7f5acee0607203e4ea321219f2a4c85a6e0fb0a27",
-            urls = [
-                "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.32.0/rules_go-v0.32.0.zip",
-                "https://github.com/bazelbuild/rules_go/releases/download/v0.32.0/rules_go-v0.32.0.zip",
-            ],
-        )
     if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
-    if not native.existing_rule("envoy_api"):
+    if not native.existing_rule("bazel_jar_jar"):
         http_archive(
-            name = "envoy_api",
-            sha256 = "ecf71817233eba19cc8b4ee14e126ffd5838065d5b5a92b2506258a42ac55199",
-            strip_prefix = "data-plane-api-0bc95493c5e88b7b07e62758d23b39341813a827",
-            urls = [
-                "https://github.com/envoyproxy/data-plane-api/archive/0bc95493c5e88b7b07e62758d23b39341813a827.tar.gz",
-            ],
+            name = "bazel_jar_jar",
+            sha256 = "3117f913c732142a795551f530d02c9157b9ea895e6b2de0fbb5af54f03040a5",
+            strip_prefix = "bazel_jar_jar-0.1.6",
+            url = "https://github.com/bazeltools/bazel_jar_jar/releases/download/v0.1.6/bazel_jar_jar-v0.1.6.tar.gz",
         )
 
 def com_google_protobuf():
@@ -166,8 +128,3 @@ def io_grpc_grpc_proto():
         strip_prefix = "grpc-proto-4f245d272a28a680606c0739753506880cf33b5f",
         urls = ["https://github.com/grpc/grpc-proto/archive/4f245d272a28a680606c0739753506880cf33b5f.zip"],
     )
-
-def _grpc_java_repositories_extension(_):
-    grpc_java_repositories(bzlmod = True)
-
-grpc_java_repositories_extension = module_extension(implementation = _grpc_java_repositories_extension)
