@@ -11,10 +11,6 @@ local_path_override(
     path = "..",
 )
 
-switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
-
-switched_rules.use_languages(java = True)
-
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 
 use_repo(maven, "maven")
