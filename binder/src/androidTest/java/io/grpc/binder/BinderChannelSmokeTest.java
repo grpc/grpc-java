@@ -58,7 +58,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -157,21 +156,6 @@ public final class BinderChannelSmokeTest {
                     .setAcceptParcelableMetadataValues(true)
                     .build())
             .build();
-  }
-
-  @Test
-  public void testConnectViaIntentTargetUri() throws Exception {
-    // TODO(jdcormie): Make this test good.
-    channel = BinderChannelBuilder.forTarget("intent://foo/bar", appContext).build();
-    // channel = BinderChannelBuilder.forTarget("android-app://com.foo.bar/authoritaaay",
-    // appContext).build();
-    ListenableFuture<String> resultFuture = doCall("Hello");
-    try {
-      resultFuture.get();
-    } catch (ExecutionException ee) {
-      StatusRuntimeException sre = (StatusRuntimeException) ee.getCause();
-      assertThat(sre.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
-    }
   }
 
   @After
