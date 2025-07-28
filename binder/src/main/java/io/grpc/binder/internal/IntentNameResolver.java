@@ -55,11 +55,11 @@ final class IntentNameResolver extends NameResolver {
 
   // Accessed only on 'syncContext'.
   private boolean shutdown;
-  private boolean lookupNeeded;
+  private boolean queryNeeded;
   @Nullable private Listener2 listener;
 
   @Nullable
-  private ListenableFuture<ResolutionResult> lookupResultFuture; // != null when lookup in progress.
+  private ListenableFuture<ResolutionResult> queryResultFuture; // != null when query in progress.
 
   // Servers discovered in PackageManager are especially untrusted. After all, an app can declare
   // any intent filter it wants. Use pre-auth to avoid giving unauthorized apps a chance to run.
@@ -105,31 +105,31 @@ final class IntentNameResolver extends NameResolver {
       return;
     }
 
-    // We can't block here in 'syncContext' so we offload PackageManager lookups to an Executor.
+    // We can't block here in 'syncContext' so we offload PackageManager querys to an Executor.
     // But offloading complicates things a bit because other calls can arrive while we wait for the
     // results. We keep 'listener' up-to-date with the latest state in PackageManager by doing:
-    // 1. Only one lookup-and-report-to-listener operation at a time.
-    // 2. At least one lookup-and-report-to-listener AFTER every PackageManager state change.
-    if (lookupResultFuture == null) {
-      lookupResultFuture = Futures.submit(this::lookupAndroidComponentAddress, sequentialExecutor);
-      lookupResultFuture.addListener(this::onLookupComplete, syncContext);
+    // 1. Only one query-and-report-to-listener operation at a time.
+    // 2. At least one query-and-report-to-listener AFTER every PackageManager state change.
+    if (queryResultFuture == null) {
+      queryResultFuture = Futures.submit(this::queryPackageManager, sequentialExecutor);
+      queryResultFuture.addListener(this::onQueryComplete, syncContext);
     } else {
-      // There's already a lookup in-flight but (2) says we need at least one more. Our sequential
+      // There's already a query in-flight but (2) says we need at least one more. Our sequential
       // Executor would be enough to ensure (1) but we also don't want a backlog of work to build up
-      // if things change rapidly. Just make a note to start a new lookup when this one finishes.
-      lookupNeeded = true;
+      // if things change rapidly. Just make a note to start a new query when this one finishes.
+      queryNeeded = true;
     }
   }
 
-  private void onLookupComplete() {
+  private void onQueryComplete() {
     syncContext.throwIfNotInThisSynchronizationContext();
-    checkState(lookupResultFuture != null);
-    checkState(lookupResultFuture.isDone());
+    checkState(queryResultFuture != null);
+    checkState(queryResultFuture.isDone());
 
     // Capture non-final `listener` here while we're on 'syncContext'.
     Listener2 listener = checkNotNull(this.listener);
     Futures.addCallback(
-        lookupResultFuture, // Already isDone() so this execute()s immediately.
+        queryResultFuture, // Already isDone() so this execute()s immediately.
         new FutureCallback<ResolutionResult>() {
           @Override
           public void onSuccess(ResolutionResult result) {
@@ -142,12 +142,12 @@ final class IntentNameResolver extends NameResolver {
           }
         },
         sequentialExecutor);
-    lookupResultFuture = null;
+    queryResultFuture = null;
 
-    if (lookupNeeded) {
+    if (queryNeeded) {
       // One or more resolve() requests arrived while we were working on the last one. Just one
-      // follow-on lookup can subsume all of them.
-      lookupNeeded = false;
+      // follow-on query can subsume all of them.
+      queryNeeded = false;
       resolve();
     }
   }
@@ -166,7 +166,7 @@ final class IntentNameResolver extends NameResolver {
     }
   }
 
-  private ResolutionResult lookupAndroidComponentAddress() throws StatusException {
+  private ResolutionResult queryPackageManager() throws StatusException {
     Intent targetIntent = parseUri(targetUri);
 
     // Avoid a spurious UnsafeIntentLaunchViolation later. Since S, Android's StrictMode is very
@@ -176,14 +176,19 @@ final class IntentNameResolver extends NameResolver {
     // connection to an unauthorized server UID no matter how you got there.
     targetIntent = sanitize(targetIntent);
 
-    List<ResolveInfo> resolveInfoList = lookupServices(targetIntent);
+    List<ResolveInfo> resolveInfoList = queryIntentServices(targetIntent);
+    if (resolveInfoList == null || resolveInfoList.isEmpty()) {
+      throw Status.UNIMPLEMENTED
+          .withDescription("Service not found for intent: " + targetIntent)
+          .asException();
+    }
 
-    // Model each matching android.app.Service as an individual gRPC server with a single address.
-    List<EquivalentAddressGroup> servers = new ArrayList<>();
+    // Model each matching android.app.Service as an EAG (server) with a single address.
+    List<EquivalentAddressGroup> addresses = new ArrayList<>();
     for (ResolveInfo resolveInfo : resolveInfoList) {
       targetIntent.setComponent(
           new ComponentName(resolveInfo.serviceInfo.packageName, resolveInfo.serviceInfo.name));
-      servers.add(
+      addresses.add(
           new EquivalentAddressGroup(
               AndroidComponentAddress.newBuilder()
                   .setBindIntent(targetIntent) // Makes a copy.
@@ -193,13 +198,13 @@ final class IntentNameResolver extends NameResolver {
     }
 
     return ResolutionResult.newBuilder()
-        .setAddressesOrError(StatusOr.fromValue(servers))
+        .setAddressesOrError(StatusOr.fromValue(addresses))
         // Empty service config means we get the default 'pick_first' load balancing policy.
         .setServiceConfig(serviceConfigParser.parseServiceConfig(ImmutableMap.of()))
         .build();
   }
 
-  private List<ResolveInfo> lookupServices(Intent intent) throws StatusException {
+  private List<ResolveInfo> queryIntentServices(Intent intent) throws StatusException {
     int flags = 0;
     if (Build.VERSION.SDK_INT >= 29) {
       // Don't match direct-boot-unaware Services that can't presently be created. We'll query again
@@ -207,10 +212,10 @@ final class IntentNameResolver extends NameResolver {
       // being explicit here avoids an android.os.strictmode.ImplicitDirectBootViolation.
       flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
     }
+
     List<ResolveInfo> intentServices =
         targetUserContext.getPackageManager().queryIntentServices(intent, flags);
-
-    if (intentServices.isEmpty()) {
+    if (intentServices == null || intentServices.isEmpty()) {
       throw Status.UNIMPLEMENTED
           .withDescription("Service not found for intent " + intent)
           .asException();
