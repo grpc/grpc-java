@@ -376,6 +376,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
     LoadBalancer balancer1 = Iterables.getLast(fooBalancers);
+    Helper helper1 = Iterables.getLast(fooHelpers);
 
     // p1 timeout, and fails over to p2
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
@@ -423,14 +424,20 @@ public class PriorityLoadBalancerTest {
     LoadBalancer balancer3 = Iterables.getLast(fooBalancers);
     Helper helper3 = Iterables.getLast(fooHelpers);
 
-    // p3 timeout then the channel should go to TRANSIENT_FAILURE
+    // p3 timeout then the channel should stay in CONNECTING
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
-    assertCurrentPickerReturnsError(Status.Code.UNAVAILABLE, "timeout");
+    assertCurrentPicker(CONNECTING, PickResult.withNoResult());
 
-    // p3 fails then the picker should have error status updated
+    // p3 fails then the picker should still be waiting on p1
     helper3.updateBalancingState(
         TRANSIENT_FAILURE,
         new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("foo"))));
+    assertCurrentPicker(CONNECTING, PickResult.withNoResult());
+
+    // p1 fails then the picker should have error status updated to p3
+    helper1.updateBalancingState(
+        TRANSIENT_FAILURE,
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("bar"))));
     assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
 
     // p2 gets back to READY
@@ -642,6 +649,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
     LoadBalancer balancer1 = Iterables.getLast(fooBalancers);
+    Helper helper1 = Iterables.getLast(fooHelpers);
 
     // p1 timeout, and fails over to p2
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
@@ -677,14 +685,20 @@ public class PriorityLoadBalancerTest {
     LoadBalancer balancer3 = Iterables.getLast(fooBalancers);
     Helper helper3 = Iterables.getLast(fooHelpers);
 
-    // p3 timeout then the channel should go to TRANSIENT_FAILURE
+    // p3 timeout then the channel should stay in CONNECTING
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
-    assertCurrentPickerReturnsError(Status.Code.UNAVAILABLE, "timeout");
+    assertCurrentPicker(CONNECTING, PickResult.withNoResult());
 
-    // p3 fails then the picker should have error status updated
+    // p3 fails then the picker should still be waiting on p1
     helper3.updateBalancingState(
         TRANSIENT_FAILURE,
         new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("foo"))));
+    assertCurrentPicker(CONNECTING, PickResult.withNoResult());
+
+    // p1 fails then the picker should have error status updated to p3
+    helper1.updateBalancingState(
+        TRANSIENT_FAILURE,
+        new FixedResultPicker(PickResult.withError(Status.DATA_LOSS.withDescription("bar"))));
     assertCurrentPickerReturnsError(Status.Code.DATA_LOSS, "foo");
 
     // p2 gets back to IDLE
@@ -863,15 +877,17 @@ public class PriorityLoadBalancerTest {
   }
 
   private void assertCurrentPickerPicksSubchannel(Subchannel expectedSubchannelToPick) {
-    assertLatestConnectivityState(READY);
-    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(pickResult.getSubchannel()).isEqualTo(expectedSubchannelToPick);
+    assertCurrentPicker(READY, PickResult.withSubchannel(expectedSubchannelToPick));
   }
 
   private void assertCurrentPickerIsBufferPicker() {
-    assertLatestConnectivityState(IDLE);
+    assertCurrentPicker(IDLE, PickResult.withNoResult());
+  }
+
+  private void assertCurrentPicker(ConnectivityState state, PickResult result) {
+    assertLatestConnectivityState(state);
     PickResult pickResult = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(pickResult).isEqualTo(PickResult.withNoResult());
+    assertThat(pickResult).isEqualTo(result);
   }
 
   private Object newChildConfig(LoadBalancerProvider provider, Object config) {
