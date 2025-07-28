@@ -38,6 +38,7 @@ xds/annotations/v3/sensitive.proto
 xds/annotations/v3/status.proto
 xds/annotations/v3/versioning.proto
 xds/core/v3/authority.proto
+xds/core/v3/cidr.proto
 xds/core/v3/collection_entry.proto
 xds/core/v3/context_params.proto
 xds/core/v3/cidr.proto
