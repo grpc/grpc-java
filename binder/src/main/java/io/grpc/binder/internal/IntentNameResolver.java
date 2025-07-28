@@ -176,16 +176,9 @@ final class IntentNameResolver extends NameResolver {
     // connection to an unauthorized server UID no matter how you got there.
     targetIntent = sanitize(targetIntent);
 
-    List<ResolveInfo> resolveInfoList = queryIntentServices(targetIntent);
-    if (resolveInfoList == null || resolveInfoList.isEmpty()) {
-      throw Status.UNIMPLEMENTED
-          .withDescription("Service not found for intent: " + targetIntent)
-          .asException();
-    }
-
     // Model each matching android.app.Service as an EAG (server) with a single address.
     List<EquivalentAddressGroup> addresses = new ArrayList<>();
-    for (ResolveInfo resolveInfo : resolveInfoList) {
+    for (ResolveInfo resolveInfo : queryIntentServices(targetIntent)) {
       targetIntent.setComponent(
           new ComponentName(resolveInfo.serviceInfo.packageName, resolveInfo.serviceInfo.name));
       addresses.add(
