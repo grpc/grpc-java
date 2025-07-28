@@ -23,6 +23,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
 import androidx.test.core.app.ApplicationProvider;
@@ -39,7 +40,6 @@ import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.NameResolverRegistry;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
@@ -49,7 +49,6 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.testing.FakeNameResolverProvider;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.ServerCalls;
@@ -59,6 +58,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -77,7 +77,6 @@ public final class BinderChannelSmokeTest {
 
   private static final int SLIGHTLY_MORE_THAN_ONE_BLOCK = 16 * 1024 + 100;
   private static final String MSG = "Some text which will be repeated many many times";
-  private static final String SERVER_TARGET_URI = "fake://server";
   private static final Metadata.Key<PoisonParcelable> POISON_KEY =
       ParcelableUtils.metadataKey("poison-bin", PoisonParcelable.CREATOR);
 
@@ -99,7 +98,6 @@ public final class BinderChannelSmokeTest {
           .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
           .build();
 
-  FakeNameResolverProvider fakeNameResolverProvider;
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
   AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
@@ -138,8 +136,6 @@ public final class BinderChannelSmokeTest {
             PeerUids.newPeerIdentifyingServerInterceptor());
 
     AndroidComponentAddress serverAddress = HostServices.allocateService(appContext);
-    fakeNameResolverProvider = new FakeNameResolverProvider(SERVER_TARGET_URI, serverAddress);
-    NameResolverRegistry.getDefaultRegistry().register(fakeNameResolverProvider);
     HostServices.configureService(
         serverAddress,
         HostServices.serviceParamsBuilder()
@@ -163,10 +159,24 @@ public final class BinderChannelSmokeTest {
             .build();
   }
 
+  @Test
+  public void testConnectViaIntentTargetUri() throws Exception {
+    // TODO(jdcormie): Make this test good.
+    channel = BinderChannelBuilder.forTarget("intent://foo/bar", appContext).build();
+    // channel = BinderChannelBuilder.forTarget("android-app://com.foo.bar/authoritaaay",
+    // appContext).build();
+    ListenableFuture<String> resultFuture = doCall("Hello");
+    try {
+      resultFuture.get();
+    } catch (ExecutionException ee) {
+      StatusRuntimeException sre = (StatusRuntimeException) ee.getCause();
+      assertThat(sre.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+    }
+  }
+
   @After
   public void tearDown() throws Exception {
     channel.shutdownNow();
-    NameResolverRegistry.getDefaultRegistry().deregister(fakeNameResolverProvider);
     HostServices.awaitServiceShutdown();
   }
 
@@ -235,7 +245,11 @@ public final class BinderChannelSmokeTest {
 
   @Test
   public void testConnectViaTargetUri() throws Exception {
-    channel = BinderChannelBuilder.forTarget(SERVER_TARGET_URI, appContext).build();
+    // Compare with the <intent-filter> mapping in AndroidManifest.xml.
+    channel =
+        BinderChannelBuilder.forTarget(
+                "intent://authority/path#Intent;action=action1;scheme=scheme;end;", appContext)
+            .build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 
@@ -245,7 +259,10 @@ public final class BinderChannelSmokeTest {
     channel =
         BinderChannelBuilder.forAddress(
                 AndroidComponentAddress.forBindIntent(
-                    new Intent().setAction("action1").setPackage(appContext.getPackageName())),
+                    new Intent()
+                        .setAction("action1")
+                        .setData(Uri.parse("scheme://authority/path"))
+                        .setPackage(appContext.getPackageName())),
                 appContext)
             .build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
