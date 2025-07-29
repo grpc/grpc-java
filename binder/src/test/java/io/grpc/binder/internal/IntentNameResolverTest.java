@@ -1,8 +1,10 @@
 package io.grpc.binder.internal;
 
+import static android.content.Intent.ACTION_PACKAGE_ADDED;
 import static android.content.Intent.ACTION_PACKAGE_REPLACED;
 import static android.content.Intent.URI_INTENT_SCHEME;
 import static android.os.Looper.getMainLooper;
+import static android.os.Process.myUserHandle;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -188,9 +190,45 @@ public final class IntentNameResolverTest {
     syncContext.execute(nameResolver::shutdown);
     shadowOf(getMainLooper()).idle();
 
-    // No Listener callbacks post-shutdown().
     verifyNoMoreInteractions(mockListener);
-    // No leaked receivers.
+    assertThat(shadowOf(appContext).getRegisteredReceivers()).isEmpty();
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testTargetAndroidUser_pushesUpdatedAddresses() throws Exception {
+    Intent intent = newIntent();
+    IntentFilter serviceIntentFilter = newFilterMatching(intent);
+
+    NameResolver nameResolver =
+        newNameResolver(
+            getIntentUri(intent),
+            newNameResolverArgs().setArg(ApiConstants.TARGET_ANDROID_USER, myUserHandle()).build());
+    syncContext.execute(() -> nameResolver.start(mockListener));
+    shadowOf(getMainLooper()).idle();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode())
+        .isEqualTo(Status.UNIMPLEMENTED.getCode());
+
+    shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
+    shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
+    broadcastPackageChange(ACTION_PACKAGE_ADDED, SOME_COMPONENT_NAME.getPackageName());
+    shadowOf(getMainLooper()).idle();
+
+    verify(mockListener, never()).onError(any());
+    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
+    assertThat(getAddressesOrThrow(resultCaptor.getValue()))
+        .containsExactly(
+            ImmutableList.of(
+                AndroidComponentAddress.newBuilder()
+                    .setTargetUser(myUserHandle())
+                    .setBindIntent(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME))
+                    .build()));
+
+    syncContext.execute(nameResolver::shutdown);
+    shadowOf(getMainLooper()).idle();
+
+    verifyNoMoreInteractions(mockListener);
     assertThat(shadowOf(appContext).getRegisteredReceivers()).isEmpty();
   }
 
@@ -224,7 +262,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
     shadowOf(appContext.getSystemService(UserManager.class)).setUserUnlocked(true);
-    broadcastUserUnlocked(android.os.Process.myUserHandle());
+    broadcastUserUnlocked(myUserHandle());
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
