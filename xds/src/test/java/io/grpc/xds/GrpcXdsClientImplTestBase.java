@@ -3158,7 +3158,6 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void resourceTimerIsTransientError_schedulesExtendedTimeout() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
     ServerInfo serverInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
@@ -3185,6 +3184,7 @@ public abstract class GrpcXdsClientImplTestBase {
         MessagePrinter.INSTANCE,
         new TlsContextManagerImpl(bootstrapInfo),
         xdsClientMetricReporter);
+    @SuppressWarnings("unchecked")
     ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
     String resourceName = "cluster.googleapis.com";
 
@@ -3203,7 +3203,6 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void resourceTimerIsTransientError_callsOnErrorUnavailable() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
@@ -3237,6 +3236,7 @@ public abstract class GrpcXdsClientImplTestBase {
         new TlsContextManagerImpl(bootstrapInfo),
         xdsClientMetricReporter);
     String timeoutResource = CDS_RESOURCE + "_timeout";
+    @SuppressWarnings("unchecked")
     ResourceWatcher<CdsUpdate> timeoutWatcher = mock(ResourceWatcher.class);
 
     xdsClient.watchXdsResource(

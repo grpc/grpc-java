@@ -18,7 +18,6 @@ package io.grpc.xds.client;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.BootstrapperImpl.xdsDataErrorHandlingEnabled;
 import static io.grpc.xds.client.XdsResourceType.ParsedResource;
 import static io.grpc.xds.client.XdsResourceType.ValidatedResourceUpdate;
 
@@ -741,7 +740,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         return;
       }
       ServerInfo serverInfo = activeCpc.getServerInfo();
-      int timeoutSec = xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError()
+      int timeoutSec = serverInfo.resourceTimerIsTransientError()
           ? EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC : INITIAL_RESOURCE_FETCH_TIMEOUT_SEC;
 
       class ResourceNotFound implements Runnable {
@@ -844,8 +843,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // Ignore deletion of State of the World resources when this feature is on,
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled = serverInfo.ignoreResourceDeletion();
-      boolean resourceTimerIsTransientError =
-          xdsDataErrorHandlingEnabled && serverInfo.resourceTimerIsTransientError();
+      boolean resourceTimerIsTransientError = serverInfo.resourceTimerIsTransientError();
       if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
@@ -860,15 +858,16 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (!absent) {
         data = null;
         absent = true;
-        metadata = resourceTimerIsTransientError ? ResourceMetadata.newResourceMetadataTimeout() :
-            ResourceMetadata.newResourceMetadataDoesNotExist();
+        metadata = serverInfo.resourceTimerIsTransientError()
+            ? ResourceMetadata.newResourceMetadataTimeout()
+            : ResourceMetadata.newResourceMetadataDoesNotExist();
         for (ResourceWatcher<T> watcher : watchers.keySet()) {
           if (processingTracker != null) {
             processingTracker.startTask();
           }
           watchers.get(watcher).execute(() -> {
             try {
-              if (resourceTimerIsTransientError) {
+              if (serverInfo.resourceTimerIsTransientError()) {
                 watcher.onError(Status.UNAVAILABLE.withDescription(
                     "Timed out waiting for resource " + resource + " from xDS server"));
               } else {
