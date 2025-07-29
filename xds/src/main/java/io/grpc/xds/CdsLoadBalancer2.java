@@ -178,11 +178,11 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     delegate.shutdown();
+    delegate = new GracefulSwitchLoadBalancer(helper);
     if (clusterSubscription != null) {
       clusterSubscription.close();
       clusterSubscription = null;
     }
-    delegate = new GracefulSwitchLoadBalancer(helper);
   }
 
   @CheckReturnValue // don't forget to return up the stack after the fail call
