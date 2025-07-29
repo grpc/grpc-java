@@ -86,7 +86,8 @@ public final class IntentNameResolverTest {
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
     verify(mockListener).onResult2(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(Status.UNIMPLEMENTED.getCode());
+    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode())
+        .isEqualTo(Status.UNIMPLEMENTED.getCode());
   }
 
   @Test
@@ -95,7 +96,8 @@ public final class IntentNameResolverTest {
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
     verify(mockListener).onResult2(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(Status.INVALID_ARGUMENT.getCode());
+    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode())
+        .isEqualTo(Status.INVALID_ARGUMENT.getCode());
   }
 
   @Test
@@ -321,10 +323,10 @@ public final class IntentNameResolverTest {
     class SomeRuntimeException extends RuntimeException {}
     doThrow(SomeRuntimeException.class).when(mockListener).onResult2(any());
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent), newNameResolverArgs()
-        .setSynchronizationContext(syncContext)
-        .build()
-    );
+    NameResolver nameResolver =
+        newNameResolver(
+            getIntentUri(intent),
+            newNameResolverArgs().setSynchronizationContext(syncContext).build());
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -422,7 +424,7 @@ public final class IntentNameResolverTest {
         });
   }
 
-  final static class RetainingUncaughtExceptionHandler implements UncaughtExceptionHandler {
+  static final class RetainingUncaughtExceptionHandler implements UncaughtExceptionHandler {
     final ArrayList<Throwable> uncaught = new ArrayList<>();
 
     @Override

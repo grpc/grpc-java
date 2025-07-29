@@ -51,21 +51,22 @@ final class IntentNameResolver extends NameResolver {
   private final ServiceConfigParser serviceConfigParser;
 
   // Accessed only on `sequentialExecutor`
-  @Nullable private PackageChangeReceiver receiver;
+  @Nullable private PackageChangeReceiver receiver; // != null when registered
 
   // Accessed only on 'syncContext'.
   private boolean shutdown;
   private boolean queryNeeded;
-  @Nullable private Listener2 listener;
+  @Nullable private Listener2 listener; // != null after start().
+  @Nullable private ListenableFuture<ResolutionResult> queryResultFuture; // != null when querying.
 
-  @Nullable
-  private ListenableFuture<ResolutionResult> queryResultFuture; // != null when query in progress.
-
-  // Servers discovered in PackageManager are especially untrusted. After all, an app can declare
-  // any intent filter it wants. Use pre-auth to avoid giving unauthorized apps a chance to run.
   @EquivalentAddressGroup.Attr
   private static final Attributes CONSTANT_EAG_ATTRS =
-      Attributes.newBuilder().set(ApiConstants.PRE_AUTH_SERVER_OVERRIDE, true).build();
+      Attributes.newBuilder()
+          // Servers discovered in PackageManager are especially untrusted. After all, any app can
+          // declare any intent filter it wants! Require pre-authorization so that unauthorized apps
+          // don't even get a chance to run onCreate()/onBind().
+          .set(ApiConstants.PRE_AUTH_SERVER_OVERRIDE, true)
+          .build();
 
   IntentNameResolver(Context context, URI targetUri, Args args) {
     this.targetUri = targetUri;
@@ -138,12 +139,13 @@ final class IntentNameResolver extends NameResolver {
 
           @Override
           public void onFailure(Throwable t) {
-            listener.onResult2(ResolutionResult.newBuilder()
-                .setAddressesOrError(StatusOr.fromStatus(Status.fromThrowable(t)))
-                .build());
+            listener.onResult2(
+                ResolutionResult.newBuilder()
+                    .setAddressesOrError(StatusOr.fromStatus(Status.fromThrowable(t)))
+                    .build());
           }
         },
-        syncContext);  // Already on 'syncContext' but addCallback() is faster than try/get/catch.
+        syncContext); // Already on 'syncContext' but addCallback() is faster than try/get/catch.
     queryResultFuture = null;
 
     if (queryNeeded) {
