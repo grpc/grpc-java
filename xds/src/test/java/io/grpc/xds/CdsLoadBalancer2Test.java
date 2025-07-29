@@ -459,7 +459,7 @@ public class CdsLoadBalancer2Test {
                   .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
             .build(),
         cluster4, EDS_CLUSTER.toBuilder().setName(cluster4).build()));
-        startXdsDepManager();
+    startXdsDepManager();
 
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
@@ -475,17 +475,20 @@ public class CdsLoadBalancer2Test {
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig3 =
             childLbConfig.childConfigs.get(cluster3);
     assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig3.childConfig).getPolicyName())
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig3.childConfig)
+            .getPolicyName())
         .isEqualTo("cds_experimental");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig4 =
         childLbConfig.childConfigs.get(cluster4);
     assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig4.childConfig).getPolicyName())
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig4.childConfig)
+            .getPolicyName())
         .isEqualTo("cds_experimental");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
             childLbConfig.childConfigs.get(cluster2);
     assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig2.childConfig).getPolicyName())
+        GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig2.childConfig)
+            .getPolicyName())
         .isEqualTo("cds_experimental");
   }
 
