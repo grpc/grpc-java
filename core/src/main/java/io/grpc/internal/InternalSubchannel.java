@@ -868,18 +868,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     return buffer.toString();
   }
 
-  private OtelMetricsAttributes buildLabelSet(String backendService, String locality,
-                                              String disconnectError, String securityLevel) {
-    return new OtelMetricsAttributes(
-        target,
-        backendService,
-        locality,
-        disconnectError,
-        securityLevel
-    );
-  }
-
-
   @VisibleForTesting
   static final class TransportLogger extends ChannelLogger {
     // Changed just after construction to break a cyclic dependency.
