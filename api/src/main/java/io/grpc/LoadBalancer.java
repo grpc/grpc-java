@@ -136,12 +136,6 @@ public abstract class LoadBalancer {
       Attributes.Key.create("io.grpc.IS_PETIOLE_POLICY");
 
   /**
-   * The name of the locality that this EquivalentAddressGroup is in.
-   */
-  public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
-      Attributes.Key.create("io.grpc.lb.locality");
-
-  /**
    * A picker that always returns an erring pick.
    *
    * @deprecated Use {@code new FixedResultPicker(PickResult.withNoResult())} instead.
