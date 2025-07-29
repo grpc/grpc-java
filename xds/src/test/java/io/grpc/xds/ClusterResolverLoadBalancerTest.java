@@ -1088,19 +1088,17 @@ public class ClusterResolverLoadBalancerTest {
     new EqualsTester()
         .addEqualityGroup(
             new ClusterResolverConfig(
-                Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false),
+                edsDiscoveryMechanism1, leastRequest, false),
             new ClusterResolverConfig(
-                Collections.singletonList(edsDiscoveryMechanism1), leastRequest, false))
+                edsDiscoveryMechanism1, leastRequest, false))
         .addEqualityGroup(new ClusterResolverConfig(
-            Collections.singletonList(edsDiscoveryMechanism1), roundRobin, false))
+            edsDiscoveryMechanism1, roundRobin, false))
         .addEqualityGroup(new ClusterResolverConfig(
-            Collections.singletonList(edsDiscoveryMechanism1), leastRequest, true))
+            edsDiscoveryMechanism1, leastRequest, true))
         .addEqualityGroup(new ClusterResolverConfig(
-            Collections.singletonList(edsDiscoveryMechanismWithOutlierDetection),
+            edsDiscoveryMechanismWithOutlierDetection,
             leastRequest,
             false))
-        .addEqualityGroup(new ClusterResolverConfig(
-            Arrays.asList(edsDiscoveryMechanism1, edsDiscoveryMechanism2), leastRequest, false))
         .testEquals();
   }
 
