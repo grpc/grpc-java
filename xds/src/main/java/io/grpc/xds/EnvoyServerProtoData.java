@@ -73,15 +73,28 @@ public final class EnvoyServerProtoData {
 
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
+    private final String sni;
+    private final boolean auto_host_sni;
+
     @VisibleForTesting
-    public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
-      super(commonTlsContext);
+    public UpstreamTlsContext(io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext) {
+      super(upstreamTlsContext.getCommonTlsContext());
+      this.sni = upstreamTlsContext.getSni();
+      this.auto_host_sni = upstreamTlsContext.getAutoHostSni();
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
         io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             upstreamTlsContext) {
-      return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
+      return new UpstreamTlsContext(upstreamTlsContext);
+    }
+
+    public String getSni() {
+      return sni;
+    }
+
+    public boolean getAutoHostSni() {
+      return auto_host_sni;
     }
 
     @Override

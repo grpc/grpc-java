@@ -918,7 +918,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator(), null);
+        getClientTlsProtocolNegotiator(), null, sni);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -957,7 +957,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator(), null);
+        getClientTlsProtocolNegotiator(), null, sni);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -982,7 +982,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator(), null);
+        getClientTlsProtocolNegotiator(), null, sni);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -1011,7 +1011,7 @@ public class ProtocolNegotiatorsTest {
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", null, noopLogger, Optional.absent(),
-        getClientTlsProtocolNegotiator(), null);
+        getClientTlsProtocolNegotiator(), null, sni);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -1026,7 +1026,7 @@ public class ProtocolNegotiatorsTest {
   private ClientTlsProtocolNegotiator getClientTlsProtocolNegotiator() throws SSLException {
     return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
         TlsTesting.loadCert("ca.pem")).build(),
-        null, Optional.absent(), null);
+        null, Optional.absent(), null, sni);
   }
 
   @Test
@@ -1277,7 +1277,7 @@ public class ProtocolNegotiatorsTest {
     }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext,
-        null, Optional.absent(), null);
+        null, Optional.absent(), null, sni);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 

@@ -388,7 +388,7 @@ public class CommonTlsContextTestsUtil {
     }
 
     @Override
-    public void updateSslContext(SslContext sslContext) {
+    public void updateSslContext(SslContext sslContext, String sni) {
       updatedSslContext = sslContext;
     }
 

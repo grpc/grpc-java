@@ -83,8 +83,8 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    capturedCallback.updateSslContext(mockSslContext, sni);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext), sni);
     verify(mockTlsContextManager, times(1))
         .releaseClientSslContextProvider(eq(mockSslContextProvider));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);

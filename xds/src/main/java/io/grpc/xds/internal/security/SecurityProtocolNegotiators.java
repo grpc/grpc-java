@@ -213,7 +213,7 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContext(SslContext sslContext, String sni) {
               if (ctx.isRemoved()) {
                 return;
               }
@@ -222,7 +222,7 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(sslContext, sni).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
@@ -356,7 +356,7 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContext(SslContext sslContext, String sni) {
               ChannelHandler handler =
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
