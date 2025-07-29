@@ -1475,7 +1475,7 @@ public class InternalSubchannelTest {
     SocketAddress addr = mock(SocketAddress.class);
     Attributes eagAttributes = Attributes.newBuilder()
         .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
-        .set(LoadBalancer.ATTR_LOCALITY_NAME, LOCALITY)
+        .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
         .build();
     List<EquivalentAddressGroup> addressGroups =
@@ -1528,7 +1528,7 @@ public class InternalSubchannelTest {
     SocketAddress addr = mock(SocketAddress.class);
     Attributes eagAttributes = Attributes.newBuilder()
         .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
-        .set(LoadBalancer.ATTR_LOCALITY_NAME, LOCALITY)
+        .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
         .build();
     List<EquivalentAddressGroup> addressGroups =
@@ -1555,8 +1555,8 @@ public class InternalSubchannelTest {
     transportInfo.listener.transportReady();
     fakeClock.runDueTasks(); // Process the successful connection
 
-    // --- Action: Transport is shut down by the "peer" ---
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("Peer Pressure"));
+    // --- Action: Transport is shut down ---
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE.withDescription("unknown"));
     fakeClock.runDueTasks(); // Process the shutdown
 
     // --- Verification ---
@@ -1581,7 +1581,7 @@ public class InternalSubchannelTest {
         eqMetricInstrumentName("grpc.subchannel.disconnections"),
         eq(1L),
         eq(Arrays.asList(AUTHORITY)),
-        eq(Arrays.asList(BACKEND_SERVICE, LOCALITY, "Peer Pressure"))
+        eq(Arrays.asList(BACKEND_SERVICE, LOCALITY, "unknown"))
     );
     inOrder.verify(mockMetricRecorder).addLongUpDownCounter(
         eqMetricInstrumentName("grpc.subchannel.open_connections"),

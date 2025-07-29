@@ -602,15 +602,15 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             pendingTransport = null;
             connectedAddressAttributes = addressIndex.getCurrentEagAttributes();
             gotoNonErrorState(READY);
-            subchannelMetrics.recordConnectionAttemptSucceeded(buildLabelSet(
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-                null,
-                extractSecurityLevel(
-                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
-            ));
+            subchannelMetrics.recordConnectionAttemptSucceeded(MetricsAttributes.newBuilder(target)
+                .backendService(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
+                .locality(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
+                .securityLevel(extractSecurityLevel(
+                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL)))
+                .build());
           }
         }
       });
@@ -636,23 +636,24 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             activeTransport = null;
             addressIndex.reset();
             gotoNonErrorState(IDLE);
-            subchannelMetrics.recordDisconnection(buildLabelSet(
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-                "Peer Pressure",
-                extractSecurityLevel(
-                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL))
-            ));
+            subchannelMetrics.recordDisconnection(MetricsAttributes.newBuilder(target)
+                .backendService(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
+                .locality(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
+                .disconnectError(SubchannelMetrics.DisconnectError.UNKNOWN.getErrorString(null))
+                .securityLevel(extractSecurityLevel(
+                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL)))
+                .build());
           } else if (pendingTransport == transport) {
-            subchannelMetrics.recordConnectionAttemptFailed(buildLabelSet(
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
-                getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), LoadBalancer.ATTR_LOCALITY_NAME),
-                null, null
-            ));
+            subchannelMetrics.recordConnectionAttemptFailed(MetricsAttributes.newBuilder(target)
+                .backendService(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
+                .locality(getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
+                .build());
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             addressIndex.increment();
@@ -871,18 +872,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
     return buffer.toString();
   }
-
-  private OtelMetricsAttributes buildLabelSet(String backendService, String locality,
-                                              String disconnectError, String securityLevel) {
-    return new OtelMetricsAttributes(
-        target,
-        backendService,
-        locality,
-        disconnectError,
-        securityLevel
-    );
-  }
-
 
   @VisibleForTesting
   static final class TransportLogger extends ChannelLogger {

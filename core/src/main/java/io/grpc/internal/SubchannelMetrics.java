@@ -22,8 +22,9 @@ import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
+import javax.annotation.Nullable;
 
-public final class SubchannelMetrics {
+final class SubchannelMetrics {
 
   private static final LongCounterMetricInstrument disconnections;
   private static final LongCounterMetricInstrument connectionAttemptsSucceeded;
@@ -75,7 +76,7 @@ public final class SubchannelMetrics {
     );
   }
 
-  public void recordConnectionAttemptSucceeded(OtelMetricsAttributes labelSet) {
+  public void recordConnectionAttemptSucceeded(MetricsAttributes labelSet) {
     metricRecorder
         .addLongCounter(connectionAttemptsSucceeded, 1,
             ImmutableList.of(labelSet.target),
@@ -86,14 +87,14 @@ public final class SubchannelMetrics {
             ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
   }
 
-  public void recordConnectionAttemptFailed(OtelMetricsAttributes labelSet) {
+  public void recordConnectionAttemptFailed(MetricsAttributes labelSet) {
     metricRecorder
         .addLongCounter(connectionAttemptsFailed, 1,
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.backendService, labelSet.locality));
   }
 
-  public void recordDisconnection(OtelMetricsAttributes labelSet) {
+  public void recordDisconnection(MetricsAttributes labelSet) {
     metricRecorder
         .addLongCounter(disconnections, 1,
             ImmutableList.of(labelSet.target),
@@ -102,5 +103,85 @@ public final class SubchannelMetrics {
         .addLongUpDownCounter(openConnections, -1,
             ImmutableList.of(labelSet.target),
             ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
+  }
+
+  /**
+   * Represents the reason for a subchannel failure.
+   */
+  public enum DisconnectError {
+
+    /**
+     * Represents an HTTP/2 GOAWAY frame. The specific error code
+     * (e.g., "NO_ERROR", "PROTOCOL_ERROR") should be handled separately
+     * as it is a dynamic part of the error.
+     * See RFC 9113 for error codes: https://www.rfc-editor.org/rfc/rfc9113.html#name-error-codes
+     */
+    GOAWAY("goaway"),
+
+    /**
+     * The subchannel was shut down for various reasons like parent channel shutdown,
+     * idleness, or load balancing policy changes.
+     */
+    SUBCHANNEL_SHUTDOWN("subchannel shutdown"),
+
+    /**
+     * Connection was reset (e.g., ECONNRESET, WSAECONNERESET).
+     */
+    CONNECTION_RESET("connection reset"),
+
+    /**
+     * Connection timed out (e.g., ETIMEDOUT, WSAETIMEDOUT), including closures
+     * from gRPC keepalives.
+     */
+    CONNECTION_TIMED_OUT("connection timed out"),
+
+    /**
+     * Connection was aborted (e.g., ECONNABORTED, WSAECONNABORTED).
+     */
+    CONNECTION_ABORTED("connection aborted"),
+
+    /**
+     * Any socket error not covered by other specific disconnect errors.
+     */
+    SOCKET_ERROR("socket error"),
+
+    /**
+     * A catch-all for any other unclassified reason.
+     */
+    UNKNOWN("unknown");
+
+    private final String errorTag;
+
+    /**
+     * Private constructor to associate a description with each enum constant.
+     *
+     * @param errorTag The detailed explanation of the error.
+     */
+    DisconnectError(String errorTag) {
+      this.errorTag = errorTag;
+    }
+
+    /**
+     * Gets the error string suitable for use as a metric tag.
+     *
+     * <p>If the reason is {@code GOAWAY}, this method requires the specific
+     * HTTP/2 error code to create the complete tag (e.g., "goaway PROTOCOL_ERROR").
+     * For all other reasons, the parameter is ignored.</p>
+     *
+     * @param goawayErrorCode The specific HTTP/2 error code. This is only
+     *                        used if the reason is GOAWAY and should not be null in that case.
+     * @return The formatted error string.
+     */
+    public String getErrorString(@Nullable String goawayErrorCode) {
+      if (this == GOAWAY) {
+        if (goawayErrorCode == null || goawayErrorCode.isEmpty()) {
+          // Return the base tag if the code is missing, or consider throwing an exception
+          // throw new IllegalArgumentException("goawayErrorCode is required for GOAWAY reason.");
+          return this.errorTag;
+        }
+        return this.errorTag + " " + goawayErrorCode;
+      }
+      return this.errorTag;
+    }
   }
 }

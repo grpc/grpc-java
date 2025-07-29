@@ -305,7 +305,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     private ClusterLocality createClusterLocalityFromAttributes(Attributes addressAttributes) {
       Locality locality = addressAttributes.get(XdsAttributes.ATTR_LOCALITY);
-      String localityName = addressAttributes.get(LoadBalancer.ATTR_LOCALITY_NAME);
+      String localityName = addressAttributes.get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
 
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
       // attributes with its locality, including endpoints in LOGICAL_DNS clusters.
