@@ -6,14 +6,16 @@ nettytcnative = '2.0.70.Final'
 opencensus = "0.31.1"
 # Not upgrading to 4.x as it is not yet ABI compatible.
 # https://github.com/protocolbuffers/protobuf/issues/17247
-protobuf = "3.25.5"
+protobuf = "3.25.8"
 
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
+# androidx-annotation 1.9.1+ uses Kotlin and requires Android Gradle Plugin 9+
 androidx-annotation = "androidx.annotation:annotation:1.9.0"
 # 1.15.0 requires libraries and applications that depend on it to compile against
 # version 35 or later of the Android APIs.
 androidx-core = "androidx.core:core:1.13.1"
+# androidx-lifecycle 2.9+ requires Java 17
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.7"
 androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.8.7"
 androidx-test-core = "androidx.test:core:1.6.1"
@@ -36,13 +38,13 @@ cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.30.0"
 # error-prone 2.32.0+ require Java 17+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.51.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.59.2"
 # google-auth-library 1.25.0+ requires error_prone_annotations 2.31.0+, which
 # breaks the Android build
 google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.24.1"
 google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.24.1"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
-google-cloud-logging = "com.google.cloud:google-cloud-logging:3.21.2"
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.1"
 # 2.12.1 requires error_prone_annotations:2.36.0 but we are stuck with 2.30.0
 gson = "com.google.code.gson:gson:2.11.0"
 # 33.4.0 requires com.google.errorprone:error_prone_annotations:2.36.0 but we are stuck with 2.30.0 (see above)
@@ -61,7 +63,7 @@ javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"
-jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.0.16"
+jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.0.23"
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
 jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16"
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
@@ -91,19 +93,19 @@ opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-g
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
-opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.46.0"
-opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.46.0-alpha"
-opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.43.0-alpha"
-opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.46.0"
-opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.46.0"
+opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.52.0"
+opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.52.0-alpha"
+opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.48.0-alpha"
+opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.52.0"
+opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.52.0"
 perfmark-api = "io.perfmark:perfmark-api:0.27.0"
 protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf" }
 protobuf-java-util = { module = "com.google.protobuf:protobuf-java-util", version.ref = "protobuf" }
 protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.ref = "protobuf" }
 protobuf-protoc = { module = "com.google.protobuf:protoc", version.ref = "protobuf" }
 re2j = "com.google.re2j:re2j:1.8"
-robolectric = "org.robolectric:robolectric:4.14.1"
-s2a-proto = "com.google.s2a.proto.v2:s2a-proto:0.1.1"
+robolectric = "org.robolectric:robolectric:4.15.1"
+s2a-proto = "com.google.s2a.proto.v2:s2a-proto:0.1.2"
 signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r2"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+

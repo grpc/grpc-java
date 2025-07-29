@@ -12,7 +12,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.51.0",
+    "com.google.api.grpc:proto-google-common-protos:2.59.2",
     "com.google.auth:google-auth-library-credentials:1.24.1",
     "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -23,7 +23,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
     "com.google.re2j:re2j:1.8",
-    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.2",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
@@ -116,9 +116,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "9bd87b8280ef720d3240514f884e56a712f2218f0d693b48050c836028940a42",
-        strip_prefix = "protobuf-25.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protobuf-25.1.tar.gz"],
+        sha256 = "3cf7d5b17c4ff04fe9f038104e9d0cae6da09b8ce271c13e44f8ac69f51e4e0f",
+        strip_prefix = "protobuf-25.5",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v25.5/protobuf-25.5.tar.gz"],
     )
 
 def io_grpc_grpc_proto():
