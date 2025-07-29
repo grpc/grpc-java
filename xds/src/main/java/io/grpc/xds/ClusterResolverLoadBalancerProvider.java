@@ -88,7 +88,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, lbConfig, isHttp11ProxyAvailable);
+      return Objects.hash(discoveryMechanism, lbConfig, isHttp11ProxyAvailable);
     }
 
     @Override
@@ -100,7 +100,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         return false;
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
-      return discoveryMechanisms.equals(that.discoveryMechanisms)
+      return discoveryMechanism.equals(that.discoveryMechanism)
           && lbConfig.equals(that.lbConfig)
           && isHttp11ProxyAvailable == that.isHttp11ProxyAvailable;
     }
