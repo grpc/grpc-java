@@ -28,6 +28,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -449,7 +450,7 @@ public class XdsNameResolverTest {
     // Two new service config updates triggered:
     //  - with load balancing config being able to select cluster1 and cluster2
     //  - with load balancing config being able to select cluster2 only
-    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resultCaptor.capture());
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster1, cluster2),
         (Map<String, ?>) resultCaptor.getAllValues().get(0).getServiceConfig().getConfig());
@@ -1070,7 +1071,9 @@ public class XdsNameResolverTest {
     assertCallSelectClusterResult(call1, configSelector, "another-cluster", 20.0);
 
     firstCall.deliverErrorStatus();  // completes previous call
-    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
+    // Two updates: one for XdsNameResolver releasing the cluster, and another for
+    // XdsDependencyManager updating the XdsConfig
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster2, "another-cluster"),
@@ -1100,7 +1103,7 @@ public class XdsNameResolverTest {
                 ImmutableMap.of())));
     // Two consecutive service config updates: one for removing clcuster1,
     // one for adding "another=cluster".
-    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     assertServiceConfigForLoadBalancingConfig(
         Arrays.asList(cluster2, "another-cluster"),
@@ -1155,7 +1158,7 @@ public class XdsNameResolverTest {
                     cluster2, Collections.emptyList(),
                     TimeUnit.SECONDS.toNanos(15L), null, false),
                 ImmutableMap.of())));
-    verifyNoMoreInteractions(mockListener);  // no cluster added/deleted
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     assertCallSelectClusterResult(call1, configSelector, "another-cluster", 15.0);
   }
 
@@ -1187,7 +1190,13 @@ public class XdsNameResolverTest {
                     null, false),
                 ImmutableMap.of())));
     testCall.deliverErrorStatus();
-    verifyNoMoreInteractions(mockListener);
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(1));
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(2));
+    assertServiceConfigForLoadBalancingConfig(
+        Arrays.asList(cluster1, cluster2), resolutionResultCaptor.getAllValues().get(3));
   }
 
   @SuppressWarnings("unchecked")
@@ -1268,7 +1277,7 @@ public class XdsNameResolverTest {
         "routeLookupConfig",
         ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"),
         "childPolicy",
-        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of("is_dynamic", true))),
         "childPolicyConfigTargetFieldName",
         "cluster");
     Map<String, ?> expectedClusterManagerLbConfig = ImmutableMap.of(
@@ -1315,7 +1324,7 @@ public class XdsNameResolverTest {
         "routeLookupConfig",
         ImmutableMap.of("lookupService", "rls-cbt-2.googleapis.com"),
         "childPolicy",
-        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of())),
+        ImmutableList.of(ImmutableMap.of("cds_experimental", ImmutableMap.of("is_dynamic", true))),
         "childPolicyConfigTargetFieldName",
         "cluster");
     Map<String, ?> expectedClusterManagerLbConfig2 = ImmutableMap.of(
@@ -1656,7 +1665,7 @@ public class XdsNameResolverTest {
   }
 
   private void assertClusterResolutionResult(CallInfo call, String expectedCluster) {
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, atLeast(1)).onResult2(resolutionResultCaptor.capture());
     ResolutionResult result = resolutionResultCaptor.getValue();
     InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     assertCallSelectClusterResult(call, configSelector, expectedCluster, null);
@@ -1742,6 +1751,13 @@ public class XdsNameResolverTest {
     assertThat(result.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL)).isNotNull();
     assertThat(result.getAttributes().get(XdsAttributes.CALL_COUNTER_PROVIDER)).isNotNull();
     return result.getAttributes().get(InternalConfigSelector.KEY);
+  }
+
+  private static void assertServiceConfigForLoadBalancingConfig(
+      List<String> clusters, ResolutionResult result) {
+    @SuppressWarnings("unchecked")
+    Map<String, ?> config = (Map<String, ?>) result.getServiceConfig().getConfig();
+    assertServiceConfigForLoadBalancingConfig(clusters, config);
   }
 
   /**
@@ -1847,7 +1863,9 @@ public class XdsNameResolverTest {
             + "                \"lookupService\": \"rls.bigtable.google.com\"\n"
             + "              },\n"
             + "              \"childPolicy\": [\n"
-            + "                {\"cds_experimental\": {}}\n"
+            + "                {\"cds_experimental\": {\n"
+            + "                  \"is_dynamic\": true\n"
+            + "                }}\n"
             + "              ],\n"
             + "              \"childPolicyConfigTargetFieldName\": \"cluster\"\n"
             + "            }\n"
@@ -2035,7 +2053,7 @@ public class XdsNameResolverTest {
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2051,7 +2069,7 @@ public class XdsNameResolverTest {
         FaultAbort.forHeader(FaultConfig.FractionalPercent.perMillion(0)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2066,7 +2084,7 @@ public class XdsNameResolverTest {
             FaultConfig.FractionalPercent.perMillion(600_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(4)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2084,7 +2102,7 @@ public class XdsNameResolverTest {
             FaultConfig.FractionalPercent.perMillion(400_000)),
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(5)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2119,7 +2137,7 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(600_000)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2130,7 +2148,7 @@ public class XdsNameResolverTest {
     httpFilterFaultConfig = FaultConfig.create(
         FaultDelay.forHeader(FaultConfig.FractionalPercent.perMillion(0)), null, null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2143,7 +2161,7 @@ public class XdsNameResolverTest {
         null,
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(4)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2156,7 +2174,7 @@ public class XdsNameResolverTest {
         null,
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(cluster1, httpFilterFaultConfig, null, null, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(5)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2221,7 +2239,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
+            + " Deadline CallOptions was exceeded after 0.000004000s"));
   }
 
   @Test
@@ -2281,7 +2299,7 @@ public class XdsNameResolverTest {
         null);
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig, null);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,
@@ -2298,7 +2316,7 @@ public class XdsNameResolverTest {
     xdsClient.deliverLdsUpdateWithFaultInjection(
         cluster1, httpFilterFaultConfig, virtualHostFaultConfig, routeFaultConfig,
         weightedClusterFaultConfig);
-    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockListener, times(3)).onResult2(resolutionResultCaptor.capture());
     result = resolutionResultCaptor.getValue();
     configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
     observer = startNewCall(TestMethodDescriptors.voidMethod(), configSelector,

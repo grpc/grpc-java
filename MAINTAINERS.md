@@ -11,8 +11,6 @@ for general contribution guidelines.
 - [ejona86](https://github.com/ejona86), Google LLC
 - [jdcormie](https://github.com/jdcormie), Google LLC
 - [kannanjgithub](https://github.com/kannanjgithub), Google LLC
-- [larry-safran](https://github.com/larry-safran), Google LLC
-- [markb74](https://github.com/markb74), Google LLC
 - [ran-su](https://github.com/ran-su), Google LLC
 - [sergiitk](https://github.com/sergiitk), Google LLC
 - [temawi](https://github.com/temawi), Google LLC
@@ -26,7 +24,9 @@ for general contribution guidelines.
 - [ericgribkoff](https://github.com/ericgribkoff)
 - [jiangtaoli2016](https://github.com/jiangtaoli2016)
 - [jtattermusch](https://github.com/jtattermusch)
+- [larry-safran](https://github.com/larry-safran)
 - [louiscryan](https://github.com/louiscryan)
+- [markb74](https://github.com/markb74)
 - [nicolasnoble](https://github.com/nicolasnoble)
 - [nmittler](https://github.com/nmittler)
 - [sanjaypujare](https://github.com/sanjaypujare)

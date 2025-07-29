@@ -92,7 +92,7 @@ public abstract class AbstractTransportTest {
    */
   public static final int TEST_FLOW_CONTROL_WINDOW = 65 * 1024;
 
-  private static final int TIMEOUT_MS = 5000;
+  protected static final int TIMEOUT_MS = 5000;
 
   protected static final String GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES =
       "GRPC_EXPERIMENTAL_SUPPORT_TRACING_MESSAGE_SIZES";
@@ -1449,7 +1449,7 @@ public abstract class AbstractTransportTest {
     clientStream.flush();
     clientStream.halfClose();
     doPingPong(serverListener);
-    assertFalse(serverStreamListener.awaitHalfClosed(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+    assertFalse(serverStreamListener.isHalfClosed());
 
     serverStream.request(1);
     serverReceived += verifyMessageCountAndClose(serverStreamListener.messageQueue, 1);
@@ -1461,11 +1461,7 @@ public abstract class AbstractTransportTest {
     Status status = Status.OK.withDescription("... quite a lengthy discussion");
     serverStream.close(status, new Metadata());
     doPingPong(serverListener);
-    try {
-      clientStreamListener.awaitClose(TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      fail("Expected TimeoutException");
-    } catch (TimeoutException expectedException) {
-    }
+    assertFalse(clientStreamListener.isClosed());
 
     clientStream.request(1);
     clientReceived += verifyMessageCountAndClose(clientStreamListener.messageQueue, 1);
@@ -2167,7 +2163,7 @@ public abstract class AbstractTransportTest {
     return true;
   }
 
-  private static void runIfNotNull(Runnable runnable) {
+  protected static void runIfNotNull(Runnable runnable) {
     if (runnable != null) {
       runnable.run();
     }
