@@ -172,6 +172,12 @@ public final class BinderClientTransportTest {
       return this;
     }
 
+    @CanIgnoreReturnValue
+    public BinderClientTransportBuilder setPreAuthorizeServer(boolean preAuthorizeServer) {
+      factoryBuilder.setPreAuthorizeServers(preAuthorizeServer);
+      return this;
+    }
+
     public BinderTransport.BinderClientTransport build() {
       return factoryBuilder
           .buildClientTransportFactory()
@@ -372,11 +378,12 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testBlackHoleSecurityPolicyConnectTimeout() throws Exception {
+  public void testBlackHoleSecurityPolicyAuthTimeout() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
     transport =
         new BinderClientTransportBuilder()
             .setSecurityPolicy(securityPolicy)
+            .setPreAuthorizeServer(false)
             .setReadyTimeoutMillis(1_234)
             .build();
     transport.start(transportListener).run();
@@ -387,15 +394,39 @@ public final class BinderClientTransportTest {
     assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     assertThat(transportStatus.getDescription()).contains("1234");
     transportListener.awaitTermination();
-
     // If the transport gave up waiting on auth, it should cancel its request.
     assertThat(authRequest.isCancelled()).isTrue();
   }
 
   @Test
-  public void testAsyncSecurityPolicyFailure() throws Exception {
+  public void testBlackHoleSecurityPolicyPreAuthTimeout() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
+    transport =
+        new BinderClientTransportBuilder()
+            .setSecurityPolicy(securityPolicy)
+            .setPreAuthorizeServer(true)
+            .setReadyTimeoutMillis(1_234)
+            .build();
+    transport.start(transportListener).run();
+    // Take the next authRequest but don't respond to it, in order to trigger the ready timeout.
+    AuthRequest preAuthRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS);
+
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    assertThat(transportStatus.getDescription()).contains("1234");
+    transportListener.awaitTermination();
+    // If the transport gave up waiting on auth, it should cancel its request.
+    assertThat(preAuthRequest.isCancelled()).isTrue();
+  }
+
+  @Test
+  public void testAsyncSecurityPolicyAuthFailure() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport =
+        new BinderClientTransportBuilder()
+            .setPreAuthorizeServer(false)
+            .setSecurityPolicy(securityPolicy)
+            .build();
     RuntimeException exception = new NullPointerException();
     transport.start(transportListener).run();
     securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS).setResult(exception);
@@ -406,15 +437,55 @@ public final class BinderClientTransportTest {
   }
 
   @Test
-  public void testAsyncSecurityPolicySuccess() throws Exception {
+  public void testAsyncSecurityPolicyPreAuthFailure() throws Exception {
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
-    transport = new BinderClientTransportBuilder().setSecurityPolicy(securityPolicy).build();
+    transport =
+        new BinderClientTransportBuilder()
+            .setPreAuthorizeServer(true)
+            .setSecurityPolicy(securityPolicy)
+            .build();
+    RuntimeException exception = new NullPointerException();
+    transport.start(transportListener).run();
+    securityPolicy.takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS).setResult(exception);
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(transportStatus.getCause()).isEqualTo(exception);
+    transportListener.awaitTermination();
+  }
+
+  @Test
+  public void testAsyncSecurityPolicyAuthSuccess() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport =
+        new BinderClientTransportBuilder()
+            .setPreAuthorizeServer(false)
+            .setSecurityPolicy(securityPolicy)
+            .build();
     transport.start(transportListener).run();
     securityPolicy
         .takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS)
-        .setResult(Status.PERMISSION_DENIED);
+        .setResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
     Status transportStatus = transportListener.awaitShutdown();
     assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
+    assertThat(transportStatus.getDescription()).contains("xyzzy");
+    transportListener.awaitTermination();
+  }
+
+  @Test
+  public void testAsyncSecurityPolicyPreAuthSuccess() throws Exception {
+    SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
+    transport =
+        new BinderClientTransportBuilder()
+            .setPreAuthorizeServer(true)
+            .setSecurityPolicy(securityPolicy)
+            .build();
+    transport.start(transportListener).run();
+    securityPolicy
+        .takeNextAuthRequest(TIMEOUT_SECONDS, SECONDS)
+        .setResult(Status.PERMISSION_DENIED.withDescription("xyzzy"));
+    Status transportStatus = transportListener.awaitShutdown();
+    assertThat(transportStatus.getCode()).isEqualTo(Code.PERMISSION_DENIED);
+    assertThat(transportStatus.getDescription()).contains("xyzzy");
     transportListener.awaitTermination();
   }
 
