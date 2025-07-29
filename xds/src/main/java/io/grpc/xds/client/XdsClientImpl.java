@@ -843,7 +843,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // Ignore deletion of State of the World resources when this feature is on,
       // and the resource is reusable.
       boolean ignoreResourceDeletionEnabled = serverInfo.ignoreResourceDeletion();
-      boolean resourceTimerIsTransientError = serverInfo.resourceTimerIsTransientError();
       if (ignoreResourceDeletionEnabled && type.isFullStateOfTheWorld() && data != null) {
         if (!resourceDeletionIgnored) {
           logger.log(XdsLogLevel.FORCE_WARNING,
