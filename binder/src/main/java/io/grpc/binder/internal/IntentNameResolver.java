@@ -105,7 +105,7 @@ final class IntentNameResolver extends NameResolver {
       return;
     }
 
-    // We can't block here in 'syncContext' so we offload PackageManager querys to an Executor.
+    // We can't block here in 'syncContext' so we offload PackageManager queries to an Executor.
     // But offloading complicates things a bit because other calls can arrive while we wait for the
     // results. We keep 'listener' up-to-date with the latest state in PackageManager by doing:
     // 1. Only one query-and-report-to-listener operation at a time.
@@ -133,15 +133,17 @@ final class IntentNameResolver extends NameResolver {
         new FutureCallback<ResolutionResult>() {
           @Override
           public void onSuccess(ResolutionResult result) {
-            listener.onResult(result);
+            listener.onResult2(result);
           }
 
           @Override
           public void onFailure(Throwable t) {
-            listener.onError(Status.fromThrowable(t));
+            listener.onResult2(ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromStatus(Status.fromThrowable(t)))
+                .build());
           }
         },
-        sequentialExecutor);
+        syncContext);  // Already on 'syncContext' but addCallback() is faster than try/get/catch.
     queryResultFuture = null;
 
     if (queryNeeded) {

@@ -59,13 +59,14 @@ public final class IntentNameResolverProviderTest {
 
   @Test
   public void testResolverForIntentScheme_returnsResolver() throws Exception {
-    URI uri = new URI("intent:///ISomething#Intent;action=io.grpc.action.BIND;scheme=grpc;end");
+    URI uri = new URI("intent://authority/path#Intent;action=action;scheme=scheme;end");
     NameResolver resolver = provider.newNameResolver(uri, args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("localhost");
     syncContext.execute(() -> resolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
-    verify(mockListener).onError(any());
+    verify(mockListener).onResult2(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddressesOrError()).isNotNull();
     syncContext.execute(() -> resolver.shutdown());
     shadowOf(getMainLooper()).idle();
   }

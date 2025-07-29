@@ -22,6 +22,7 @@ import android.content.pm.ServiceInfo;
 import android.net.Uri;
 import android.os.UserHandle;
 import android.os.UserManager;
+import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.common.collect.ImmutableList;
@@ -34,8 +35,10 @@ import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.junit.Rule;
@@ -68,7 +71,6 @@ public final class IntentNameResolverTest {
   @Rule public MockitoTestRule mockitoTestRule = MockitoJUnit.testRule(this);
   @Mock public NameResolver.Listener2 mockListener;
   @Captor public ArgumentCaptor<ResolutionResult> resultCaptor;
-  @Captor public ArgumentCaptor<Status> statusCaptor;
 
   @Test
   public void testResolverForIntentScheme_returnsResolverWithLocalHostAuthority() throws Exception {
@@ -83,8 +85,8 @@ public final class IntentNameResolverTest {
     NameResolver nameResolver = newNameResolver(getIntentUri(newIntent()));
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
-    verify(mockListener).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.UNIMPLEMENTED.getCode());
+    verify(mockListener).onResult2(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(Status.UNIMPLEMENTED.getCode());
   }
 
   @Test
@@ -92,8 +94,8 @@ public final class IntentNameResolverTest {
     NameResolver nameResolver = newNameResolver(new URI("intent:xxx#Intent;e.x=1;end;"));
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
-    verify(mockListener).onError(statusCaptor.capture());
-    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.INVALID_ARGUMENT.getCode());
+    verify(mockListener).onResult2(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode()).isEqualTo(Status.INVALID_ARGUMENT.getCode());
   }
 
   @Test
@@ -114,7 +116,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(
             toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)),
@@ -136,7 +138,7 @@ public final class IntentNameResolverTest {
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)));
     assertThat(
@@ -166,7 +168,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(
             toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)),
@@ -177,7 +179,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)));
 
@@ -208,7 +210,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)));
 
@@ -224,7 +226,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(
             toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)),
@@ -250,7 +252,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(
             toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)),
@@ -259,7 +261,7 @@ public final class IntentNameResolverTest {
     syncContext.execute(nameResolver::refresh);
     shadowOf(getMainLooper()).idle();
     verify(mockListener, never()).onError(any());
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(
             toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)),
@@ -286,7 +288,7 @@ public final class IntentNameResolverTest {
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(SOME_COMPONENT_NAME)));
 
@@ -309,24 +311,27 @@ public final class IntentNameResolverTest {
 
   @Test
   public void testResolutionOnResultThrows_onErrorNotCalled() throws Exception {
+    RetainingUncaughtExceptionHandler exceptionHandler = new RetainingUncaughtExceptionHandler();
+    SynchronizationContext syncContext = new SynchronizationContext(exceptionHandler);
     Intent intent = newIntent();
     shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, newFilterMatching(intent));
 
     @SuppressWarnings("serial")
     class SomeRuntimeException extends RuntimeException {}
-    doThrow(SomeRuntimeException.class).when(mockListener).onResult(any());
+    doThrow(SomeRuntimeException.class).when(mockListener).onResult2(any());
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(getIntentUri(intent), newNameResolverArgs()
+        .setSynchronizationContext(syncContext)
+        .build()
+    );
     syncContext.execute(() -> nameResolver.start(mockListener));
-    try {
-      shadowOf(getMainLooper()).idle();
-    } catch (SomeRuntimeException e) {
-      // Permitted.
-    }
+    shadowOf(getMainLooper()).idle();
 
-    verify(mockListener).onResult(any());
+    verify(mockListener).onResult2(any());
     verify(mockListener, never()).onError(any());
+    assertThat(exceptionHandler.uncaught).hasSize(1);
+    assertThat(exceptionHandler.uncaught.get(0)).isInstanceOf(SomeRuntimeException.class);
   }
 
   private static Intent newIntent() {
@@ -388,6 +393,10 @@ public final class IntentNameResolverTest {
   }
 
   private NameResolver newNameResolver(URI targetUri) {
+    return newNameResolver(targetUri, args);
+  }
+
+  private NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     return new IntentNameResolver(appContext, targetUri, args);
   }
 
@@ -411,5 +420,14 @@ public final class IntentNameResolverTest {
         (thread, exception) -> {
           throw new AssertionError(exception);
         });
+  }
+
+  final static class RetainingUncaughtExceptionHandler implements UncaughtExceptionHandler {
+    final ArrayList<Throwable> uncaught = new ArrayList<>();
+
+    @Override
+    public void uncaughtException(@NonNull Thread t, @NonNull Throwable e) {
+      uncaught.add(e);
+    }
   }
 }
