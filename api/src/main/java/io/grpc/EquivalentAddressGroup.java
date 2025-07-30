@@ -50,6 +50,11 @@ public final class EquivalentAddressGroup {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
   public static final Attributes.Key<String> ATTR_AUTHORITY_OVERRIDE =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE");
+  /**
+   * The name of the locality that this EquivalentAddressGroup is in.
+   */
+  public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
+      Attributes.Key.create("io.grpc.lb.locality");
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 
