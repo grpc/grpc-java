@@ -37,6 +37,7 @@ import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Logger;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.HdrHistogram.Histogram;
@@ -48,6 +49,8 @@ import org.HdrHistogram.Histogram;
  * https://github.com/grpc/grpc/blob/master/doc/interop-test-descriptions.md#rpc_soak
  */
 final class SoakClient {
+  private static final Logger logger = Logger.getLogger(SoakClient.class.getName());
+
   private static class SoakIterationResult {
     public SoakIterationResult(long latencyMs, Status status) {
       this.latencyMs = latencyMs;
@@ -171,7 +174,7 @@ final class SoakClient {
       iterationsDone += threadResult.getIterationsDone();
       latencies.add(threadResult.getLatencies());
     }
-    System.err.println(
+    logger.info(
         String.format(
             Locale.US,
             "(server_uri: %s) soak test ran: %d / %d iterations. total failures: %d. "
@@ -244,14 +247,16 @@ final class SoakClient {
       if (!result.getStatus().equals(Status.OK)) {
         threadResults.threadFailures++;
         logStr.append(String.format(" failed: %s", result.getStatus()));
+        logger.warning(logStr.toString());
       } else if (result.getLatencyMs() > maxAcceptablePerIterationLatencyMs) {
         threadResults.threadFailures++;
         logStr.append(
             " exceeds max acceptable latency: " + maxAcceptablePerIterationLatencyMs);
+        logger.warning(logStr.toString());
       } else {
         logStr.append(" succeeded");
+        logger.info(logStr.toString());
       }
-      System.err.println(logStr.toString());
       threadResults.iterationsDone++;
       threadResults.getLatencies().recordValue(result.getLatencyMs());
       long remainingNs = earliestNextStartNs - System.nanoTime();
