@@ -68,9 +68,13 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract String getJsonContent() throws IOException, XdsInitializationException;
 
-  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
+  protected abstract Object getImplSpecificChannelCredConfig(
+      Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException;
 
+  protected abstract Object getImplSpecificCallCredConfig(
+      Map<String, ?> serverConfig, String serverUri)
+      throws XdsInitializationException;
 
   /**
    * Reads and parses bootstrap config. The config is expected to be in JSON format.
@@ -245,7 +249,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
 
-      Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
+      Object implSpecificChannelCredConfig =
+          getImplSpecificChannelCredConfig(serverConfig, serverUri);
+      Object implSpecificCallCredConfig = getImplSpecificCallCredConfig(serverConfig, serverUri);
 
       boolean ignoreResourceDeletion = false;
       // "For forward compatibility reasons, the client will ignore any entry in the list that it
@@ -256,9 +262,13 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
       }
       servers.add(
-          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
-              serverFeatures != null
-                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
+          ServerInfo.create(
+            serverUri,
+            implSpecificChannelCredConfig,
+            implSpecificCallCredConfig,
+            ignoreResourceDeletion,
+            serverFeatures != null
+                && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER)));
     }
     return servers.build();
   }

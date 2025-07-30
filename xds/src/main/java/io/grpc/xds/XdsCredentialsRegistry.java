@@ -114,7 +114,7 @@ final class XdsCredentialsRegistry {
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "
-            + "TLS and Insecure. This is probably due to a broken build.");
+            + "TLS, Insecure and JWT token file. This is probably due to a broken build.");
       }
       instance = new XdsCredentialsRegistry();
       for (XdsCredentialsProvider provider : providerList) {
@@ -170,7 +170,13 @@ final class XdsCredentialsRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.WARNING, "Unable to find TlsXdsCredentialsProvider", e);
     }
-      
+
+    try {
+      list.add(Class.forName("io.grpc.xds.internal.JwtTokenFileXdsCredentialsProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.WARNING, "Unable to find JwtTokenFileXdsCredentialsProvider", e);
+    }
+
     return Collections.unmodifiableList(list);
   }
 
