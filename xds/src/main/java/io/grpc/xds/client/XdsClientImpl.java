@@ -67,6 +67,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   public static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  public static final int EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC = 30;
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -738,6 +739,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         // When client becomes ready, it triggers a restartTimer for all relevant subscribers.
         return;
       }
+      ServerInfo serverInfo = activeCpc.getServerInfo();
+      int timeoutSec = serverInfo.resourceTimerIsTransientError()
+          ? EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC : INITIAL_RESOURCE_FETCH_TIMEOUT_SEC;
 
       class ResourceNotFound implements Runnable {
         @Override
@@ -761,8 +765,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         respTimer.cancel();
       }
       respTimer = syncContext.schedule(
-          new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
-          timeService);
+          new ResourceNotFound(), timeoutSec, TimeUnit.SECONDS, timeService);
     }
 
     void stopTimer() {
@@ -854,14 +857,21 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (!absent) {
         data = null;
         absent = true;
-        metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
+        metadata = serverInfo.resourceTimerIsTransientError()
+            ? ResourceMetadata.newResourceMetadataTimeout()
+            : ResourceMetadata.newResourceMetadataDoesNotExist();
         for (ResourceWatcher<T> watcher : watchers.keySet()) {
           if (processingTracker != null) {
             processingTracker.startTask();
           }
           watchers.get(watcher).execute(() -> {
             try {
-              watcher.onResourceDoesNotExist(resource);
+              if (serverInfo.resourceTimerIsTransientError()) {
+                watcher.onError(Status.UNAVAILABLE.withDescription(
+                    "Timed out waiting for resource " + resource + " from xDS server"));
+              } else {
+                watcher.onResourceDoesNotExist(resource);
+              }
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
