@@ -100,7 +100,8 @@ public class UndertowTransportTest extends AbstractTransportTest {
         ServerTransportListener serverTransportListener =
             listener.transportCreated(new ServerTransportImpl(scheduler));
         ServletAdapter adapter =
-            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
+            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE,
+                false);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
         InstanceFactory<? extends Servlet> instanceFactory =
             () -> new ImmediateInstanceHandle<>(grpcServlet);
