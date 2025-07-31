@@ -1,5 +1,6 @@
+load("@bazel_jar_jar//:jar_jar.bzl", "jar_jar")
 load("@rules_jvm_external//:defs.bzl", "artifact")
-load("//:java_grpc_library.bzl", "java_grpc_library")
+load("//:java_grpc_library.bzl", "INTERNAL_java_grpc_library_for_xds", "java_grpc_library", "java_rpc_toolchain")
 
 # Mirrors the dependencies included in the artifact on Maven Central for usage
 # with maven_install's override_targets. Should only be used as a dep for
@@ -13,25 +14,11 @@ java_library(
     ],
 )
 
+# Ordinary deps for :xds
 java_library(
-    name = "xds",
-    srcs = glob(
-        [
-            "src/main/java/**/*.java",
-            "third_party/zero-allocation-hashing/main/java/**/*.java",
-        ],
-        exclude = ["src/main/java/io/grpc/xds/orca/**"],
-    ),
-    resources = glob([
-        "src/main/resources/**",
-    ]),
-    visibility = ["//visibility:public"],
-    deps = [
-        ":envoy_service_discovery_v3_java_grpc",
-        ":envoy_service_load_stats_v3_java_grpc",
-        ":envoy_service_status_v3_java_grpc",
+    name = "xds_deps_depend",
+    exports = [
         ":orca",
-        ":xds_protos_java",
         "//:auto_value_annotations",
         "//alts",
         "//api",
@@ -43,7 +30,6 @@ java_library(
         "//services:metrics_internal",
         "//stub",
         "//util",
-        "@com_google_googleapis//google/rpc:rpc_java_proto",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@maven//:com_google_auth_google_auth_library_oauth2_http",
@@ -58,70 +44,89 @@ java_library(
         artifact("io.netty:netty-handler"),
         artifact("io.netty:netty-transport"),
     ],
-)
-
-java_proto_library(
-    name = "xds_protos_java",
-    deps = [
-        "@com_github_cncf_xds//udpa/type/v1:pkg",
-        "@com_github_cncf_xds//xds/type/v3:pkg",
-        "@envoy_api//envoy/admin/v3:pkg",
-        "@envoy_api//envoy/config/cluster/v3:pkg",
-        "@envoy_api//envoy/config/core/v3:pkg",
-        "@envoy_api//envoy/config/endpoint/v3:pkg",
-        "@envoy_api//envoy/config/listener/v3:pkg",
-        "@envoy_api//envoy/config/rbac/v3:pkg",
-        "@envoy_api//envoy/config/route/v3:pkg",
-        "@envoy_api//envoy/extensions/clusters/aggregate/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/common/fault/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/http/fault/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/http/gcp_authn/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/http/rbac/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/http/router/v3:pkg",
-        "@envoy_api//envoy/extensions/filters/network/http_connection_manager/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/least_request/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/pick_first/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/ring_hash/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/round_robin/v3:pkg",
-        "@envoy_api//envoy/extensions/load_balancing_policies/wrr_locality/v3:pkg",
-        "@envoy_api//envoy/extensions/transport_sockets/http_11_proxy/v3:pkg",
-        "@envoy_api//envoy/extensions/transport_sockets/tls/v3:pkg",
-        "@envoy_api//envoy/service/discovery/v3:pkg",
-        "@envoy_api//envoy/service/load_stats/v3:pkg",
-        "@envoy_api//envoy/service/status/v3:pkg",
-        "@envoy_api//envoy/type/matcher/v3:pkg",
-        "@envoy_api//envoy/type/v3:pkg",
+    runtime_deps = [
+        "//compiler:java_grpc_library_deps__do_not_reference",
     ],
 )
 
-java_grpc_library(
-    name = "envoy_service_discovery_v3_java_grpc",
-    srcs = ["@envoy_api//envoy/service/discovery/v3:pkg"],
-    deps = [":xds_protos_java"],
+java_library(
+    name = "xds_deps_depend_neverlink",
+    neverlink = 1,
+    exports = [":xds_deps_depend"],
 )
 
-java_grpc_library(
-    name = "envoy_service_load_stats_v3_java_grpc",
-    srcs = ["@envoy_api//envoy/service/load_stats/v3:pkg"],
-    deps = [":xds_protos_java"],
+# Deps to be combined into the :xds jar itself
+java_library(
+    name = "xds_deps_embed",
+    exports = [
+        ":envoy_java_grpc",
+        ":envoy_java_proto",
+        ":googleapis_rpc_java_proto",
+        ":xds_java_proto",
+    ],
 )
 
-java_grpc_library(
-    name = "envoy_service_status_v3_java_grpc",
-    srcs = ["@envoy_api//envoy/service/status/v3:pkg"],
-    deps = [":xds_protos_java"],
+java_binary(
+    name = "xds_notjarjar",
+    srcs = glob(
+        [
+            "src/main/java/**/*.java",
+            "third_party/zero-allocation-hashing/main/java/**/*.java",
+        ],
+        exclude = ["src/main/java/io/grpc/xds/orca/**"],
+    ),
+    main_class = "unused",
+    resources = glob([
+        "src/main/resources/**",
+    ]),
+    deps = [
+        # Do not add additional dependencies here; add them to one of these two deps instead
+        ":xds_deps_depend_neverlink",
+        ":xds_deps_embed",
+    ],
+)
+
+JAR_JAR_RULES = [
+    "zap com.google.protobuf.**",  # Drop codegen dep
+    # Keep in sync with build.gradle's shadowJar
+    "rule com.github.udpa.** io.grpc.xds.shaded.com.github.udpa.@1",
+    "rule com.github.xds.** io.grpc.xds.shaded.com.github.xds.@1",
+    "rule com.google.api.expr.** io.grpc.xds.shaded.com.google.api.expr.@1",
+    "rule com.google.security.** io.grpc.xds.shaded.com.google.security.@1",
+    "rule dev.cel.expr.** io.grpc.xds.shaded.dev.cel.expr.@1",
+    "rule envoy.annotations.** io.grpc.xds.shaded.envoy.annotations.@1",
+    "rule io.envoyproxy.** io.grpc.xds.shaded.io.envoyproxy.@1",
+    "rule udpa.annotations.** io.grpc.xds.shaded.udpa.annotations.@1",
+    "rule xds.annotations.** io.grpc.xds.shaded.xds.annotations.@1",
+]
+
+jar_jar(
+    name = "xds_jarjar",
+    inline_rules = JAR_JAR_RULES,
+    input_jar = ":xds_notjarjar_deploy.jar",
 )
 
 java_library(
-    name = "orca",
-    srcs = glob([
-        "src/main/java/io/grpc/xds/orca/*.java",
-    ]),
+    name = "xds",
     visibility = ["//visibility:public"],
+    exports = [":xds_jarjar"],
+    runtime_deps = [":xds_deps_depend"],
+)
+
+java_proto_library(
+    name = "googleapis_rpc_java_proto",
     deps = [
-        ":orca_protos_java",
-        ":xds_service_orca_v3_java_grpc",
+        "@com_google_googleapis//google/rpc:code_proto",
+        "@com_google_googleapis//google/rpc:status_proto",
+    ],
+)
+
+# Ordinary deps for :orca
+java_library(
+    name = "orca_deps_depend",
+    exports = [
+        ":xds_orca_java_grpc",
+        ":xds_orca_java_proto",
         "//api",
         "//context",
         "//core:internal",
@@ -136,16 +141,222 @@ java_library(
     ],
 )
 
-java_proto_library(
-    name = "orca_protos_java",
-    deps = [
-        "@com_github_cncf_xds//xds/data/orca/v3:pkg",
-        "@com_github_cncf_xds//xds/service/orca/v3:pkg",
+java_library(
+    name = "orca_deps_depend_neverlink",
+    neverlink = 1,
+    exports = [":orca_deps_depend"],
+)
+
+# Deps to be combined into the :orca jar itself
+java_library(
+    name = "orca_deps_embed",
+    exports = [
+        ":xds_orca_java_grpc",
+        ":xds_orca_java_proto",
     ],
 )
 
+java_binary(
+    name = "orca_notjarjar",
+    srcs = glob([
+        "src/main/java/io/grpc/xds/orca/*.java",
+    ]),
+    main_class = "unused",
+    visibility = ["//visibility:public"],
+    deps = [
+        # Do not add additional dependencies here; add them to one of these two deps instead
+        ":orca_deps_depend_neverlink",
+        ":orca_deps_embed",
+    ],
+)
+
+jar_jar(
+    name = "orca_jarjar",
+    inline_rules = JAR_JAR_RULES,
+    input_jar = ":orca_notjarjar_deploy.jar",
+)
+
+java_library(
+    name = "orca",
+    visibility = ["//visibility:public"],
+    exports = [":orca_jarjar"],
+    runtime_deps = [":orca_deps_depend"],
+)
+
+java_proto_library(
+    name = "orca_java_proto",
+    deps = [":xds_proto"],
+)
+
 java_grpc_library(
-    name = "xds_service_orca_v3_java_grpc",
-    srcs = ["@com_github_cncf_xds//xds/service/orca/v3:pkg"],
-    deps = [":orca_protos_java"],
+    name = "orca_java_grpc",
+    srcs = [":xds_proto"],
+    deps = [":orca_java_proto"],
+)
+
+proto_library(
+    name = "cel_spec_proto",
+    srcs = glob(["third_party/cel-spec/src/main/proto/**/*.proto"]),
+    strip_import_prefix = "third_party/cel-spec/src/main/proto/",
+    deps = [
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:empty_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+proto_library(
+    name = "envoy_proto",
+    srcs = glob(["third_party/envoy/src/main/proto/**/*.proto"]),
+    strip_import_prefix = "third_party/envoy/src/main/proto/",
+    deps = [
+        ":googleapis_proto",
+        ":protoc_gen_validate_proto",
+        ":xds_proto",
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_googleapis//google/rpc:status_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:descriptor_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:empty_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:timestamp_proto",
+        "@com_google_protobuf//:wrappers_proto",
+    ],
+)
+
+java_proto_library(
+    name = "envoy_java_proto",
+    deps = [":envoy_proto"],
+)
+
+INTERNAL_java_grpc_library_for_xds(
+    name = "envoy_java_grpc",
+    srcs = [":envoy_proto"],
+    deps = [":envoy_java_proto"],
+)
+
+proto_library(
+    name = "googleapis_proto",
+    srcs = glob(["third_party/googleapis/src/main/proto/**/*.proto"]),
+    strip_import_prefix = "third_party/googleapis/src/main/proto/",
+    deps = [
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:empty_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+proto_library(
+    name = "protoc_gen_validate_proto",
+    srcs = glob(["third_party/protoc-gen-validate/src/main/proto/**/*.proto"]),
+    strip_import_prefix = "third_party/protoc-gen-validate/src/main/proto/",
+    deps = [
+        "@com_google_protobuf//:descriptor_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+proto_library(
+    name = "xds_proto",
+    srcs = glob(
+        ["third_party/xds/src/main/proto/**/*.proto"],
+        exclude = [
+            "third_party/xds/src/main/proto/xds/data/orca/v3/*.proto",
+            "third_party/xds/src/main/proto/xds/service/orca/v3/*.proto",
+        ],
+    ),
+    strip_import_prefix = "third_party/xds/src/main/proto/",
+    deps = [
+        ":cel_spec_proto",
+        ":googleapis_proto",
+        ":protoc_gen_validate_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:descriptor_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:wrappers_proto",
+    ],
+)
+
+java_proto_library(
+    name = "xds_java_proto",
+    deps = [":xds_proto"],
+)
+
+proto_library(
+    name = "xds_orca_proto",
+    srcs = glob([
+        "third_party/xds/src/main/proto/xds/data/orca/v3/*.proto",
+        "third_party/xds/src/main/proto/xds/service/orca/v3/*.proto",
+    ]),
+    strip_import_prefix = "third_party/xds/src/main/proto/",
+    deps = [
+        ":protoc_gen_validate_proto",
+        "@com_google_protobuf//:duration_proto",
+    ],
+)
+
+java_proto_library(
+    name = "xds_orca_java_proto",
+    deps = [":xds_orca_proto"],
+)
+
+java_grpc_library(
+    name = "xds_orca_java_grpc",
+    srcs = [":xds_orca_proto"],
+    deps = [":xds_orca_java_proto"],
+)
+
+java_rpc_toolchain(
+    name = "java_grpc_library_toolchain",
+    plugin = "//compiler:grpc_java_plugin",
+    runtime = [":java_grpc_library_deps"],
+)
+
+java_library(
+    name = "java_grpc_library_deps",
+    neverlink = 1,
+    exports = ["//compiler:java_grpc_library_deps__do_not_reference"],
+)
+
+java_library(
+    name = "testlib",
+    testonly = 1,
+    srcs = [
+        "src/test/java/io/grpc/xds/ControlPlaneRule.java",
+        "src/test/java/io/grpc/xds/DataPlaneRule.java",
+        "src/test/java/io/grpc/xds/FakeControlPlaneXdsIntegrationTest.java",
+        "src/test/java/io/grpc/xds/MetadataLoadBalancerProvider.java",
+        "src/test/java/io/grpc/xds/XdsTestControlPlaneService.java",
+        "src/test/java/io/grpc/xds/XdsTestLoadReportingService.java",
+    ],
+    deps = [
+        ":envoy_java_grpc",
+        ":envoy_java_proto",
+        ":xds",
+        ":xds_java_proto",
+        "//api",
+        "//core:internal",
+        "//stub",
+        "//testing",
+        "//testing-proto:simpleservice_java_grpc",
+        "//testing-proto:simpleservice_java_proto",
+        "//util",
+        "@com_google_protobuf//java/core",
+        "@maven//:com_google_code_findbugs_jsr305",
+        "@maven//:com_google_guava_guava",
+        "@maven//:com_google_truth_truth",
+        "@maven//:junit_junit",
+    ],
+)
+
+java_test(
+    name = "FakeControlPlaneXdsIntegrationTest",
+    size = "small",
+    test_class = "io.grpc.xds.FakeControlPlaneXdsIntegrationTest",
+    runtime_deps = [":testlib"],
 )
