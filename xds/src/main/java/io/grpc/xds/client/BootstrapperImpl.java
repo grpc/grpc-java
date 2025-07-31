@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
@@ -170,9 +171,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     builder.node(nodeBuilder.build());
 
     Map<String, ?> certProvidersBlob = JsonUtil.getObject(rawData, "certificate_providers");
+    Map<String, CertificateProviderInfo> certProviders = new HashMap<>();
     if (certProvidersBlob != null) {
       logger.log(XdsLogLevel.INFO, "Configured with {0} cert providers", certProvidersBlob.size());
-      Map<String, CertificateProviderInfo> certProviders = new HashMap<>(certProvidersBlob.size());
       for (String name : certProvidersBlob.keySet()) {
         Map<String, ?> valueMap = JsonUtil.getObject(certProvidersBlob, name);
         String pluginName =
@@ -183,6 +184,21 @@ public abstract class BootstrapperImpl extends Bootstrapper {
             CertificateProviderInfo.create(pluginName, config);
         certProviders.put(name, certificateProviderInfo);
       }
+    }
+
+    for (ServerInfo serverInfo : servers) {
+      Object creds = serverInfo.implSpecificConfig();
+      if (creds instanceof TlsChannelCredentials) {
+        Map<String, ?> config = ((TlsChannelCredentials)creds).getCustomCertificatesConfig();
+        if (config != null) {
+          CertificateProviderInfo certificateProviderInfo =
+              CertificateProviderInfo.create("file_watcher", config);
+          certProviders.put("mtls_channel_creds_identity_certs", certificateProviderInfo);
+        }
+      }
+    }
+
+    if (!certProviders.isEmpty()) {
       builder.certProviders(certProviders);
     }
 

@@ -17,6 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -26,9 +29,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
@@ -894,6 +899,60 @@ public class GrpcBootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
+  }
+
+  @Test
+  public void parseTlsChannelCredentialsWithCustomCertificatesConfig()
+      throws XdsInitializationException, IOException {
+    String rootCertPath = TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath();
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    String privateKeyPath = TestUtils.loadCert(CLIENT_KEY_FILE).getAbsolutePath();
+
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\n"
+        + "          \"type\": \"tls\","
+        + "          \"config\": {\n"
+        + "            \"ca_certificate_file\": \"" + rootCertPath + "\",\n"
+        + "            \"certificate_file\": \"" + certChainPath + "\",\n"
+        + "            \"private_key_file\": \"" + privateKeyPath + "\"\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(
+        ImmutableMap.of(
+            "type", "tls",
+            "config", ImmutableMap.of(
+                "ca_certificate_file", rootCertPath,
+                "certificate_file", certChainPath,
+                "private_key_file", privateKeyPath)));
+    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
+
+    assertThat(info.certProviders()).hasSize(1);
+    ImmutableMap<String, CertificateProviderInfo> certProviderInfo = info.certProviders();
+    assertThat(certProviderInfo.keySet()).containsExactly("mtls_channel_creds_identity_certs");
+    CertificateProviderInfo mtlsChannelCredCertProviderInfo =
+        certProviderInfo.get("mtls_channel_creds_identity_certs");
+    assertThat(mtlsChannelCredCertProviderInfo.config().keySet())
+        .containsExactly("ca_certificate_file", "certificate_file", "private_key_file");
+    assertThat(mtlsChannelCredCertProviderInfo.config().get("ca_certificate_file"))
+        .isEqualTo(rootCertPath);
+    assertThat(mtlsChannelCredCertProviderInfo.config().get("certificate_file"))
+        .isEqualTo(certChainPath);
+    assertThat(mtlsChannelCredCertProviderInfo.config().get("private_key_file"))
+        .isEqualTo(privateKeyPath);
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
