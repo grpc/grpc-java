@@ -25,6 +25,8 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_P
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SPIFFE_TRUST_MAP_1_FILE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -355,6 +357,33 @@ public class FileWatcherCertificateProviderTest {
         TimeUnit.MILLISECONDS);
     provider.checkAndReloadCertificates();
     verifyWatcherErrorUpdates(Status.Code.UNKNOWN, NoSuchFileException.class, 1, 0, "root.pem");
+  }
+
+  @Test
+  public void illegalConstructorArguments_MissingPrivateKeyWhileCertChainPresent()
+      throws IllegalArgumentException {
+    Exception ex = assertThrows(
+        IllegalArgumentException.class,
+        () -> new FileWatcherCertificateProvider(
+            watcher, true, null, keyFile, rootFile, null, 600L, timeService, timeProvider));
+
+    String expectedMsg = "certFile and keyFile must be both set or both unset";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
+  }
+
+  @Test
+  public void illegalConstructorArguments_NoFilesToWatch() throws IllegalArgumentException {
+    Exception ex = assertThrows(
+        IllegalArgumentException.class,
+        () -> new FileWatcherCertificateProvider(
+            watcher, true, null, null, null, null, 600L, timeService, timeProvider));
+
+    String expectedMsg = "must be watching either root or identity certificates";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
   }
 
   private void commonErrorTest(

@@ -206,7 +206,9 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'certificate_file' is required in the config");
+      assertThat(npe)
+          .hasMessageThat()
+          .isEqualTo("'certificate_file' and 'private_key_file' must be both set or both unset");
     }
   }
 
@@ -220,24 +222,69 @@ public class FileWatcherCertificateProviderProviderTest {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo("'private_key_file' is required in the config");
+      assertThat(npe)
+          .hasMessageThat()
+          .isEqualTo("'certificate_file' and 'private_key_file' must be both set or both unset");
     }
   }
 
   @Test
-  public void createProvider_missingRoot_expectException() throws IOException {
-    String expectedMessage = enableSpiffe ? "either 'ca_certificate_file' or "
-        + "'spiffe_trust_bundle_map_file' is required in the config"
-        : "'ca_certificate_file' is required in the config";
+  public void createProvider_missingRootAndSpiffeConfig() throws IOException {
     CertificateProvider.DistributorWatcher distWatcher =
         new CertificateProvider.DistributorWatcher();
     @SuppressWarnings("unchecked")
     Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_ROOT_AND_SPIFFE_CONFIG);
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
+    provider.createCertificateProvider(map, distWatcher, true);
+    verify(fileWatcherCertificateProviderFactory, times(1))
+        .create(
+            eq(distWatcher),
+            eq(true),
+            eq("/var/run/gke-spiffe/certs/certificates.pem"),
+            eq("/var/run/gke-spiffe/certs/private_key.pem"),
+            eq(null),
+            eq(null),
+            eq(600L),
+            eq(mockService),
+            eq(timeProvider));
+  }
+
+  @Test
+  public void createProvider_missingCertAndKeyConfig() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+        new CertificateProvider.DistributorWatcher();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(MISSING_CERT_AND_KEY_CONFIG);
+    ScheduledExecutorService mockService = mock(ScheduledExecutorService.class);
+    when(scheduledExecutorServiceFactory.create()).thenReturn(mockService);
+    provider.createCertificateProvider(map, distWatcher, true);
+    verify(fileWatcherCertificateProviderFactory, times(1))
+        .create(
+            eq(distWatcher),
+            eq(true),
+            eq(null),
+            eq(null),
+            eq("/var/run/gke-spiffe/certs/ca_certificates.pem"),
+            eq(null),
+            eq(600L),
+            eq(mockService),
+            eq(timeProvider));
+  }
+
+  @Test
+  public void createProvider_emptyConfig_expectException() throws IOException {
+    CertificateProvider.DistributorWatcher distWatcher =
+        new CertificateProvider.DistributorWatcher();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> map = (Map<String, ?>) JsonParser.parse(EMPTY_CONFIG);
     try {
       provider.createCertificateProvider(map, distWatcher, true);
       fail("exception expected");
     } catch (NullPointerException npe) {
-      assertThat(npe).hasMessageThat().isEqualTo(expectedMessage);
+      assertThat(npe)
+          .hasMessageThat()
+          .isEqualTo("must be watching either root or identity certificates");
     }
   }
 
@@ -291,6 +338,13 @@ public class FileWatcherCertificateProviderProviderTest {
           + "        \"certificate_file\": \"/var/run/gke-spiffe/certs/certificates.pem\","
           + "        \"private_key_file\": \"/var/run/gke-spiffe/certs/private_key.pem\""
           + "      }";
+
+  private static final String MISSING_CERT_AND_KEY_CONFIG =
+      "{\n"
+          + "        \"ca_certificate_file\": \"/var/run/gke-spiffe/certs/ca_certificates.pem\""
+          + "      }";
+
+  private static final String EMPTY_CONFIG = "{\n}";
 
   private static final String ZERO_REFRESH_INTERVAL =
       "{\n"
