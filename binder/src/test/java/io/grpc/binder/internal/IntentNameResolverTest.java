@@ -146,6 +146,55 @@ public final class IntentNameResolverTest {
   }
 
   @Test
+  public void testExplicitResolutionByComponent_returnsRestrictedResults() throws Exception {
+    Intent intent = newIntent();
+    IntentFilter serviceIntentFilter = newFilterMatching(intent);
+
+    shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
+    shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
+    shadowPackageManager.addServiceIfNotPresent(ANOTHER_COMPONENT_NAME);
+    shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
+
+    NameResolver nameResolver =
+        newNameResolver(getIntentUri(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
+    nameResolver.start(mockListener);
+    shadowOf(getMainLooper()).idle();
+
+    verify(mockListener, never()).onError(any());
+    verify(mockListener).onResult(resultCaptor.capture());
+    assertThat(getAddressesOrThrow(resultCaptor.getValue()))
+        .containsExactly(toAddressList(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
+
+    nameResolver.shutdown();
+    shadowOf(getMainLooper()).idle();
+  }
+
+  @Test
+  public void testExplicitResolutionByPackage_returnsRestrictedResults() throws Exception {
+    Intent intent = newIntent();
+    IntentFilter serviceIntentFilter = newFilterMatching(intent);
+
+    shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
+    shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
+    shadowPackageManager.addServiceIfNotPresent(ANOTHER_COMPONENT_NAME);
+    shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
+
+    NameResolver nameResolver =
+        newNameResolver(
+            getIntentUri(intent.cloneFilter().setPackage(ANOTHER_COMPONENT_NAME.getPackageName())));
+    nameResolver.start(mockListener);
+    shadowOf(getMainLooper()).idle();
+
+    verify(mockListener, never()).onError(any());
+    verify(mockListener).onResult(resultCaptor.capture());
+    assertThat(getAddressesOrThrow(resultCaptor.getValue()))
+        .containsExactly(toAddressList(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
+
+    nameResolver.shutdown();
+    shadowOf(getMainLooper()).idle();
+  }
+
+  @Test
   public void testResolution_setsPreAuthEagAttribute() throws Exception {
     Intent intent = newIntent();
     IntentFilter serviceIntentFilter = newFilterMatching(intent);

@@ -15,7 +15,7 @@
  */
 package io.grpc.binder.internal;
 
-import static android.content.Intent.URI_INTENT_SCHEME;
+import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.binder.internal.SystemApis.createContextAsUser;
@@ -187,23 +187,24 @@ final class IntentNameResolver extends NameResolver {
 
   private ResolutionResult queryPackageManager() throws StatusException {
     Intent targetIntent = parseUri(targetUri);
+    List<ResolveInfo> queryResults = queryIntentServices(targetIntent);
 
     // Avoid a spurious UnsafeIntentLaunchViolation later. Since S, Android's StrictMode is very
     // conservative, marking any Intent parsed from a string as suspicious and complaining when you
     // bind to it. But all this is pointless with grpc-binder, which already goes even further by
     // not trusting addresses at all! Instead, we rely on SecurityPolicy, which won't allow a
     // connection to an unauthorized server UID no matter how you got there.
-    targetIntent = sanitize(targetIntent);
+    Intent prototypeBindIntent = sanitize(targetIntent);
 
     // Model each matching android.app.Service as an EAG (server) with a single address.
     List<EquivalentAddressGroup> addresses = new ArrayList<>();
-    for (ResolveInfo resolveInfo : queryIntentServices(targetIntent)) {
-      targetIntent.setComponent(
+    for (ResolveInfo resolveInfo : queryResults) {
+      prototypeBindIntent.setComponent(
           new ComponentName(resolveInfo.serviceInfo.packageName, resolveInfo.serviceInfo.name));
       addresses.add(
           new EquivalentAddressGroup(
               AndroidComponentAddress.newBuilder()
-                  .setBindIntent(targetIntent) // Makes a copy.
+                  .setBindIntent(prototypeBindIntent) // Makes a copy.
                   .setTargetUser(targetUser)
                   .build(),
               CONSTANT_EAG_ATTRS));
@@ -237,7 +238,7 @@ final class IntentNameResolver extends NameResolver {
 
   private static Intent parseUri(URI targetUri) throws StatusException {
     try {
-      return Intent.parseUri(targetUri.toString(), URI_INTENT_SCHEME);
+      return Intent.parseUri(targetUri.toString(), URI_ANDROID_APP_SCHEME);
     } catch (URISyntaxException uriSyntaxException) {
       throw Status.INVALID_ARGUMENT
           .withCause(uriSyntaxException)
