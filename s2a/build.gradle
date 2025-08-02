@@ -49,17 +49,7 @@ dependencies {
     }
     testRuntimeOnly (libraries.netty.tcnative) {
         artifact {
-            classifier = "osx-x86_64"
-        }
-    }
-    testRuntimeOnly (libraries.netty.tcnative) {
-        artifact {
             classifier = "osx-aarch_64"
-        }
-    }
-    testRuntimeOnly (libraries.netty.tcnative) {
-        artifact {
-            classifier = "windows-x86_64"
         }
     }
 
