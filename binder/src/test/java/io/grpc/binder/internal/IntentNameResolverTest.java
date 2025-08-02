@@ -157,15 +157,15 @@ public final class IntentNameResolverTest {
 
     NameResolver nameResolver =
         newNameResolver(getIntentUri(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
-    nameResolver.start(mockListener);
+    syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
 
-    nameResolver.shutdown();
+    syncContext.execute(nameResolver::shutdown);
     shadowOf(getMainLooper()).idle();
   }
 
@@ -182,15 +182,15 @@ public final class IntentNameResolverTest {
     NameResolver nameResolver =
         newNameResolver(
             getIntentUri(intent.cloneFilter().setPackage(ANOTHER_COMPONENT_NAME.getPackageName())));
-    nameResolver.start(mockListener);
+    syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
     verify(mockListener, never()).onError(any());
-    verify(mockListener).onResult(resultCaptor.capture());
+    verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(getAddressesOrThrow(resultCaptor.getValue()))
         .containsExactly(toAddressList(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
 
-    nameResolver.shutdown();
+    syncContext.execute(nameResolver::shutdown);
     shadowOf(getMainLooper()).idle();
   }
 
