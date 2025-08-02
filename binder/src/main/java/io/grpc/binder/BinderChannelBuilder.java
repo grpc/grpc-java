@@ -321,6 +321,8 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   public ManagedChannel build() {
     transportFactoryBuilder.setOffloadExecutorPool(
         managedChannelImplBuilder.getOffloadExecutorPool());
+    setNameResolverArg(
+        ApiConstants.SOURCE_ANDROID_CONTEXT, transportFactoryBuilder.getSourceContext());
     return super.build();
   }
 }

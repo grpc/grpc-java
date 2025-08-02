@@ -35,6 +35,18 @@ public final class ApiConstants {
   public static final String ACTION_BIND = "grpc.io.action.BIND";
 
   /**
+   * Gives a {@link NameResolver} access to its Channel's "source" {@link android.content.Context},
+   * the entry point to almost every other Android API.
+   *
+   * <p>This argument is set automatically by {@link BinderChannelBuilder}. Any value passed to
+   * {@link io.grpc.ManagedChannelBuilder#setNameResolverArg} will be ignored.
+   *
+   * <p>See {@link BinderChannelBuilder#forTarget(String, android.content.Context)} for more.
+   */
+  public static final NameResolver.Args.Key<android.content.Context> SOURCE_ANDROID_CONTEXT =
+      NameResolver.Args.Key.create("source-android-context");
+
+  /**
    * Specifies the Android user in which target URIs should be resolved.
    *
    * <p>{@link UserHandle} can't reasonably be encoded in a target URI string. Instead, all {@link
