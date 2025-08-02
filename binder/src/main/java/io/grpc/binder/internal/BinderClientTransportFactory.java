@@ -142,6 +142,10 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
       return this;
     }
 
+    public Context getSourceContext() {
+      return sourceContext;
+    }
+
     public Builder setOffloadExecutorPool(ObjectPool<? extends Executor> offloadExecutorPool) {
       this.offloadExecutorPool = checkNotNull(offloadExecutorPool, "offloadExecutorPool");
       return this;

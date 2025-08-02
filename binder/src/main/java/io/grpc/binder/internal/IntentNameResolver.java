@@ -15,7 +15,6 @@
  */
 package io.grpc.binder.internal;
 
-import static android.content.Intent.URI_ANDROID_APP_SCHEME;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.binder.internal.SystemApis.createContextAsUser;
@@ -44,8 +43,6 @@ import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -57,7 +54,7 @@ import javax.annotation.Nullable;
  * AndroidComponentAddress} that match it by manifest intent filter.
  */
 final class IntentNameResolver extends NameResolver {
-  private final URI targetUri;
+  private final Intent targetIntent; // Never mutated.
   @Nullable private final UserHandle targetUser; // null means same user that hosts this process.
   private final Context targetUserContext;
   private final Executor offloadExecutor;
@@ -83,9 +80,12 @@ final class IntentNameResolver extends NameResolver {
           .set(ApiConstants.PRE_AUTH_SERVER_OVERRIDE, true)
           .build();
 
-  IntentNameResolver(Context context, URI targetUri, Args args) {
-    this.targetUri = targetUri;
+  IntentNameResolver(Intent targetIntent, Args args) {
+    this.targetIntent = targetIntent;
     this.targetUser = args.getArg(ApiConstants.TARGET_ANDROID_USER);
+    Context context =
+        checkNotNull(args.getArg(ApiConstants.SOURCE_ANDROID_CONTEXT), "SOURCE_ANDROID_CONTEXT")
+            .getApplicationContext();
     this.targetUserContext =
         targetUser != null
             ? createContextAsUser(context, targetUser, /* flags= */ 0) // @SystemApi since R.
@@ -186,7 +186,6 @@ final class IntentNameResolver extends NameResolver {
   }
 
   private ResolutionResult queryPackageManager() throws StatusException {
-    Intent targetIntent = parseUri(targetUri);
     List<ResolveInfo> queryResults = queryIntentServices(targetIntent);
 
     // Avoid a spurious UnsafeIntentLaunchViolation later. Since S, Android's StrictMode is very
@@ -229,22 +228,12 @@ final class IntentNameResolver extends NameResolver {
     List<ResolveInfo> intentServices =
         targetUserContext.getPackageManager().queryIntentServices(intent, flags);
     if (intentServices == null || intentServices.isEmpty()) {
+      // Must be the same as when ServiceBinding's call to bindService() returns false.
       throw Status.UNIMPLEMENTED
           .withDescription("Service not found for intent " + intent)
           .asException();
     }
     return intentServices;
-  }
-
-  private static Intent parseUri(URI targetUri) throws StatusException {
-    try {
-      return Intent.parseUri(targetUri.toString(), URI_ANDROID_APP_SCHEME);
-    } catch (URISyntaxException uriSyntaxException) {
-      throw Status.INVALID_ARGUMENT
-          .withCause(uriSyntaxException)
-          .withDescription("Failed to parse target URI " + targetUri + " as intent")
-          .asException();
-    }
   }
 
   // Returns a new Intent with the same action, data and categories as 'input'.

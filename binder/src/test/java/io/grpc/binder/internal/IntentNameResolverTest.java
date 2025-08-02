@@ -17,7 +17,6 @@ package io.grpc.binder.internal;
 
 import static android.content.Intent.ACTION_PACKAGE_ADDED;
 import static android.content.Intent.ACTION_PACKAGE_REPLACED;
-import static android.content.Intent.URI_INTENT_SCHEME;
 import static android.os.Looper.getMainLooper;
 import static android.os.Process.myUserHandle;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -54,7 +53,6 @@ import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.SocketAddress;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -91,30 +89,19 @@ public final class IntentNameResolverTest {
 
   @Test
   public void testResolverForIntentScheme_returnsResolverWithLocalHostAuthority() throws Exception {
-    URI uri = getIntentUri(newIntent());
-    NameResolver resolver = newNameResolver(uri);
+    NameResolver resolver = newNameResolver(newIntent());
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("localhost");
   }
 
   @Test
   public void testResolutionWithoutServicesAvailable_returnsUnimplemented() throws Exception {
-    NameResolver nameResolver = newNameResolver(getIntentUri(newIntent()));
+    NameResolver nameResolver = newNameResolver(newIntent());
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
     verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode())
         .isEqualTo(Status.UNIMPLEMENTED.getCode());
-  }
-
-  @Test
-  public void testResolutionWithBadUri_returnsIllegalArg() throws Exception {
-    NameResolver nameResolver = newNameResolver(new URI("intent:xxx#Intent;e.x=1;end;"));
-    syncContext.execute(() -> nameResolver.start(mockListener));
-    shadowOf(getMainLooper()).idle();
-    verify(mockListener).onResult2(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddressesOrError().getStatus().getCode())
-        .isEqualTo(Status.INVALID_ARGUMENT.getCode());
   }
 
   @Test
@@ -130,7 +117,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addServiceIfNotPresent(ANOTHER_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -156,7 +143,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
     NameResolver nameResolver =
-        newNameResolver(getIntentUri(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME)));
+        newNameResolver(intent.cloneFilter().setComponent(ANOTHER_COMPONENT_NAME));
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -180,8 +167,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
     NameResolver nameResolver =
-        newNameResolver(
-            getIntentUri(intent.cloneFilter().setPackage(ANOTHER_COMPONENT_NAME.getPackageName())));
+        newNameResolver(intent.cloneFilter().setPackage(ANOTHER_COMPONENT_NAME.getPackageName()));
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -202,7 +188,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -231,7 +217,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addServiceIfNotPresent(ANOTHER_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -266,7 +252,7 @@ public final class IntentNameResolverTest {
 
     NameResolver nameResolver =
         newNameResolver(
-            getIntentUri(intent),
+            intent,
             newNameResolverArgs().setArg(ApiConstants.TARGET_ANDROID_USER, myUserHandle()).build());
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
@@ -309,7 +295,7 @@ public final class IntentNameResolverTest {
     someServiceInfo.directBootAware = true;
     shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -351,7 +337,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addServiceIfNotPresent(ANOTHER_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(ANOTHER_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -384,7 +370,7 @@ public final class IntentNameResolverTest {
     shadowPackageManager.addServiceIfNotPresent(SOME_COMPONENT_NAME);
     shadowPackageManager.addIntentFilterForService(SOME_COMPONENT_NAME, serviceIntentFilter);
 
-    NameResolver nameResolver = newNameResolver(getIntentUri(intent));
+    NameResolver nameResolver = newNameResolver(intent);
     syncContext.execute(() -> nameResolver.start(mockListener)); // Should kick off the 1st lookup.
     syncContext.execute(nameResolver::refresh); // Should queue a lookup to run when 1st finishes.
     syncContext.execute(nameResolver::refresh); // Should be ignored since a lookup is already Q'd.
@@ -427,8 +413,7 @@ public final class IntentNameResolverTest {
 
     NameResolver nameResolver =
         newNameResolver(
-            getIntentUri(intent),
-            newNameResolverArgs().setSynchronizationContext(syncContext).build());
+            intent, newNameResolverArgs().setSynchronizationContext(syncContext).build());
     syncContext.execute(() -> nameResolver.start(mockListener));
     shadowOf(getMainLooper()).idle();
 
@@ -468,10 +453,6 @@ public final class IntentNameResolverTest {
     return filter;
   }
 
-  private static URI getIntentUri(Intent intent) throws Exception {
-    return new URI(intent.toUri(URI_INTENT_SCHEME));
-  }
-
   private static List<EquivalentAddressGroup> getEagsOrThrow(ResolutionResult result) {
     StatusOr<List<EquivalentAddressGroup>> eags = result.getAddressesOrError();
     if (!eags.hasValue()) {
@@ -496,12 +477,12 @@ public final class IntentNameResolverTest {
     return builder.build();
   }
 
-  private NameResolver newNameResolver(URI targetUri) {
-    return newNameResolver(targetUri, args);
+  private NameResolver newNameResolver(Intent targetIntent) {
+    return newNameResolver(targetIntent, args);
   }
 
-  private NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-    return new IntentNameResolver(appContext, targetUri, args);
+  private NameResolver newNameResolver(Intent targetIntent, NameResolver.Args args) {
+    return new IntentNameResolver(targetIntent, args);
   }
 
   /** Returns a new test-specific {@link NameResolver.Args} instance. */
@@ -511,6 +492,7 @@ public final class IntentNameResolverTest {
         .setProxyDetector((target) -> null) // No proxies here.
         .setSynchronizationContext(syncContext)
         .setOffloadExecutor(ContextCompat.getMainExecutor(appContext))
+        .setArg(ApiConstants.SOURCE_ANDROID_CONTEXT, appContext)
         .setServiceConfigParser(mock(ServiceConfigParser.class));
   }
 

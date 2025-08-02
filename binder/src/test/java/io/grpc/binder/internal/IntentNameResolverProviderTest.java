@@ -17,6 +17,7 @@ package io.grpc.binder.internal;
 
 import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.robolectric.Shadows.shadowOf;
@@ -29,6 +30,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.SynchronizationContext;
+import io.grpc.binder.ApiConstants;
 import java.net.URI;
 import org.junit.Before;
 import org.junit.Rule;
@@ -57,7 +59,7 @@ public final class IntentNameResolverProviderTest {
 
   @Before
   public void setUp() {
-    provider = new IntentNameResolverProvider(appContext);
+    provider = new IntentNameResolverProvider();
   }
 
   @Test
@@ -72,6 +74,13 @@ public final class IntentNameResolverProviderTest {
   }
 
   @Test
+  public void testResolutionWithBadUri_throwsIllegalArg() throws Exception {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> provider.newNameResolver(new URI("intent:xxx#Intent;e.x=1;end;"), args));
+  }
+
+  @Test
   public void testResolverForIntentScheme_returnsResolver() throws Exception {
     URI uri = new URI("intent://authority/path#Intent;action=action;scheme=scheme;end");
     NameResolver resolver = provider.newNameResolver(uri, args);
@@ -81,7 +90,7 @@ public final class IntentNameResolverProviderTest {
     shadowOf(getMainLooper()).idle();
     verify(mockListener).onResult2(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddressesOrError()).isNotNull();
-    syncContext.execute(() -> resolver.shutdown());
+    syncContext.execute(resolver::shutdown);
     shadowOf(getMainLooper()).idle();
   }
 
@@ -93,6 +102,7 @@ public final class IntentNameResolverProviderTest {
         .setSynchronizationContext(syncContext)
         .setOffloadExecutor(ContextCompat.getMainExecutor(appContext))
         .setServiceConfigParser(mock(ServiceConfigParser.class))
+        .setArg(ApiConstants.SOURCE_ANDROID_CONTEXT, appContext)
         .build();
   }
 

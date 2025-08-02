@@ -15,18 +15,17 @@
  */
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import static android.content.Intent.URI_INTENT_SCHEME;
 
-import android.content.Context;
 import android.content.Intent;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.NameResolverRegistry;
 import io.grpc.binder.AndroidComponentAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -36,35 +35,7 @@ import javax.annotation.Nullable;
  */
 public final class IntentNameResolverProvider extends NameResolverProvider {
 
-  /** Defined by {@link Intent#URI_INTENT_SCHEME}. */
-  public static final String ANDROID_INTENT_SCHEME = "intent";
-
-  private static boolean isDefaultRegistered;
-
-  private final Context context;
-
-  /**
-   * Creates a new IntentNameResolverProvider.
-   *
-   * @param context an Android Application {@link Context}, for access to PackageManager.
-   */
-  IntentNameResolverProvider(Context context) {
-    this.context = checkNotNull(context);
-  }
-
-  /**
-   * Registers a new instance of this {@link NameResolverProvider} in the {@link
-   * NameResolverRegistry#getDefaultRegistry()}, unless a previous call has already done so.
-   *
-   * @param context any Android {@link Context}, not retained, for access to the Application
-   */
-  public static synchronized void maybeCreateAndDefaultRegister(Context context) {
-    if (!isDefaultRegistered) {
-      NameResolverRegistry.getDefaultRegistry()
-          .register(new IntentNameResolverProvider(context.getApplicationContext()));
-      isDefaultRegistered = true;
-    }
-  }
+  static final String ANDROID_INTENT_SCHEME = "intent";
 
   @Override
   public String getDefaultScheme() {
@@ -75,7 +46,7 @@ public final class IntentNameResolverProvider extends NameResolverProvider {
   @Override
   public NameResolver newNameResolver(URI targetUri, final Args args) {
     if (Objects.equals(targetUri.getScheme(), ANDROID_INTENT_SCHEME)) {
-      return new IntentNameResolver(context, targetUri, args);
+      return new IntentNameResolver(parseUriArg(targetUri), args);
     } else {
       return null;
     }
@@ -88,11 +59,19 @@ public final class IntentNameResolverProvider extends NameResolverProvider {
 
   @Override
   public int priority() {
-    return 5; // default.
+    return 3; // Lower than DNS so we don't accidentally become the default scheme for a registry.
   }
 
   @Override
   public ImmutableSet<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return ImmutableSet.of(AndroidComponentAddress.class);
+  }
+
+  private static Intent parseUriArg(URI targetUri) {
+    try {
+      return Intent.parseUri(targetUri.toString(), URI_INTENT_SCHEME);
+    } catch (URISyntaxException e) {
+      throw new IllegalArgumentException(e);
+    }
   }
 }

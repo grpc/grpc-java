@@ -17,7 +17,6 @@ package io.grpc.binder.internal;
 
 import android.content.Context;
 import android.os.UserHandle;
-import com.google.common.base.VerifyException;
 import java.lang.reflect.Method;
 
 /**
@@ -50,7 +49,7 @@ public class SystemApis {
       }
       return (Context) createContextAsUserMethod.invoke(context, userHandle, flags);
     } catch (ReflectiveOperationException e) {
-      throw new VerifyException(e);
+      throw new IllegalStateException("Requires SDK_INT >= R and @SystemApi visibility", e);
     }
   }
 }

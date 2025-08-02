@@ -28,7 +28,6 @@ import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.binder.internal.BinderClientTransportFactory;
-import io.grpc.binder.internal.IntentNameResolverProvider;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ManagedChannelImplBuilder;
 import java.util.concurrent.Executor;
@@ -178,9 +177,6 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
           new ManagedChannelImplBuilder(
               directAddress, directAddress.getAuthority(), transportFactoryBuilder, null);
     } else {
-      if (checkNotNull(target).startsWith("intent:")) {
-        IntentNameResolverProvider.maybeCreateAndDefaultRegister(sourceContext);
-      }
       managedChannelImplBuilder =
           new ManagedChannelImplBuilder(target, transportFactoryBuilder, null);
     }
@@ -325,6 +321,8 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   public ManagedChannel build() {
     transportFactoryBuilder.setOffloadExecutorPool(
         managedChannelImplBuilder.getOffloadExecutorPool());
+    setNameResolverArg(
+        ApiConstants.SOURCE_ANDROID_CONTEXT, transportFactoryBuilder.getSourceContext());
     return super.build();
   }
 }
