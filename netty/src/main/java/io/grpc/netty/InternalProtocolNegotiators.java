@@ -171,7 +171,7 @@ public final class InternalProtocolNegotiators {
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
     return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
-        Optional.absent(), null, null, sni);
+        Optional.absent(), null, null);
   }
 
   public static class ProtocolNegotiationHandler

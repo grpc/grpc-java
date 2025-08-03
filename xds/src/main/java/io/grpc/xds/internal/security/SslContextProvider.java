@@ -44,6 +44,7 @@ import java.util.concurrent.Executor;
 public abstract class SslContextProvider implements Closeable {
 
   protected final BaseTlsContext tlsContext;
+  private String sni;
 
   @VisibleForTesting public abstract static class Callback {
     private final Executor executor;

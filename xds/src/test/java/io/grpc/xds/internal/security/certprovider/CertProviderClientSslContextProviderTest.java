@@ -84,7 +84,7 @@ public class CertProviderClientSslContextProviderTest {
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
-            bootstrapInfo.node().toEnvoyProtoNode(),
+            key.getValue(), bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
   }
 
@@ -106,7 +106,7 @@ public class CertProviderClientSslContextProviderTest {
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
-            bootstrapInfo.node().toEnvoyProtoNode(),
+            key.getValue(), bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
   }
 

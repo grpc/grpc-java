@@ -20,10 +20,11 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
 import io.grpc.xds.internal.security.certprovider.CertProviderClientSslContextProviderFactory;
+import java.util.AbstractMap;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
-    implements ValueFactory<UpstreamTlsContext, SslContextProvider> {
+    implements ValueFactory<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>, SslContextProvider> {
 
   private BootstrapInfo bootstrapInfo;
   private final CertProviderClientSslContextProviderFactory
@@ -41,9 +42,9 @@ final class ClientSslContextProviderFactory
 
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public SslContextProvider create(UpstreamTlsContext upstreamTlsContext) {
+  public SslContextProvider create(AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String> key) {
     return certProviderClientSslContextProviderFactory.getProvider(
-        upstreamTlsContext,
+        key.getKey(), key.getValue(),
         bootstrapInfo.node().toEnvoyProtoNode(),
         bootstrapInfo.certProviders());
   }

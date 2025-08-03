@@ -55,7 +55,7 @@ public final class CertProviderClientSslContextProviderFactory {
    */
   public SslContextProvider getProvider(
       UpstreamTlsContext upstreamTlsContext,
-      Node node,
+      String sni, Node node,
       @Nullable Map<String, CertificateProviderInfo> certProviders) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
@@ -74,6 +74,7 @@ public final class CertProviderClientSslContextProviderFactory {
           rootCertInstance,
           staticCertValidationContext,
           upstreamTlsContext,
+          sni,
           certificateProviderStore);
     }
     throw new UnsupportedOperationException("Unsupported configurations in UpstreamTlsContext!");

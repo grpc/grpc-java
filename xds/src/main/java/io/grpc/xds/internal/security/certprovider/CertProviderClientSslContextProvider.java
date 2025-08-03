@@ -39,7 +39,7 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
       CommonTlsContext.CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
       UpstreamTlsContext upstreamTlsContext,
-      CertificateProviderStore certificateProviderStore) {
+      String sni, CertificateProviderStore certificateProviderStore) {
     super(
         node,
         certProviders,

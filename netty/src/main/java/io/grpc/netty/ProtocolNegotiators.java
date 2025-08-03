@@ -609,7 +609,7 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, this,
+          this.executor, negotiationLogger, handshakeCompleteRunnable,
               x509ExtendedTrustManager, sni);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
@@ -641,7 +641,6 @@ final class ProtocolNegotiators {
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
                      Executor executor, ChannelLogger negotiationLogger,
                      Optional<Runnable> handshakeCompleteRunnable,
-                     ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
                      X509TrustManager x509ExtendedTrustManager, String sni) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
@@ -754,7 +753,7 @@ final class ProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    *
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
-   * @param sni
+   * @param sni the SNI value to use in the Tls handshake
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
                                        ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,

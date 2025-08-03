@@ -59,6 +59,7 @@ import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -208,6 +209,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private Map<String, Struct> filterMetadata = ImmutableMap.of();
     @Nullable
     private final ServerInfo lrsServerInfo;
+    private final Map<String, SslContextProviderSupplier> sslContextProviderSupplierMap = new HashMap<>();
 
     private ClusterImplLbHelper(AtomicLong inFlights, @Nullable ServerInfo lrsServerInfo) {
       this.inFlights = checkNotNull(inFlights, "inFlights");
@@ -294,11 +296,16 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
             XdsAttributes.ATTR_CLUSTER_NAME, cluster);
         if (tlsContext != null) {
+          String addressNameAttr = eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME);
+          if (!sslContextProviderSupplierMap.containsKey(addressNameAttr)) {
+            sslContextProviderSupplierMap.put(addressNameAttr,
+                new SslContextProviderSupplier(tlsContext,
+                    (TlsContextManager) xdsClient.getSecurityConfig(),
+                    eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)));
+          }
           attrBuilder.set(
               SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-              new SslContextProviderSupplier(tlsContext,
-                  (TlsContextManager) xdsClient.getSecurityConfig(),
-                  eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)));
+              sslContextProviderSupplierMap.get(addressNameAttr));
         }
         newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
