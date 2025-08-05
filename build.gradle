@@ -25,7 +25,7 @@ subprojects {
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/maven2/"
+            url = "https://maven-central.storage-download.googleapis.com/maven2/"
             metadataSources {
                 mavenPom()
                 ignoreGradleMetadataRedirection()
@@ -241,9 +241,9 @@ subprojects {
         tasks.named("test").configure {
             testLogging {
                 exceptionFormat = 'full'
-                showExceptions true
-                showCauses true
-                showStackTraces true
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
             }
             maxHeapSize = '1500m'
         }
@@ -410,7 +410,7 @@ subprojects {
         }
 
         signing {
-            required false
+            required = false
             sign publishing.publications.maven
         }
 

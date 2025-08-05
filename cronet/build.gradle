@@ -11,7 +11,7 @@ repositories {
 }
 
 android {
-    namespace 'io.grpc.cronet'
+    namespace = 'io.grpc.cronet'
     compileSdkVersion 33
     defaultConfig {
         minSdkVersion 21

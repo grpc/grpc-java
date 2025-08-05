@@ -85,6 +85,7 @@ import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.Locality;
@@ -145,7 +146,7 @@ import org.mockito.verification.VerificationMode;
 public abstract class GrpcXdsClientImplTestBase {
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
-  private static final String SERVER_URI_CUSTOME_AUTHORITY = "trafficdirector2.googleapis.com";
+  private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   private static final String LDS_RESOURCE = "listener.googleapis.com";
   private static final String RDS_RESOURCE = "route-configuration.googleapis.com";
@@ -304,6 +305,30 @@ public abstract class GrpcXdsClientImplTestBase {
   private final BindableService adsService = createAdsService();
   private final BindableService lrsService = createLrsService();
 
+  private XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
+    @Override
+    public XdsTransport create(ServerInfo serverInfo) {
+      if (serverInfo.target().equals(SERVER_URI)) {
+        return new GrpcXdsTransport(channel);
+      }
+      if (serverInfo.target().equals(SERVER_URI_CUSTOM_AUTHORITY)) {
+        if (channelForCustomAuthority == null) {
+          channelForCustomAuthority = cleanupRule.register(
+              InProcessChannelBuilder.forName(serverName).directExecutor().build());
+        }
+        return new GrpcXdsTransport(channelForCustomAuthority);
+      }
+      if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
+        if (channelForEmptyAuthority == null) {
+          channelForEmptyAuthority = cleanupRule.register(
+              InProcessChannelBuilder.forName(serverName).directExecutor().build());
+        }
+        return new GrpcXdsTransport(channelForEmptyAuthority);
+      }
+      throw new IllegalArgumentException("Can not create channel for " + serverInfo);
+    }
+  };
+
   @Before
   public void setUp() throws IOException {
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
@@ -322,32 +347,9 @@ public abstract class GrpcXdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
-      @Override
-      public XdsTransport create(ServerInfo serverInfo) {
-        if (serverInfo.target().equals(SERVER_URI)) {
-          return new GrpcXdsTransport(channel);
-        }
-        if (serverInfo.target().equals(SERVER_URI_CUSTOME_AUTHORITY)) {
-          if (channelForCustomAuthority == null) {
-            channelForCustomAuthority = cleanupRule.register(
-                InProcessChannelBuilder.forName(serverName).directExecutor().build());
-          }
-          return new GrpcXdsTransport(channelForCustomAuthority);
-        }
-        if (serverInfo.target().equals(SERVER_URI_EMPTY_AUTHORITY)) {
-          if (channelForEmptyAuthority == null) {
-            channelForEmptyAuthority = cleanupRule.register(
-                InProcessChannelBuilder.forName(serverName).directExecutor().build());
-          }
-          return new GrpcXdsTransport(channelForEmptyAuthority);
-        }
-        throw new IllegalArgumentException("Can not create channel for " + serverInfo);
-      }
-    };
 
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
-        true);
+        true, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -357,7 +359,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
@@ -3155,6 +3157,108 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(anotherWatcher).onError(any());
   }
 
+  @Test
+  public void resourceTimerIsTransientError_schedulesExtendedTimeout() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    ServerInfo serverInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
+        false, true, true);
+    BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(serverInfo))
+            .node(NODE)
+            .authorities(ImmutableMap.of(
+                "",
+                AuthorityInfo.create(
+                    "xdstp:///envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+            .certProviders(ImmutableMap.of())
+            .build();
+    xdsClient = new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+    @SuppressWarnings("unchecked")
+    ResourceWatcher<CdsUpdate> watcher = mock(ResourceWatcher.class);
+    String resourceName = "cluster.googleapis.com";
+
+    xdsClient.watchXdsResource(
+        XdsClusterResource.getInstance(),
+        resourceName,
+        watcher,
+        fakeClock.getScheduledExecutorService());
+
+    ScheduledTask task = Iterables.getOnlyElement(
+        fakeClock.getPendingTasks(CDS_RESOURCE_FETCH_TIMEOUT_TASK_FILTER));
+    assertThat(task.getDelay(TimeUnit.SECONDS))
+        .isEqualTo(XdsClientImpl.EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC);
+    fakeClock.runDueTasks();
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  @Test
+  public void resourceTimerIsTransientError_callsOnErrorUnavailable() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, true);
+    BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(xdsServerInfo))
+            .node(NODE)
+            .authorities(ImmutableMap.of(
+                "authority.xds.com",
+                AuthorityInfo.create(
+                    "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
+                "",
+                AuthorityInfo.create(
+                    "xdstp:///envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+            .certProviders(ImmutableMap.of("cert-instance-name",
+                CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
+            .build();
+    xdsClient = new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+    String timeoutResource = CDS_RESOURCE + "_timeout";
+    @SuppressWarnings("unchecked")
+    ResourceWatcher<CdsUpdate> timeoutWatcher = mock(ResourceWatcher.class);
+
+    xdsClient.watchXdsResource(
+        XdsClusterResource.getInstance(),
+        timeoutResource,
+        timeoutWatcher,
+        fakeClock.getScheduledExecutorService());
+
+    assertThat(resourceDiscoveryCalls).hasSize(1);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.verifyRequest(CDS, ImmutableList.of(timeoutResource), "", "", NODE);
+    fakeClock.forwardTime(XdsClientImpl.EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS);
+    fakeClock.runDueTasks();
+    ArgumentCaptor<Status> errorCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(timeoutWatcher).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo(
+        "Timed out waiting for resource " + timeoutResource + " from xDS server");
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
   private Answer<Void> blockUpdate(CyclicBarrier barrier) {
     return new Answer<Void>() {
       @Override
@@ -4220,7 +4324,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private BootstrapInfo buildBootStrap(String serverUri) {
 
     ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
-        ignoreResourceDeletion(), true);
+        ignoreResourceDeletion(), true, false);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))
@@ -4230,7 +4334,7 @@ public abstract class GrpcXdsClientImplTestBase {
             AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                 ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_CUSTOME_AUTHORITY, CHANNEL_CREDENTIALS))),
+                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
             "",
             AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
