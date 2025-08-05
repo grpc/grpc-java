@@ -70,6 +70,7 @@ public final class BlockingClientCall<ReqT, RespT> {
 
   private boolean writeClosed;
   private volatile Status closedStatus; // null if not closed
+  private volatile Metadata closedTrailers;
 
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
@@ -128,7 +129,7 @@ public final class BlockingClientCall<ReqT, RespT> {
       throw new IllegalStateException(
           "The message disappeared... are you reading from multiple threads?");
     } else if (!currentClosedStatus.isOk()) {
-      throw currentClosedStatus.asException();
+      throw currentClosedStatus.asException(closedTrailers);
     } else {
       return null;
     }
@@ -152,7 +153,7 @@ public final class BlockingClientCall<ReqT, RespT> {
 
     Status currentClosedStatus = closedStatus;
     if (currentClosedStatus != null && !currentClosedStatus.isOk()) {
-      throw currentClosedStatus.asException();
+      throw currentClosedStatus.asException(closedTrailers);
     }
 
     return !buffer.isEmpty();
@@ -343,6 +344,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     public void onClose(Status status, Metadata trailers) {
       Preconditions.checkState(closedStatus == null, "ClientCall already closed");
       closedStatus = status;
+      closedTrailers = trailers;
     }
   }
 
