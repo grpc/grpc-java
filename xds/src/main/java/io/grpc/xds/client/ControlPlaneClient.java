@@ -109,7 +109,7 @@ final class ControlPlaneClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    logId = InternalLogId.allocate("xds-client", serverInfo.target());
+    logId = InternalLogId.allocate("xds-cp-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
