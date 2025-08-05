@@ -27,14 +27,17 @@ import java.lang.reflect.Method;
  * "non-SDK" elements simply don't exist from our compiler's perspective. Instead we resort to
  * reflection but use the static wrappers found here to keep call sites readable and type safe.
  *
- * <p>>Modern Android's JRE also limits the visibility of these methods at *runtime*. Only certain
+ * <p>Modern Android's JRE also limits the visibility of these methods at *runtime*. Only certain
  * privileged apps installed on the system image app can call them, even using reflection, and this
  * wrapper doesn't change that. Callers are responsible for ensuring that the host app actually has
  * the ability to call @SystemApis. See
  * https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces for more.
  */
-public class SystemApis {
+final class SystemApis {
   private static volatile Method createContextAsUserMethod;
+
+  // Not to be instantiated.
+  private SystemApis() {}
 
   /** Returns a new Context object whose methods act as if they were running in the given user. */
   public static Context createContextAsUser(Context context, UserHandle userHandle, int flags) {
