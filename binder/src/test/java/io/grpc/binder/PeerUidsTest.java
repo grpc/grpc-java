@@ -19,9 +19,13 @@ package io.grpc.binder;
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ManagedChannel;
@@ -31,6 +35,8 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
+import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.binder.internal.BinderTransport;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -41,6 +47,9 @@ import io.grpc.testing.GrpcCleanupRule;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Rule;
 import org.junit.Test;
@@ -60,6 +69,28 @@ public class PeerUidsTest {
           .build();
 
   private final AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
+
+  @Test
+  public void checkAuthorizationIsForwardedToSecurityPolicy() {
+    SecurityPolicy mockPolicy = mock(SecurityPolicy.class);
+    when(mockPolicy.checkAuthorization(FAKE_UID))
+        .thenReturn(Status.PERMISSION_DENIED.augmentDescription("xyzzy"));
+    Status status = PeerUids.checkAuthorization(mockPolicy, new PeerUid(FAKE_UID));
+    assertThat(status.getCode()).isEqualTo(Code.PERMISSION_DENIED);
+    assertThat(status.getDescription()).contains("xyzzy");
+  }
+
+  @Test
+  public void checkAuthorizationAsyncIsForwardedToSecurityPolicy()
+      throws ExecutionException, InterruptedException, TimeoutException {
+    AsyncSecurityPolicy mockPolicy = mock(AsyncSecurityPolicy.class);
+    when(mockPolicy.checkAuthorizationAsync(FAKE_UID))
+        .thenReturn(Futures.immediateFuture(Status.PERMISSION_DENIED.augmentDescription("xyzzy")));
+    ListenableFuture<Status> statusFuture =
+        PeerUids.checkAuthorizationAsync(mockPolicy, new PeerUid(FAKE_UID));
+    assertThat(statusFuture.get(10, TimeUnit.SECONDS).getCode()).isEqualTo(Code.PERMISSION_DENIED);
+    assertThat(statusFuture.get(10, TimeUnit.SECONDS).getDescription()).contains("xyzzy");
+  }
 
   @Test
   public void keyPopulatedWithInterceptor() throws Exception {
