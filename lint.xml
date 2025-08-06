@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <lint>
+    <!--
+      Suppress temporarily due to AAPT2 failures with SDK 35/36 on AGP 7.x.
+      Remove after AGP upgrade.
+    -->
     <issue id="OldTargetApi" severity="ignore" />
 </lint>
