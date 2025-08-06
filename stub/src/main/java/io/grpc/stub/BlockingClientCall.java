@@ -353,7 +353,7 @@ public final class BlockingClientCall<ReqT, RespT> {
     final Metadata trailers;
 
     CloseState(Status status, Metadata trailers) {
-      this.status = status;
+      this.status = Preconditions.checkNotNull(status, "status");
       this.trailers = trailers;
     }
   }
