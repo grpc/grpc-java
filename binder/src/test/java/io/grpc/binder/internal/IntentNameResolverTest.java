@@ -21,6 +21,7 @@ import static android.os.Looper.getMainLooper;
 import static android.os.Process.myUserHandle;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -280,6 +281,17 @@ public final class IntentNameResolverTest {
 
     verifyNoMoreInteractions(mockListener);
     assertThat(shadowOf(appContext).getRegisteredReceivers()).isEmpty();
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testTargetAndroidUser_notSupported_throwsWithHelpfulMessage() throws Exception {
+    NameResolver.Args args =
+        newNameResolverArgs().setArg(ApiConstants.TARGET_ANDROID_USER, myUserHandle()).build();
+    IllegalArgumentException iae =
+        assertThrows(IllegalArgumentException.class, () -> newNameResolver(newIntent(), args));
+    assertThat(iae.getMessage()).contains("TARGET_ANDROID_USER");
+    assertThat(iae.getMessage()).contains("SDK_INT >= R");
   }
 
   @Test

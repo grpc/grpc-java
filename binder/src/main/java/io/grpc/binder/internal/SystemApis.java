@@ -30,7 +30,8 @@ import java.lang.reflect.Method;
  * <p>Modern Android's JRE also limits the visibility of these methods at *runtime*. Only certain
  * privileged apps installed on the system image app can call them, even using reflection, and this
  * wrapper doesn't change that. Callers are responsible for ensuring that the host app actually has
- * the ability to call @SystemApis. See
+ * the ability to call @SystemApis and all methods throw {@link ReflectiveOperationException} as a
+ * reminder to do that. See
  * https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces for more.
  */
 final class SystemApis {
@@ -39,20 +40,21 @@ final class SystemApis {
   // Not to be instantiated.
   private SystemApis() {}
 
-  /** Returns a new Context object whose methods act as if they were running in the given user. */
-  public static Context createContextAsUser(Context context, UserHandle userHandle, int flags) {
-    try {
-      if (createContextAsUserMethod == null) {
-        synchronized (SystemApis.class) {
-          if (createContextAsUserMethod == null) {
-            createContextAsUserMethod =
-                Context.class.getMethod("createContextAsUser", UserHandle.class, int.class);
-          }
+  /**
+   * Returns a new Context object whose methods act as if they were running in the given user.
+   *
+   * @throws ReflectiveOperationException if SDK_INT < R or host app lacks @SystemApi visibility
+   */
+  public static Context createContextAsUser(Context context, UserHandle userHandle, int flags)
+      throws ReflectiveOperationException {
+    if (createContextAsUserMethod == null) {
+      synchronized (SystemApis.class) {
+        if (createContextAsUserMethod == null) {
+          createContextAsUserMethod =
+              Context.class.getMethod("createContextAsUser", UserHandle.class, int.class);
         }
       }
-      return (Context) createContextAsUserMethod.invoke(context, userHandle, flags);
-    } catch (ReflectiveOperationException e) {
-      throw new IllegalStateException("Requires SDK_INT >= R and @SystemApi visibility", e);
     }
+    return (Context) createContextAsUserMethod.invoke(context, userHandle, flags);
   }
 }

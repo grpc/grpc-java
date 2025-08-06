@@ -87,9 +87,7 @@ final class IntentNameResolver extends NameResolver {
         checkNotNull(args.getArg(ApiConstants.SOURCE_ANDROID_CONTEXT), "SOURCE_ANDROID_CONTEXT")
             .getApplicationContext();
     this.targetUserContext =
-        targetUser != null
-            ? createContextAsUser(context, targetUser, /* flags= */ 0) // @SystemApi since R.
-            : context;
+        targetUser != null ? createContextForTargetUserOrThrow(context, targetUser) : context;
     // This Executor is nominally optional but all grpc-java Channels provide it since 1.25.
     this.offloadExecutor =
         checkNotNull(args.getOffloadExecutor(), "NameResolver.Args.getOffloadExecutor()");
@@ -97,6 +95,15 @@ final class IntentNameResolver extends NameResolver {
     this.sequentialExecutor = MoreExecutors.newSequentialExecutor(offloadExecutor);
     this.syncContext = args.getSynchronizationContext();
     this.serviceConfigParser = args.getServiceConfigParser();
+  }
+
+  private static Context createContextForTargetUserOrThrow(Context context, UserHandle targetUser) {
+    try {
+      return createContextAsUser(context, targetUser, /* flags= */ 0); // @SystemApi since R.
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalArgumentException(
+          "TARGET_ANDROID_USER NameResolver.Arg requires SDK_INT >= R and @SystemApi visibility");
+    }
   }
 
   @Override
