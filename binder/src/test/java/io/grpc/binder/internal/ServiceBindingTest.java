@@ -21,7 +21,6 @@ import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
@@ -331,8 +330,8 @@ public final class ServiceBindingTest {
 
   @Test
   @Config(sdk = 30)
-  public void testBindService_doesNotThrowInternalErrorWhenSDkAtLeastR() {
-    UserHandle userHandle = mock(UserHandle.class);
+  public void testBindService_doesNotThrowInternalErrorWhenSdkAtLeastR() {
+    UserHandle userHandle = generateUserHandle(/* userId= */ 12345);
     binding = newBuilder().setTargetUserHandle(userHandle).build();
     binding.bind();
     shadowOf(getMainLooper()).idle();
@@ -343,31 +342,34 @@ public final class ServiceBindingTest {
 
   @Test
   @Config(sdk = 28)
-  public void testBindServiceAsUser_returnsErrorWhenSDkBelowR() {
-    UserHandle userHandle = mock(UserHandle.class);
+  public void testBindServiceAsUser_returnsErrorWhenSdkBelowR() {
+    UserHandle userHandle = generateUserHandle(/* userId= */ 12345);
     binding = newBuilder().setTargetUserHandle(userHandle).build();
     binding.bind();
     shadowOf(getMainLooper()).idle();
 
     assertThat(observer.unboundReason.getCode()).isEqualTo(Code.INTERNAL);
-    assertThat(observer.unboundReason.getDescription()).isEqualTo("Cross user Channel requires Android R+");
+    assertThat(observer.unboundReason.getDescription())
+        .isEqualTo("Cross user Channel requires Android R+");
   }
 
   @Test
   @Config(sdk = 28)
-  public void testDevicePolicyBlind_returnsErrorWhenSDkBelowR() {
+  public void testDevicePolicyBlind_returnsErrorWhenSdkBelowR() {
     String deviceAdminClassName = "DevicePolicyAdmin";
     ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
-    allowBindDeviceAdminForUser(appContext, adminComponent,10);
-    binding = newBuilder()
-                    .setTargetUserHandle(UserHandle.getUserHandleForUid(10))
-                    .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
-                    .build();
+    allowBindDeviceAdminForUser(appContext, adminComponent, 10);
+    binding =
+        newBuilder()
+            .setTargetUserHandle(UserHandle.getUserHandleForUid(10))
+            .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
+            .build();
     binding.bind();
     shadowOf(getMainLooper()).idle();
 
     assertThat(observer.unboundReason.getCode()).isEqualTo(Code.INTERNAL);
-    assertThat(observer.unboundReason.getDescription()).isEqualTo("Device policy admin binding requires Android R+");
+    assertThat(observer.unboundReason.getDescription())
+        .isEqualTo("Device policy admin binding requires Android R+");
   }
 
   @Test
