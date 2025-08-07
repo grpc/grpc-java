@@ -347,22 +347,26 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @Override
   @MainThread
   public void onServiceDisconnected(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE
-    .withDescription("Server process crashed, exited or was killed (onServiceDisconnected): " + name)
-    );
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Server process crashed, exited or was killed (onServiceDisconnected): " + name));
   }
 
   @Override
   @MainThread
   public void onNullBinding(ComponentName name) {
-    unbindInternal(Status.UNIMPLEMENTED.withDescription("Service " + name + " had no IBinder server for " + bindIntent));
+    unbindInternal(
+        Status.UNIMPLEMENTED.withDescription(
+            "Server returned no IBinder for " + bindIntent + " (onNullBinding): " + name));
   }
 
   @Override
   @MainThread
   public void onBindingDied(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE.withDescription(
-            "Server/Service was disabled, uninstalled or upgraded (onBindingDied): " + name));
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Server package or Component was disabled, uninstalled or upgraded (onBindingDied): "
+                + name));
   }
 
   @VisibleForTesting
