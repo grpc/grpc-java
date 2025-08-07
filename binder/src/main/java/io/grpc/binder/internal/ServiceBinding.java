@@ -365,8 +365,8 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public void onBindingDied(ComponentName name) {
     unbindInternal(
         Status.UNAVAILABLE.withDescription(
-            "Remote Service was disabled, or server package was disabled, uninstalled or replaced"
-                + " (onBindingDied): "
+            "Remote Service was disabled, or the server app was disabled, force-stopped or"
+                + " uninstalled  (onBindingDied): "
                 + name));
   }
 
