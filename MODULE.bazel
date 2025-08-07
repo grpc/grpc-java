@@ -8,7 +8,7 @@ module(
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.51.0",
+    "com.google.api.grpc:proto-google-common-protos:2.59.2",
     "com.google.auth:google-auth-library-credentials:1.24.1",
     "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -19,7 +19,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
     "com.google.re2j:re2j:1.8",
-    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.2",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
@@ -50,7 +50,8 @@ bazel_dep(name = "bazel_jar_jar", version = "0.1.7")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
-bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
+# Protobuf 25.5+ is incompatible with Bazel 7 with bzlmod
+bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "24.4")
 bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "rules_java", version = "5.3.5")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
