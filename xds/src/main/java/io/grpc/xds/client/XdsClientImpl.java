@@ -904,8 +904,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
       this.lastError = errorAugmented;
-      this.data = null;
-      this.absent = false;
 
       for (ResourceWatcher<T> watcher : watchers.keySet()) {
         if (tracker != null) {
