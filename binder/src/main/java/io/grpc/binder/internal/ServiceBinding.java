@@ -193,18 +193,27 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           bindResult = context.bindService(bindIntent, conn, flags);
           break;
         case BIND_SERVICE_AS_USER:
-          bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          } else {
+            return Status.INTERNAL.withDescription("Cross user Channel requires Android R+");
+          }
           break;
         case DEVICE_POLICY_BIND_SEVICE_ADMIN:
           DevicePolicyManager devicePolicyManager =
               (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-          bindResult =
-              devicePolicyManager.bindDeviceAdminServiceAsUser(
-                  channelCredentials.getDevicePolicyAdminComponentName(),
-                  bindIntent,
-                  conn,
-                  flags,
-                  targetUserHandle);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            bindResult =
+                devicePolicyManager.bindDeviceAdminServiceAsUser(
+                    channelCredentials.getDevicePolicyAdminComponentName(),
+                    bindIntent,
+                    conn,
+                    flags,
+                    targetUserHandle);
+          } else {
+            return Status.INTERNAL.withDescription(
+                "Device policy admin binding requires Android R+");
+          }
           break;
       }
       if (!bindResult) {

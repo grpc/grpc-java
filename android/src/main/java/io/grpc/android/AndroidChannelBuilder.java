@@ -217,7 +217,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback);
         unregisterRunnable =
             new Runnable() {
-              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
               @Override
               public void run() {
                 connectivityManager.unregisterNetworkCallback(defaultNetworkCallback);
@@ -231,7 +230,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         context.registerReceiver(networkReceiver, networkIntentFilter);
         unregisterRunnable =
             new Runnable() {
-              @TargetApi(Build.VERSION_CODES.LOLLIPOP)
               @Override
               public void run() {
                 context.unregisterReceiver(networkReceiver);
