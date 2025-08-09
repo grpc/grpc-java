@@ -274,6 +274,11 @@ final class OpenTelemetryMetricSink implements MetricSink {
               .setDescription(description)
               .ofLongs()
               .buildObserver();
+        } else if (instrument instanceof LongUpDownCounterMetricInstrument) {
+          openTelemetryMeasure = openTelemetryMeter.upDownCounterBuilder(name)
+              .setUnit(unit)
+              .setDescription(description)
+              .build();
         } else {
           logger.log(Level.FINE, "Unsupported metric instrument type : {0}", instrument);
           openTelemetryMeasure = null;

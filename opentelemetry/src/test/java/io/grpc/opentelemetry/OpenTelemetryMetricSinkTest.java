@@ -24,6 +24,7 @@ import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
+import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricSink;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
@@ -144,15 +145,24 @@ public class OpenTelemetryMetricSinkTest {
             "Number of client calls started", "count", Collections.emptyList(),
             Collections.emptyList(),
             true);
+    LongUpDownCounterMetricInstrument longUpDownCounterInstrument =
+        new LongUpDownCounterMetricInstrument(2, "active_carrier_pigeons",
+            "Active Carrier Pigeons", "pigeons",
+            Collections.emptyList(),
+            Collections.emptyList(), true);
+
     // Create sink
     sink = new OpenTelemetryMetricSink(testMeter, enabledMetrics, false, Collections.emptyList());
 
     // Invoke updateMeasures
-    sink.updateMeasures(Arrays.asList(longCounterInstrument, doubleCounterInstrument));
+    sink.updateMeasures(Arrays.asList(longCounterInstrument, doubleCounterInstrument,
+        longUpDownCounterInstrument));
 
     sink.addLongCounter(longCounterInstrument, 123L, Collections.emptyList(),
         Collections.emptyList());
     sink.addDoubleCounter(doubleCounterInstrument, 12.0, Collections.emptyList(),
+        Collections.emptyList());
+    sink.addLongUpDownCounter(longUpDownCounterInstrument, -3L, Collections.emptyList(),
         Collections.emptyList());
 
     assertThat(openTelemetryTesting.getMetrics())
@@ -184,7 +194,21 @@ public class OpenTelemetryMetricSinkTest {
                                 .hasPointsSatisfying(
                                     point ->
                                         point
-                                            .hasValue(12.0D))));
+                                            .hasValue(12.0D))),
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName("active_carrier_pigeons")
+                    .hasDescription("Active Carrier Pigeons")
+                    .hasUnit("pigeons")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasValue(-3L))));
   }
 
   @Test
@@ -192,18 +216,27 @@ public class OpenTelemetryMetricSinkTest {
     // set up sink with disabled metric
     Map<String, Boolean> enabledMetrics = new HashMap<>();
     enabledMetrics.put("client_latency", false);
+    enabledMetrics.put("active_carrier_pigeons", false);
 
     LongCounterMetricInstrument instrument =
         new LongCounterMetricInstrument(0, "client_latency", "Client latency", "s",
             Collections.emptyList(),
             Collections.emptyList(), true);
+    LongUpDownCounterMetricInstrument longUpDownCounterInstrument =
+        new LongUpDownCounterMetricInstrument(1, "active_carrier_pigeons",
+            "Active Carrier Pigeons", "pigeons",
+            Collections.emptyList(),
+            Collections.emptyList(), false);
+
     // Create sink
     sink = new OpenTelemetryMetricSink(testMeter, enabledMetrics, true, Collections.emptyList());
 
     // Invoke updateMeasures
-    sink.updateMeasures(Arrays.asList(instrument));
+    sink.updateMeasures(Arrays.asList(instrument, longUpDownCounterInstrument));
 
     sink.addLongCounter(instrument, 123L, Collections.emptyList(), Collections.emptyList());
+    sink.addLongUpDownCounter(longUpDownCounterInstrument, -13L, Collections.emptyList(),
+        Collections.emptyList());
 
     assertThat(openTelemetryTesting.getMetrics()).isEmpty();
   }
@@ -377,6 +410,7 @@ public class OpenTelemetryMetricSinkTest {
   public void recordLabels() {
     Map<String, Boolean> enabledMetrics = new HashMap<>();
     enabledMetrics.put("client_latency", true);
+    enabledMetrics.put("ghosts_in_the_wire", true);
 
     List<String> optionalLabels = Arrays.asList("optional_label_key_2");
 
@@ -384,14 +418,22 @@ public class OpenTelemetryMetricSinkTest {
         new LongCounterMetricInstrument(0, "client_latency", "Client latency", "s",
             ImmutableList.of("required_label_key_1", "required_label_key_2"),
             ImmutableList.of("optional_label_key_1", "optional_label_key_2"), false);
+    LongUpDownCounterMetricInstrument longUpDownCounterInstrument =
+        new LongUpDownCounterMetricInstrument(1, "ghosts_in_the_wire",
+            "Number of Ghosts Haunting the Wire", "{ghosts}",
+            ImmutableList.of("required_label_key_1", "required_label_key_2"),
+            ImmutableList.of("optional_label_key_1", "optional_label_key_2"), false);
 
     // Create sink
     sink = new OpenTelemetryMetricSink(testMeter, enabledMetrics, false, optionalLabels);
 
     // Invoke updateMeasures
-    sink.updateMeasures(Arrays.asList(longCounterInstrument));
+    sink.updateMeasures(Arrays.asList(longCounterInstrument, longUpDownCounterInstrument));
 
     sink.addLongCounter(longCounterInstrument, 123L,
+        ImmutableList.of("required_label_value_1", "required_label_value_2"),
+        ImmutableList.of("optional_label_value_1", "optional_label_value_2"));
+    sink.addLongUpDownCounter(longUpDownCounterInstrument, -400L,
         ImmutableList.of("required_label_value_1", "required_label_value_2"),
         ImmutableList.of("optional_label_value_1", "optional_label_value_2"));
 
@@ -417,6 +459,22 @@ public class OpenTelemetryMetricSinkTest {
                                     point ->
                                         point
                                             .hasAttributes(expectedAtrributes)
-                                            .hasValue(123L))));
+                                            .hasValue(123L))),
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName("ghosts_in_the_wire")
+                    .hasDescription("Number of Ghosts Haunting the Wire")
+                    .hasUnit("{ghosts}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(expectedAtrributes)
+                                            .hasValue(-400L))));
+
   }
 }
