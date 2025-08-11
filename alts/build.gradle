@@ -1,6 +1,5 @@
 plugins {
     id "java-library"
-    id "java-test-fixtures"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -35,9 +34,6 @@ dependencies {
             libraries.junit,
             libraries.mockito.core,
             libraries.truth
-
-    testFixturesImplementation libraries.junit,
-            libraries.guava
 
     testImplementation libraries.guava.testlib
     testRuntimeOnly libraries.netty.tcnative,
@@ -108,6 +104,3 @@ publishing {
         }
     }
 }
-
-components.java.withVariantsFromConfiguration(configurations.testFixturesApiElements) { skip() }
-components.java.withVariantsFromConfiguration(configurations.testFixturesRuntimeElements) { skip() }

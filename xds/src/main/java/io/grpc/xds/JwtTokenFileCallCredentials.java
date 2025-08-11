@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.alts;
+package io.grpc.xds;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.client.json.webtoken.JsonWebSignature;
@@ -33,11 +35,11 @@ import java.util.Date;
  * See gRFC A97 (https://github.com/grpc/proposal/pull/492).
  */
 public final class JwtTokenFileCallCredentials extends OAuth2Credentials {
-  private static final long serialVersionUID = 452556614608513984L;
-  private String path = null;
+  private static final long serialVersionUID = 0L;
+  private final String path;
 
   private JwtTokenFileCallCredentials(String path) {
-    this.path = path;
+    this.path = checkNotNull(path, "path");
   }
 
   @Override

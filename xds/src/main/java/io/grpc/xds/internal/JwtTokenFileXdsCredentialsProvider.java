@@ -18,8 +18,8 @@ package io.grpc.xds.internal;
 
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
-import io.grpc.alts.JwtTokenFileCallCredentials;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.JwtTokenFileCallCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.io.File;
 import java.util.Map;
@@ -28,7 +28,7 @@ import java.util.Map;
  * A wrapper class that supports {@link JwtTokenFileXdsCredentialsProvider} for
  * Xds by implementing {@link XdsCredentialsProvider}.
  */
-public class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProvider {
+public final class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final String CREDS_NAME = "jwt_token_file";
 
   @Override
