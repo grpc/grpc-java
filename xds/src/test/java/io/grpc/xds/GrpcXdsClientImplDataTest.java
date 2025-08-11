@@ -3587,7 +3587,7 @@ public class GrpcXdsClientImplDataTest {
 
   private XdsResourceType.Args getXdsResourceTypeArgs(boolean isTrustedServer) {
     return new XdsResourceType.Args(
-        ServerInfo.create("http://td", "", false, isTrustedServer), "1.0", null, null, null, null
+        ServerInfo.create("http://td", "", false, isTrustedServer, false), "1.0", null, null, null, null
     );
   }
 }

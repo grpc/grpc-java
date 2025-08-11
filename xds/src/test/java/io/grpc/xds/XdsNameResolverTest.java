@@ -368,13 +368,13 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true, true)))
+            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false)))
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
                 "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.of(ServerInfo.create(
-                    "td.googleapis.com", InsecureChannelCredentials.create(), true, true)))))
+                    "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false)))))
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
@@ -2239,7 +2239,7 @@ public class XdsNameResolverTest {
     assertThat(testCall).isNull();
     verifyRpcDelayedThenAborted(observer, 4000L, Status.DEADLINE_EXCEEDED.withDescription(
         "Deadline exceeded after up to 5000 ns of fault-injected delay:"
-            + " Deadline CallOptions will be exceeded in 0.000004000s. "));
+            + " Deadline CallOptions was exceeded after 0.000004000s"));
   }
 
   @Test

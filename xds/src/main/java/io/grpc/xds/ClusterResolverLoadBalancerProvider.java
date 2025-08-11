@@ -31,7 +31,6 @@ import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
@@ -71,15 +70,15 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
   }
 
   static final class ClusterResolverConfig {
-    // Ordered list of clusters to be resolved.
-    final List<DiscoveryMechanism> discoveryMechanisms;
+    // Cluster to be resolved.
+    final DiscoveryMechanism discoveryMechanism;
     // GracefulSwitch configuration
     final Object lbConfig;
     private final boolean isHttp11ProxyAvailable;
 
-    ClusterResolverConfig(List<DiscoveryMechanism> discoveryMechanisms, Object lbConfig,
+    ClusterResolverConfig(DiscoveryMechanism discoveryMechanism, Object lbConfig,
         boolean isHttp11ProxyAvailable) {
-      this.discoveryMechanisms = checkNotNull(discoveryMechanisms, "discoveryMechanisms");
+      this.discoveryMechanism = checkNotNull(discoveryMechanism, "discoveryMechanism");
       this.lbConfig = checkNotNull(lbConfig, "lbConfig");
       this.isHttp11ProxyAvailable = isHttp11ProxyAvailable;
     }
@@ -90,7 +89,7 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
 
     @Override
     public int hashCode() {
-      return Objects.hash(discoveryMechanisms, lbConfig);
+      return Objects.hash(discoveryMechanism, lbConfig, isHttp11ProxyAvailable);
     }
 
     @Override
@@ -102,15 +101,17 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
         return false;
       }
       ClusterResolverConfig that = (ClusterResolverConfig) o;
-      return discoveryMechanisms.equals(that.discoveryMechanisms)
-          && lbConfig.equals(that.lbConfig);
+      return discoveryMechanism.equals(that.discoveryMechanism)
+          && lbConfig.equals(that.lbConfig)
+          && isHttp11ProxyAvailable == that.isHttp11ProxyAvailable;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("discoveryMechanisms", discoveryMechanisms)
+          .add("discoveryMechanism", discoveryMechanism)
           .add("lbConfig", lbConfig)
+          .add("isHttp11ProxyAvailable", isHttp11ProxyAvailable)
           .toString();
     }
 

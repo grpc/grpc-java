@@ -6,7 +6,7 @@ plugins {
 description = 'gRPC BinderChannel'
 
 android {
-    namespace 'io.grpc.binder'
+    namespace = 'io.grpc.binder'
     compileSdkVersion 34
     compileOptions {
         sourceCompatibility 1.8
@@ -18,16 +18,16 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        multiDexEnabled true
+        multiDexEnabled = true
     }
-    lintOptions { abortOnError false }
+    lintOptions { abortOnError = false }
     publishing {
         singleVariant('release') {
             withSourcesJar()
             withJavadocJar()
         }
     }
-    testFixtures { enable true }
+    testFixtures { enable = true }
 }
 
 repositories {
@@ -72,6 +72,7 @@ dependencies {
     androidTestImplementation testFixtures(project(':grpc-core'))
 
     testFixturesImplementation libraries.guava.testlib
+    testFixturesImplementation testFixtures(project(':grpc-core'))
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

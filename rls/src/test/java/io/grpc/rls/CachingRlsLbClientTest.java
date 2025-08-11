@@ -191,7 +191,9 @@ public class CachingRlsLbClientTest {
 
   @After
   public void tearDown() throws Exception {
-    rlsLbClient.close();
+    if (rlsLbClient != null) {
+      rlsLbClient.close();
+    }
     assertWithMessage(
             "On client shut down, RlsLoadBalancer must shut down with all its child loadbalancers.")
         .that(lbProvider.loadBalancers).isEmpty();
@@ -372,12 +374,14 @@ public class CachingRlsLbClientTest {
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
     ArgumentCaptor<ConnectivityState> stateCaptor =
         ArgumentCaptor.forClass(ConnectivityState.class);
-    inOrder.verify(helper, times(2))
+    inOrder.verify(helper, times(3))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
     assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
+    // TRANSIENT_FAILURE is because the test setup pretends fallback is not available.
     assertThat(stateCaptor.getAllValues())
-        .containsExactly(ConnectivityState.CONNECTING, ConnectivityState.READY);
+        .containsExactly(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING,
+            ConnectivityState.READY);
     Metadata headers = new Metadata();
     PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
     assertThat(pickResult.getStatus().isOk()).isTrue();
@@ -439,7 +443,7 @@ public class CachingRlsLbClientTest {
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
     ArgumentCaptor<ConnectivityState> stateCaptor =
         ArgumentCaptor.forClass(ConnectivityState.class);
-    verify(helper, times(4)).updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
+    verify(helper, times(5)).updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
     Metadata headers = new Metadata();
     PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
@@ -509,7 +513,7 @@ public class CachingRlsLbClientTest {
     ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
     ArgumentCaptor<ConnectivityState> stateCaptor =
         ArgumentCaptor.forClass(ConnectivityState.class);
-    inOrder.verify(helper, times(2))
+    inOrder.verify(helper, times(3))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
     Metadata headers = new Metadata();
@@ -699,6 +703,7 @@ public class CachingRlsLbClientTest {
 
     // Shutdown
     rlsLbClient.close();
+    rlsLbClient = null;
     verify(mockGaugeRegistration).close();
   }
 

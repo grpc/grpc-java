@@ -166,6 +166,11 @@ public final class NameResolverRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.binder.internal.IntentNameResolverProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find IntentNameResolverProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 
