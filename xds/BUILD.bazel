@@ -35,6 +35,8 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@maven//:com_google_auth_google_auth_library_oauth2_http",
+        "@maven//:com_google_http_client_google_http_client",
+        "@maven//:com_google_http_client_google_http_client_gson",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.code.gson:gson"),
         artifact("com.google.errorprone:error_prone_annotations"),
