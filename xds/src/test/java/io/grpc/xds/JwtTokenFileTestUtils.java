@@ -14,22 +14,24 @@
  * limitations under the License.
  */
 
-package io.grpc.alts;
+package io.grpc.xds;
 
 import com.google.common.io.BaseEncoding;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import org.junit.rules.TemporaryFolder;
 
 public class JwtTokenFileTestUtils {
-  public static File createEmptyJwtToken(TemporaryFolder tempFolder) throws Exception {
-    File jwtToken = tempFolder.newFile(new String("jwt.token"));
+  public static File createEmptyJwtToken() throws IOException {
+    File jwtToken = File.createTempFile(new String("jwt.token"), "");
+    jwtToken.deleteOnExit();
     return jwtToken;
   }
 
-  public static File createJwtTokenWithoutExpiration(TemporaryFolder tempFolder) throws Exception {
-    File jwtToken = tempFolder.newFile(new String("jwt.token"));
+  public static File createJwtTokenWithoutExpiration() throws IOException {
+    File jwtToken = File.createTempFile(new String("jwt.token"), "");
+    jwtToken.deleteOnExit();
     FileOutputStream outputStream = new FileOutputStream(jwtToken);
     String content =
         BaseEncoding.base64().encode(
@@ -44,9 +46,10 @@ public class JwtTokenFileTestUtils {
     return jwtToken;
   }
 
-  public static File createValidJwtToken(TemporaryFolder tempFolder, Long expTime)
+  public static File createValidJwtToken(long expTime)
         throws Exception {
-    File jwtToken = tempFolder.newFile(new String("jwt.token"));
+    File jwtToken = File.createTempFile(new String("jwt.token"), "");
+    jwtToken.deleteOnExit();
     FileOutputStream outputStream = new FileOutputStream(jwtToken);
     String content =
         BaseEncoding.base64().encode(
