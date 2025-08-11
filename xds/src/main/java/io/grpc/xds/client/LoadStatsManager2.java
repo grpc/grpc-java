@@ -25,6 +25,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Internal;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.client.Stats.BackendLoadMetricStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
@@ -57,6 +58,8 @@ public final class LoadStatsManager2 {
   private final Map<String, Map<String,
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
+  static boolean isEnabledOrcaLrsPropagation =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", false);
 
   @VisibleForTesting
   public LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
@@ -380,19 +383,24 @@ public final class LoadStatsManager2 {
      * Metrics are filtered based on the backend metric propagation configuration if configured.
      */
     public synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
-      // If no propagation configuration is set, use the old behavior (propagate everything)
-      // Otherwise, filter based on the configuration
+      if (!isEnabledOrcaLrsPropagation) {
+        namedMetrics.forEach((name, value) -> updateLoadMetricStats(name, value));
+        return;
+      }
+
       namedMetrics.forEach((name, value) -> {
-        if (backendMetricPropagation == null
-            || backendMetricPropagation.shouldPropagateNamedMetric(name)) {
-          String prefixedName = (backendMetricPropagation == null) ? name : "named_metrics." + name;
-          if (!loadMetricStatsMap.containsKey(prefixedName)) {
-            loadMetricStatsMap.put(prefixedName, new BackendLoadMetricStats(1, value));
-          } else {
-            loadMetricStatsMap.get(prefixedName).addMetricValueAndIncrementRequestsFinished(value);
-          }
+        if (backendMetricPropagation.shouldPropagateNamedMetric(name)) {
+          updateLoadMetricStats("named_metrics." + name, value);
         }
       });
+    }
+
+    private void updateLoadMetricStats(String metricName, double value) {
+      if (!loadMetricStatsMap.containsKey(metricName)) {
+        loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, value));
+      } else {
+        loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(value);
+      }
     }
 
     /**
@@ -406,59 +414,18 @@ public final class LoadStatsManager2 {
      */
     public synchronized void recordTopLevelMetrics(double cpuUtilization, double memUtilization,
         double applicationUtilization) {
-      // If no propagation configuration is set, use the old behavior (propagate everything)
-      // Otherwise, filter based on the configuration
-
-      if (cpuUtilization > 0) {
-        boolean shouldPropagate = true;
-        if (backendMetricPropagation != null) {
-          shouldPropagate = backendMetricPropagation.propagateCpuUtilization;
-        }
-
-        if (shouldPropagate) {
-          String metricName = "cpu_utilization";
-          if (!loadMetricStatsMap.containsKey(metricName)) {
-            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, cpuUtilization));
-          } else {
-            loadMetricStatsMap.get(metricName)
-                .addMetricValueAndIncrementRequestsFinished(cpuUtilization);
-          }
-        }
+      if (!isEnabledOrcaLrsPropagation) {
+        return;
       }
 
-      if (memUtilization > 0) {
-        boolean shouldPropagate = true;
-        if (backendMetricPropagation != null) {
-          shouldPropagate = backendMetricPropagation.propagateMemUtilization;
-        }
-
-        if (shouldPropagate) {
-          String metricName = "mem_utilization";
-          if (!loadMetricStatsMap.containsKey(metricName)) {
-            loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, memUtilization));
-          } else {
-            loadMetricStatsMap.get(metricName)
-                .addMetricValueAndIncrementRequestsFinished(memUtilization);
-          }
-        }
+      if (backendMetricPropagation.propagateCpuUtilization && cpuUtilization > 0) {
+        updateLoadMetricStats("cpu_utilization", cpuUtilization);
       }
-
-      if (applicationUtilization > 0) {
-        boolean shouldPropagate = true;
-        if (backendMetricPropagation != null) {
-          shouldPropagate = backendMetricPropagation.propagateApplicationUtilization;
-        }
-
-        if (shouldPropagate) {
-          String metricName = "application_utilization";
-          if (!loadMetricStatsMap.containsKey(metricName)) {
-            loadMetricStatsMap.put(
-                metricName, new BackendLoadMetricStats(1, applicationUtilization));
-          } else {
-            loadMetricStatsMap.get(metricName)
-                .addMetricValueAndIncrementRequestsFinished(applicationUtilization);
-          }
-        }
+      if (backendMetricPropagation.propagateMemUtilization && memUtilization > 0) {
+        updateLoadMetricStats("mem_utilization", memUtilization);
+      }
+      if (backendMetricPropagation.propagateApplicationUtilization && applicationUtilization > 0) {
+        updateLoadMetricStats("application_utilization", applicationUtilization);
       }
     }
 
