@@ -18,8 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -27,7 +25,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.CallCredentials;
 import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
@@ -131,9 +131,8 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -186,14 +185,12 @@ public class GrpcBootstrapperImplTest {
     List<ServerInfo> serverInfoList = info.servers();
     assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
-    assertThat(serverInfoList.get(0).implSpecificChannelCredConfig())
+    assertThat(serverInfoList.get(0).implSpecificConfig())
         .isInstanceOf(TlsChannelCredentials.class);
-    assertNull(serverInfoList.get(0).implSpecificCallCredConfig());
     assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
-    assertThat(serverInfoList.get(1).implSpecificChannelCredConfig())
+    assertThat(serverInfoList.get(1).implSpecificConfig())
         .isInstanceOf(InsecureChannelCredentials.class);
-    assertNull(serverInfoList.get(0).implSpecificCallCredConfig());
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -237,9 +234,8 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -310,9 +306,8 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -607,9 +602,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -631,9 +625,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -655,9 +648,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -680,9 +672,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
@@ -704,9 +695,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificChannelCredConfig()).isInstanceOf(
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
         InsecureChannelCredentials.class);
-    assertNull(serverInfo.implSpecificCallCredConfig());
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -951,7 +941,8 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-    assertNull(serverInfo.implSpecificCallCredConfig());
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
+        InsecureChannelCredentials.class);
   }
 
   @Test
@@ -1050,8 +1041,10 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-    assertSame(CompositeCallCredentials.class,
-        serverInfo.implSpecificCallCredConfig().getClass());
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(CompositeChannelCredentials.class);
+    CallCredentials callCredentials =
+        ((CompositeChannelCredentials) serverInfo.implSpecificConfig()).getCallCredentials();
+    assertThat(callCredentials).isInstanceOf(CompositeCallCredentials.class);
 
     jwtToken_1.delete();
     jwtToken_2.delete();

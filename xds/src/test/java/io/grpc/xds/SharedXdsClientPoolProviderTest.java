@@ -28,6 +28,7 @@ import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
@@ -66,6 +67,7 @@ import org.mockito.junit.MockitoRule;
 /** Tests for {@link SharedXdsClientPoolProvider}. */
 @RunWith(JUnit4.class)
 public class SharedXdsClientPoolProviderTest {
+
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
@@ -242,8 +244,9 @@ public class SharedXdsClientPoolProviderTest {
     // Set up bootstrap & xDS client pool provider
     ServerInfo server = ServerInfo.create(
         xdsServerUri,
-        InsecureChannelCredentials.create(),
-        JwtTokenFileCallCredentials.create(jwtToken.toString()));
+        CompositeChannelCredentials.create(
+            InsecureChannelCredentials.create(),
+            JwtTokenFileCallCredentials.create(jwtToken.toString())));
     BootstrapInfo bootstrapInfo =
         BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
     when(bootstrapper.bootstrap()).thenReturn(bootstrapInfo);

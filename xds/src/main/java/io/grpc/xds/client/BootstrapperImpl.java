@@ -19,6 +19,9 @@ package io.grpc.xds.client;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.internal.GrpcUtil;
@@ -275,8 +278,11 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       servers.add(
           ServerInfo.create(
             serverUri,
-            implSpecificChannelCredConfig,
-            implSpecificCallCredConfig,
+            (implSpecificCallCredConfig != null)
+                ? CompositeChannelCredentials.create(
+                    (ChannelCredentials) implSpecificChannelCredConfig,
+                    (CallCredentials) implSpecificCallCredConfig)
+                : implSpecificChannelCredConfig,
             ignoreResourceDeletion,
             serverFeatures != null
                 && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),

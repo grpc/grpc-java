@@ -347,13 +347,9 @@ public abstract class GrpcXdsClientImplTestBase {
         .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
-    xdsServerInfo = ServerInfo.create(
-        SERVER_URI,
-        CHANNEL_CREDENTIALS,
-        null,
-        ignoreResourceDeletion(),
-        true,
-        false);
+
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3164,13 +3160,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_schedulesExtendedTimeout() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    ServerInfo serverInfo = ServerInfo.create(
-        SERVER_URI,
-        CHANNEL_CREDENTIALS,
-        null,
-        false,
-        true,
-        true);
+    ServerInfo serverInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
+        false, true, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(serverInfo))
@@ -3214,13 +3205,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_callsOnErrorUnavailable() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(
-        SERVER_URI,
-        CHANNEL_CREDENTIALS,
-        null,
-        ignoreResourceDeletion(),
-        true,
-        true);
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -4337,13 +4323,8 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private BootstrapInfo buildBootStrap(String serverUri) {
 
-    ServerInfo xdsServerInfo = ServerInfo.create(
-        serverUri,
-        CHANNEL_CREDENTIALS,
-        null,
-        ignoreResourceDeletion(),
-        true,
-        false);
+    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
+        ignoreResourceDeletion(), true, false);
 
     return Bootstrapper.BootstrapInfo.builder()
         .servers(Collections.singletonList(xdsServerInfo))
