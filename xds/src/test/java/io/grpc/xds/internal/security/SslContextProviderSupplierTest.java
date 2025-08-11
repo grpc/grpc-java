@@ -25,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.TlsContextManager;
@@ -46,6 +47,8 @@ import org.mockito.junit.MockitoRule;
 public class SslContextProviderSupplierTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
+  private static final String HOSTNAME = "hostname";
+
   @Mock private TlsContextManager mockTlsContextManager;
   private SslContextProviderSupplier supplier;
   private SslContextProvider mockSslContextProvider;
@@ -58,12 +61,14 @@ public class SslContextProviderSupplierTest {
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
             .when(mockTlsContextManager)
-            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
     supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
   }
 
   private void callUpdateSslContext() {
     mockCallback = mock(SslContextProvider.Callback.class);
+    when(mockCallback.isClientSide()).thenReturn(true);
+    when(mockCallback.getHostname()).thenReturn(HOSTNAME);
     Executor mockExecutor = mock(Executor.class);
     doReturn(mockExecutor).when(mockCallback).getExecutor();
     supplier.updateSslContext(mockCallback);
@@ -74,23 +79,23 @@ public class SslContextProviderSupplierTest {
     prepareSupplier();
     callUpdateSslContext();
     verify(mockTlsContextManager, times(2))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
     verify(mockTlsContextManager, times(0))
-        .releaseClientSslContextProvider(any(SslContextProvider.class));
+        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(HOSTNAME));
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
         ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext, sni);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext), sni);
+    capturedCallback.updateSslContext(mockSslContext, HOSTNAME);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext), HOSTNAME);
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
     supplier.updateSslContext(mockCallback);
     verify(mockTlsContextManager, times(3))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
   }
 
   @Test
@@ -106,7 +111,7 @@ public class SslContextProviderSupplierTest {
     capturedCallback.onException(exception);
     verify(mockCallback, times(1)).onException(eq(exception));
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
   }
 
   @Test
@@ -115,24 +120,24 @@ public class SslContextProviderSupplierTest {
     callUpdateSslContext();
     supplier.close();
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
     supplier.updateSslContext(mockCallback);
     verify(mockTlsContextManager, times(3))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(any(SslContextProvider.class));
+        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(HOSTNAME));
   }
 
   @Test
   public void testClose_nullSslContextProvider() {
     prepareSupplier();
     doThrow(new NullPointerException()).when(mockTlsContextManager)
-        .releaseClientSslContextProvider(null);
+        .releaseClientSslContextProvider(null, HOSTNAME);
     supplier.close();
     verify(mockTlsContextManager, never())
-        .releaseClientSslContextProvider(eq(mockSslContextProvider));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
     callUpdateSslContext();
     verify(mockTlsContextManager, times(1))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
   }
 }

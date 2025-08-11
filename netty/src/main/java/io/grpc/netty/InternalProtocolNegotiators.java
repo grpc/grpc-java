@@ -41,9 +41,9 @@ public final class InternalProtocolNegotiators {
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
-          ObjectPool<? extends Executor> executorPool,
-          Optional<Runnable> handshakeCompleteRunnable,
-          String sni) {
+                                                                  ObjectPool<? extends Executor> executorPool,
+                                                                  Optional<Runnable> handshakeCompleteRunnable,
+                                                                  String sni) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
         executorPool, handshakeCompleteRunnable, null, sni);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
@@ -63,17 +63,17 @@ public final class InternalProtocolNegotiators {
         negotiator.close();
       }
     }
-    
+
     return new TlsNegotiator();
   }
-  
+
   /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    */
-  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext, String sni) {
-    return tls(sslContext, null, Optional.absent(), sni);
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
+    return tls(sslContext, null, Optional.absent(), null);
   }
 
   /**
@@ -156,7 +156,7 @@ public final class InternalProtocolNegotiators {
    * Internal version of {@link WaitUntilActiveHandler}.
    */
   public static ChannelHandler waitUntilActiveHandler(ChannelHandler next,
-      ChannelLogger negotiationLogger) {
+                                                      ChannelLogger negotiationLogger) {
     return new WaitUntilActiveHandler(next, negotiationLogger);
   }
 
@@ -171,14 +171,14 @@ public final class InternalProtocolNegotiators {
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
     return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
-        Optional.absent(), null, null);
+        Optional.absent(), null);
   }
 
   public static class ProtocolNegotiationHandler
       extends ProtocolNegotiators.ProtocolNegotiationHandler {
 
     protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
-        ChannelLogger negotiationLogger) {
+                                         ChannelLogger negotiationLogger) {
       super(next, negotiatorName, negotiationLogger);
     }
 

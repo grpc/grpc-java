@@ -27,7 +27,9 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.internal.security.certprovider.CertProviderClientSslContextProvider;
 import io.netty.handler.ssl.SslContext;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import javax.net.ssl.SSLException;
 
 /**
@@ -41,20 +43,14 @@ public final class SslContextProviderSupplier implements Closeable {
 
   private final BaseTlsContext tlsContext;
   private final TlsContextManager tlsContextManager;
-  private final String hostname;
+  private final Set<String> snisSentByClients = new HashSet<>();
   private SslContextProvider sslContextProvider;
   private boolean shutdown;
 
   public SslContextProviderSupplier(
       BaseTlsContext tlsContext, TlsContextManager tlsContextManager) {
-    this(tlsContext, tlsContextManager, null);
-  }
-
-  public SslContextProviderSupplier(
-      BaseTlsContext tlsContext, TlsContextManager tlsContextManager, String hostname) {
     this.tlsContext = checkNotNull(tlsContext, "tlsContext");
     this.tlsContextManager = checkNotNull(tlsContextManager, "tlsContextManager");
-    this.hostname = hostname;
   }
 
   public BaseTlsContext getTlsContext() {
@@ -65,21 +61,26 @@ public final class SslContextProviderSupplier implements Closeable {
   public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
     try {
+      String sni;
+      if (callback.isClientSide()) {
+        UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
+        sni = upstreamTlsContext.getAutoHostSni() ? callback.getHostname() : upstreamTlsContext.getSni();
+      } else {
+        sni = null;
+      }
       if (!shutdown) {
         if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider();
+          sslContextProvider = getSslContextProvider(sni);
         }
       }
-      UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-      String sni = upstreamTlsContext.getAutoHostSni() ? hostname : upstreamTlsContext.getSni();
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider();
+      final SslContextProvider toRelease = getSslContextProvider(sni);
       if (toRelease instanceof CertProviderClientSslContextProvider
           && ((CertProviderClientSslContextProvider) toRelease).isUsingSystemRootCerts()) {
         callback.getExecutor().execute(() -> {
           try {
             callback.updateSslContext(GrpcSslContexts.forClient().build(), sni);
-            releaseSslContextProvider(toRelease);
+            releaseSslContextProvider(toRelease, sni);
           } catch (SSLException e) {
             callback.onException(e);
           }
@@ -91,13 +92,13 @@ public final class SslContextProviderSupplier implements Closeable {
               @Override
               public void updateSslContext(SslContext sslContext, String sni) {
                 callback.updateSslContext(sslContext, sni);
-                releaseSslContextProvider(toRelease);
+                releaseSslContextProvider(toRelease, sni);
               }
 
               @Override
               public void onException(Throwable throwable) {
                 callback.onException(throwable);
-                releaseSslContextProvider(toRelease);
+                releaseSslContextProvider(toRelease, sni);
               }
             });
       };
@@ -111,18 +112,21 @@ public final class SslContextProviderSupplier implements Closeable {
     }
   }
 
-  private void releaseSslContextProvider(SslContextProvider toRelease) {
+  private void releaseSslContextProvider(SslContextProvider toRelease, String sni) {
     if (tlsContext instanceof UpstreamTlsContext) {
-      tlsContextManager.releaseClientSslContextProvider(toRelease);
+      tlsContextManager.releaseClientSslContextProvider(toRelease, sni);
+      snisSentByClients.remove(sni);
     } else {
       tlsContextManager.releaseServerSslContextProvider(toRelease);
     }
   }
 
-  private SslContextProvider getSslContextProvider() {
-    return tlsContext instanceof UpstreamTlsContext
-        ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
-        : tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
+  private SslContextProvider getSslContextProvider(String sni) {
+    if (tlsContext instanceof UpstreamTlsContext) {
+      snisSentByClients.add(sni);
+      return tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext, sni);
+    }
+    return tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {
@@ -134,7 +138,9 @@ public final class SslContextProviderSupplier implements Closeable {
   public synchronized void close() {
     if (sslContextProvider != null) {
       if (tlsContext instanceof UpstreamTlsContext) {
-        tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
+        for (String sni: snisSentByClients) {
+          tlsContextManager.releaseClientSslContextProvider(sslContextProvider, sni);
+        }
       } else {
         tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
       }

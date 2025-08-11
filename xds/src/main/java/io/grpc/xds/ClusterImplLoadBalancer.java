@@ -59,7 +59,6 @@ import io.grpc.xds.orca.OrcaPerRequestUtil;
 import io.grpc.xds.orca.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -147,14 +146,14 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     childLbHelper.updateDropPolicies(config.dropCategories);
     childLbHelper.updateMaxConcurrentRequests(config.maxConcurrentRequests);
-    childLbHelper.updateSslContext(config.tlsContext);
+    childLbHelper.updateSslContextProviderSupplier(config.tlsContext);
     childLbHelper.updateFilterMetadata(config.filterMetadata);
 
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes.toBuilder()
-              .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
-              .build())
+                .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
+                .build())
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;
@@ -185,7 +184,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     if (childSwitchLb != null) {
       childSwitchLb.shutdown();
       if (childLbHelper != null) {
-        childLbHelper.updateSslContext(null);
+        childLbHelper.updateSslContextProviderSupplier(null);
         childLbHelper = null;
       }
     }
@@ -205,11 +204,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
-    private UpstreamTlsContext tlsContext;
+    private SslContextProviderSupplier sslContextProviderSupplier;
     private Map<String, Struct> filterMetadata = ImmutableMap.of();
     @Nullable
     private final ServerInfo lrsServerInfo;
-    private final Map<String, SslContextProviderSupplier> sslContextProviderSupplierMap = new HashMap<>();
 
     private ClusterImplLbHelper(AtomicLong inFlights, @Nullable ServerInfo lrsServerInfo) {
       this.inFlights = checkNotNull(inFlights, "inFlights");
@@ -295,17 +293,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
             XdsAttributes.ATTR_CLUSTER_NAME, cluster);
-        if (tlsContext != null) {
-          String addressNameAttr = eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME);
-          if (!sslContextProviderSupplierMap.containsKey(addressNameAttr)) {
-            sslContextProviderSupplierMap.put(addressNameAttr,
-                new SslContextProviderSupplier(tlsContext,
-                    (TlsContextManager) xdsClient.getSecurityConfig(),
-                    eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)));
-          }
+        if (sslContextProviderSupplier != null) {
           attrBuilder.set(
               SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-              sslContextProviderSupplierMap.get(addressNameAttr));
+              sslContextProviderSupplier);
         }
         newAddresses.add(new EquivalentAddressGroup(eag.getAddresses(), attrBuilder.build()));
       }
@@ -329,7 +320,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           (lrsServerInfo == null)
               ? null
               : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
-                  edsServiceName, locality);
+              edsServiceName, locality);
 
       return new ClusterLocality(localityStats, localityName);
     }
@@ -357,11 +348,22 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       updateBalancingState(currentState, currentPicker);
     }
 
-    private void updateSslContext(@Nullable UpstreamTlsContext tlsContext) {
-      if (Objects.equals(this.tlsContext,  tlsContext)) {
+    private void updateSslContextProviderSupplier(@Nullable UpstreamTlsContext tlsContext) {
+      UpstreamTlsContext currentTlsContext =
+          sslContextProviderSupplier != null
+              ? (UpstreamTlsContext)sslContextProviderSupplier.getTlsContext()
+              : null;
+      if (Objects.equals(currentTlsContext,  tlsContext)) {
         return;
       }
-      this.tlsContext = tlsContext;
+      if (sslContextProviderSupplier != null) {
+        sslContextProviderSupplier.close();
+      }
+      sslContextProviderSupplier =
+          tlsContext != null
+              ? new SslContextProviderSupplier(tlsContext,
+              (TlsContextManager) xdsClient.getSecurityConfig())
+              : null;
     }
 
     private void updateFilterMetadata(Map<String, Struct> filterMetadata) {
@@ -375,8 +377,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       private final Map<String, Struct> filterMetadata;
 
       private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-          List<DropOverload> dropPolicies, long maxConcurrentRequests,
-          Map<String, Struct> filterMetadata) {
+                                              List<DropOverload> dropPolicies, long maxConcurrentRequests,
+                                              Map<String, Struct> filterMetadata) {
         this.delegate = delegate;
         this.dropPolicies = dropPolicies;
         this.maxConcurrentRequests = maxConcurrentRequests;

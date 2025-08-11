@@ -60,14 +60,14 @@ public final class SecurityProtocolNegotiators {
   private static final AsciiString SCHEME = AsciiString.of("http");
 
   public static final Attributes.Key<SslContextProviderSupplier>
-          ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
+      ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
+      Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
 
   /** Attribute key for SslContextProviderSupplier (used from client) for a subchannel. */
   @Grpc.TransportAttr
   public static final Attributes.Key<SslContextProviderSupplier>
       ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
+      Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
 
   /**
    * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
@@ -222,7 +222,7 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext, sni).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
@@ -289,10 +289,10 @@ public final class SecurityProtocolNegotiators {
       if (evt instanceof ProtocolNegotiationEvent) {
         ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
         SslContextProviderSupplier sslContextProviderSupplier = InternalProtocolNegotiationEvent
-                .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
+            .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
         if (sslContextProviderSupplier == null) {
           logger.log(Level.FINE, "No sslContextProviderSupplier found in filterChainMatch "
-              + "for connection from {0} to {1}",
+                  + "for connection from {0} to {1}",
               new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
@@ -325,13 +325,13 @@ public final class SecurityProtocolNegotiators {
 
   @VisibleForTesting
   static final class ServerSecurityHandler
-          extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
     ServerSecurityHandler(
-            GrpcHttp2ConnectionHandler grpcHandler,
-            SslContextProviderSupplier sslContextProviderSupplier) {
+        GrpcHttp2ConnectionHandler grpcHandler,
+        SslContextProviderSupplier sslContextProviderSupplier) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior

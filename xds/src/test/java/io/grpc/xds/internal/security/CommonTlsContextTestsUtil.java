@@ -224,7 +224,7 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
-  private static CommonTlsContext.Builder addCertificateValidationContext(
+  public static CommonTlsContext.Builder addCertificateValidationContext(
       CommonTlsContext.Builder builder,
       String rootInstanceName,
       String rootCertName,

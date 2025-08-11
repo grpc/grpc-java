@@ -44,17 +44,35 @@ import java.util.concurrent.Executor;
 public abstract class SslContextProvider implements Closeable {
 
   protected final BaseTlsContext tlsContext;
-  private String sni;
 
   @VisibleForTesting public abstract static class Callback {
     private final Executor executor;
+    private final String hostname;
+    private final boolean isClientSide;
 
     protected Callback(Executor executor) {
       this.executor = executor;
+      this.hostname = null;
+      this.isClientSide = false;
+    }
+
+    // Only for client SslContextProvider.
+    protected Callback(Executor executor, String hostname) {
+      this.executor = executor;
+      this.hostname = hostname;
+      this.isClientSide = true;
     }
 
     @VisibleForTesting public Executor getExecutor() {
       return executor;
+    }
+
+    protected String getHostname() {
+      return hostname;
+    }
+
+    public boolean isClientSide() {
+      return isClientSide;
     }
 
     /** Informs callee of new/updated SslContext. */
@@ -112,7 +130,7 @@ public abstract class SslContextProvider implements Closeable {
   public abstract void addCallback(Callback callback);
 
   protected final void performCallback(
-          final SslContextGetter sslContextGetter, final Callback callback) {
+      final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
     callback.executor.execute(
@@ -121,7 +139,7 @@ public abstract class SslContextProvider implements Closeable {
           public void run() {
             try {
               SslContext sslContext = sslContextGetter.get();
-              callback.updateSslContext(sslContext, sni);
+              callback.updateSslContext(sslContext, callback.getHostname());
             } catch (Throwable e) {
               callback.onException(e);
             }
