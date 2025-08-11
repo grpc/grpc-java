@@ -70,23 +70,20 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
       String target = serverInfo.target();
-      ChannelCredentials channelCredentials =
-          (ChannelCredentials) serverInfo.implSpecificChannelCredConfig();
-      Object callCredConfig = serverInfo.implSpecificCallCredConfig();
-      if (callCredConfig != null) {
-        channelCredentials = CompositeChannelCredentials.create(
-          channelCredentials, (CallCredentials) callCredConfig);
-      }
+      Object implSpecificConfig = serverInfo.implSpecificConfig();
 
-      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
+      this.channel = Grpc.newChannelBuilder(target, (ChannelCredentials) implSpecificConfig)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
 
-      if (callCredentials != null && callCredConfig != null) {
+      if (callCredentials != null && implSpecificConfig instanceof CompositeChannelCredentials) {
         this.callCredentials =
-            new CompositeCallCredentials(callCredentials, (CallCredentials) callCredConfig);
-      } else if (callCredConfig != null) {
-        this.callCredentials = (CallCredentials) callCredConfig;
+            new CompositeCallCredentials(
+                callCredentials,
+                ((CompositeChannelCredentials) implSpecificConfig).getCallCredentials());
+      } else if (implSpecificConfig instanceof CompositeChannelCredentials) {
+        this.callCredentials =
+            ((CompositeChannelCredentials) implSpecificConfig).getCallCredentials();
       } else {
         this.callCredentials = callCredentials;
       }

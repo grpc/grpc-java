@@ -347,7 +347,7 @@ public class XdsClientFallbackTest {
       @Override
       public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
         ChannelCredentials channelCredentials =
-            (ChannelCredentials) serverInfo.implSpecificChannelCredConfig();
+            (ChannelCredentials) serverInfo.implSpecificConfig();
         return new GrpcXdsTransportFactory.GrpcXdsTransport(
             Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
               .executor(executor)
