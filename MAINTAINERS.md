@@ -15,6 +15,7 @@ for general contribution guidelines.
 - [markb74](https://github.com/markb74), Google LLC
 - [ran-su](https://github.com/ran-su), Google LLC
 - [sergiitk](https://github.com/sergiitk), Google LLC
+- [shivaspeaks](https://github.com/shivaspeaks), Google LLC
 - [temawi](https://github.com/temawi), Google LLC
 - [YifeiZhuang](https://github.com/YifeiZhuang), Google LLC
 - [zhangkun83](https://github.com/zhangkun83), Google LLC
