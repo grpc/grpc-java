@@ -26,7 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
 
-final class AddressFilter {
+public final class AddressFilter {
   @ResolutionResultAttr
   private static final Attributes.Key<PathChain> PATH_CHAIN_KEY =
       Attributes.Key.create("io.grpc.xds.AddressFilter.PATH_CHAIN_KEY");
@@ -38,7 +38,7 @@ final class AddressFilter {
    * Returns a new EquivalentAddressGroup by setting a path filter to the given
    * EquivalentAddressGroup. This method does not modify the input address.
    */
-  static EquivalentAddressGroup setPathFilter(EquivalentAddressGroup address, List<String> names) {
+  public static EquivalentAddressGroup setPathFilter(EquivalentAddressGroup address, List<String> names) {
     checkNotNull(address, "address");
     checkNotNull(names, "names");
     Attributes.Builder attrBuilder = address.getAttributes().toBuilder().discard(PATH_CHAIN_KEY);
@@ -75,11 +75,11 @@ final class AddressFilter {
     return Collections.unmodifiableList(filteredAddresses);
   }
 
-  private static final class PathChain {
+  public static final class PathChain {
     final String name;
     @Nullable PathChain next;
 
-    PathChain(String name) {
+    public PathChain(String name) {
       this.name = checkNotNull(name, "name");
     }
 
