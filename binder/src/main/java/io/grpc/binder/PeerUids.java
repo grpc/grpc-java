@@ -22,6 +22,7 @@ import android.content.pm.PackageManager;
 import android.os.Build.VERSION_CODES;
 import android.os.UserHandle;
 import androidx.annotation.RequiresApi;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ExperimentalApi;
@@ -29,6 +30,7 @@ import io.grpc.Metadata;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 import io.grpc.binder.internal.BinderTransport;
 import javax.annotation.Nullable;
 
@@ -72,6 +74,38 @@ public final class PeerUids {
   @RequiresApi(api = VERSION_CODES.N)
   public static UserHandle getUserHandleForUid(PeerUid who) {
     return UserHandle.getUserHandleForUid(who.getUid());
+  }
+
+  /**
+   * Tests whether a {@link SecurityPolicy} authorizes the given {@link PeerUid}.
+   *
+   * <p>This method does not replace the transport layer {@link ServerSecurityPolicy} required by
+   * all servers. Rather, it lets an application implement additional, higher layer security policy
+   * that's checked after the call itself is authorized by the lower layer. This could be done with
+   * a {@link ServerInterceptor} or in the RPC method implementation itself.
+   *
+   * <p>This method is equivalent to calling {@link SecurityPolicy#checkAuthorization(int)}, except
+   * the caller provides a {@link PeerUid} instead of the raw integer uid.
+   */
+  public static Status checkAuthorization(SecurityPolicy securityPolicy, PeerUid who) {
+    return securityPolicy.checkAuthorization(who.getUid());
+  }
+
+  /**
+   * Tests whether a {@link AsyncSecurityPolicy} authorizes the given {@link PeerUid}.
+   *
+   * <p>This method does not replace the transport layer {@link ServerSecurityPolicy} required by
+   * all servers. Rather, it lets an application implement additional, higher layer security policy
+   * that's checked after the call itself is authorized by the lower layer. This could be done with
+   * a {@link ServerInterceptor} or in the RPC method implementation itself.
+   *
+   * <p>This method is equivalent to calling {@link
+   * AsyncSecurityPolicy#checkAuthorizationAsync(int)}, except the caller provides a {@link PeerUid}
+   * instead of the raw integer uid.
+   */
+  public static ListenableFuture<Status> checkAuthorizationAsync(
+      AsyncSecurityPolicy securityPolicy, PeerUid who) {
+    return securityPolicy.checkAuthorizationAsync(who.getUid());
   }
 
   /**
