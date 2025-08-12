@@ -18,7 +18,10 @@ package io.grpc.xds.internal;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.File;
+import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -30,7 +33,42 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    return TlsChannelCredentials.create();
+    TlsChannelCredentials.Builder builder = TlsChannelCredentials.newBuilder();
+
+    if (jsonConfig == null) {
+      return builder.build();
+    }
+
+    // use trust certificate file path from bootstrap config if provided; else use system default
+    String rootCertPath = JsonUtil.getString(jsonConfig, "ca_certificate_file");
+    if (rootCertPath != null) {
+      try {
+        builder.trustManager(new File(rootCertPath));
+      } catch (IOException e) {
+        return null;
+      }
+    }
+
+    // use certificate chain and private key file paths from bootstrap config if provided. Mind that
+    // both JSON values must be either set (mTLS case) or both unset (TLS case)
+    String certChainPath = JsonUtil.getString(jsonConfig, "certificate_file");
+    String privateKeyPath = JsonUtil.getString(jsonConfig, "private_key_file");
+    if (certChainPath != null && privateKeyPath != null) {
+      try {
+        builder.keyManager(new File(certChainPath), new File(privateKeyPath));
+      } catch (IOException e) {
+        return null;
+      }
+    } else if (certChainPath != null || privateKeyPath != null) {
+      return null;
+    }
+
+    // save json config when custom certificate paths were provided in a bootstrap
+    if (rootCertPath != null || certChainPath != null) {
+      builder.customCertificatesConfig(jsonConfig);
+    }
+    
+    return builder.build();
   }
 
   @Override
