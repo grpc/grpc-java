@@ -71,7 +71,6 @@ import javax.annotation.Nullable;
  */
 final class OpenTelemetryMetricsModule {
   private static final Logger logger = Logger.getLogger(OpenTelemetryMetricsModule.class.getName());
-  private static final double NANOS_PER_SEC = 1_000_000_000.0;
   public static final ImmutableSet<String> DEFAULT_PER_CALL_METRICS_SET =
       ImmutableSet.of(
           "grpc.client.attempt.started",
@@ -286,7 +285,7 @@ final class OpenTelemetryMetricsModule {
   static final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
     private final OpenTelemetryMetricsModule module;
     private final String target;
-    private final Stopwatch attemptStopwatch;
+    private final Stopwatch attemptDelayStopwatch;
     private final Stopwatch callStopWatch;
     @GuardedBy("lock")
     private boolean callEnded;
@@ -313,7 +312,7 @@ final class OpenTelemetryMetricsModule {
       this.target = checkNotNull(target, "target");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.callPlugins = checkNotNull(callPlugins, "callPlugins");
-      this.attemptStopwatch = module.stopwatchSupplier.get();
+      this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
@@ -333,9 +332,9 @@ final class OpenTelemetryMetricsModule {
           // This can be the case when the call is cancelled but a retry attempt is created.
           return new ClientStreamTracer() {};
         }
-        if (++activeStreams == 1 && attemptStopwatch.isRunning()) {
-          attemptStopwatch.stop();
-          retryDelayNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
+        if (++activeStreams == 1 && attemptDelayStopwatch.isRunning()) {
+          attemptDelayStopwatch.stop();
+          retryDelayNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
       }
       // Skip recording for the first time, since it is already recorded in
@@ -376,7 +375,7 @@ final class OpenTelemetryMetricsModule {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (--activeStreams == 0) {
-          attemptStopwatch.start();
+          attemptDelayStopwatch.start();
           if (callEnded && !finishedCallToBeRecorded) {
             shouldRecordFinishedCall = true;
             finishedCallToBeRecorded = true;
@@ -411,7 +410,7 @@ final class OpenTelemetryMetricsModule {
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
-        tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
+        tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
       }
@@ -436,7 +435,7 @@ final class OpenTelemetryMetricsModule {
 
       // Retry counts
       if (module.resource.clientCallRetriesCounter() != null) {
-        long retriesPerCall = attemptsPerCall.get() - 1 >= 0 ? attemptsPerCall.get() - 1 : 0;
+        long retriesPerCall = Math.max(attemptsPerCall.get() - 1, 0);
         if (retriesPerCall > 0) {
           module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
         }
@@ -444,23 +443,26 @@ final class OpenTelemetryMetricsModule {
 
       // Hedge counts
       if (module.resource.clientCallHedgesCounter() != null) {
-        if (hedgedAttemptsPerCall.get() > 0) {
+        long hedges = hedgedAttemptsPerCall.get();
+        if (hedges > 0) {
           module.resource.clientCallHedgesCounter()
-              .record(hedgedAttemptsPerCall.get(), baseAttributes);
+              .record(hedges, baseAttributes);
         }
       }
 
       // Transparent Retry counts
-      if (module.resource.clientCallTransparentRetriesCounter() != null
-          && transparentRetriesPerCall.get() > 0) {
-        module.resource.clientCallTransparentRetriesCounter().record(
-            transparentRetriesPerCall.get(), baseAttributes);
+      if (module.resource.clientCallTransparentRetriesCounter() != null) {
+        long transparentRetries = transparentRetriesPerCall.get();
+        if (transparentRetries > 0) {
+          module.resource.clientCallTransparentRetriesCounter().record(
+              transparentRetries, baseAttributes);
+        }
       }
 
       // Retry delay
       if (module.resource.clientCallRetryDelayCounter() != null) {
         module.resource.clientCallRetryDelayCounter().record(
-            retryDelayNanos / NANOS_PER_SEC,
+            retryDelayNanos * SECONDS_PER_NANO,
             baseAttributes
         );
       }
