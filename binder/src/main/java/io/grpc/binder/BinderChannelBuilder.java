@@ -99,6 +99,30 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    * Creates a channel builder that will bind to a remote Android service, via a string target name
    * which will be resolved.
    *
+   * <p>'target' will be resolved by way of a {@link io.grpc.NameResolverRegistry} in the usual way.
+   * However, the Android-standard Intent URI schemes are supported out of the box (at {@link
+   * io.grpc.NameResolverProvider} priority 3) without any setup or registration needed. See {@link
+   * android.content.Intent#URI_INTENT_SCHEME} and {@link
+   * android.content.Intent#URI_ANDROID_APP_SCHEME} for the syntax.
+   *
+   * <p>In both cases, the decoded Intent is resolved using {@link
+   * android.content.pm.PackageManager#queryIntentServices} and the resulting addresses are tried in
+   * `android:priority` order using the `pick_first` load balancer policy. Unlike ordinary Android
+   * bindings, target Intents need not specify the Service's package or ComponentName explicitly.
+   * However, on-device servers discovered in this way are always pre-authorized (see {@link
+   * #preAuthorizeServers} for details).
+   *
+   * <p>`android-app:` target URIs are parsed in a slightly non-standard way to permit service
+   * discovery. This scheme normally uses the URI's authority component to encoded a package
+   * restriction for the Intent. But if 'target's authority is either "localhost" or the empty
+   * string, the resulting Intent will have no package restriction at all. In other words, a URI
+   * like `android-app:///...` can resolve to a Service in any package (not a package named "").
+   *
+   * <p>grpc-java only supports target URIs that can be parsed under java.net.URI's interpretation
+   * of RFC 2396. This unfortunately does not include the 'intent:` URI encoding of many common
+   * Intents, including ones without an embedded "data" URI. Use the 'android-app' scheme to work
+   * around this limitation.
+   *
    * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
    * after 30 minutes without use by default but can be configured via {@link
    * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
@@ -118,16 +142,10 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   /**
-   * Creates a channel builder that will bind to a remote Android service, via a string target name
-   * which will be resolved.
+   * Creates a channel builder that will bind to a remote Android service resolved by target URI and
+   * using the specified credentials.
    *
-   * <p>The underlying Android binding will be torn down when the channel becomes idle. This happens
-   * after 30 minutes without use by default but can be configured via {@link
-   * ManagedChannelBuilder#idleTimeout(long, TimeUnit)} or triggered manually with {@link
-   * ManagedChannel#enterIdle()}.
-   *
-   * <p>You the caller are responsible for managing the lifecycle of any channels built by the
-   * resulting builder. They will not be shut down automatically.
+   * <p>See {@link #forTarget(String, Context)} for details.
    *
    * @param target A target uri which should resolve into an {@link AndroidComponentAddress}
    *     referencing the service to bind to.
