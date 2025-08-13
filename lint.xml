@@ -5,4 +5,10 @@
       Remove after AGP upgrade.
     -->
     <issue id="OldTargetApi" severity="ignore" />
+
+    <!--
+    Suppress 'VisibleForTests' warnings for now as these methods are intentionally
+    exposed for testing purposes and access across modules.
+    -->
+    <issue id="VisibleForTests" severity="ignore" />
 </lint>
