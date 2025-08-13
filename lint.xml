@@ -7,8 +7,7 @@
     <issue id="OldTargetApi" severity="ignore" />
 
     <!--
-    Suppress 'VisibleForTests' warnings for now as these methods are intentionally
-    exposed for testing purposes and access across modules.
+    Suppress temporarily 'VisibleForTests' warnings - exposed for testing purposes
     -->
     <issue id="VisibleForTests" severity="ignore" />
 </lint>
