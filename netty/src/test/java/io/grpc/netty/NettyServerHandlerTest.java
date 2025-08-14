@@ -1304,6 +1304,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   private void rapidReset(int burstSize) throws Exception {
+    when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
+        .thenAnswer((args) -> new TestServerStreamTracer());
     Http2Headers headers = new DefaultHttp2Headers()
         .method(HTTP_METHOD)
         .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
@@ -1315,6 +1317,48 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
       for (int i = 0; i < burstSize; i++) {
         channelRead(headersFrame(streamId, headers));
         channelRead(rstStreamFrame(streamId, (int) Http2Error.CANCEL.code()));
+        streamId += 2;
+        fakeClock().forwardNanos(rpcTimeNanos);
+      }
+      while (channel().readOutbound() != null) {}
+      fakeClock().forwardNanos(maxRstPeriodNanos - rpcTimeNanos * burstSize + 1);
+    }
+  }
+
+  @Test
+  public void maxRstCountSent_withinLimit_succeeds() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    madeYouReset(maxRstCount);
+
+    assertTrue(channel().isOpen());
+  }
+
+  @Test
+  public void maxRstCountSent_exceedsLimit_fails() throws Exception {
+    maxRstCount = 10;
+    maxRstPeriodNanos = TimeUnit.MILLISECONDS.toNanos(100);
+    manualSetUp();
+    assertThrows(ClosedChannelException.class, () -> madeYouReset(maxRstCount + 1));
+
+    assertFalse(channel().isOpen());
+  }
+
+  private void madeYouReset(int burstSize) throws Exception {
+    when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
+        .thenAnswer((args) -> new TestServerStreamTracer());
+    Http2Headers headers = new DefaultHttp2Headers()
+        .method(HTTP_METHOD)
+        .set(CONTENT_TYPE_HEADER, new AsciiString("application/grpc", UTF_8))
+        .set(TE_HEADER, TE_TRAILERS)
+        .path(new AsciiString("/foo/bar"));
+    int streamId = 1;
+    long rpcTimeNanos = maxRstPeriodNanos / 2 / burstSize;
+    for (int period = 0; period < 3; period++) {
+      for (int i = 0; i < burstSize; i++) {
+        channelRead(headersFrame(streamId, headers));
+        channelRead(windowUpdate(streamId, 0));
         streamId += 2;
         fakeClock().forwardNanos(rpcTimeNanos);
       }
