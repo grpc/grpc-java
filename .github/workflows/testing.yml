@@ -102,6 +102,9 @@ jobs:
     - name: Run bazel build
       run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
 
+    - name: Run bazel test
+      run: bazelisk test //... --enable_bzlmod=${{ matrix.bzlmod }}
+
     - name: Run example bazel build
       run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
       working-directory: ./examples
