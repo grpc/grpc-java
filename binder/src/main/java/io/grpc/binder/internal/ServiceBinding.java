@@ -357,7 +357,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public void onNullBinding(ComponentName name) {
     unbindInternal(
         Status.UNIMPLEMENTED.withDescription(
-            "Server returned no IBinder for " + bindIntent + " (onNullBinding): " + name));
+            "Remote Service returned null from onBind() for "
+                + bindIntent
+                + " (onNullBinding): "
+                + name));
   }
 
   @Override
@@ -365,9 +368,11 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   public void onBindingDied(ComponentName name) {
     unbindInternal(
         Status.UNAVAILABLE.withDescription(
-            "Remote Service was disabled, or the server app was disabled, force-stopped or"
-                + " uninstalled (onBindingDied): "
-                + name));
+            "Remote Service component "
+                + name.getClassName()
+                + " was disabled, or its package "
+                + name.getPackageName()
+                + " was disabled, force-stopped, replaced or uninstalled (onBindingDied)."));
   }
 
   @VisibleForTesting
