@@ -12,7 +12,7 @@ GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'" \
   ../gradlew installDist -x test -PskipCodegen=true -PskipAndroid=true
 popd
 
-git clone -b master --single-branch --depth=1 https://github.com/grpc/grpc.git
+git clone -b fix/psm/legacy/pip-freeze --single-branch --depth=1 https://github.com/sergiitk/grpc.git
 
 grpc/tools/run_tests/helper_scripts/prep_xds.sh
 
