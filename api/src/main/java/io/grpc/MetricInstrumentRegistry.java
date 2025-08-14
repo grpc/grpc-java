@@ -145,6 +145,47 @@ public final class MetricInstrumentRegistry {
   }
 
   /**
+   * Registers a new Long Up Down Counter metric instrument.
+   *
+   * @param name              the name of the metric
+   * @param description       a description of the metric
+   * @param unit              the unit of measurement for the metric
+   * @param requiredLabelKeys a list of required label keys
+   * @param optionalLabelKeys a list of optional label keys
+   * @param enableByDefault   whether the metric should be enabled by default
+   * @return the newly created LongUpDownCounterMetricInstrument
+   * @throws IllegalStateException if a metric with the same name already exists
+   */
+  public LongUpDownCounterMetricInstrument registerLongUpDownCounter(String name,
+                                                                     String description,
+                                                                     String unit,
+                                                                     List<String> requiredLabelKeys,
+                                                                     List<String> optionalLabelKeys,
+                                                                     boolean enableByDefault) {
+    checkArgument(!Strings.isNullOrEmpty(name), "missing metric name");
+    checkNotNull(description, "description");
+    checkNotNull(unit, "unit");
+    checkNotNull(requiredLabelKeys, "requiredLabelKeys");
+    checkNotNull(optionalLabelKeys, "optionalLabelKeys");
+    synchronized (lock) {
+      if (registeredMetricNames.contains(name)) {
+        throw new IllegalStateException("Metric with name " + name + " already exists");
+      }
+      int index = nextAvailableMetricIndex;
+      if (index + 1 == metricInstruments.length) {
+        resizeMetricInstruments();
+      }
+      LongUpDownCounterMetricInstrument instrument = new LongUpDownCounterMetricInstrument(
+          index, name, description, unit, requiredLabelKeys, optionalLabelKeys,
+          enableByDefault);
+      metricInstruments[index] = instrument;
+      registeredMetricNames.add(name);
+      nextAvailableMetricIndex += 1;
+      return instrument;
+    }
+  }
+
+  /**
    * Registers a new Double Histogram metric instrument.
    *
    * @param name the name of the metric
