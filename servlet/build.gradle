@@ -69,7 +69,9 @@ dependencies {
             libraries.protobuf.java
 }
 
-tasks.named("test").configure {
+tasks.register('threadingTest', Test) {
+    classpath = sourceSets.threadingTest.runtimeClasspath
+    testClassesDirs = sourceSets.threadingTest.output.classesDirs
     if (JavaVersion.current().isJava9Compatible()) {
         jvmArgs += [
                 // required for Lincheck
@@ -77,11 +79,6 @@ tasks.named("test").configure {
                 '--add-exports=java.base/jdk.internal.util=ALL-UNNAMED',
         ]
     }
-}
-
-tasks.register('threadingTest', Test) {
-    classpath = sourceSets.threadingTest.runtimeClasspath
-    testClassesDirs = sourceSets.threadingTest.output.classesDirs
 }
 
 tasks.named("assemble").configure {
