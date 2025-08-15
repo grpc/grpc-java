@@ -62,7 +62,7 @@ public final class SslContextProviderSupplier implements Closeable {
     checkNotNull(callback, "callback");
     try {
       String sni;
-      if (callback.isClientSide()) {
+      if (tlsContext instanceof UpstreamTlsContext) {
         UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
         sni = upstreamTlsContext.getAutoHostSni() ? callback.getHostname() : upstreamTlsContext.getSni();
       } else {
@@ -75,33 +75,21 @@ public final class SslContextProviderSupplier implements Closeable {
       }
       // we want to increment the ref-count so call findOrCreate again...
       final SslContextProvider toRelease = getSslContextProvider(sni);
-      if (toRelease instanceof CertProviderClientSslContextProvider
-          && ((CertProviderClientSslContextProvider) toRelease).isUsingSystemRootCerts()) {
-        callback.getExecutor().execute(() -> {
-          try {
-            callback.updateSslContext(GrpcSslContexts.forClient().build(), sni);
-            releaseSslContextProvider(toRelease, sni);
-          } catch (SSLException e) {
-            callback.onException(e);
-          }
-        });
-      } else {
-        toRelease.addCallback(
-            new SslContextProvider.Callback(callback.getExecutor()) {
+      toRelease.addCallback(
+          new SslContextProvider.Callback(callback.getExecutor()) {
 
-              @Override
-              public void updateSslContext(SslContext sslContext, String sni) {
-                callback.updateSslContext(sslContext, sni);
-                releaseSslContextProvider(toRelease, sni);
-              }
+            @Override
+            public void updateSslContext(SslContext sslContext, String sni) {
+              callback.updateSslContext(sslContext, sni);
+              releaseSslContextProvider(toRelease, sni);
+            }
 
-              @Override
-              public void onException(Throwable throwable) {
-                callback.onException(throwable);
-                releaseSslContextProvider(toRelease, sni);
-              }
-            });
-      };
+            @Override
+            public void onException(Throwable throwable) {
+              callback.onException(throwable);
+              releaseSslContextProvider(toRelease, sni);
+            }
+          });
     } catch (final Throwable throwable) {
       callback.getExecutor().execute(new Runnable() {
         @Override

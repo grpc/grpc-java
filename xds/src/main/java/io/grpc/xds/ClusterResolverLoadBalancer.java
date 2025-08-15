@@ -61,6 +61,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -432,7 +433,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                           .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
                           .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                          .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                          .set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, endpoint.hostname())
                           .build();
 
                   EquivalentAddressGroup eag;
@@ -680,7 +681,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               Attributes attr = eag.getAttributes().toBuilder()
                       .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
                       .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
-                      .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
+                      .set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, dnsHostName)
                       .build();
               eag = new EquivalentAddressGroup(eag.getAddresses(), attr);
               eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));

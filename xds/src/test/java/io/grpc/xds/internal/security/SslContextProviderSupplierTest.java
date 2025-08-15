@@ -55,7 +55,7 @@ public class SslContextProviderSupplierTest {
   private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
   private SslContextProvider.Callback mockCallback;
 
-  private void prepareSupplier() {
+  private void prepareSupplier(boolean autoHostSni) {
     upstreamTlsContext =
             CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     mockSslContextProvider = mock(SslContextProvider.class);
@@ -65,9 +65,12 @@ public class SslContextProviderSupplierTest {
     supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
   }
 
+  private EnvoyServerProtoData.UpstreamTlsContext getUpstreamTlsContext(boolean autoHostSni) {
+
+  }
+
   private void callUpdateSslContext() {
     mockCallback = mock(SslContextProvider.Callback.class);
-    when(mockCallback.isClientSide()).thenReturn(true);
     when(mockCallback.getHostname()).thenReturn(HOSTNAME);
     Executor mockExecutor = mock(Executor.class);
     doReturn(mockExecutor).when(mockCallback).getExecutor();

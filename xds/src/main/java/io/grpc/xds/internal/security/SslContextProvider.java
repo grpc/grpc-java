@@ -48,19 +48,16 @@ public abstract class SslContextProvider implements Closeable {
   @VisibleForTesting public abstract static class Callback {
     private final Executor executor;
     private final String hostname;
-    private final boolean isClientSide;
 
     protected Callback(Executor executor) {
       this.executor = executor;
       this.hostname = null;
-      this.isClientSide = false;
     }
 
     // Only for client SslContextProvider.
     protected Callback(Executor executor, String hostname) {
       this.executor = executor;
       this.hostname = hostname;
-      this.isClientSide = true;
     }
 
     @VisibleForTesting public Executor getExecutor() {
@@ -69,10 +66,6 @@ public abstract class SslContextProvider implements Closeable {
 
     protected String getHostname() {
       return hostname;
-    }
-
-    public boolean isClientSide() {
-      return isClientSide;
     }
 
     /** Informs callee of new/updated SslContext. */

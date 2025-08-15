@@ -86,6 +86,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class SecurityProtocolNegotiatorsTest {
 
+  private static final String HOSTNAME = "hostname";
+
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
 
@@ -157,7 +159,7 @@ public class SecurityProtocolNegotiatorsTest {
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
     ClientSecurityHandler clientSecurityHandler =
-        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
     pipeline.addLast(clientSecurityHandler);
     channelHandlerCtx = pipeline.context(clientSecurityHandler);
     assertNotNull(channelHandlerCtx);
@@ -369,7 +371,7 @@ public class SecurityProtocolNegotiatorsTest {
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
     ClientSecurityHandler clientSecurityHandler =
-        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
     pipeline.addLast(clientSecurityHandler);
     channelHandlerCtx = pipeline.context(clientSecurityHandler);
@@ -420,7 +422,7 @@ public class SecurityProtocolNegotiatorsTest {
         new SslContextProviderSupplier(upstreamTlsContext,
             new TlsContextManagerImpl(bootstrapInfoForClient));
     ClientSecurityHandler clientSecurityHandler =
-        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier);
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
     pipeline.addLast(clientSecurityHandler);
     channelHandlerCtx = pipeline.context(clientSecurityHandler);

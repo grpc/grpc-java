@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -49,6 +50,11 @@ import javax.annotation.Nullable;
  */
 @VisibleForTesting
 public final class SecurityProtocolNegotiators {
+
+  /** Name associated with individual address, if available (e.g., DNS name). */
+  @EquivalentAddressGroup.Attr
+  public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
 
   // Prevent instantiation.
   private SecurityProtocolNegotiators() {
@@ -142,7 +148,8 @@ public final class SecurityProtocolNegotiators {
             fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
-      return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier);
+      return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
+          grpcHandler.getEagAttributes().get(ATTR_ADDRESS_NAME));
     }
 
     @Override
@@ -185,10 +192,12 @@ public final class SecurityProtocolNegotiators {
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
+    private final String hostname;
 
     ClientSecurityHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
-        SslContextProviderSupplier sslContextProviderSupplier) {
+        SslContextProviderSupplier sslContextProviderSupplier,
+        String hostname) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -202,6 +211,7 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
+      this.hostname = hostname;
     }
 
     @Override
@@ -210,7 +220,7 @@ public final class SecurityProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
       sslContextProviderSupplier.updateSslContext(
-          new SslContextProvider.Callback(ctx.executor()) {
+          new SslContextProvider.Callback(ctx.executor(), hostname) {
 
             @Override
             public void updateSslContext(SslContext sslContext, String sni) {

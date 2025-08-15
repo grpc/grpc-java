@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
@@ -60,21 +61,34 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private final X509ExtendedTrustManager delegate;
   private final Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates;
   private final CertificateValidationContext certContext;
+  private final String sni;
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
                       X509ExtendedTrustManager delegate) {
+    this(certContext, delegate, null);
+  }
+
+  XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
+                      X509ExtendedTrustManager delegate, @Nullable String sni) {
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
     this.spiffeTrustMapDelegates = null;
+    this.sni = sni;
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates) {
+                      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates) {
+    this(certContext, spiffeTrustMapDelegates, null);
+  }
+
+  XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
+                      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates, @Nullable String sni) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
     this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;
     this.delegate = null;
+    this.sni = sni;
   }
 
   private static boolean verifyDnsNameInPattern(
@@ -208,7 +222,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
-    List<StringMatcher> verifyList = certContext.getMatchSubjectAltNamesList();
+    List<StringMatcher> verifyList = sni != null? ImmutableList.of(StringMatcher.newBuilder().setExact(sni).build()) : certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {
       return;
     }

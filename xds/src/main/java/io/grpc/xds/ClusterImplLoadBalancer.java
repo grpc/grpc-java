@@ -241,9 +241,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
       if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
         String hostname = args.getAddresses().get(0).getAttributes()
-            .get(XdsAttributes.ATTR_ADDRESS_NAME);
+            .get(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(XdsAttributes.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
@@ -438,7 +438,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
                 result.getSubchannel().getAttributes().get(
-                    XdsAttributes.ATTR_ADDRESS_NAME));
+                    SecurityProtocolNegotiators.ATTR_ADDRESS_NAME));
           }
         }
         return result;
