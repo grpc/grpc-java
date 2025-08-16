@@ -190,8 +190,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           break;
         case BIND_SERVICE_AS_USER:
           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // We don't need SystemApis because bindServiceAsUser() is simply public in R+.
             bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
           } else {
+            // TODO(jdcormie): Use SystemApis to make this work pre-R.
             return Status.INTERNAL.withDescription("Cross user Channel requires Android R+");
           }
           break;
