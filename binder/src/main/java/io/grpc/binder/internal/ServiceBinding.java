@@ -267,7 +267,6 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @AnyThread
   @Override
   public ServiceInfo resolve() throws StatusException {
-    checkState(sourceContext != null);
     int flags = 0;
     if (Build.VERSION.SDK_INT >= 29) {
       // Filter out non-'directBootAware' <service>s when 'targetUserHandle' is locked. Here's why:
@@ -276,10 +275,16 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       // 'directBootAware'-ness. This flag explicitly tells resolveService() to act the same way.
       flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
     }
+    Context targetUserContext;
+    try {
+      targetUserContext = getContextForTargetUser();
+    } catch (ReflectiveOperationException e) {
+      throw Status.INTERNAL
+          .withDescription("Cross-user pre-auth requires SDK_INT >= R and @SystemApi visibility")
+          .asException();
+    }
     ResolveInfo resolveInfo =
-        getContextForTargetUser(sourceContext, targetUserHandle)
-            .getPackageManager()
-            .resolveService(bindIntent, flags);
+        targetUserContext.getPackageManager().resolveService(bindIntent, flags);
     if (resolveInfo == null) {
       throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
           .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
@@ -288,18 +293,12 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     return resolveInfo.serviceInfo;
   }
 
-  private static Context getContextForTargetUser(Context context, UserHandle targetUser)
-      throws StatusException {
-    if (targetUser == null) {
-      return context;
-    }
-    try {
-      return createContextAsUser(context, targetUser, /* flags= */ 0); // @SystemApi since R.
-    } catch (ReflectiveOperationException e) {
-      throw Status.INTERNAL
-          .withDescription("Cross-user pre-auth requires SDK_INT >= R and @SystemApi visibility")
-          .asException();
-    }
+  private Context getContextForTargetUser() throws ReflectiveOperationException {
+    checkState(sourceContext != null);
+    return targetUserHandle == null
+        ? sourceContext
+        : createContextAsUser(
+            sourceContext, targetUserHandle, /* flags= */ 0); // @SystemApi since R.
   }
 
   @MainThread
