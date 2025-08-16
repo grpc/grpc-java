@@ -25,8 +25,8 @@ import javax.annotation.Nullable;
  */
 public class StatusException extends Exception {
   private static final long serialVersionUID = -660954903976144640L;
-  private final Status status;
-  private final Metadata trailers;
+  private final transient Status status;
+  private final transient Metadata trailers;
 
   /**
    * Constructs an exception with both a status.  See also {@link Status#asException()}.
