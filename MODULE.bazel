@@ -2,13 +2,13 @@ module(
     name = "grpc-java",
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "1.75.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
+    version = "1.76.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.51.0",
+    "com.google.api.grpc:proto-google-common-protos:2.59.2",
     "com.google.auth:google-auth-library-credentials:1.24.1",
     "com.google.auth:google-auth-library-oauth2-http:1.24.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
@@ -19,24 +19,24 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.3.1-android",
     "com.google.re2j:re2j:1.8",
-    "com.google.s2a.proto.v2:s2a-proto:0.1.1",
+    "com.google.s2a.proto.v2:s2a-proto:0.1.2",
     "com.google.truth:truth:1.4.2",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.110.Final",
-    "io.netty:netty-codec-http2:4.1.110.Final",
-    "io.netty:netty-codec-http:4.1.110.Final",
-    "io.netty:netty-codec-socks:4.1.110.Final",
-    "io.netty:netty-codec:4.1.110.Final",
-    "io.netty:netty-common:4.1.110.Final",
-    "io.netty:netty-handler-proxy:4.1.110.Final",
-    "io.netty:netty-handler:4.1.110.Final",
-    "io.netty:netty-resolver:4.1.110.Final",
+    "io.netty:netty-buffer:4.1.124.Final",
+    "io.netty:netty-codec-http2:4.1.124.Final",
+    "io.netty:netty-codec-http:4.1.124.Final",
+    "io.netty:netty-codec-socks:4.1.124.Final",
+    "io.netty:netty-codec:4.1.124.Final",
+    "io.netty:netty-common:4.1.124.Final",
+    "io.netty:netty-handler-proxy:4.1.124.Final",
+    "io.netty:netty-handler:4.1.124.Final",
+    "io.netty:netty-resolver:4.1.124.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.70.Final",
     "io.netty:netty-tcnative-classes:2.0.70.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.110.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.110.Final",
-    "io.netty:netty-transport:4.1.110.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.124.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.124.Final",
+    "io.netty:netty-transport:4.1.124.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -50,7 +50,8 @@ bazel_dep(name = "bazel_jar_jar", version = "0.1.7")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
-bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
+# Protobuf 25.5+ is incompatible with Bazel 7 with bzlmod
+bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "24.4")
 bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "rules_java", version = "5.3.5")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
