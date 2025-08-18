@@ -220,6 +220,7 @@ public abstract class GrpcXdsClientImplTestBase {
   protected final Queue<LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
   protected final AtomicBoolean lrsEnded = new AtomicBoolean(true);
+  @SuppressWarnings("this-escape")
   private final MessageFactory mf = createMessageFactory();
 
   private static final long TIME_INCREMENT = TimeUnit.SECONDS.toNanos(1);
@@ -302,7 +303,9 @@ public abstract class GrpcXdsClientImplTestBase {
   private boolean originalEnableLeastRequest;
   private Server xdsServer;
   private final String serverName = InProcessServerBuilder.generateName();
+  @SuppressWarnings("this-escape")
   private final BindableService adsService = createAdsService();
+  @SuppressWarnings("this-escape")
   private final BindableService lrsService = createLrsService();
 
   private XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
