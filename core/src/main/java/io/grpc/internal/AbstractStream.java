@@ -163,6 +163,7 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private int onReadyThreshold;
 
+    @SuppressWarnings("this-escape")
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,

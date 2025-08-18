@@ -90,6 +90,7 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   private final TransportTracer transportTracer;
+  @SuppressWarnings("this-escape")
   private final Framer framer;
   private final boolean shouldBeCountedForInUse;
   private final boolean useGet;
@@ -101,6 +102,7 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   private volatile boolean cancelled;
 
+  @SuppressWarnings("this-escape")
   protected AbstractClientStream(
       WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx,

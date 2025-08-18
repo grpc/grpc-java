@@ -365,14 +365,14 @@ public class JsonUtil {
   private static long normalizedDuration(long seconds, int nanos) {
     if (nanos <= -NANOS_PER_SECOND || nanos >= NANOS_PER_SECOND) {
       seconds = checkedAdd(seconds, nanos / NANOS_PER_SECOND);
-      nanos %= NANOS_PER_SECOND;
+      nanos %= (int) NANOS_PER_SECOND;
     }
     if (seconds > 0 && nanos < 0) {
-      nanos += NANOS_PER_SECOND; // no overflow since nanos is negative (and we're adding)
+      nanos += (int) NANOS_PER_SECOND; // no overflow— nanos is negative (and we're adding)
       seconds--; // no overflow since seconds is positive (and we're decrementing)
     }
     if (seconds < 0 && nanos > 0) {
-      nanos -= NANOS_PER_SECOND; // no overflow since nanos is positive (and we're subtracting)
+      nanos -= (int) NANOS_PER_SECOND; // no overflow— nanos is positive (and we're subtracting)
       seconds++; // no overflow since seconds is negative (and we're incrementing)
     }
     if (!durationIsValid(seconds, nanos)) {

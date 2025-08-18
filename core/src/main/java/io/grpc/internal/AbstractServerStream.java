@@ -75,6 +75,7 @@ public abstract class AbstractServerStream extends AbstractStream
   private boolean outboundClosed;
   private boolean headersSent;
 
+  @SuppressWarnings("this-escape")
   protected AbstractServerStream(
       WritableBufferAllocator bufferAllocator, StatsTraceContext statsTraceCtx) {
     this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
