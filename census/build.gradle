@@ -19,6 +19,7 @@ dependencies {
     runtimeOnly project(":grpc-context")
     implementation libraries.guava,
             project(":grpc-context"), // Override opencensus dependency with our newer version
+            project(":grpc-core"),
             libraries.opencensus.api,
             libraries.opencensus.contrib.grpc.metrics
 
