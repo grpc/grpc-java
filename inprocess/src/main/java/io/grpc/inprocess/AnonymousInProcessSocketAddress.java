@@ -34,7 +34,7 @@ public final class AnonymousInProcessSocketAddress extends SocketAddress {
 
   @Nullable
   @GuardedBy("this")
-  private InProcessServer server;
+  private transient InProcessServer server;
 
   /** Creates a new AnonymousInProcessSocketAddress. */
   public AnonymousInProcessSocketAddress() { }
