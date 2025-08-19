@@ -124,7 +124,7 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build());
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, false);
     ClientSecurityProtocolNegotiator pn =
         new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -153,7 +153,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
@@ -365,7 +365,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
@@ -416,7 +416,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,

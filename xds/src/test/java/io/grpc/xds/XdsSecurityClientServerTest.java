@@ -546,7 +546,7 @@ public class XdsSecurityClientServerTest {
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, spiffeFile);
     return CommonTlsContextTestsUtil
-        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
+        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert, null, false);
   }
 
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
@@ -563,7 +563,7 @@ public class XdsSecurityClientServerTest {
           CertificateValidationContext.newBuilder()
               .setSystemRootCerts(
                   CertificateValidationContext.SystemRootCerts.newBuilder().build())
-              .build());
+              .build(), null, false);
     }
     return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
         "google_cloud_private_spiffe-client", "ROOT", null,

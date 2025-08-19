@@ -134,7 +134,7 @@ public class ClusterResolverLoadBalancerTest {
   private final Locality locality3 =
       Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
   private final UpstreamTlsContext tlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, false);
   private final OutlierDetection outlierDetection = OutlierDetection.create(
       100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
       FailurePercentageEjection.create(100, 100, 100, 100));

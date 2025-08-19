@@ -149,23 +149,28 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
-      CommonTlsContext commonTlsContext) {
-    UpstreamTlsContext upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+      CommonTlsContext commonTlsContext, String sni, boolean autoHostSni) {
+    UpstreamTlsContext.Builder upstreamTlsContext =
+        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).setAutoHostSni(autoHostSni);
+    if (sni != null) {
+      upstreamTlsContext.setSni(sni);
+    }
     return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-        upstreamTlsContext);
+        upstreamTlsContext.build());
   }
 
   /** Helper method to build UpstreamTlsContext for multiple test classes. */
   public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
-      String commonInstanceName, boolean hasIdentityCert) {
+      String commonInstanceName, boolean hasIdentityCert, String sni, boolean autoHostSni) {
     return buildUpstreamTlsContextForCertProviderInstance(
         hasIdentityCert ? commonInstanceName : null,
         hasIdentityCert ? "default" : null,
         commonInstanceName,
         "ROOT",
         null,
-        null);
+        null,
+        sni,
+        autoHostSni);
   }
 
   /** Gets a cert from contents of a resource. */
@@ -271,12 +276,12 @@ public class CommonTlsContextTestsUtil {
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForCertProviderInstance(
-          @Nullable String certInstanceName,
-          @Nullable String certName,
-          @Nullable String rootInstanceName,
-          @Nullable String rootCertName,
-          Iterable<String> alpnProtocols,
-          CertificateValidationContext staticCertValidationContext) {
+      @Nullable String certInstanceName,
+      @Nullable String certName,
+      @Nullable String rootInstanceName,
+      @Nullable String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext, String sni, boolean autoHostSni) {
     return buildUpstreamTlsContext(
         buildCommonTlsContextForCertProviderInstance(
             certInstanceName,
@@ -284,7 +289,8 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext));
+            staticCertValidationContext),
+        sni, autoHostSni);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
@@ -303,7 +309,7 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext));
+            staticCertValidationContext), null, false);
   }
 
   /** Helper method to build DownstreamTlsContext for CertProvider tests. */

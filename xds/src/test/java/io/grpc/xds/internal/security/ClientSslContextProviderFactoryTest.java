@@ -30,7 +30,6 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.TlsCertificate;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
-import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
@@ -80,7 +79,7 @@ public class ClientSslContextProviderFactoryTest {
             "gcp_id",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -139,7 +138,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    /* staticCertValidationContext= */ null);
+                    /* staticCertValidationContext= */ null, null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -173,7 +172,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    staticCertValidationContext);
+                    staticCertValidationContext, null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -203,7 +202,7 @@ public class ClientSslContextProviderFactoryTest {
             "file_provider",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =

@@ -107,7 +107,7 @@ public class CdsLoadBalancer2Test {
       .node(BOOTSTRAP_NODE)
       .build();
   private final UpstreamTlsContext upstreamTlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, false);
   private final OutlierDetection outlierDetection = OutlierDetection.create(
       null, null, null, null, SuccessRateEjection.create(null, null, null, null), null);
 

@@ -81,7 +81,7 @@ public class CertProviderClientSslContextProviderTest {
             rootInstanceName,
             "root-default",
             alpnProtocols,
-            staticCertValidationContext);
+            staticCertValidationContext, null, false);
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,

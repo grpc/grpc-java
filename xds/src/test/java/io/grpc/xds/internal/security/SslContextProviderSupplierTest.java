@@ -57,16 +57,12 @@ public class SslContextProviderSupplierTest {
 
   private void prepareSupplier(boolean autoHostSni) {
     upstreamTlsContext =
-            CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+            CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, autoHostSni);
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
             .when(mockTlsContextManager)
             .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
     supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
-  }
-
-  private EnvoyServerProtoData.UpstreamTlsContext getUpstreamTlsContext(boolean autoHostSni) {
-
   }
 
   private void callUpdateSslContext() {
@@ -79,7 +75,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void get_updateSecret() {
-    prepareSupplier();
+    prepareSupplier(false);
     callUpdateSslContext();
     verify(mockTlsContextManager, times(2))
         .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
@@ -103,7 +99,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void get_onException() {
-    prepareSupplier();
+    prepareSupplier(false);
     callUpdateSslContext();
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
         ArgumentCaptor.forClass(SslContextProvider.Callback.class);
@@ -119,7 +115,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void testClose() {
-    prepareSupplier();
+    prepareSupplier(false);
     callUpdateSslContext();
     supplier.close();
     verify(mockTlsContextManager, times(1))
@@ -133,7 +129,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void testClose_nullSslContextProvider() {
-    prepareSupplier();
+    prepareSupplier(false);
     doThrow(new NullPointerException()).when(mockTlsContextManager)
         .releaseClientSslContextProvider(null, HOSTNAME);
     supplier.close();

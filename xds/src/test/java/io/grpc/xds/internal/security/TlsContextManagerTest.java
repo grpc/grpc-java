@@ -82,7 +82,7 @@ public class TlsContextManagerTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", false);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", false, null, false);
 
     TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(bootstrapInfoForClient);
     SslContextProvider clientSecretProvider =
@@ -126,7 +126,7 @@ public class TlsContextManagerTest {
             CA_PEM_FILE, "cert-instance-2", CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", false);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", false, null, false);
 
     TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(bootstrapInfoForClient);
     SslContextProvider clientSecretProvider =
@@ -134,7 +134,7 @@ public class TlsContextManagerTest {
     assertThat(clientSecretProvider).isNotNull();
 
     UpstreamTlsContext upstreamTlsContext1 =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-2", true);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-2", true, null, false);
 
     SslContextProvider clientSecretProvider1 =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext1, SNI);
@@ -164,7 +164,7 @@ public class TlsContextManagerTest {
   public void createClientSslContextProvider_releaseInstance() {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
 
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
