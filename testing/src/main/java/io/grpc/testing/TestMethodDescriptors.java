@@ -30,16 +30,19 @@ import java.io.InputStream;
 public final class TestMethodDescriptors {
   private TestMethodDescriptors() {}
 
+  /** The name of the service that the method returned by {@link #voidMethod()} uses. */
+  public static final String SERVICE_NAME = "service_foo";
+
   /**
    * Creates a new method descriptor that always creates zero length messages, and always parses to
-   * null objects.
+   * null objects. It is part of the service named {@link #SERVICE_NAME}.
    *
    * @since 1.1.0
    */
   public static MethodDescriptor<Void, Void> voidMethod() {
     return MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodType.UNARY)
-        .setFullMethodName(MethodDescriptor.generateFullMethodName("service_foo", "method_bar"))
+        .setFullMethodName(MethodDescriptor.generateFullMethodName(SERVICE_NAME, "method_bar"))
         .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
         .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
         .build();
