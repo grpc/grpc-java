@@ -320,13 +320,14 @@ final class PriorityLoadBalancer extends LoadBalancer {
         if (!children.containsKey(priority)) {
           return;
         }
+        ConnectivityState oldState = connectivityState;
         connectivityState = newState;
         picker = newPicker;
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
         }
-        if (newState.equals(CONNECTING)) {
+        if (newState.equals(CONNECTING) && !oldState.equals(newState)) {
           if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
             failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
                 executor);
