@@ -676,6 +676,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     private ResourceMetadata metadata;
     @Nullable
     private String errorDescription;
+    @Nullable
+    private Status lastError;
 
     ResourceSubscriber(XdsResourceType<T> type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
@@ -712,9 +714,14 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       watchers.put(watcher, watcherExecutor);
       T savedData = data;
       boolean savedAbsent = absent;
+      Status savedError = lastError;
       watcherExecutor.execute(() -> {
         if (errorDescription != null) {
           watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+          return;
+        }
+        if (savedError != null) {
+          watcher.onError(savedError);
           return;
         }
         if (savedData != null) {
@@ -808,6 +815,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       this.metadata = ResourceMetadata
           .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       absent = false;
+      lastError = null;
       if (resourceDeletionIgnored) {
         logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
                 + "of resource for which we previously ignored a deletion: type {1} name {2}",
@@ -857,6 +865,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (!absent) {
         data = null;
         absent = true;
+        lastError = null;
         metadata = serverInfo.resourceTimerIsTransientError()
             ? ResourceMetadata.newResourceMetadataTimeout()
             : ResourceMetadata.newResourceMetadataDoesNotExist();
@@ -894,6 +903,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       Status errorAugmented = Status.fromCode(error.getCode())
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
+      this.lastError = errorAugmented;
 
       for (ResourceWatcher<T> watcher : watchers.keySet()) {
         if (tracker != null) {
