@@ -285,6 +285,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Mock
   private ResourceWatcher<LdsUpdate> ldsResourceWatcher;
   @Mock
+  private ResourceWatcher<LdsUpdate> ldsResourceWatcher2;
+  @Mock
   private ResourceWatcher<RdsUpdate> rdsResourceWatcher;
   @Mock
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
@@ -691,6 +693,26 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(resourceDiscoveryCalls.poll()).isNull();
     xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
+  public void ldsResource_onError_cachedForNewWatcher() {
+    String ldsResourceName =
+        "xdstp://unknown.example.com/envoy.config.listener.v3.Listener/listener1";
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName,
+        ldsResourceWatcher);
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    Status initialError = errorCaptor.getValue();
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), ldsResourceName,
+        ldsResourceWatcher2);
+    ArgumentCaptor<Status> secondErrorCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher2).onError(secondErrorCaptor.capture());
+    Status cachedError = secondErrorCaptor.getValue();
+
+    assertThat(cachedError.getCode()).isEqualTo(initialError.getCode());
+    assertThat(cachedError.getDescription()).isEqualTo(initialError.getDescription());
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 
