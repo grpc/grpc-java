@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
