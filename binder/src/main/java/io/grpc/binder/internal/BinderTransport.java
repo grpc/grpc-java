@@ -22,7 +22,6 @@ import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static io.grpc.binder.ApiConstants.PRE_AUTH_SERVER_OVERRIDE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
