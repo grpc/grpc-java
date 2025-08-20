@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static io.grpc.binder.internal.TransactionUtils.newCallerFilteringHandler;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
