@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
 import static io.grpc.binder.internal.TransactionUtils.newCallerFilteringHandler;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
@@ -547,6 +548,525 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
           inbound.onTransportReady();
         }
       }
+    }
+  }
+
+  /**
+   * An abstraction of the client handshake, used to transition off a problematic legacy approach.
+   */
+  interface ClientHandshake {
+    /**
+     * Notifies the implementation that the binding has succeeded and we are now connected to the
+     * server 'endpointBinder'.
+     */
+    @GuardedBy("this")
+    @MainThread
+    void onBound(IBinder endpointBinder);
+
+    /**
+     * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
+     * server that can be reached at 'serverBinder'.
+     */
+    @GuardedBy("this")
+    @BinderThread
+    void handleSetupTransport(IBinder serverBinder);
+  }
+
+  /** Concrete client-side transport implementation. */
+  @ThreadSafe
+  @Internal
+  public static final class BinderClientTransport extends BinderTransport
+      implements ConnectionClientTransport, Bindable.Observer {
+
+    private final ObjectPool<? extends Executor> offloadExecutorPool;
+    private final Executor offloadExecutor;
+    private final SecurityPolicy securityPolicy;
+    private final Bindable serviceBinding;
+
+    /** Number of ongoing calls which keep this transport "in-use". */
+    private final AtomicInteger numInUseStreams;
+
+    private final long readyTimeoutMillis;
+    private final PingTracker pingTracker;
+    private final boolean preAuthorizeServer;
+    private final ClientHandshake handshakeImpl;
+
+    @Nullable private ManagedClientTransport.Listener clientTransportListener;
+
+    @GuardedBy("this")
+    private int latestCallId = FIRST_CALL_ID;
+
+    @GuardedBy("this")
+    private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
+    @GuardedBy("this")
+    @Nullable private ListenableFuture<Status> authResultFuture; // null before we check auth.
+
+    @GuardedBy("this")
+    @Nullable
+    private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
+
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param factory parameters common to all a Channel's transports
+     * @param targetAddress the fully resolved and load-balanced server address
+     * @param options other parameters that can vary as transports come and go within a Channel
+     */
+    public BinderClientTransport(
+        BinderClientTransportFactory factory,
+        AndroidComponentAddress targetAddress,
+        ClientTransportOptions options) {
+      super(
+          factory.scheduledExecutorPool,
+          buildClientAttributes(
+              options.getEagAttributes(),
+              factory.sourceContext,
+              targetAddress,
+              factory.inboundParcelablePolicy),
+          factory.binderDecorator,
+          buildLogId(factory.sourceContext, targetAddress));
+      this.offloadExecutorPool = factory.offloadExecutorPool;
+      this.securityPolicy = factory.securityPolicy;
+      this.offloadExecutor = offloadExecutorPool.getObject();
+      this.readyTimeoutMillis = factory.readyTimeoutMillis;
+      Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
+      this.preAuthorizeServer =
+          preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+      this.handshakeImpl = new LegacyClientHandshake();
+      numInUseStreams = new AtomicInteger();
+      pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
+
+      serviceBinding =
+          new ServiceBinding(
+              factory.mainThreadExecutor,
+              factory.sourceContext,
+              factory.channelCredentials,
+              targetAddress.asBindIntent(),
+              targetAddress.getTargetUser() != null
+                  ? targetAddress.getTargetUser()
+                  : factory.defaultTargetUserHandle,
+              factory.bindServiceFlags.toInteger(),
+              this);
+    }
+
+    @Override
+    void releaseExecutors() {
+      super.releaseExecutors();
+      offloadExecutorPool.returnObject(offloadExecutor);
+    }
+
+    @Override
+    public synchronized void onBound(IBinder endpointBinder) {
+      handshakeImpl.onBound(endpointBinder);
+    }
+
+    @Override
+    public synchronized void onUnbound(Status reason) {
+      shutdownInternal(reason, true);
+    }
+
+    @CheckReturnValue
+    @Override
+    public synchronized Runnable start(ManagedClientTransport.Listener clientTransportListener) {
+      this.clientTransportListener = checkNotNull(clientTransportListener);
+      return () -> {
+        synchronized (BinderClientTransport.this) {
+          if (inState(TransportState.NOT_STARTED)) {
+            setState(TransportState.SETUP);
+            try {
+              if (preAuthorizeServer) {
+                preAuthorize(serviceBinding.resolve());
+              } else {
+                serviceBinding.bind();
+              }
+            } catch (StatusException e) {
+              shutdownInternal(e.getStatus(), true);
+              return;
+            }
+            if (readyTimeoutMillis >= 0) {
+              readyTimeoutFuture =
+                  getScheduledExecutorService()
+                      .schedule(
+                          BinderClientTransport.this::onReadyTimeout,
+                          readyTimeoutMillis,
+                          MILLISECONDS);
+            }
+          }
+        }
+      };
+    }
+
+    @GuardedBy("this")
+    private void preAuthorize(ServiceInfo serviceInfo) {
+      // It's unlikely, but the identity/existence of this Service could change by the time we
+      // actually connect. It doesn't matter though, because:
+      // - If pre-auth fails (but would succeed against the server's new state), the grpc-core layer
+      // will eventually retry using a new transport instance that will see the Service's new state.
+      // - If pre-auth succeeds (but would fail against the server's new state), we might give an
+      // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
+      // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
+      // can't typically control the exact timing of its installation.
+      preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+      Futures.addCallback(
+          preAuthResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              handlePreAuthResult(result);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
+    }
+
+    private synchronized void handlePreAuthResult(Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else {
+          serviceBinding.bind();
+        }
+      }
+    }
+
+    private synchronized void onReadyTimeout() {
+      if (inState(TransportState.SETUP)) {
+        readyTimeoutFuture = null;
+        shutdownInternal(
+            Status.DEADLINE_EXCEEDED.withDescription(
+                "Connect timeout " + readyTimeoutMillis + "ms lapsed"),
+            true);
+      }
+    }
+
+    @Override
+    public synchronized ClientStream newStream(
+        final MethodDescriptor<?, ?> method,
+        final Metadata headers,
+        final CallOptions callOptions,
+        ClientStreamTracer[] tracers) {
+      if (!inState(TransportState.READY)) {
+        return newFailingClientStream(
+            isShutdown()
+                ? shutdownStatus
+                : Status.INTERNAL.withDescription("newStream() before transportReady()"),
+            attributes,
+            headers,
+            tracers);
+      }
+
+      int callId = latestCallId++;
+      if (latestCallId == LAST_CALL_ID) {
+        latestCallId = FIRST_CALL_ID;
+      }
+      StatsTraceContext statsTraceContext =
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
+      Inbound.ClientInbound inbound =
+          new Inbound.ClientInbound(
+              this, attributes, callId, GrpcUtil.shouldBeCountedForInUse(callOptions));
+      if (ongoingCalls.putIfAbsent(callId, inbound) != null) {
+        Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
+        shutdownInternal(failure, true);
+        return newFailingClientStream(failure, attributes, headers, tracers);
+      } else {
+        if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+          clientTransportListener.transportInUse(true);
+        }
+        Outbound.ClientOutbound outbound =
+            new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
+        if (method.getType().clientSendsOneMessage()) {
+          return new SingleMessageClientStream(inbound, outbound, attributes);
+        } else {
+          return new MultiMessageClientStream(inbound, outbound, attributes);
+        }
+      }
+    }
+
+    @Override
+    protected void unregisterInbound(Inbound<?> inbound) {
+      if (inbound.countsForInUse() && numInUseStreams.decrementAndGet() == 0) {
+        clientTransportListener.transportInUse(false);
+      }
+      super.unregisterInbound(inbound);
+    }
+
+    @Override
+    public void ping(final PingCallback callback, Executor executor) {
+      pingTracker.startPing(callback, executor);
+    }
+
+    @Override
+    public synchronized void shutdown(Status reason) {
+      checkNotNull(reason, "reason");
+      shutdownInternal(reason, false);
+    }
+
+    @Override
+    public synchronized void shutdownNow(Status reason) {
+      checkNotNull(reason, "reason");
+      shutdownInternal(reason, true);
+    }
+
+    @Override
+    @GuardedBy("this")
+    void notifyShutdown(Status status) {
+      clientTransportListener.transportShutdown(status);
+    }
+
+    @Override
+    @GuardedBy("this")
+    void notifyTerminated() {
+      if (numInUseStreams.getAndSet(0) > 0) {
+        clientTransportListener.transportInUse(false);
+      }
+      if (readyTimeoutFuture != null) {
+        readyTimeoutFuture.cancel(false);
+        readyTimeoutFuture = null;
+      }
+      if (preAuthResultFuture != null) {
+        preAuthResultFuture.cancel(false); // No effect if already complete.
+      }
+      if (authResultFuture != null) {
+        authResultFuture.cancel(false);  // No effect if already complete.
+      }
+      serviceBinding.unbind();
+      clientTransportListener.transportTerminated();
+    }
+
+    @Override
+    @GuardedBy("this")
+    protected void handleSetupTransport(Parcel parcel) {
+      if (inState(TransportState.SETUP)) {
+        int version = parcel.readInt();
+        IBinder binder = parcel.readStrongBinder();
+        if (version != WIRE_FORMAT_VERSION) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+        } else if (binder == null) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
+        } else {
+          handshakeImpl.handleSetupTransport(binder);
+        }
+      }
+    }
+
+    private ListenableFuture<Status> checkServerAuthorizationAsync(int remoteUid) {
+      return (securityPolicy instanceof AsyncSecurityPolicy)
+          ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
+          : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
+    }
+
+    class LegacyClientHandshake implements ClientHandshake {
+      @Override
+      @MainThread
+      @GuardedBy("BinderClientTransport.this")
+      public void onBound(IBinder binder) {
+        sendSetupTransaction(
+            binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+      }
+
+      @Override
+      @BinderThread
+      @GuardedBy("BinderClientTransport.this")
+      public void handleSetupTransport(IBinder binder) {
+        int remoteUid = Binder.getCallingUid();
+        attributes = setSecurityAttrs(attributes, remoteUid);
+        authResultFuture = checkServerAuthorizationAsync(remoteUid);
+        Futures.addCallback(
+            authResultFuture,
+            new FutureCallback<Status>() {
+              @Override
+              public void onSuccess(Status result) {
+                synchronized (BinderClientTransport.this) {
+                  handleAuthResult(binder, result);
+                }
+              }
+
+              @Override
+              public void onFailure(Throwable t) {
+                BinderClientTransport.this.handleAuthResult(t);
+              }
+            },
+            offloadExecutor);
+      }
+
+      @GuardedBy("BinderClientTransport.this")
+      private void handleAuthResult(IBinder binder, Status authorization) {
+        if (inState(TransportState.SETUP)) {
+          if (!authorization.isOk()) {
+            shutdownInternal(authorization, true);
+          } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
+            shutdownInternal(
+                Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+          } else {
+            // Check state again, since a failure inside setOutgoingBinder (or a callback it
+            // triggers), could have shut us down.
+            if (!isShutdown()) {
+              reportReady();
+            }
+          }
+        }
+      }
+    }
+
+    @GuardedBy("this")
+    private void reportReady() {
+      setState(TransportState.READY);
+      attributes = clientTransportListener.filterTransport(attributes);
+      clientTransportListener.transportReady();
+      if (readyTimeoutFuture != null) {
+        readyTimeoutFuture.cancel(false);
+        readyTimeoutFuture = null;
+      }
+    }
+
+    private synchronized void handleAuthResult(Throwable t) {
+      shutdownInternal(
+          Status.INTERNAL.withDescription("Could not evaluate SecurityPolicy").withCause(t), true);
+    }
+
+    @GuardedBy("this")
+    @Override
+    protected void handlePingResponse(Parcel parcel) {
+      pingTracker.onPingResponse(parcel.readInt());
+    }
+
+    private static ClientStream newFailingClientStream(
+        Status failure, Attributes attributes, Metadata headers, ClientStreamTracer[] tracers) {
+      StatsTraceContext statsTraceContext =
+          StatsTraceContext.newClientContext(tracers, attributes, headers);
+      statsTraceContext.clientOutboundHeaders();
+      return new FailingClientStream(failure, tracers);
+    }
+
+    private static InternalLogId buildLogId(
+        Context sourceContext, AndroidComponentAddress targetAddress) {
+      return InternalLogId.allocate(
+          BinderClientTransport.class,
+          sourceContext.getClass().getSimpleName() + "->" + targetAddress);
+    }
+
+    private static Attributes buildClientAttributes(
+        Attributes eagAttrs,
+        Context sourceContext,
+        AndroidComponentAddress targetAddress,
+        InboundParcelablePolicy inboundParcelablePolicy) {
+      return Attributes.newBuilder()
+          .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE) // Trust noone for now.
+          .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
+          .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, AndroidComponentAddress.forContext(sourceContext))
+          .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, targetAddress)
+          .set(INBOUND_PARCELABLE_POLICY, inboundParcelablePolicy)
+          .build();
+    }
+
+    private static Attributes setSecurityAttrs(Attributes attributes, int uid) {
+      return attributes.toBuilder()
+          .set(REMOTE_UID, uid)
+          .set(
+              GrpcAttributes.ATTR_SECURITY_LEVEL,
+              uid == Process.myUid()
+                  ? SecurityLevel.PRIVACY_AND_INTEGRITY
+                  : SecurityLevel.INTEGRITY) // TODO: Have the SecrityPolicy decide this.
+          .build();
+    }
+  }
+
+  /** Concrete server-side transport implementation. */
+  @Internal
+  public static final class BinderServerTransport extends BinderTransport
+      implements ServerTransport {
+
+    private final List<ServerStreamTracer.Factory> streamTracerFactories;
+    @Nullable private ServerTransportListener serverTransportListener;
+
+    /**
+     * Constructs a new transport instance.
+     *
+     * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
+     */
+    public BinderServerTransport(
+        ObjectPool<ScheduledExecutorService> executorServicePool,
+        Attributes attributes,
+        List<ServerStreamTracer.Factory> streamTracerFactories,
+        OneWayBinderProxy.Decorator binderDecorator,
+        IBinder callbackBinder) {
+      super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
+      this.streamTracerFactories = streamTracerFactories;
+      // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
+      setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
+    }
+
+    public synchronized void setServerTransportListener(
+        ServerTransportListener serverTransportListener) {
+      this.serverTransportListener = serverTransportListener;
+      if (isShutdown()) {
+        setState(TransportState.SHUTDOWN_TERMINATED);
+        notifyTerminated();
+        releaseExecutors();
+      } else {
+        sendSetupTransaction();
+        // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a
+        // callback it triggers), could have shut us down.
+        if (!isShutdown()) {
+          setState(TransportState.READY);
+          attributes = serverTransportListener.transportReady(attributes);
+        }
+      }
+    }
+
+    StatsTraceContext createStatsTraceContext(String methodName, Metadata headers) {
+      return StatsTraceContext.newServerContext(streamTracerFactories, methodName, headers);
+    }
+
+    synchronized Status startStream(ServerStream stream, String methodName, Metadata headers) {
+      if (isShutdown()) {
+        return Status.UNAVAILABLE.withDescription("transport is shutdown");
+      } else {
+        serverTransportListener.streamCreated(stream, methodName, headers);
+        return Status.OK;
+      }
+    }
+
+    @Override
+    @GuardedBy("this")
+    void notifyShutdown(Status status) {
+      // Nothing to do.
+    }
+
+    @Override
+    @GuardedBy("this")
+    void notifyTerminated() {
+      if (serverTransportListener != null) {
+        serverTransportListener.transportTerminated();
+      }
+    }
+
+    @Override
+    public synchronized void shutdown() {
+      shutdownInternal(Status.OK, false);
+    }
+
+    @Override
+    public synchronized void shutdownNow(Status reason) {
+      shutdownInternal(reason, true);
+    }
+
+    @Override
+    @Nullable
+    @GuardedBy("this")
+    protected Inbound<?> createInbound(int callId) {
+      return new Inbound.ServerInbound(this, attributes, callId);
+    }
+
+    private static InternalLogId buildLogId(Attributes attributes) {
+      return InternalLogId.allocate(
+          BinderServerTransport.class, "from " + attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
     }
   }
 
