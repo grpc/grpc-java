@@ -220,8 +220,7 @@ public abstract class GrpcXdsClientImplTestBase {
   protected final Queue<LrsRpcCall> loadReportCalls = new ArrayDeque<>();
   protected final AtomicBoolean adsEnded = new AtomicBoolean(true);
   protected final AtomicBoolean lrsEnded = new AtomicBoolean(true);
-  @SuppressWarnings("this-escape")
-  private final MessageFactory mf = createMessageFactory();
+  protected MessageFactory mf;
 
   private static final long TIME_INCREMENT = TimeUnit.SECONDS.toNanos(1);
   /** Fake time provider increments time TIME_INCREMENT each call. */
@@ -235,37 +234,22 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private static final int VHOST_SIZE = 2;
   // LDS test resources.
-  private final Any testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
-      mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
-  private final Any testListenerRds =
-      Any.pack(mf.buildListenerWithApiListenerForRds(LDS_RESOURCE, RDS_RESOURCE));
+  private Any testListenerVhosts;
+  private Any testListenerRds;
 
   // RDS test resources.
-  private final Any testRouteConfig =
-      Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(VHOST_SIZE)));
+  private Any testRouteConfig;
 
   // CDS test resources.
-  private final Any testClusterRoundRobin =
-      Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null,
-          null, false, null, "envoy.transport_sockets.tls", null, null
-      ));
+  private Any testClusterRoundRobin;
 
   // EDS test resources.
-  private final Message lbEndpointHealthy =
-      mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-          mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2, "endpoint-host-name"), 1, 0);
+  private Message lbEndpointHealthy;
   // Locality with 0 endpoints
-  private final Message lbEndpointEmpty =
-      mf.buildLocalityLbEndpoints("region3", "zone3", "subzone3",
-          ImmutableList.<Message>of(), 2, 1);
+  private Message lbEndpointEmpty;
   // Locality with 0-weight endpoint
-  private final Message lbEndpointZeroWeight =
-      mf.buildLocalityLbEndpoints("region4", "zone4", "subzone4",
-          mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5, "endpoint-host-name"), 0, 2);
-  private final Any testClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
-      ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty, lbEndpointZeroWeight),
-      ImmutableList.of(mf.buildDropOverload("lb", 200), mf.buildDropOverload("throttle", 1000))));
-
+  private Message lbEndpointZeroWeight;
+  private Any testClusterLoadAssignment;
   @Captor
   private ArgumentCaptor<LdsUpdate> ldsUpdateCaptor;
   @Captor
@@ -303,10 +287,8 @@ public abstract class GrpcXdsClientImplTestBase {
   private boolean originalEnableLeastRequest;
   private Server xdsServer;
   private final String serverName = InProcessServerBuilder.generateName();
-  @SuppressWarnings("this-escape")
-  private final BindableService adsService = createAdsService();
-  @SuppressWarnings("this-escape")
-  private final BindableService lrsService = createLrsService();
+  private BindableService adsService;
+  private BindableService lrsService;
 
   private XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
     @Override
@@ -334,6 +316,32 @@ public abstract class GrpcXdsClientImplTestBase {
 
   @Before
   public void setUp() throws IOException {
+    mf = createMessageFactory();
+    testListenerVhosts = Any.pack(mf.buildListenerWithApiListener(LDS_RESOURCE,
+        mf.buildRouteConfiguration("do not care", mf.buildOpaqueVirtualHosts(VHOST_SIZE))));
+    testListenerRds =
+        Any.pack(mf.buildListenerWithApiListenerForRds(LDS_RESOURCE, RDS_RESOURCE));
+    testRouteConfig =
+        Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(VHOST_SIZE)));
+    testClusterRoundRobin =
+        Any.pack(mf.buildEdsCluster(CDS_RESOURCE, null, "round_robin", null,
+            null, false, null, "envoy.transport_sockets.tls", null, null
+        ));
+    lbEndpointHealthy =
+        mf.buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+            mf.buildLbEndpoint("192.168.0.1", 8080, "healthy", 2, "endpoint-host-name"), 1, 0);
+    lbEndpointEmpty =
+        mf.buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+            ImmutableList.<Message>of(), 2, 1);
+    lbEndpointZeroWeight =
+        mf.buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+            mf.buildLbEndpoint("192.168.142.5", 80, "unknown", 5, "endpoint-host-name"), 0, 2);
+    testClusterLoadAssignment = Any.pack(mf.buildClusterLoadAssignment(EDS_RESOURCE,
+        ImmutableList.of(lbEndpointHealthy, lbEndpointEmpty, lbEndpointZeroWeight),
+        ImmutableList.of(mf.buildDropOverload("lb", 200), mf.buildDropOverload("throttle", 1000))));
+    adsService = createAdsService();
+    lrsService = createLrsService();
+
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);

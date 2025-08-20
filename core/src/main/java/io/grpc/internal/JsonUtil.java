@@ -356,7 +356,7 @@ public class JsonUtil {
     return result;
   }
 
-  private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+  private static final int NANOS_PER_SECOND = 1_000_000_000;
 
   /**
    * Copy of {@link com.google.protobuf.util.Durations#normalizedDuration}.
@@ -365,14 +365,14 @@ public class JsonUtil {
   private static long normalizedDuration(long seconds, int nanos) {
     if (nanos <= -NANOS_PER_SECOND || nanos >= NANOS_PER_SECOND) {
       seconds = checkedAdd(seconds, nanos / NANOS_PER_SECOND);
-      nanos %= (int) NANOS_PER_SECOND;
+      nanos %= NANOS_PER_SECOND;
     }
     if (seconds > 0 && nanos < 0) {
-      nanos += (int) NANOS_PER_SECOND; // no overflow— nanos is negative (and we're adding)
+      nanos += NANOS_PER_SECOND; // no overflow— nanos is negative (and we're adding)
       seconds--; // no overflow since seconds is positive (and we're decrementing)
     }
     if (seconds < 0 && nanos > 0) {
-      nanos -= (int) NANOS_PER_SECOND; // no overflow— nanos is positive (and we're subtracting)
+      nanos -= NANOS_PER_SECOND; // no overflow— nanos is positive (and we're subtracting)
       seconds++; // no overflow since seconds is negative (and we're incrementing)
     }
     if (!durationIsValid(seconds, nanos)) {

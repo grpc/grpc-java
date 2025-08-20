@@ -101,7 +101,6 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   private volatile boolean cancelled;
 
-  @SuppressWarnings("this-escape")
   protected AbstractClientStream(
       WritableBufferAllocator bufferAllocator,
       StatsTraceContext statsTraceCtx,
@@ -114,7 +113,9 @@ public abstract class AbstractClientStream extends AbstractStream
     this.shouldBeCountedForInUse = GrpcUtil.shouldBeCountedForInUse(callOptions);
     this.useGet = useGet;
     if (!useGet) {
-      framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+      @SuppressWarnings("this-escape")
+      MessageFramer framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
+      this.framer = framer;
       this.headers = headers;
     } else {
       framer = new GetFramer(headers, statsTraceCtx);

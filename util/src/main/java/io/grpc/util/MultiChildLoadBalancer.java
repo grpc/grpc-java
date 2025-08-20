@@ -268,10 +268,11 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
-    @SuppressWarnings("this-escape")
     public ChildLbState(Object key, LoadBalancer.Factory policyFactory) {
       this.key = key;
-      this.lb = policyFactory.newLoadBalancer(createChildHelper());
+      @SuppressWarnings("this-escape")
+      LoadBalancer lb = policyFactory.newLoadBalancer(createChildHelper());
+      this.lb = lb;
       this.currentState = CONNECTING;
     }
 
