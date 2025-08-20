@@ -269,9 +269,7 @@ final class ServletServerStream extends AbstractServerStream {
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
       if (asyncCompleted) {
-        if (logger.isLoggable(FINE)) {
-          logger.log(FINE, "[{0}] ignore writeTrailers as already completed", new Object[]{logId});
-        }
+        logger.fine("ignore writeTrailers as already completed");
         return;
       }
       if (logger.isLoggable(FINE)) {
@@ -299,9 +297,7 @@ final class ServletServerStream extends AbstractServerStream {
     public void cancel(Status status) {
       transportState.runOnTransportThread(() -> transportState.transportReportStatus(status));
       if (asyncCompleted) {
-        if (logger.isLoggable(FINE)) {
-          logger.log(FINE, "[{0}] ignore cancel as already completed", new Object[]{logId});
-        }
+        logger.fine("ignore cancel as already completed");
         return;
       }
       // There is no way to RST_STREAM with CANCEL code, so write trailers instead
