@@ -656,8 +656,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     }
 
     @Override
-    public synchronized void onBound(IBinder endpointBinder) {
-      handshakeImpl.onBound(endpointBinder);
+    public synchronized void onBound(IBinder binder) {
+      handshakeImpl.onBound(binder);
     }
 
     @Override
