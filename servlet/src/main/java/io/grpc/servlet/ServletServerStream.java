@@ -30,7 +30,6 @@ import io.grpc.Attributes;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
@@ -43,8 +42,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -58,12 +55,15 @@ final class ServletServerStream extends AbstractServerStream {
 
   private final ServletTransportState transportState;
   private final Sink sink = new Sink();
-  private final AsyncContext asyncCtx;
   private final HttpServletResponse resp;
   private final Attributes attributes;
   private final String authority;
   private final InternalLogId logId;
   private final AsyncServletOutputStreamWriter writer;
+  /**
+   * If the async servlet operation has been completed.
+   */
+  volatile boolean asyncCompleted = false;
 
   ServletServerStream(
       AsyncContext asyncCtx,
@@ -78,7 +78,6 @@ final class ServletServerStream extends AbstractServerStream {
     this.attributes = attributes;
     this.authority = authority;
     this.logId = logId;
-    this.asyncCtx = asyncCtx;
     this.resp = (HttpServletResponse) asyncCtx.getResponse();
     this.writer = new AsyncServletOutputStreamWriter(
         asyncCtx, transportState, logId);
@@ -269,6 +268,12 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
+      if (asyncCompleted) {
+        if (logger.isLoggable(FINE)) {
+          logger.log(FINE, "[{0}] ignore writeTrailers as already completed", new Object[]{logId});
+        }
+        return;
+      }
       if (logger.isLoggable(FINE)) {
         logger.log(
             FINE,
@@ -292,24 +297,16 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void cancel(Status status) {
-      if (resp.isCommitted() && Code.DEADLINE_EXCEEDED == status.getCode()) {
-        return; // let the servlet timeout, the container will sent RST_STREAM automatically
-      }
       transportState.runOnTransportThread(() -> transportState.transportReportStatus(status));
-      // There is no way to RST_STREAM with CANCEL code, so write trailers instead
-      close(Status.CANCELLED.withDescription("Servlet stream cancelled")
-              .withCause(status.asRuntimeException()),
-          new Metadata());
-      CountDownLatch countDownLatch = new CountDownLatch(1);
-      transportState.runOnTransportThread(() -> {
-        asyncCtx.complete();
-        countDownLatch.countDown();
-      });
-      try {
-        countDownLatch.await(5, TimeUnit.SECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
+      if (asyncCompleted) {
+        if (logger.isLoggable(FINE)) {
+          logger.log(FINE, "[{0}] ignore cancel as already completed", new Object[]{logId});
+        }
+        return;
       }
+      // There is no way to RST_STREAM with CANCEL code, so write trailers instead
+      close(status, new Metadata());
+      // close() calls writeTrailers(), which calls AsyncContext.complete()
     }
   }
 
