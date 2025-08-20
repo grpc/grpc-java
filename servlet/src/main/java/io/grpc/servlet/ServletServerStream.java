@@ -268,10 +268,6 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
-      if (asyncCompleted) {
-        logger.fine("ignore writeTrailers as already completed");
-        return;
-      }
       if (logger.isLoggable(FINE)) {
         logger.log(
             FINE,
