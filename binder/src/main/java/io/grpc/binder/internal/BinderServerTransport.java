@@ -121,7 +121,6 @@ public final class BinderServerTransport extends BinderTransport implements Serv
 
   private static InternalLogId buildLogId(Attributes attributes) {
     return InternalLogId.allocate(
-        io.grpc.binder.internal.BinderServerTransport.class,
-        "from " + attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+        BinderServerTransport.class, "from " + attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 }

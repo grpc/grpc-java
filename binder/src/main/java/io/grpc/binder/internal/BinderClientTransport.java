@@ -52,6 +52,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.StatsTraceContext;
 import java.util.concurrent.Executor;
@@ -78,7 +79,7 @@ public final class BinderClientTransport extends BinderTransport
   private final PingTracker pingTracker;
   private final boolean preAuthorizeServer;
 
-  @Nullable private Listener clientTransportListener;
+  @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
   @GuardedBy("this")
   private int latestCallId = FIRST_CALL_ID;
@@ -158,7 +159,7 @@ public final class BinderClientTransport extends BinderTransport
   public synchronized Runnable start(Listener clientTransportListener) {
     this.clientTransportListener = checkNotNull(clientTransportListener);
     return () -> {
-      synchronized (io.grpc.binder.internal.BinderClientTransport.this) {
+      synchronized (BinderClientTransport.this) {
         if (inState(TransportState.NOT_STARTED)) {
           setState(TransportState.SETUP);
           try {
@@ -175,7 +176,7 @@ public final class BinderClientTransport extends BinderTransport
             readyTimeoutFuture =
                 getScheduledExecutorService()
                     .schedule(
-                        io.grpc.binder.internal.BinderClientTransport.this::onReadyTimeout,
+                        BinderClientTransport.this::onReadyTimeout,
                         readyTimeoutMillis,
                         MILLISECONDS);
           }
@@ -409,7 +410,7 @@ public final class BinderClientTransport extends BinderTransport
   private static InternalLogId buildLogId(
       Context sourceContext, AndroidComponentAddress targetAddress) {
     return InternalLogId.allocate(
-        io.grpc.binder.internal.BinderClientTransport.class,
+        BinderClientTransport.class,
         sourceContext.getClass().getSimpleName() + "->" + targetAddress);
   }
 
