@@ -22,7 +22,7 @@ pluginManagement {
 	// https://github.com/GoogleCloudPlatform/appengine-plugins/releases
         id "com.google.cloud.tools.appengine" version "2.8.0"
         // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.jib" version "3.4.4"
+        id "com.google.cloud.tools.jib" version "3.4.5"
 	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases
@@ -34,11 +34,11 @@ pluginManagement {
         // https://github.com/melix/japicmp-gradle-plugin/blob/master/CHANGELOG.txt
         id "me.champeau.gradle.japicmp" version "0.4.2"
         // https://github.com/melix/jmh-gradle-plugin/releases
-        id "me.champeau.jmh" version "0.7.2"
+        id "me.champeau.jmh" version "0.7.3"
         // https://github.com/tbroyer/gradle-errorprone-plugin/releases
-        id "net.ltgt.errorprone" version "4.1.0"
+        id "net.ltgt.errorprone" version "4.3.0"
         // https://github.com/xvik/gradle-animalsniffer-plugin/releases
-        id "ru.vyarus.animalsniffer" version "2.0.0"
+        id "ru.vyarus.animalsniffer" version "2.0.1"
     }
     resolutionStrategy {
         eachPlugin {
