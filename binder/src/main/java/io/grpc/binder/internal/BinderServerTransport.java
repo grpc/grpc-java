@@ -66,8 +66,8 @@ public final class BinderServerTransport extends BinderTransport implements Serv
       releaseExecutors();
     } else {
       sendSetupTransaction();
-      // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a
-      // callback it triggers), could have shut us down.
+      // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
+      // it triggers), could have shut us down.
       if (!isShutdown()) {
         setState(TransportState.READY);
         attributes = serverTransportListener.transportReady(attributes);
