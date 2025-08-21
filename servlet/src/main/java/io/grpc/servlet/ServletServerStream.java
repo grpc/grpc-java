@@ -284,8 +284,7 @@ final class ServletServerStream extends AbstractServerStream {
         writeHeadersToServletResponse(trailers);
       } else {
         serializeHeaders(trailers,
-            (key, value) ->
-                trailerSupplier.get().merge(key, value, (oldV, newV) -> oldV + "," + newV));
+            (k, v) -> trailerSupplier.get().merge(k, v, (oldV, newV) -> oldV + "," + newV));
       }
 
       writer.complete();
