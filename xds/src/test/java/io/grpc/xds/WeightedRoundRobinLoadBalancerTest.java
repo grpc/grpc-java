@@ -244,6 +244,9 @@ public class WeightedRoundRobinLoadBalancerTest {
         .addEqualityGroup(
             WeightedRoundRobinLoadBalancerConfig.newBuilder()
               .setErrorUtilizationPenalty(0.5F).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setErrorUtilizationPenalty(Float.NaN).build())
         .testEquals();
   }
 

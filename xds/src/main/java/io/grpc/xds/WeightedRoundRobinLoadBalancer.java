@@ -750,7 +750,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
           && this.enableOobLoadReport == that.enableOobLoadReport
           && this.oobReportingPeriodNanos == that.oobReportingPeriodNanos
           && this.weightUpdatePeriodNanos == that.weightUpdatePeriodNanos
-          && this.errorUtilizationPenalty == that.errorUtilizationPenalty;
+          // Float.compare considers NaNs equal
+          && Float.compare(this.errorUtilizationPenalty, that.errorUtilizationPenalty) == 0;
     }
 
     @Override
