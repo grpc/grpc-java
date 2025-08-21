@@ -100,7 +100,7 @@ public final class BinderClientTransportTest {
           .build();
 
   AndroidComponentAddress serverAddress;
-  BinderTransport.BinderClientTransport transport;
+  BinderClientTransport transport;
   BlockingSecurityPolicy blockingSecurityPolicy = new BlockingSecurityPolicy();
 
   private final ObjectPool<ScheduledExecutorService> executorServicePool =
@@ -178,7 +178,7 @@ public final class BinderClientTransportTest {
       return this;
     }
 
-    public BinderTransport.BinderClientTransport build() {
+    public BinderClientTransport build() {
       return factoryBuilder
           .buildClientTransportFactory()
           .newClientTransport(serverAddress, new ClientTransportOptions(), null);
@@ -502,8 +502,7 @@ public final class BinderClientTransportTest {
   }
 
   private static void startAndAwaitReady(
-      BinderTransport.BinderClientTransport transport, TestTransportListener transportListener)
-      throws Exception {
+      BinderClientTransport transport, TestTransportListener transportListener) throws Exception {
     transport.start(transportListener).run();
     transportListener.awaitReady();
   }

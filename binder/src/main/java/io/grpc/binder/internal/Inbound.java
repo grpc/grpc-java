@@ -610,10 +610,9 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
   // Server-side inbound transactions.
   static final class ServerInbound extends Inbound<ServerStreamListener> {
 
-    private final BinderTransport.BinderServerTransport serverTransport;
+    private final BinderServerTransport serverTransport;
 
-    ServerInbound(
-        BinderTransport.BinderServerTransport transport, Attributes attributes, int callId) {
+    ServerInbound(BinderServerTransport transport, Attributes attributes, int callId) {
       super(transport, attributes, callId);
       this.serverTransport = transport;
     }

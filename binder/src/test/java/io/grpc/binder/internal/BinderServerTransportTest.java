@@ -56,12 +56,12 @@ public final class BinderServerTransportTest {
 
   @Mock IBinder mockBinder;
 
-  BinderTransport.BinderServerTransport transport;
+  BinderServerTransport transport;
 
   @Before
   public void setUp() throws Exception {
     transport =
-        new BinderTransport.BinderServerTransport(
+        new BinderServerTransport(
             new FixedObjectPool<>(executorService),
             Attributes.EMPTY,
             ImmutableList.of(),
