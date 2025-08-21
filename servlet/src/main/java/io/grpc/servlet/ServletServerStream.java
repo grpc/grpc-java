@@ -46,7 +46,6 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -284,8 +283,9 @@ final class ServletServerStream extends AbstractServerStream {
       if (!headersSent) {
         writeHeadersToServletResponse(trailers);
       } else {
-        BiFunction<String, String, String> merge = (oldV, newV) -> oldV + "," + newV;
-        serializeHeaders(trailers, (key, value) -> trailerSupplier.get().merge(key, value, merge));
+        serializeHeaders(trailers,
+            (key, value) ->
+                trailerSupplier.get().merge(key, value, (oldV, newV) -> oldV + "," + newV));
       }
 
       writer.complete();
