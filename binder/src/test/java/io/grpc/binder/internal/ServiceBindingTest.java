@@ -305,6 +305,15 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  @Config(sdk = 29)
+  public void testResolveWithUnsupportedTargetUserHandle() throws Exception {
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(statusException.getStatus().getDescription()).contains("SDK_INT >= R");
+  }
+
+  @Test
   public void testResolveNonExistentServiceThrows() throws Exception {
     ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
     binding = newBuilder().setTargetComponent(doesNotExistService).build();
