@@ -479,7 +479,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // the delayed transport or a real transport will go in-use and cancel the idle timer.
       if (!retryEnabled) {
         ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
-            callOptions, headers, 0, /* isTransparentRetry= */ false);
+            callOptions, headers, 0, /* isTransparentRetry= */ false,
+            /* isHedging= */false);
         Context origContext = context.attach();
         try {
           return delayedTransport.newStream(method, headers, callOptions, tracers);
@@ -519,10 +520,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           @Override
           ClientStream newSubstream(
               Metadata newHeaders, ClientStreamTracer.Factory factory, int previousAttempts,
-              boolean isTransparentRetry) {
+              boolean isTransparentRetry, boolean isHedging) {
             CallOptions newOptions = callOptions.withStreamTracerFactory(factory);
             ClientStreamTracer[] tracers = GrpcUtil.getClientStreamTracers(
-                newOptions, newHeaders, previousAttempts, isTransparentRetry);
+                newOptions, newHeaders, previousAttempts, isTransparentRetry, isHedging);
             Context origContext = context.attach();
             try {
               return delayedTransport.newStream(method, newHeaders, newOptions, tracers);
