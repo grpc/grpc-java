@@ -285,6 +285,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Mock
   private ResourceWatcher<LdsUpdate> ldsResourceWatcher;
   @Mock
+  private ResourceWatcher<LdsUpdate> ldsResourceWatcher2;
+  @Mock
   private ResourceWatcher<RdsUpdate> rdsResourceWatcher;
   @Mock
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
@@ -691,6 +693,24 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(resourceDiscoveryCalls.poll()).isNull();
     xdsClient.cancelXdsResourceWatch(XdsListenerResource.getInstance(), ldsResourceName,
         ldsResourceWatcher);
+    assertThat(resourceDiscoveryCalls.poll()).isNull();
+  }
+
+  @Test
+  public void ldsResource_onError_cachedForNewWatcher() {
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    call.sendCompleted();
+    verify(ldsResourceWatcher).onError(errorCaptor.capture());
+    Status initialError = errorCaptor.getValue();
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher2);
+    ArgumentCaptor<Status> secondErrorCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher2).onError(secondErrorCaptor.capture());
+    Status cachedError = secondErrorCaptor.getValue();
+
+    assertThat(cachedError).isEqualTo(initialError);
     assertThat(resourceDiscoveryCalls.poll()).isNull();
   }
 

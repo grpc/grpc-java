@@ -24,8 +24,8 @@ import io.grpc.internal.TestUtils.NoopChannelLogger;
 import java.net.SocketAddress;
 
 /**
- * Helps unit tests create {@link BinderTransport.BinderClientTransport} instances without having to
- * mention irrelevant details (go/tott/719).
+ * Helps unit tests create {@link BinderClientTransport} instances without having to mention
+ * irrelevant details (go/tott/719).
  */
 public class BinderClientTransportBuilder {
   private BinderClientTransportFactory factory;
@@ -54,7 +54,7 @@ public class BinderClientTransportBuilder {
     return this;
   }
 
-  public BinderTransport.BinderClientTransport build() {
+  public BinderClientTransport build() {
     return factory.newClientTransport(
         checkNotNull(serverAddress), checkNotNull(options), checkNotNull(channelLogger));
   }
