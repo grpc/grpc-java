@@ -16,23 +16,23 @@
 
 package io.grpc.servlet;
 
-import static com.google.common.truth.Truth.assertWithMessage;
-import static org.jetbrains.kotlinx.lincheck.strategy.managed.ManagedStrategyGuaranteeKt.forClasses;
+import static org.jetbrains.lincheck.datastructures.ManagedStrategyGuaranteeKt.forClasses;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import io.grpc.servlet.AsyncServletOutputStreamWriter.ActionItem;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
-import org.jetbrains.kotlinx.lincheck.LinChecker;
-import org.jetbrains.kotlinx.lincheck.annotations.OpGroupConfig;
-import org.jetbrains.kotlinx.lincheck.annotations.Operation;
-import org.jetbrains.kotlinx.lincheck.annotations.Param;
-import org.jetbrains.kotlinx.lincheck.paramgen.BooleanGen;
+import org.jetbrains.lincheck.datastructures.BooleanGen;
+import org.jetbrains.lincheck.datastructures.ModelCheckingOptions;
+import org.jetbrains.lincheck.datastructures.Operation;
+import org.jetbrains.lincheck.datastructures.Param;
 import org.jetbrains.kotlinx.lincheck.strategy.managed.modelchecking.ModelCheckingCTest;
-import org.jetbrains.kotlinx.lincheck.strategy.managed.modelchecking.ModelCheckingOptions;
-import org.jetbrains.kotlinx.lincheck.verifier.VerifierState;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -50,17 +50,19 @@ import org.junit.runners.JUnit4;
  * operations are linearizable in each interleave scenario.
  */
 @ModelCheckingCTest
-@OpGroupConfig(name = "update", nonParallel = true)
-@OpGroupConfig(name = "write", nonParallel = true)
 @Param(name = "keepReady", gen = BooleanGen.class)
 @RunWith(JUnit4.class)
-public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState {
+public class AsyncServletOutputStreamWriterConcurrencyTest {
   private static final int OPERATIONS_PER_THREAD = 6;
 
   private final AsyncServletOutputStreamWriter writer;
   private final boolean[] keepReadyArray = new boolean[OPERATIONS_PER_THREAD];
 
   private volatile boolean isReady;
+  /**
+   * The container initiates the first call shortly after {@code startAsync}.
+   */
+  private final AtomicBoolean initialOnWritePossible = new AtomicBoolean(true);
   // when isReadyReturnedFalse, writer.onWritePossible() will be called.
   private volatile boolean isReadyReturnedFalse;
   private int producerIndex;
@@ -71,17 +73,15 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   public AsyncServletOutputStreamWriterConcurrencyTest() {
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
-          assertWithMessage("write should only be called while isReady() is true")
-              .that(isReady)
-              .isTrue();
+          assertTrue("write should only be called while isReady() is true", isReady);
           // The byte to be written must equal to consumerIndex, otherwise execution order is wrong
-          assertWithMessage("write in wrong order").that(bytes[0]).isEqualTo((byte) consumerIndex);
+          assertEquals("write in wrong order", bytes[0], (byte) consumerIndex);
           bytesWritten++;
           writeOrFlush();
         };
 
     ActionItem flushAction = () -> {
-      assertWithMessage("flush must only be called while isReady() is true").that(isReady).isTrue();
+      assertTrue("flush must only be called while isReady() is true", isReady);
       writeOrFlush();
     };
 
@@ -102,12 +102,13 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   }
 
   private boolean isReady() {
-    if (!isReady) {
-      assertWithMessage("isReady() already returned false, onWritePossible() will be invoked")
-          .that(isReadyReturnedFalse).isFalse();
+    boolean copyOfIsReady = isReady;
+    if (!copyOfIsReady) {
+      assertFalse("isReady() already returned false, onWritePossible() will be invoked",
+          isReadyReturnedFalse);
       isReadyReturnedFalse = true;
     }
-    return isReady;
+    return copyOfIsReady;
   }
 
   /**
@@ -118,7 +119,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
    *                  the ServletOutputStream should become unready if keepReady == false.
    */
   // @com.google.errorprone.annotations.Keep
-  @Operation(group = "write")
+  @Operation(nonParallelGroup = "write")
   public void write(@Param(name = "keepReady") boolean keepReady) throws IOException {
     keepReadyArray[producerIndex] = keepReady;
     writer.writeBytes(new byte[]{(byte) producerIndex}, 1);
@@ -133,7 +134,7 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
    *                  the ServletOutputStream should become unready if keepReady == false.
    */
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
-  @Operation(group = "write")
+  @Operation(nonParallelGroup = "write")
   public void flush(@Param(name = "keepReady") boolean keepReady) throws IOException {
     keepReadyArray[producerIndex] = keepReady;
     writer.flush();
@@ -142,9 +143,12 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
 
   /** If the writer is not ready, let it turn ready and call writer.onWritePossible(). */
   // @com.google.errorprone.annotations.Keep // called by lincheck reflectively
-  @Operation(group = "update")
+  @Operation(nonParallelGroup = "update")
   public void maybeOnWritePossible() throws IOException {
-    if (isReadyReturnedFalse) {
+    if (initialOnWritePossible.compareAndSet(true, false)) {
+      isReady = true;
+      writer.onWritePossible();
+    } else if (isReadyReturnedFalse) {
       isReadyReturnedFalse = false;
       isReady = true;
       writer.onWritePossible();
@@ -152,7 +156,13 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
   }
 
   @Override
-  protected Object extractState() {
+  public final boolean equals(Object o) {
+    return o instanceof AsyncServletOutputStreamWriterConcurrencyTest
+        && bytesWritten == ((AsyncServletOutputStreamWriterConcurrencyTest) o).bytesWritten;
+  }
+
+  @Override
+  public int hashCode() {
     return bytesWritten;
   }
 
@@ -169,6 +179,6 @@ public class AsyncServletOutputStreamWriterConcurrencyTest extends VerifierState
                     AtomicReference.class.getName())
                 .allMethods()
                 .treatAsAtomic());
-    LinChecker.check(AsyncServletOutputStreamWriterConcurrencyTest.class, options);
+    options.check(AsyncServletOutputStreamWriterConcurrencyTest.class);
   }
 }
