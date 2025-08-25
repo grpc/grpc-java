@@ -16,7 +16,6 @@ java_library(
         "//context",
         "//core:internal",
         "//stub",
-        "//util",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:grpclb_load_balancer_java_proto",
         artifact("com.google.code.findbugs:jsr305"),
