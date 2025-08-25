@@ -163,20 +163,19 @@ public abstract class AbstractStream implements Stream {
     @GuardedBy("onReadyLock")
     private int onReadyThreshold;
 
+    @SuppressWarnings("this-escape")
     protected TransportState(
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
         TransportTracer transportTracer) {
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
       this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-      @SuppressWarnings("this-escape")
-      MessageDeframer rawDeframer = new MessageDeframer(
+      this.rawDeframer = new MessageDeframer(
           this,
           Codec.Identity.NONE,
           maxMessageSize,
           statsTraceCtx,
           transportTracer);
-      this.rawDeframer = rawDeframer;
       // TODO(#7168): use MigratingThreadDeframer when enabling retry doesn't break.
       deframer = this.rawDeframer;
       onReadyThreshold = DEFAULT_ONREADY_THRESHOLD;
