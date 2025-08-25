@@ -80,6 +80,9 @@ final class AsyncServletOutputStreamWriter {
   // returns false and before writeState.compareAndSet()
   @Nullable
   private volatile Thread parkingThread;
+  // In case runOrBuffer is called in parallel with onWritePossible, we need to know whether
+  // onWritePossible() would park the tread to ensure runOrBuffer thread unparks it.
+  private volatile boolean mayParkThread = false;
 
   AsyncServletOutputStreamWriter(
       AsyncContext asyncContext,
@@ -197,6 +200,7 @@ final class AsyncServletOutputStreamWriter {
   }
 
   private void assureReadyAndDrainedTurnsFalse() {
+    mayParkThread = true;
     // readyAndDrained should have been set to false already.
     // Just in case due to a race condition readyAndDrained is still true at this moment and is
     // being set to false by runOrBuffer() concurrently.
@@ -207,6 +211,7 @@ final class AsyncServletOutputStreamWriter {
       LockSupport.parkNanos(Duration.ofHours(1).toNanos()); // should return immediately
     }
     parkingThread = null;
+    mayParkThread = false;
   }
 
   /**
@@ -225,6 +230,9 @@ final class AsyncServletOutputStreamWriter {
       if (!isReady.getAsBoolean()) {
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+        while (mayParkThread && parkingThread == null) {
+          LockSupport.parkNanos(Duration.ofMillis(1).toNanos());
+        }
         LockSupport.unpark(parkingThread);
         checkState(successful, "Bug: curState is unexpectedly changed by another thread");
         log.finest("the servlet output stream becomes not ready");
