@@ -316,14 +316,21 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
-    if (preAuthResultFuture != null) {
-      preAuthResultFuture.cancel(false); // No effect if already complete.
-    }
-    if (authResultFuture != null) {
-      authResultFuture.cancel(false); // No effect if already complete.
-    }
+
+    ListenableFuture<Status> preAuthFuture = preAuthResultFuture;
+    ListenableFuture<Status> authFuture = authResultFuture;
+    preAuthResultFuture = null;
+    authResultFuture = null;
+
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
+
+    if (preAuthFuture != null) {
+      offloadExecutor.execute(() -> preAuthFuture.cancel(false)); // No effect if already complete.
+    }
+    if (authFuture != null) {
+      offloadExecutor.execute(() -> authFuture.cancel(false)); // No effect if already complete.
+    }
   }
 
   @Override
