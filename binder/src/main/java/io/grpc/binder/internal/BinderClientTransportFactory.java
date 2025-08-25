@@ -83,12 +83,12 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   }
 
   @Override
-  public BinderTransport.BinderClientTransport newClientTransport(
+  public BinderClientTransport newClientTransport(
       SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
     if (closed) {
       throw new IllegalStateException("The transport factory is closed.");
     }
-    return new BinderTransport.BinderClientTransport(this, (AndroidComponentAddress) addr, options);
+    return new BinderClientTransport(this, (AndroidComponentAddress) addr, options);
   }
 
   @Override
