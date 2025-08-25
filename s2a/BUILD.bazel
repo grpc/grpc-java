@@ -56,7 +56,6 @@ java_library(
     ],
     deps = [
         ":token_manager",
-        ":s2a_channel_pool",
         ":s2a_identity",
         "//api",
         "//core:internal",

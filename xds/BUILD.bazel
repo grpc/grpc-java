@@ -342,7 +342,6 @@ java_library(
         "//api",
         "//core:internal",
         "//stub",
-        "//testing",
         "//testing-proto:simpleservice_java_grpc",
         "//testing-proto:simpleservice_java_proto",
         "//util",
