@@ -37,6 +37,7 @@ import javax.servlet.http.HttpServletResponse;
 public class GrpcServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
 
+  @SuppressWarnings("serial")
   private final ServletAdapter servletAdapter;
 
   GrpcServlet(ServletAdapter servletAdapter) {

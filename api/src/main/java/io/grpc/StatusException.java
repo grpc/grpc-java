@@ -25,7 +25,9 @@ import javax.annotation.Nullable;
  */
 public class StatusException extends Exception {
   private static final long serialVersionUID = -660954903976144640L;
+  @SuppressWarnings("serial")
   private final Status status;
+  @SuppressWarnings("serial")
   private final Metadata trailers;
 
   /**
