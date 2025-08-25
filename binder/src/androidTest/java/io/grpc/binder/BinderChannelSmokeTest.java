@@ -183,6 +183,7 @@ public final class BinderChannelSmokeTest {
   @Test
   public void testBasicCall() throws Exception {
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
+    assertThat(channel.authority()).isEqualTo("io.grpc.binder.test");
   }
 
   @Test
@@ -228,7 +229,16 @@ public final class BinderChannelSmokeTest {
   }
 
   @Test
-  public void testConnectViaTargetUri() throws Exception {
+  public void testConnectViaAndroidAppTargetUri() throws Exception {
+    // Compare with the <intent-filter> mapping in AndroidManifest.xml.
+    channel =
+        BinderChannelBuilder.forTarget("android-app:///#Intent;action=action3;end;", appContext)
+            .build();
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testConnectViaIntentTargetUri() throws Exception {
     // Compare with the <intent-filter> mapping in AndroidManifest.xml.
     channel =
         BinderChannelBuilder.forTarget(
