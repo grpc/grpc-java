@@ -69,8 +69,7 @@ jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.0.16"
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.20"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
-# 2.17+ require Java 11+ (not mentioned in release notes)
-lincheck = "org.jetbrains.kotlinx:lincheck-jvm:2.16"
+lincheck = "org.jetbrains.lincheck:lincheck:3.2"
 # Update notes / 2023-07-19 sergiitk:
 #    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
 #    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
