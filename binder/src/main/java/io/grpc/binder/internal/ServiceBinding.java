@@ -356,19 +356,32 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @Override
   @MainThread
   public void onServiceDisconnected(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE.withDescription("onServiceDisconnected: " + name));
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Server process crashed, exited or was killed (onServiceDisconnected): " + name));
   }
 
   @Override
   @MainThread
   public void onNullBinding(ComponentName name) {
-    unbindInternal(Status.UNIMPLEMENTED.withDescription("onNullBinding: " + name));
+    unbindInternal(
+        Status.UNIMPLEMENTED.withDescription(
+            "Remote Service returned null from onBind() for "
+                + bindIntent
+                + " (onNullBinding): "
+                + name));
   }
 
   @Override
   @MainThread
   public void onBindingDied(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE.withDescription("onBindingDied: " + name));
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Remote Service component "
+                + name.getClassName()
+                + " was disabled, or its package "
+                + name.getPackageName()
+                + " was disabled, force-stopped, replaced or uninstalled (onBindingDied)."));
   }
 
   @VisibleForTesting
