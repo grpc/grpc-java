@@ -330,32 +330,31 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
     int remoteUid = Binder.getCallingUid();
-    attributes = setSecurityAttrs(attributes, remoteUid);
-    if (inState(TransportState.SETUP)) {
-      int version = parcel.readInt();
-      IBinder binder = parcel.readStrongBinder();
-      if (version != WIRE_FORMAT_VERSION) {
-        shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
-      } else if (binder == null) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
-      } else {
-        authResultFuture = checkServerAuthorizationAsync(remoteUid);
-        Futures.addCallback(
-            authResultFuture,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {
-                handleAuthResult(binder, result);
-              }
+    int version = parcel.readInt();
+    IBinder binder = parcel.readStrongBinder();
+    if (version != WIRE_FORMAT_VERSION) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+    } else if (binder == null) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
+    } else if (authResultFuture != null) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Too many SETUP_TRANSPORTs"), true);
+    } else {
+      attributes = setSecurityAttrs(attributes, remoteUid);
+      authResultFuture = checkServerAuthorizationAsync(remoteUid);
+      Futures.addCallback(
+          authResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              handleAuthResult(binder, result);
+            }
 
-              @Override
-              public void onFailure(Throwable t) {
-                handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
-      }
+            @Override
+            public void onFailure(Throwable t) {
+              handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
     }
   }
 

@@ -2114,7 +2114,7 @@ public abstract class AbstractTransportTest {
    * Only assert that the Status.Code matches, but provide the entire actual result in case the
    * assertion fails.
    */
-  private static void assertCodeEquals(String message, Status expected, Status actual) {
+  protected static void assertCodeEquals(String message, Status expected, Status actual) {
     if (expected == null) {
       fail("expected should not be null");
     }
