@@ -23,12 +23,15 @@ import io.grpc.xds.XdsCredentialsProvider;
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A wrapper class that supports {@link TlsChannelCredentials} for Xds
  * by implementing {@link XdsCredentialsProvider}.
  */
 public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
+  private static final Logger logger = Logger.getLogger(TlsXdsCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "tls";
 
   @Override
@@ -45,6 +48,7 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       try {
         builder.trustManager(new File(rootCertPath));
       } catch (IOException e) {
+        logger.log(Level.WARNING, "Unable to read root certificates", e);
         return null;
       }
     }
@@ -57,9 +61,11 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       try {
         builder.keyManager(new File(certChainPath), new File(privateKeyPath));
       } catch (IOException e) {
+        logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
         return null;
       }
     } else if (certChainPath != null || privateKeyPath != null) {
+      logger.log(Level.WARNING, "Certificate chain and private key must be both set or unset");
       return null;
     }
 
