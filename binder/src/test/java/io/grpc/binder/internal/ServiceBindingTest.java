@@ -112,6 +112,7 @@ public final class ServiceBindingTest {
     assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
     assertThat(observer.gotBoundEvent).isTrue();
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
+    assertThat(observer.serviceName).isEqualTo(serviceComponent);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
   }
@@ -380,8 +381,8 @@ public final class ServiceBindingTest {
     allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* uid= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
+            .setTargetComponent(serviceComponent)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
@@ -392,6 +393,7 @@ public final class ServiceBindingTest {
     assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
     assertThat(observer.gotBoundEvent).isTrue();
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
+    assertThat(observer.serviceName).isEqualTo(serviceComponent);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
   }
@@ -413,10 +415,7 @@ public final class ServiceBindingTest {
     ShadowDevicePolicyManager devicePolicyManager =
         shadowOf(context.getSystemService(DevicePolicyManager.class));
     devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(
-        Arrays.asList(UserHandle.getUserHandleForUid(userId)));
     shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
-    devicePolicyManager.setDeviceOwner(admin);
     devicePolicyManager.setBindDeviceAdminTargetUsers(Arrays.asList(generateUserHandle(userId)));
   }
 
@@ -434,16 +433,18 @@ public final class ServiceBindingTest {
 
     public boolean gotBoundEvent;
     public IBinder binder;
+    public ComponentName serviceName;
 
     public boolean gotUnboundEvent;
     public Status unboundReason;
 
     @Override
-    public void onBound(IBinder binder) {
+    public void onBound(ComponentName serviceName, IBinder binder) {
       assertThat(gotBoundEvent).isFalse();
       assertNoLockHeld();
       gotBoundEvent = true;
       this.binder = binder;
+      this.serviceName = serviceName;
     }
 
     @Override

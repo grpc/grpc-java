@@ -308,6 +308,30 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     return this;
   }
 
+  /**
+   * Specifies how and when to authorize the server.
+   *
+   * <p>The legacy client handshake uses the UID of the server process that sent the SETUP_TRANSPORT
+   * transaction for SecurityPolicy authorization. This is problematic for Android isolated
+   * processes which run as a completely different UID with none of the hosting app's privs. The new
+   * handshake checks the server *app*'s UID instead, which allows connections to Services hosted in
+   * isolated processes like normal.
+   *
+   * <p>In order to learn the UID of the server *process*, the legacy handshake must send its
+   * secret client Binder to the server before authorizing it. This problematic because it allows a
+   * malicious man-in-the-middle server to forge responses.
+   *
+   * <p>The default value of this property is true but it will become false in a future release.
+   * Clients that require a particular behavior should configure it explicitly using this method
+   * rather than relying on the default.
+   *
+   * @return this
+   */
+  public BinderChannelBuilder useLegacyHandshake(boolean legacyHandshake) {
+    transportFactoryBuilder.setUseLegacyHandshake(legacyHandshake);
+    return this;
+  }
+
   @Override
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(

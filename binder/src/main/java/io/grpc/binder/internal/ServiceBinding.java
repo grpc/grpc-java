@@ -24,6 +24,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -131,11 +132,11 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @MainThread
-  private void notifyBound(IBinder binder) {
+  private void notifyBound(ComponentName serviceName, IBinder binder) {
     if (reportedState == State.NOT_BINDING) {
       reportedState = State.BOUND;
       logger.log(Level.FINEST, "notify bound - notifying");
-      observer.onBound(binder);
+      observer.onBound(serviceName, binder);
     }
   }
 
@@ -337,6 +338,24 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @Override
+  public ServiceInfo getServiceInfo(ComponentName serviceName) throws StatusException {
+    try {
+      Context targetUserContext =
+          targetUserHandle != null
+              ? SystemApis.createContextAsUser(sourceContext, targetUserHandle, 0)
+              : sourceContext;
+      return targetUserContext.getPackageManager().getServiceInfo(serviceName, 0);
+    } catch (NameNotFoundException e) {
+      throw Status.UNIMPLEMENTED.withCause(e).withDescription("impossible race?").asException();
+    } catch (ReflectiveOperationException e) {
+      throw Status.INTERNAL
+          .withCause(e)
+          .withDescription("cross user requires SDK>=R")
+          .asException();
+    }
+  }
+
+  @Override
   @MainThread
   public void onServiceConnected(ComponentName className, IBinder binder) {
     boolean bound = false;
@@ -349,7 +368,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     if (bound) {
       // We call notify directly because we know we're on the main thread already.
       // (every millisecond counts in this path).
-      notifyBound(binder);
+      notifyBound(className, binder);
     }
   }
 

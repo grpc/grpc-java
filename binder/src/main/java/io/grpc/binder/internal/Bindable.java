@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import android.content.ComponentName;
 import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import androidx.annotation.AnyThread;
@@ -35,7 +36,7 @@ interface Bindable {
 
     /** We're now bound to the service. Only called once, and only if the binding succeeded. */
     @MainThread
-    void onBound(IBinder binder);
+    void onBound(ComponentName serviceName, IBinder binder);
 
     /**
      * We've disconnected from (or failed to bind to) the service. This will only be called once,
@@ -59,6 +60,16 @@ interface Bindable {
    */
   @AnyThread
   ServiceInfo resolve() throws StatusException;
+
+  /**
+   * Fetches details about a *connected* remote Service from PackageManager.
+   *
+   * <p>Use the 'serviceName' result from the Observer#onBound callback. The difference
+   *
+   * @throws StatusException UNIMPLEMENTED if 'serviceName' isn't found
+   */
+  @AnyThread
+  ServiceInfo getServiceInfo(ComponentName serviceName) throws StatusException;
 
   /**
    * Attempt to bind with the remote service.
