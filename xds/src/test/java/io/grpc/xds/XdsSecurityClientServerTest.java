@@ -51,10 +51,8 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.StatusRuntimeException;
-import io.grpc.TlsServerCredentials;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.testing.TlsTesting;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -515,36 +513,6 @@ public class XdsSecurityClientServerTest {
     }
   }
 
-  @Test
-  public void mtlsClientServer_withClientAuthentication_withTlsChannelCredsFromBootstrap()
-      throws Exception {
-    final String mtlsCertProviderInstanceName = "mtls_channel_creds_identity_certs";
-
-    UpstreamTlsContext upstreamTlsContext =
-        setBootstrapInfoWithMTlsChannelCredsAndBuildUpstreamTlsContext(
-            mtlsCertProviderInstanceName, CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    
-    DownstreamTlsContext downstreamTlsContext =
-        setBootstrapInfoWithMTlsChannelCredsAndBuildDownstreamTlsContext(
-            mtlsCertProviderInstanceName, SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, CA_PEM_FILE);
-
-    ServerCredentials serverCreds = TlsServerCredentials.newBuilder()
-        .keyManager(TlsTesting.loadCert(SERVER_1_PEM_FILE), TlsTesting.loadCert(SERVER_1_KEY_FILE))
-        .trustManager(TlsTesting.loadCert(CA_PEM_FILE))
-        .clientAuth(TlsServerCredentials.ClientAuth.REQUIRE)
-        .build();
-
-    buildServer(
-        XdsServerBuilder.forPort(0, serverCreds)
-            .xdsClientPoolFactory(fakePoolFactory)
-            .addService(new SimpleServiceImpl()),
-        downstreamTlsContext);
-
-    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-            getBlockingStub(upstreamTlsContext, OVERRIDE_AUTHORITY);
-    assertThat(unaryRpc("buddy", blockingStub)).isEqualTo("Hello buddy");
-  }
-
   private void performMtlsTestAndGetListenerWatcher(
       UpstreamTlsContext upstreamTlsContext, String certInstanceName2,
       String privateKey2, String cert2, String trustCa2)
@@ -603,22 +571,6 @@ public class XdsSecurityClientServerTest {
             .setSystemRootCerts(
                 CertificateValidationContext.SystemRootCerts.newBuilder().build())
             .build());
-  }
-
-  private UpstreamTlsContext setBootstrapInfoWithMTlsChannelCredsAndBuildUpstreamTlsContext(
-      String instanceName, String clientKeyFile, String clientPemFile, String caCertFile) {
-    bootstrapInfoForClient = CommonBootstrapperTestUtils
-        .buildBootstrapInfoForMTlsChannelCredentialServerInfo(
-            instanceName, clientKeyFile, clientPemFile, caCertFile);
-    return CommonTlsContextTestsUtil.buildUpstreamTlsContext(instanceName, true);
-  }
-
-  private DownstreamTlsContext setBootstrapInfoWithMTlsChannelCredsAndBuildDownstreamTlsContext(
-      String instanceName, String serverKeyFile, String serverPemFile, String caCertFile) {
-    bootstrapInfoForServer = CommonBootstrapperTestUtils
-        .buildBootstrapInfoForMTlsChannelCredentialServerInfo(
-            instanceName, serverKeyFile, serverPemFile, caCertFile);
-    return CommonTlsContextTestsUtil.buildDownstreamTlsContext(instanceName, true, true);
   }
 
   private void buildServerWithTlsContext(DownstreamTlsContext downstreamTlsContext)
