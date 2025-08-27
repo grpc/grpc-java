@@ -18,15 +18,12 @@ package io.grpc.xds.client;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ChannelCredentials;
-import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -157,42 +154,6 @@ public class CommonBootstrapperTestUtils {
         .servers(ImmutableList.<ServerInfo>of())
         .node(EnvoyProtoData.Node.newBuilder().build())
         .certProviders(certProviders)
-        .build();
-  }
-
-  public static Bootstrapper.BootstrapInfo buildBootstrapInfoForMTlsChannelCredentialServerInfo(
-      String instanceName, String privateKey, String cert, String trustCa) {
-    try {
-      privateKey = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(privateKey);
-      cert = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(cert);
-      trustCa = CommonTlsContextTestsUtil.getTempFileNameForResourcesFile(trustCa);
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
-    }
-
-    HashMap<String, String> config = new HashMap<>();
-    config.put("certificate_file", cert);
-    config.put("private_key_file", privateKey);
-    config.put("ca_certificate_file", trustCa);
-
-    ChannelCredentials creds;
-    try {
-      creds = TlsChannelCredentials.newBuilder()
-          .customCertificatesConfig(config)
-          .keyManager(new File(cert), new File(privateKey))
-          .trustManager(new File(trustCa))
-          .build();
-    } catch (IOException ioe) {
-      throw new RuntimeException(ioe);
-    }
-
-    // config for tls channel credentials and for certificate provider are the same
-    return Bootstrapper.BootstrapInfo.builder()
-        .servers(ImmutableList.<ServerInfo>of(ServerInfo.create(SERVER_URI, creds)))
-        .node(EnvoyProtoData.Node.newBuilder().build())
-        .certProviders(ImmutableMap.of(
-            instanceName,
-            Bootstrapper.CertificateProviderInfo.create("file_watcher", config)))
         .build();
   }
 
