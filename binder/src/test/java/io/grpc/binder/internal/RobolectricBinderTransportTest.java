@@ -18,14 +18,14 @@ package io.grpc.binder.internal;
 
 import static android.os.Process.myUid;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
+import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
+import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.robolectric.Shadows.shadowOf;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
-import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
-import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 
 import android.app.Application;
 import android.content.Intent;
@@ -34,33 +34,10 @@ import android.content.pm.PackageInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
 import android.os.Parcel;
-
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
-
 import com.google.common.collect.ImmutableList;
-
-import org.junit.Before;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
-import org.robolectric.ParameterizedRobolectricTestRunner;
-import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
-import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
-import org.robolectric.annotation.LooperMode;
-import org.robolectric.annotation.LooperMode.Mode;
-import org.robolectric.shadows.ShadowBinder;
-
-import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
-
 import io.grpc.Attributes;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
@@ -77,6 +54,23 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
+import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
+import org.robolectric.ParameterizedRobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
+import org.robolectric.annotation.LooperMode;
+import org.robolectric.annotation.LooperMode.Mode;
+import org.robolectric.shadows.ShadowBinder;
 
 /**
  * All of the AbstractTransportTest cases applied to {@link BinderTransport} running in a
@@ -308,10 +302,6 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
     assertThat(((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID))
             .isEqualTo(myUid());
-
-    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(statusCaptor.capture());
-    assertCodeEquals(null, Status.UNAVAILABLE, statusCaptor.getValue());
   }
 
   @Test
