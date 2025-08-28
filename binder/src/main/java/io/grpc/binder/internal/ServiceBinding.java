@@ -193,7 +193,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
             // We don't need SystemApis because bindServiceAsUser() is simply public in R+.
             bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
           } else {
-            // TODO(jdcormie): Use SystemApis to make this work pre-R.
+            // TODO(#12279): Use SystemApis to make this work pre-R.
             return Status.INTERNAL.withDescription("Cross user Channel requires Android R+");
           }
           break;
@@ -294,7 +294,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   private Context getContextForTargetUser() throws ReflectiveOperationException {
-    checkState(sourceContext != null);
+    checkState(sourceContext != null, "Already unbound!");
     return targetUserHandle == null
         ? sourceContext
         : createContextAsUser(
