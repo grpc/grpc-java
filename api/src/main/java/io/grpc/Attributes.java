@@ -215,6 +215,7 @@ public final class Attributes {
    * The helper class to build an Attributes instance.
    */
   public static final class Builder {
+    // Exactly one of base and newdata will be set
     private Attributes base;
     private IdentityHashMap<Key<?>, Object> newdata;
 
@@ -225,8 +226,11 @@ public final class Attributes {
 
     private IdentityHashMap<Key<?>, Object> data(int size) {
       if (newdata == null) {
-        newdata = new IdentityHashMap<>(size);
+        newdata = new IdentityHashMap<>(base.data.size() + size);
+        newdata.putAll(base.data);
+        base = null;
       }
+      assert base == null;
       return newdata;
     }
 
@@ -243,12 +247,11 @@ public final class Attributes {
      * @return this
      */
     public <T> Builder discard(Key<T> key) {
-      if (base.data.containsKey(key)) {
-        IdentityHashMap<Key<?>, Object> newBaseData = new IdentityHashMap<>(base.data);
-        newBaseData.remove(key);
-        base = new Attributes(newBaseData);
-      }
-      if (newdata != null) {
+      if (base != null) {
+        if (base.data.containsKey(key)) {
+          data(0).remove(key);
+        }
+      } else {
         newdata.remove(key);
       }
       return this;
@@ -264,11 +267,6 @@ public final class Attributes {
      */
     public Attributes build() {
       if (newdata != null) {
-        for (Map.Entry<Key<?>, Object> entry : base.data.entrySet()) {
-          if (!newdata.containsKey(entry.getKey())) {
-            newdata.put(entry.getKey(), entry.getValue());
-          }
-        }
         base = new Attributes(newdata);
         newdata = null;
       }
