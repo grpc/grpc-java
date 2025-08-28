@@ -46,6 +46,11 @@ else
       -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
       -B. || exit 1
+  elif [[ "$ARCH" == "aarch_64" && "$(uname -s)" == "Darwin" ]]; then
+    cmake .. \
+      -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
+      -B. || exit 1
   else
     if [[ "$ARCH" == aarch_64 ]]; then
       GCC_ARCH=aarch64-linux-gnu
