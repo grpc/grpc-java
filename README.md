@@ -69,12 +69,6 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
   <artifactId>grpc-stub</artifactId>
   <version>1.74.0</version>
 </dependency>
-<dependency> <!-- necessary for Java 9+ -->
-  <groupId>org.apache.tomcat</groupId>
-  <artifactId>annotations-api</artifactId>
-  <version>6.0.53</version>
-  <scope>provided</scope>
-</dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
@@ -82,7 +76,6 @@ Or for Gradle with non-Android, add to your dependencies:
 runtimeOnly 'io.grpc:grpc-netty-shaded:1.74.0'
 implementation 'io.grpc:grpc-protobuf:1.74.0'
 implementation 'io.grpc:grpc-stub:1.74.0'
-compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
@@ -91,7 +84,6 @@ For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 implementation 'io.grpc:grpc-okhttp:1.74.0'
 implementation 'io.grpc:grpc-protobuf-lite:1.74.0'
 implementation 'io.grpc:grpc-stub:1.74.0'
-compileOnly 'org.apache.tomcat:annotations-api:6.0.53' // necessary for Java 9+
 ```
 
 For [Bazel](https://bazel.build), you can either
