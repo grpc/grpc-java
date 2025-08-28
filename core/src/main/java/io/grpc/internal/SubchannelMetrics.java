@@ -76,33 +76,35 @@ final class SubchannelMetrics {
     );
   }
 
-  public void recordConnectionAttemptSucceeded(MetricsAttributes labelSet) {
+  public void recordConnectionAttemptSucceeded(String target, String backendService,
+                                               String locality, String securityLevel) {
     metricRecorder
         .addLongCounter(connectionAttemptsSucceeded, 1,
-            ImmutableList.of(labelSet.target),
-            ImmutableList.of(labelSet.backendService, labelSet.locality));
+            ImmutableList.of(target),
+            ImmutableList.of(backendService, locality));
     metricRecorder
         .addLongUpDownCounter(openConnections, 1,
-            ImmutableList.of(labelSet.target),
-            ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
+            ImmutableList.of(target),
+            ImmutableList.of(securityLevel, backendService, locality));
   }
 
-  public void recordConnectionAttemptFailed(MetricsAttributes labelSet) {
+  public void recordConnectionAttemptFailed(String target, String backendService, String locality) {
     metricRecorder
         .addLongCounter(connectionAttemptsFailed, 1,
-            ImmutableList.of(labelSet.target),
-            ImmutableList.of(labelSet.backendService, labelSet.locality));
+            ImmutableList.of(target),
+            ImmutableList.of(backendService, locality));
   }
 
-  public void recordDisconnection(MetricsAttributes labelSet) {
+  public void recordDisconnection(String target, String backendService, String locality,
+                                  String disconnectError, String securityLevel) {
     metricRecorder
         .addLongCounter(disconnections, 1,
-            ImmutableList.of(labelSet.target),
-            ImmutableList.of(labelSet.backendService, labelSet.locality, labelSet.disconnectError));
+            ImmutableList.of(target),
+            ImmutableList.of(backendService, locality, disconnectError));
     metricRecorder
         .addLongUpDownCounter(openConnections, -1,
-            ImmutableList.of(labelSet.target),
-            ImmutableList.of(labelSet.securityLevel, labelSet.backendService, labelSet.locality));
+            ImmutableList.of(target),
+            ImmutableList.of(securityLevel, backendService, locality));
   }
 
   /**

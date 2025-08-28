@@ -602,15 +602,13 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             pendingTransport = null;
             connectedAddressAttributes = addressIndex.getCurrentEagAttributes();
             gotoNonErrorState(READY);
-            subchannelMetrics.recordConnectionAttemptSucceeded(MetricsAttributes.newBuilder(target)
-                .backendService(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
-                .locality(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(),
-                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
-                .securityLevel(extractSecurityLevel(
-                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL)))
-                .build());
+            subchannelMetrics.recordConnectionAttemptSucceeded(/* target= */ target,
+                /* backendService= */ getAttributeOrDefault(
+                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
+                    .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           }
         }
       });
@@ -636,24 +634,21 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             activeTransport = null;
             addressIndex.reset();
             gotoNonErrorState(IDLE);
-            subchannelMetrics.recordDisconnection(MetricsAttributes.newBuilder(target)
-                .backendService(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
-                .locality(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(),
-                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
-                .disconnectError(SubchannelMetrics.DisconnectError.UNKNOWN.getErrorString(null))
-                .securityLevel(extractSecurityLevel(
-                    addressIndex.getCurrentEagAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL)))
-                .build());
+            subchannelMetrics.recordDisconnection(/* target= */ target,
+                /* backendService= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    NameResolver.ATTR_BACKEND_SERVICE),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME),
+                /* disconnectError= */ SubchannelMetrics.DisconnectError.UNKNOWN
+                    .getErrorString(null),
+                /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
+                    .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           } else if (pendingTransport == transport) {
-            subchannelMetrics.recordConnectionAttemptFailed(MetricsAttributes.newBuilder(target)
-                .backendService(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE))
-                .locality(getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(),
-                    EquivalentAddressGroup.ATTR_LOCALITY_NAME))
-                .build());
+            subchannelMetrics.recordConnectionAttemptFailed(/* target= */ target,
+                /* backendService= */getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    NameResolver.ATTR_BACKEND_SERVICE),
+                /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
+                    EquivalentAddressGroup.ATTR_LOCALITY_NAME));
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
             addressIndex.increment();
