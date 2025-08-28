@@ -42,6 +42,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -122,9 +123,13 @@ final class ServletServerStream extends AbstractServerStream {
     resp.setStatus(HttpServletResponse.SC_OK);
     resp.setContentType(CONTENT_TYPE_GRPC);
 
+    serializeHeaders(metadata, resp::addHeader);
+  }
+
+  private static void serializeHeaders(Metadata metadata, BiConsumer<String, String> consumer) {
     byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(metadata);
     for (int i = 0; i < serializedHeaders.length; i += 2) {
-      resp.addHeader(
+      consumer.accept(
           new String(serializedHeaders[i], StandardCharsets.US_ASCII),
           new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
     }
@@ -277,13 +282,8 @@ final class ServletServerStream extends AbstractServerStream {
       if (!headersSent) {
         writeHeadersToServletResponse(trailers);
       } else {
-        byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
-        for (int i = 0; i < serializedHeaders.length; i += 2) {
-          String key = new String(serializedHeaders[i], StandardCharsets.US_ASCII);
-          String newValue = new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII);
-          trailerSupplier.get().computeIfPresent(key, (k, v) -> v + "," + newValue);
-          trailerSupplier.get().putIfAbsent(key, newValue);
-        }
+        serializeHeaders(trailers,
+            (k, v) -> trailerSupplier.get().merge(k, v, (oldV, newV) -> oldV + "," + newV));
       }
 
       writer.complete();
