@@ -187,7 +187,7 @@ public class RetriableStreamTest {
         ClientStreamTracer.Factory tracerFactory,
         int previousAttempts,
         boolean isTransparentRetry,
-        boolean isHedging) {
+        boolean isHedgedStream) {
       bufferSizeTracer =
           tracerFactory.newClientStreamTracer(STREAM_INFO, metadata);
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
