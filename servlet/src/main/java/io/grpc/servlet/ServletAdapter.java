@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -160,7 +161,8 @@ public final class ServletAdapter {
   /**
    * Deadlines are managed via Context, servlet async timeout is not supposed to happen.
    */
-  private static final long ASYNC_TIMEOUT_SAFETY_MARGIN = 5_000;
+  @VisibleForTesting
+  static final long ASYNC_TIMEOUT_SAFETY_MARGIN = 5_000;
 
   // This method must use Enumeration and its members, since that is the only way to read headers
   // from the servlet api.
