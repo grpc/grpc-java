@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -736,6 +737,32 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       this.oobReportingPeriodNanos = oobReportingPeriodNanos;
       this.weightUpdatePeriodNanos = weightUpdatePeriodNanos;
       this.errorUtilizationPenalty = errorUtilizationPenalty;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof WeightedRoundRobinLoadBalancerConfig)) {
+        return false;
+      }
+      WeightedRoundRobinLoadBalancerConfig that = (WeightedRoundRobinLoadBalancerConfig) o;
+      return this.blackoutPeriodNanos == that.blackoutPeriodNanos
+          && this.weightExpirationPeriodNanos == that.weightExpirationPeriodNanos
+          && this.enableOobLoadReport == that.enableOobLoadReport
+          && this.oobReportingPeriodNanos == that.oobReportingPeriodNanos
+          && this.weightUpdatePeriodNanos == that.weightUpdatePeriodNanos
+          // Float.compare considers NaNs equal
+          && Float.compare(this.errorUtilizationPenalty, that.errorUtilizationPenalty) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(
+          blackoutPeriodNanos,
+          weightExpirationPeriodNanos,
+          enableOobLoadReport,
+          oobReportingPeriodNanos,
+          weightUpdatePeriodNanos,
+          errorUtilizationPenalty);
     }
 
     static final class Builder {

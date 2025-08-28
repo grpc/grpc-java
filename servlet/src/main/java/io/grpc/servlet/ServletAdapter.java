@@ -215,7 +215,9 @@ public final class ServletAdapter {
     }
 
     @Override
-    public void onComplete(AsyncEvent event) {}
+    public void onComplete(AsyncEvent event) {
+      stream.asyncCompleted = true;
+    }
 
     @Override
     public void onTimeout(AsyncEvent event) {
