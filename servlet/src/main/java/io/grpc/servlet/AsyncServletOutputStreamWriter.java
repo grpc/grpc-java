@@ -26,9 +26,9 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.servlet.ServletServerStream.ServletTransportState;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BiFunction;
@@ -128,7 +128,7 @@ final class AsyncServletOutputStreamWriter {
             log.fine("call completed");
           });
     };
-    this.isReady = () -> outputStream.isReady();
+    this.isReady = outputStream::isReady;
   }
 
   /**
@@ -173,7 +173,9 @@ final class AsyncServletOutputStreamWriter {
   /** Called from the container thread {@link javax.servlet.WriteListener#onWritePossible()}. */
   void onWritePossible() throws IOException {
     log.finest("onWritePossible: ENTRY. The servlet output stream becomes ready");
-    assureReadyAndDrainedTurnsFalse();
+    if (writeState.get().readyAndDrained) {
+      assureReadyAndDrainedTurnsFalse();
+    }
     while (isReady.getAsBoolean()) {
       WriteState curState = writeState.get();
 
@@ -200,11 +202,9 @@ final class AsyncServletOutputStreamWriter {
     // readyAndDrained should have been set to false already.
     // Just in case due to a race condition readyAndDrained is still true at this moment and is
     // being set to false by runOrBuffer() concurrently.
+    parkingThread = Thread.currentThread();
     while (writeState.get().readyAndDrained) {
-      parkingThread = Thread.currentThread();
-      // Try to sleep for an extremely long time to avoid writeState being changed at exactly
-      // the time when sleep time expires (in extreme scenario, such as #9917).
-      LockSupport.parkNanos(Duration.ofHours(1).toNanos()); // should return immediately
+      LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1)); // should return immediately
     }
     parkingThread = null;
   }
@@ -254,7 +254,7 @@ final class AsyncServletOutputStreamWriter {
   @VisibleForTesting // Lincheck test can not run with java.util.logging dependency.
   interface Log {
     default boolean isLoggable(Level level) {
-      return false; 
+      return false;
     }
 
     default void fine(String str, Object...params) {}

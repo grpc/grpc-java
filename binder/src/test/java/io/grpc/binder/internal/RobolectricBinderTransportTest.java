@@ -16,7 +16,11 @@
 
 package io.grpc.binder.internal;
 
+import static android.os.Process.myUid;
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
+import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
+import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -28,6 +32,8 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.ServiceInfo;
+import android.os.Binder;
+import android.os.Parcel;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
@@ -38,9 +44,11 @@ import io.grpc.Status;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
+import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
+import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -109,7 +117,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   public void setUp() {
     serverAppInfo =
         ApplicationInfoBuilder.newBuilder().setPackageName("the.server.package").build();
-    serverAppInfo.uid = android.os.Process.myUid();
+    serverAppInfo.uid = myUid();
     serverPkgInfo =
         PackageInfoBuilder.newBuilder()
             .setPackageName(serverAppInfo.packageName)
@@ -262,6 +270,38 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     authRequest.setResult(Status.OK);
 
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
+  }
+
+  @Test
+  public void clientIgnoresDuplicateSetupTransaction() throws Exception {
+    server.start(serverListener);
+    client =
+        newClientTransportBuilder()
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setSecurityPolicy(SecurityPolicies.internalOnly())
+                    .buildClientTransportFactory())
+            .build();
+    runIfNotNull(client.start(mockClientTransportListener));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
+
+    assertThat(((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID))
+        .isEqualTo(myUid());
+
+    Parcel setupParcel = Parcel.obtain();
+    try {
+      setupParcel.writeInt(WIRE_FORMAT_VERSION);
+      setupParcel.writeStrongBinder(new Binder());
+      setupParcel.setDataPosition(0);
+      ShadowBinder.setCallingUid(1 + myUid());
+      ((BinderClientTransport) client).handleTransaction(SETUP_TRANSPORT, setupParcel);
+    } finally {
+      ShadowBinder.setCallingUid(myUid());
+      setupParcel.recycle();
+    }
+
+    assertThat(((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID))
+            .isEqualTo(myUid());
   }
 
   @Test
