@@ -330,7 +330,6 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
     int remoteUid = Binder.getCallingUid();
-    attributes = setSecurityAttrs(attributes, remoteUid);
     if (inState(TransportState.SETUP)) {
       int version = parcel.readInt();
       IBinder binder = parcel.readStrongBinder();
@@ -340,6 +339,7 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
+        attributes = setSecurityAttrs(attributes, remoteUid);
         authResultFuture = checkServerAuthorizationAsync(remoteUid);
         Futures.addCallback(
             authResultFuture,
