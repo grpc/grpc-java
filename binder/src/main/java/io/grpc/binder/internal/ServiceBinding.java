@@ -275,16 +275,10 @@ final class ServiceBinding implements Bindable, ServiceConnection {
       // 'directBootAware'-ness. This flag explicitly tells resolveService() to act the same way.
       flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
     }
-    Context targetUserContext;
-    try {
-      targetUserContext = getContextForTargetUser();
-    } catch (ReflectiveOperationException e) {
-      throw Status.INTERNAL
-          .withDescription("Cross-user pre-auth requires SDK_INT >= R and @SystemApi visibility")
-          .asException();
-    }
     ResolveInfo resolveInfo =
-        targetUserContext.getPackageManager().resolveService(bindIntent, flags);
+        getContextForTargetUser("Cross-user pre-auth")
+            .getPackageManager()
+            .resolveService(bindIntent, flags);
     if (resolveInfo == null) {
       throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
           .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
@@ -293,12 +287,17 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     return resolveInfo.serviceInfo;
   }
 
-  private Context getContextForTargetUser() throws ReflectiveOperationException {
+  private Context getContextForTargetUser(String purpose) throws StatusException {
     checkState(sourceContext != null, "Already unbound!");
-    return targetUserHandle == null
-        ? sourceContext
-        : createContextAsUser(
-            sourceContext, targetUserHandle, /* flags= */ 0); // @SystemApi since R.
+    try {
+      return targetUserHandle == null
+          ? sourceContext
+          : createContextAsUser(sourceContext, targetUserHandle, /* flags= */ 0);
+    } catch (ReflectiveOperationException e) {
+      throw Status.INTERNAL
+          .withDescription(purpose + " requires SDK_INT >= R and @SystemApi visibility")
+          .asException();
+    }
   }
 
   @MainThread
