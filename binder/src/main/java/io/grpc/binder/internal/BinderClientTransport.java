@@ -343,8 +343,7 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
-        OneWayBinderProxy binderProxy =
-            binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor));
+        OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
         handshakeImpl.handleSetupTransport(binderProxy);
       }
     }
