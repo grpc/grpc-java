@@ -73,6 +73,7 @@ public final class BinderClientTransport extends BinderTransport
   private final Executor offloadExecutor;
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
+  private final ClientHandshake handshakeImpl;
 
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
@@ -80,7 +81,6 @@ public final class BinderClientTransport extends BinderTransport
   private final long readyTimeoutMillis;
   private final PingTracker pingTracker;
   private final boolean preAuthorizeServer;
-  private final ClientHandshake handshakeImpl;
 
   @Nullable private ManagedClientTransport.Listener clientTransportListener;
 
@@ -150,8 +150,9 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   public synchronized void onBound(IBinder binder) {
-    handshakeImpl.onBound(
-        binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+    OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
+    binderProxy = binderDecorator.decorate(binderProxy);
+    handshakeImpl.onBound(binderProxy);
   }
 
   @Override
@@ -388,7 +389,7 @@ public final class BinderClientTransport extends BinderTransport
           offloadExecutor);
     }
 
-    @GuardedBy("this")
+    @GuardedBy("BinderClientTransport.this")
     private void handleAuthResult(OneWayBinderProxy binder, Status authorization) {
       if (inState(TransportState.SETUP)) {
         if (!authorization.isOk()) {
@@ -400,7 +401,7 @@ public final class BinderClientTransport extends BinderTransport
           // Check state again, since a failure inside setOutgoingBinder (or a callback it
           // triggers), could have shut us down.
           if (!isShutdown()) {
-            reportReady();
+            onHandshakeComplete();
           }
         }
       }
@@ -469,18 +470,18 @@ public final class BinderClientTransport extends BinderTransport
 
     @Override
     @GuardedBy("BinderClientTransport.this")
-    public void handleSetupTransport(OneWayBinderProxy binder) {
-      if (!setOutgoingBinder(binder)) {
+    public void handleSetupTransport(OneWayBinderProxy serverBinder) {
+      if (!setOutgoingBinder(serverBinder)) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
       } else {
-        reportReady();
+        onHandshakeComplete();
       }
     }
   }
 
   @GuardedBy("this")
-  private void reportReady() {
+  private void onHandshakeComplete() {
     setState(TransportState.READY);
     attributes = clientTransportListener.filterTransport(attributes);
     clientTransportListener.transportReady();
@@ -542,7 +543,7 @@ public final class BinderClientTransport extends BinderTransport
      */
     @GuardedBy("BinderClientTransport.this")
     @BinderThread
-    abstract void handleSetupTransport(OneWayBinderProxy binder);
+    abstract void handleSetupTransport(OneWayBinderProxy serverBinder);
   }
 
   private static ClientStream newFailingClientStream(
