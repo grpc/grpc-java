@@ -288,8 +288,14 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     return resolveInfo.serviceInfo;
   }
 
+  // The returned Context must be *retained* for any ongoing operations, e.g. registerReceiver().
   private Context getContextForTargetUser(String purpose) throws StatusException {
-    checkState(sourceContext != null, "Already unbound!");
+    // This call races against unbind().
+    Context sourceContext = this.sourceContext;
+    if (sourceContext == null) {
+      throw Status.UNAVAILABLE.withDescription("Already unbound!").asException();
+    }
+
     try {
       return targetUserHandle == null
           ? sourceContext
@@ -309,18 +315,11 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @Override
   public ServiceInfo getServiceInfo(ComponentName serviceName) throws StatusException {
     try {
-      Context targetUserContext =
-          targetUserHandle != null
-              ? SystemApis.createContextAsUser(sourceContext, targetUserHandle, 0)
-              : sourceContext;
-      return targetUserContext.getPackageManager().getServiceInfo(serviceName, 0);
+      return getContextForTargetUser("cross-user v2 handshake")
+          .getPackageManager()
+          .getServiceInfo(serviceName, /* flags= */ 0);
     } catch (NameNotFoundException e) {
       throw Status.UNIMPLEMENTED.withCause(e).withDescription("impossible race?").asException();
-    } catch (ReflectiveOperationException e) {
-      throw Status.INTERNAL
-          .withCause(e)
-          .withDescription("cross user requires SDK>=R")
-          .asException();
     }
   }
 
