@@ -55,6 +55,8 @@ else
       GCC_ARCH=s390x-linux-gnu
     elif [[ "$ARCH" == loongarch_64 ]]; then
       GCC_ARCH=loongarch64-unknown-linux-gnu
+    elif [[ "$ARCH" == riscv* ]]; then
+      GCC_ARCH=riscv64-unknown-linux-gnu
     else
       echo "Unknown architecture: $ARCH"
       exit 1

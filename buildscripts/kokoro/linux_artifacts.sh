@@ -21,3 +21,5 @@ trap spongify_logs EXIT
 #   internal compiler error: output_operand: invalid %-code
 "$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-ubuntu2004 env \
   SKIP_TESTS=true ARCH=s390_64 /grpc-java/buildscripts/kokoro/unix.sh
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
+  SKIP_TESTS=true ARCH=riscv64 /grpc-java/buildscripts/kokoro/unix.sh

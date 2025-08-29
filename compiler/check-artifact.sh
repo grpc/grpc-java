@@ -63,6 +63,8 @@ checkArch ()
         assertEq "$format" "elf64-little" $LINENO
       elif [[ "$ARCH" == loongarch_64 ]]; then
         echo $format
+      elif [[ "$ARCH" == riscv64 ]]; then
+        assertEq "$format" "elf64-littleriscv" $LINENO
 	assertEq "$format" "elf64-loongarch" $LINENO
       elif [[ "$ARCH" == ppcle_64 ]]; then
         format="$(powerpc64le-linux-gnu-objdump -f "$1" | grep -o "file format .*$" | grep -o "[^ ]*$")"
@@ -121,6 +123,8 @@ checkDependencies ()
       white_list="${white_list}\|libm\.so\.6"
     elif [[ "$ARCH" == aarch_64 ]]; then
       white_list="${white_list}\|ld-linux-aarch64\.so\.1"
+    elif [[ "$ARCH" == riscv64 ]]; then
+      white_list="libm\.so\.6\|libc\.so\.6\|ld-linux-riscv64-lp64d\.so\.1"
     fi
   elif [[ "$OS" == osx ]]; then
     dump_cmd='otool -L '"$1"' | fgrep dylib'
