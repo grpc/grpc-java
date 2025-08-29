@@ -103,6 +103,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   private State reportedState; // Only used on the main thread.
 
+  @GuardedBy("this")
+  private ComponentName connectedServiceName;
+
   @AnyThread
   ServiceBinding(
       Executor mainThreadExecutor,
@@ -128,11 +131,11 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @MainThread
-  private void notifyBound(ComponentName serviceName, IBinder binder) {
+  private void notifyBound(IBinder binder) {
     if (reportedState == State.NOT_BINDING) {
       reportedState = State.BOUND;
       logger.log(Level.FINEST, "notify bound - notifying");
-      observer.onBound(serviceName, binder);
+      observer.onBound(binder);
     }
   }
 
@@ -313,14 +316,19 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   }
 
   @Override
-  public ServiceInfo getServiceInfo(ComponentName serviceName) throws StatusException {
+  public ServiceInfo getConnectedServiceInfo() throws StatusException {
     try {
       return getContextForTargetUser("cross-user v2 handshake")
           .getPackageManager()
-          .getServiceInfo(serviceName, /* flags= */ 0);
+          .getServiceInfo(getConnectedServiceName(), /* flags= */ 0);
     } catch (NameNotFoundException e) {
       throw Status.UNIMPLEMENTED.withCause(e).withDescription("impossible race?").asException();
     }
+  }
+
+  private synchronized ComponentName getConnectedServiceName() {
+    checkState(connectedServiceName != null, "onBound() not yet called!");
+    return connectedServiceName;
   }
 
   @Override
@@ -330,13 +338,14 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     synchronized (this) {
       if (state == State.BINDING) {
         state = State.BOUND;
+        connectedServiceName = className;
         bound = true;
       }
     }
     if (bound) {
       // We call notify directly because we know we're on the main thread already.
       // (every millisecond counts in this path).
-      notifyBound(className, binder);
+      notifyBound(binder);
     }
   }
 

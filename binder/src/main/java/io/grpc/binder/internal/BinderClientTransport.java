@@ -19,7 +19,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.binder.ApiConstants.PRE_AUTH_SERVER_OVERRIDE;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
@@ -129,7 +128,7 @@ public final class BinderClientTransport extends BinderTransport
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
     this.handshakeImpl =
-          factory.useLegacyHandshake ? new LegacyClientHandshake() : new NewClientHandshake();
+        factory.useLegacyHandshake ? new LegacyClientHandshake() : new NewClientHandshake();
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
@@ -150,8 +149,9 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   @Override
-  public synchronized void onBound(ComponentName serviceName, IBinder binder) {
-    handshakeImpl.onBound(serviceName, binder);
+  public synchronized void onBound(IBinder binder) {
+    handshakeImpl.onBound(
+        binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
   }
 
   @Override
@@ -343,7 +343,9 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
-        handshakeImpl.handleSetupTransport(binder);
+        OneWayBinderProxy binderProxy =
+            binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor));
+        handshakeImpl.handleSetupTransport(binderProxy);
       }
     }
   }
@@ -353,70 +355,86 @@ public final class BinderClientTransport extends BinderTransport
         ? ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(remoteUid)
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
-   class LegacyClientHandshake extends ClientHandshake {
-      @Override
-      @MainThread
-      @GuardedBy("BinderClientTransport.this")
-      public void onBound(ComponentName unused, IBinder binder) {
-        sendSetupTransaction(
-            binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
-      }
 
-      @Override
-      @BinderThread
-      @GuardedBy("BinderClientTransport.this")
-      public void handleSetupTransport(IBinder binder) {
-        int remoteUid = Binder.getCallingUid();
-        attributes = setSecurityAttrs(attributes, remoteUid);
-        authResultFuture = checkServerAuthorizationAsync(remoteUid);
-        Futures.addCallback(
-            authResultFuture,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {
-                synchronized (BinderClientTransport.this) {
-                  handleAuthResult(binder, result);
-                }
+  class LegacyClientHandshake extends ClientHandshake {
+    @Override
+    @MainThread
+    @GuardedBy("BinderClientTransport.this")
+    public void onBound(OneWayBinderProxy binder) {
+      sendSetupTransaction(binder);
+    }
+
+    @Override
+    @BinderThread
+    @GuardedBy("BinderClientTransport.this")
+    public void handleSetupTransport(OneWayBinderProxy binder) {
+      int remoteUid = Binder.getCallingUid();
+      attributes = setSecurityAttrs(attributes, remoteUid);
+      authResultFuture = checkServerAuthorizationAsync(remoteUid);
+      Futures.addCallback(
+          authResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              synchronized (BinderClientTransport.this) {
+                handleAuthResult(binder, result);
               }
-
-              @Override
-              public void onFailure(Throwable t) {
-                BinderClientTransport.this.handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
-      }
-
-      @GuardedBy("this")
-      private void handleAuthResult(IBinder binder, Status authorization) {
-        if (inState(TransportState.SETUP)) {
-          if (!authorization.isOk()) {
-            shutdownInternal(authorization, true);
-          } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-            shutdownInternal(
-                Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
-          } else {
-            // Check state again, since a failure inside setOutgoingBinder (or a callback it
-            // triggers), could have shut us down.
-            if (!isShutdown()) {
-              reportReady();
             }
+
+            @Override
+            public void onFailure(Throwable t) {
+              BinderClientTransport.this.handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("this")
+    private void handleAuthResult(OneWayBinderProxy binder, Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else if (!setOutgoingBinder(binder)) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+        } else {
+          // Check state again, since a failure inside setOutgoingBinder (or a callback it
+          // triggers), could have shut us down.
+          if (!isShutdown()) {
+            reportReady();
           }
         }
       }
     }
+  }
 
-    class NewClientHandshake extends ClientHandshake {
-      @Override
-      @GuardedBy("BinderClientTransport.this")
-      public void onBound(ComponentName serviceName, IBinder endpointBinder) {
-        ServiceInfo serviceInfo;
-        try {
-          serviceInfo = serviceBinding.getServiceInfo(serviceName);
-        } catch (StatusException e) {
-          shutdownInternal(e.getStatus(), true);
-          return;
-        }
+  class NewClientHandshake extends ClientHandshake {
+    @Override
+    @GuardedBy("BinderClientTransport.this")
+    public void onBound(OneWayBinderProxy endpointBinder) {
+      Futures.addCallback(
+          Futures.submit(serviceBinding::getConnectedServiceInfo, offloadExecutor),
+          new FutureCallback<ServiceInfo>() {
+            @Override
+            public void onSuccess(ServiceInfo result) {
+              synchronized (BinderClientTransport.this) {
+                onConnectedServiceInfo(endpointBinder, result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (BinderClientTransport.this) {
+                shutdownInternal(Status.fromThrowable(t), true);
+              }
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void onConnectedServiceInfo(OneWayBinderProxy endpointBinder, ServiceInfo serviceInfo) {
+      if (inState(TransportState.SETUP)) {
         attributes = setSecurityAttrs(attributes, serviceInfo.applicationInfo.uid);
         authResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
 
@@ -437,40 +455,41 @@ public final class BinderClientTransport extends BinderTransport
             },
             offloadExecutor);
       }
+    }
 
-      @GuardedBy("BinderClientTransport.this")
-      private void handleAuthResult(IBinder endpointBinder, Status result) {
-        if (inState(TransportState.SETUP)) {
-          if (!result.isOk()) {
-            shutdownInternal(result, true);
-          } else {
-            sendSetupTransaction(
-                binderDecorator.decorate(OneWayBinderProxy.wrap(endpointBinder, offloadExecutor)));
-          }
-        }
-      }
-
-      @Override
-      public void handleSetupTransport(IBinder binder) {
-        if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-          shutdownInternal(
-              Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+    @GuardedBy("BinderClientTransport.this")
+    private void handleAuthResult(OneWayBinderProxy endpointBinder, Status authResult) {
+      if (inState(TransportState.SETUP)) {
+        if (!authResult.isOk()) {
+          shutdownInternal(authResult, true);
         } else {
-          reportReady();
+          sendSetupTransaction(endpointBinder);
         }
       }
     }
 
-    @GuardedBy("this")
-    private void reportReady() {
-      setState(TransportState.READY);
-      attributes = clientTransportListener.filterTransport(attributes);
-      clientTransportListener.transportReady();
-      if (readyTimeoutFuture != null) {
-        readyTimeoutFuture.cancel(false);
-        readyTimeoutFuture = null;
+    @Override
+    @GuardedBy("BinderClientTransport.this")
+    public void handleSetupTransport(OneWayBinderProxy binder) {
+      if (!setOutgoingBinder(binder)) {
+        shutdownInternal(
+            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+      } else {
+        reportReady();
       }
     }
+  }
+
+  @GuardedBy("this")
+  private void reportReady() {
+    setState(TransportState.READY);
+    attributes = clientTransportListener.filterTransport(attributes);
+    clientTransportListener.transportReady();
+    if (readyTimeoutFuture != null) {
+      readyTimeoutFuture.cancel(false);
+      readyTimeoutFuture = null;
+    }
+  }
 
   private synchronized void handleAuthResult(IBinder binder, Status authorization) {
     if (inState(TransportState.SETUP)) {
@@ -516,7 +535,7 @@ public final class BinderClientTransport extends BinderTransport
      */
     @GuardedBy("BinderClientTransport.this")
     @MainThread
-    abstract void onBound(ComponentName unused, IBinder endpointBinder);
+    abstract void onBound(OneWayBinderProxy endpointBinder);
 
     /**
      * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
@@ -524,7 +543,7 @@ public final class BinderClientTransport extends BinderTransport
      */
     @GuardedBy("BinderClientTransport.this")
     @BinderThread
-    abstract void handleSetupTransport(IBinder serverBinder);
+    abstract void handleSetupTransport(OneWayBinderProxy binder);
   }
 
   private static ClientStream newFailingClientStream(

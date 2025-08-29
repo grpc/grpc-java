@@ -112,7 +112,6 @@ public final class ServiceBindingTest {
     assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
     assertThat(observer.gotBoundEvent).isTrue();
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
-    assertThat(observer.serviceName).isEqualTo(serviceComponent);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
   }
@@ -402,9 +401,12 @@ public final class ServiceBindingTest {
     assertThat(shadowApplication.getBoundServiceConnections()).isNotEmpty();
     assertThat(observer.gotBoundEvent).isTrue();
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
-    assertThat(observer.serviceName).isEqualTo(serviceComponent);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
   }
 
   private void assertNoLockHeld() {
@@ -448,12 +450,11 @@ public final class ServiceBindingTest {
     public Status unboundReason;
 
     @Override
-    public void onBound(ComponentName serviceName, IBinder binder) {
+    public void onBound(IBinder binder) {
       assertThat(gotBoundEvent).isFalse();
       assertNoLockHeld();
       gotBoundEvent = true;
       this.binder = binder;
-      this.serviceName = serviceName;
     }
 
     @Override
