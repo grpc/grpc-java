@@ -12,6 +12,7 @@ description = "gRPC: S2A"
 
 dependencies {
     implementation libraries.s2a.proto
+    implementation 'org.checkerframework:checker-qual:3.49.5'
 
     api project(':grpc-api')
     implementation project(':grpc-stub'),
