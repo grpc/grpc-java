@@ -73,7 +73,7 @@ public final class BinderClientTransport extends BinderTransport
   private final Executor offloadExecutor;
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
-  private final ClientHandshake handshakeImpl;
+  private final ClientHandshake handshake;
 
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
@@ -127,7 +127,7 @@ public final class BinderClientTransport extends BinderTransport
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-    this.handshakeImpl =
+    this.handshake =
         factory.useLegacyHandshake ? new LegacyClientHandshake() : new NewClientHandshake();
     serviceBinding =
         new ServiceBinding(
@@ -152,7 +152,7 @@ public final class BinderClientTransport extends BinderTransport
   public synchronized void onBound(IBinder binder) {
     OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
     binderProxy = binderDecorator.decorate(binderProxy);
-    handshakeImpl.onBound(binderProxy);
+    handshake.onBound(binderProxy);
   }
 
   @Override
@@ -345,7 +345,7 @@ public final class BinderClientTransport extends BinderTransport
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
         OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
-        handshakeImpl.handleSetupTransport(binderProxy);
+        handshake.handleSetupTransport(binderProxy);
       }
     }
   }
