@@ -36,7 +36,8 @@ public final class AnonymousInProcessSocketAddress extends SocketAddress {
 
   @Nullable
   @GuardedBy("this")
-  private transient InProcessServer server;
+  @SuppressWarnings("serial")
+  private InProcessServer server;
 
   private void writeObject(ObjectOutputStream out) throws IOException {
     throw new NotSerializableException("AnonymousInProcessSocketAddress is not serializable");

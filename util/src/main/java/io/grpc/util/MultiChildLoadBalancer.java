@@ -269,6 +269,7 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
     @SuppressWarnings("this-escape")
+    // TODO(okshiva): Fix 'this-escape' from the constructor before making the API public.
     public ChildLbState(Object key, LoadBalancer.Factory policyFactory) {
       this.key = key;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());
