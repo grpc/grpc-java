@@ -150,7 +150,9 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   public synchronized void onBound(IBinder binder) {
-    handshake.onBound(binder);
+    OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
+    binderProxy = binderDecorator.decorate(binderProxy);
+    handshake.onBound(binderProxy);
   }
 
   @Override
@@ -342,7 +344,8 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
-        handshake.handleSetupTransport(binder);
+        OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
+        handshake.handleSetupTransport(binderProxy);
       }
     }
   }
@@ -357,15 +360,14 @@ public final class BinderClientTransport extends BinderTransport
     @Override
     @MainThread
     @GuardedBy("BinderClientTransport.this")
-    public void onBound(IBinder binder) {
-      sendSetupTransaction(
-          binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+    public void onBound(OneWayBinderProxy binder) {
+      sendSetupTransaction(binder);
     }
 
     @Override
     @BinderThread
     @GuardedBy("BinderClientTransport.this")
-    public void handleSetupTransport(IBinder binder) {
+    public void handleSetupTransport(OneWayBinderProxy binder) {
       int remoteUid = Binder.getCallingUid();
       attributes = setSecurityAttrs(attributes, remoteUid);
       authResultFuture = checkServerAuthorizationAsync(remoteUid);
@@ -388,11 +390,11 @@ public final class BinderClientTransport extends BinderTransport
     }
 
     @GuardedBy("BinderClientTransport.this")
-    private void handleAuthResult(IBinder binder, Status authorization) {
+    private void handleAuthResult(OneWayBinderProxy binder, Status authorization) {
       if (inState(TransportState.SETUP)) {
         if (!authorization.isOk()) {
           shutdownInternal(authorization, true);
-        } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
+        } else if (!setOutgoingBinder(binder)) {
           shutdownInternal(
               Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
         } else {
@@ -438,7 +440,7 @@ public final class BinderClientTransport extends BinderTransport
      */
     @GuardedBy("this")
     @MainThread
-    void onBound(IBinder endpointBinder);
+    void onBound(OneWayBinderProxy endpointBinder);
 
     /**
      * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
@@ -446,7 +448,7 @@ public final class BinderClientTransport extends BinderTransport
      */
     @GuardedBy("this")
     @BinderThread
-    void handleSetupTransport(IBinder serverBinder);
+    void handleSetupTransport(OneWayBinderProxy serverBinder);
   }
 
   private static ClientStream newFailingClientStream(
