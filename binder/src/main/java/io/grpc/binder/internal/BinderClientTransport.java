@@ -25,6 +25,10 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Process;
+
+import androidx.annotation.BinderThread;
+import androidx.annotation.MainThread;
+
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -146,7 +150,9 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   public synchronized void onBound(IBinder binder) {
-    sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+    OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
+    binderProxy = binderDecorator.decorate(binderProxy);
+    handshake.onBound(binderProxy);
   }
 
   @Override
@@ -339,23 +345,8 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
-        restrictIncomingBinderToCallsFrom(remoteUid);
-        attributes = setSecurityAttrs(attributes, remoteUid);
-        authResultFuture = checkServerAuthorizationAsync(remoteUid);
-        Futures.addCallback(
-            authResultFuture,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {
-                handleAuthResult(binder, result);
-              }
-
-              @Override
-              public void onFailure(Throwable t) {
-                handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
+        OneWayBinderProxy binderProxy = OneWayBinderProxy.wrap(binder, offloadExecutor);
+        handshake.handleSetupTransport(binderProxy);
       }
     }
   }
@@ -366,26 +357,66 @@ public final class BinderClientTransport extends BinderTransport
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
 
-  private synchronized void handleAuthResult(IBinder binder, Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
-      } else {
-        // Check state again, since a failure inside setOutgoingBinder (or a callback it
-        // triggers), could have shut us down.
-        if (!isShutdown()) {
-          setState(TransportState.READY);
-          attributes = clientTransportListener.filterTransport(attributes);
-          clientTransportListener.transportReady();
-          if (readyTimeoutFuture != null) {
-            readyTimeoutFuture.cancel(false);
-            readyTimeoutFuture = null;
+  class LegacyClientHandshake implements ClientHandshake {
+    @Override
+    @MainThread
+    @GuardedBy("BinderClientTransport.this")
+    public void onBound(OneWayBinderProxy binder) {
+      sendSetupTransaction(binder);
+    }
+
+    @Override
+    @BinderThread
+    @GuardedBy("BinderClientTransport.this")
+    public void handleSetupTransport(OneWayBinderProxy binder) {
+      int remoteUid = Binder.getCallingUid();
+      attributes = setSecurityAttrs(attributes, remoteUid);
+      authResultFuture = checkServerAuthorizationAsync(remoteUid);
+      Futures.addCallback(
+          authResultFuture,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              synchronized (BinderClientTransport.this) {
+                handleAuthResult(binder, result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
+      }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void handleAuthResult(OneWayBinderProxy binder, Status authorization) {
+      if (inState(TransportState.SETUP)) {
+        if (!authorization.isOk()) {
+          shutdownInternal(authorization, true);
+        } else if (!setOutgoingBinder(binder)) {
+          shutdownInternal(
+              Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+        } else {
+          // Check state again, since a failure inside setOutgoingBinder (or a callback it
+          // triggers), could have shut us down.
+          if (!isShutdown()) {
+            onHandshakeComplete();
           }
         }
       }
+    }
+  }
+
+  @GuardedBy("this")
+  private void onHandshakeComplete() {
+    setState(TransportState.READY);
+    attributes = clientTransportListener.filterTransport(attributes);
+    clientTransportListener.transportReady();
+    if (readyTimeoutFuture != null) {
+      readyTimeoutFuture.cancel(false);
+      readyTimeoutFuture = null;
     }
   }
 
@@ -398,6 +429,27 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   protected void handlePingResponse(Parcel parcel) {
     pingTracker.onPingResponse(parcel.readInt());
+  }
+
+  /**
+   * An abstraction of the client handshake, used to transition off a problematic legacy approach.
+   */
+  interface ClientHandshake {
+    /**
+     * Notifies the implementation that the binding has succeeded and we are now connected to the
+     * server 'endpointBinder'.
+     */
+    @GuardedBy("this")
+    @MainThread
+    void onBound(OneWayBinderProxy endpointBinder);
+
+    /**
+     * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
+     * server that can be reached at 'serverBinder'.
+     */
+    @GuardedBy("this")
+    @BinderThread
+    void handleSetupTransport(OneWayBinderProxy serverBinder);
   }
 
   private static ClientStream newFailingClientStream(
