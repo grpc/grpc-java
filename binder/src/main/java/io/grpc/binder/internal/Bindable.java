@@ -54,8 +54,11 @@ interface Bindable {
    * before giving them a chance to run. However, note that the identity/existence of the resolved
    * Service can change between the time this method returns and the time you actually bind/connect
    * to it. For example, suppose the target package gets uninstalled or upgraded right after this
-   * method returns. In {@link Observer#onBound}, you should verify that the server you resolved is
-   * the same one you connected to.
+   * method returns.
+   *
+   * <p>Compare with {@link #getConnectedServiceInfo()}, which can only be called after {@link
+   * Observer#onBound(IBinder)} but can be used to learn about the service you actually connected
+   * to.
    */
   @AnyThread
   ServiceInfo resolve() throws StatusException;
@@ -69,10 +72,16 @@ interface Bindable {
   void bind();
 
   /**
-   * Asks PackageManager for details about the remote Service we're connected to.
+   * Asks PackageManager for details about the remote Service we *actually* connected to.
    *
-   * @throws StatusException UNIMPLEMENTED if the connected service isn't found
-   * @throws IllegalStateException if Observer#onBound() has not "happened-before" this call
+   * <p>Can only be called after {@link Observer#onBound}.
+   *
+   * <p>Compare with {@link #resolve()}, which reports which service would be selected as of now but
+   * *without* connecting.
+   *
+   * @throws StatusException UNIMPLEMENTED if the connected service isn't found (an {@link
+   *     Observer#onUnbound} callback has likely already happened or is on its way!)
+   * @throws IllegalStateException if {@link Observer#onBound} has not "happened-before" this call
    */
   @AnyThread
   ServiceInfo getConnectedServiceInfo() throws StatusException;
