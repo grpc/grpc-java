@@ -491,29 +491,6 @@ public final class BinderClientTransport extends BinderTransport
     }
   }
 
-  private synchronized void handleAuthResult(IBinder binder, Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
-      } else {
-        // Check state again, since a failure inside setOutgoingBinder (or a callback it
-        // triggers), could have shut us down.
-        if (!isShutdown()) {
-          setState(TransportState.READY);
-          attributes = clientTransportListener.filterTransport(attributes);
-          clientTransportListener.transportReady();
-          if (readyTimeoutFuture != null) {
-            readyTimeoutFuture.cancel(false);
-            readyTimeoutFuture = null;
-          }
-        }
-      }
-    }
-  }
-
   private synchronized void handleAuthResult(Throwable t) {
     shutdownInternal(
         Status.INTERNAL.withDescription("Could not evaluate SecurityPolicy").withCause(t), true);
