@@ -18,19 +18,63 @@ package io.grpc.xds.internal;
 
 import io.grpc.ChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.File;
+import java.io.IOException;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A wrapper class that supports {@link TlsChannelCredentials} for Xds
  * by implementing {@link XdsCredentialsProvider}.
  */
 public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
+  private static final Logger logger = Logger.getLogger(TlsXdsCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "tls";
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    return TlsChannelCredentials.create();
+    TlsChannelCredentials.Builder builder = TlsChannelCredentials.newBuilder();
+
+    if (jsonConfig == null) {
+      return builder.build();
+    }
+
+    // use trust certificate file path from bootstrap config if provided; else use system default
+    String rootCertPath = JsonUtil.getString(jsonConfig, "ca_certificate_file");
+    if (rootCertPath != null) {
+      try {
+        builder.trustManager(new File(rootCertPath));
+      } catch (IOException e) {
+        logger.log(Level.WARNING, "Unable to read root certificates", e);
+        return null;
+      }
+    }
+
+    // use certificate chain and private key file paths from bootstrap config if provided. Mind that
+    // both JSON values must be either set (mTLS case) or both unset (TLS case)
+    String certChainPath = JsonUtil.getString(jsonConfig, "certificate_file");
+    String privateKeyPath = JsonUtil.getString(jsonConfig, "private_key_file");
+    if (certChainPath != null && privateKeyPath != null) {
+      try {
+        builder.keyManager(new File(certChainPath), new File(privateKeyPath));
+      } catch (IOException e) {
+        logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
+        return null;
+      }
+    } else if (certChainPath != null || privateKeyPath != null) {
+      logger.log(Level.WARNING, "Certificate chain and private key must be both set or unset");
+      return null;
+    }
+
+    // save json config when custom certificate paths were provided in a bootstrap
+    if (rootCertPath != null || certChainPath != null) {
+      builder.customCertificatesConfig(jsonConfig);
+    }
+    
+    return builder.build();
   }
 
   @Override
