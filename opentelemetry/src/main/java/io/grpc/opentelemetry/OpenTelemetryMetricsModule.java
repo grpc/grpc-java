@@ -466,6 +466,7 @@ final class OpenTelemetryMetricsModule {
       this.fullMethodName = fullMethodName;
       this.streamPlugins = checkNotNull(streamPlugins, "streamPlugins");
       this.stopwatch = module.stopwatchSupplier.get().start();
+      isGeneratedMethod = fullMethodName != null;
     }
 
     @Override
