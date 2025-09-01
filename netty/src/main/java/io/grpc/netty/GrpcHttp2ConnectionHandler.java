@@ -68,6 +68,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
     usingPre4_1_111_Netty = identifiedOldVersion;
   }
 
+  @SuppressWarnings("this-escape")
   protected GrpcHttp2ConnectionHandler(
       ChannelPromise channelUnused,
       Http2ConnectionDecoder decoder,
