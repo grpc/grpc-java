@@ -60,6 +60,12 @@ public final class SslContextProviderSupplier implements Closeable {
   public synchronized void updateSslContext(final SslContextProvider.Callback callback, String sni) {
     checkNotNull(callback, "callback");
     try {
+      if (!shutdown) {
+        if (sslContextProvider == null) {
+          sslContextProvider = getSslContextProvider(sni);
+        }
+      }
+
       // we want to increment the ref-count so call findOrCreate again...
       final SslContextProvider toRelease = getSslContextProvider(sni);
       toRelease.addCallback(

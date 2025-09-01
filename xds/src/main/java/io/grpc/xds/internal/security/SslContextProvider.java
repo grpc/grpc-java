@@ -54,18 +54,8 @@ public abstract class SslContextProvider implements Closeable {
       this.hostname = null;
     }
 
-    // Only for client SslContextProvider.
-    protected Callback(Executor executor, String hostname) {
-      this.executor = executor;
-      this.hostname = hostname;
-    }
-
     @VisibleForTesting public Executor getExecutor() {
       return executor;
-    }
-
-    protected String getHostname() {
-      return hostname;
     }
 
     /** Informs callee of new/updated SslContext. */
