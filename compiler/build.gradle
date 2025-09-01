@@ -103,6 +103,10 @@ model {
                 cppCompiler.args "--std=c++14"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
+                if (project.hasProperty('buildUniversal') && osdetector.os == "osx") {
+                    cppCompiler.args "-arch", "arm64", "-arch", "x86_64"
+                    linker.args "-arch", "arm64", "-arch", "x86_64"
+                }
                 if (osdetector.os == "osx") {
                     cppCompiler.args "-mmacosx-version-min=10.7", "-stdlib=libc++"
                     linker.args "-framework", "CoreFoundation"
