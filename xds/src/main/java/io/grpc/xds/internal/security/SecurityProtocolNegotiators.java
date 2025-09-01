@@ -19,8 +19,10 @@ package io.grpc.xds.internal.security;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -30,6 +32,7 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.EnvoyServerProtoData;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -192,12 +195,12 @@ public final class SecurityProtocolNegotiators {
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
-    private final String hostname;
+    private final String sni;
 
     ClientSecurityHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
         SslContextProviderSupplier sslContextProviderSupplier,
-        String hostname) {
+        String endpointHostname) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -211,7 +214,15 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
-      this.hostname = hostname;
+      EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
+      UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
+      sni = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
+              ? endpointHostname : upstreamTlsContext.getSni();
+    }
+
+    @VisibleForTesting
+    String getSni() {
+      return sni;
     }
 
     @Override
@@ -220,10 +231,10 @@ public final class SecurityProtocolNegotiators {
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
       sslContextProviderSupplier.updateSslContext(
-          new SslContextProvider.Callback(ctx.executor(), hostname) {
+          new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext, String sni) {
+            public void updateSslContext(SslContext sslContext) {
               if (ctx.isRemoved()) {
                 return;
               }
@@ -232,7 +243,7 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(sslContext, sni).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
@@ -244,8 +255,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+          sni);
     }
 
     @Override
@@ -366,7 +377,7 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext, String sni) {
+            public void updateSslContext(SslContext sslContext) {
               ChannelHandler handler =
                   InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
 
@@ -382,8 +393,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+              null);
     }
   }
 }

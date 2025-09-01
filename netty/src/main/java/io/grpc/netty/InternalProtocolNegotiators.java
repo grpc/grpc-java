@@ -72,8 +72,8 @@ public final class InternalProtocolNegotiators {
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    */
-  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext) {
-    return tls(sslContext, null, Optional.absent(), null);
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext, String sni) {
+    return tls(sslContext, null, Optional.absent(), sni);
   }
 
   /**
@@ -171,7 +171,7 @@ public final class InternalProtocolNegotiators {
       ChannelHandler next, SslContext sslContext, String authority,
       ChannelLogger negotiationLogger) {
     return new ClientTlsHandler(next, sslContext, authority, null, negotiationLogger,
-        Optional.absent(), null);
+        Optional.absent(), null, null);
   }
 
   public static class ProtocolNegotiationHandler

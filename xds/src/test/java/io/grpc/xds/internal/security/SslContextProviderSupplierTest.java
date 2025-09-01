@@ -47,7 +47,8 @@ import org.mockito.junit.MockitoRule;
 public class SslContextProviderSupplierTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final String HOSTNAME = "hostname";
+  private static final String ENDPOINT_HOSTNAME_FROM_ATTR = "endpoint-hostname-from-attribute";
+  private static final String SNI_IN_UTC = "sni-in-upstream-tls-context";
 
   @Mock private TlsContextManager mockTlsContextManager;
   private SslContextProviderSupplier supplier;
@@ -55,52 +56,151 @@ public class SslContextProviderSupplierTest {
   private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
   private SslContextProvider.Callback mockCallback;
 
-  private void prepareSupplier(boolean autoHostSni) {
-    upstreamTlsContext =
-            CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, autoHostSni);
+  private void prepareSupplier(boolean autoHostSni, String sniInUTC, String sniSentByClient) {
+    upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true, sniInUTC, autoHostSni);
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
             .when(mockTlsContextManager)
-            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(sniSentByClient));
     supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
   }
 
-  private void callUpdateSslContext() {
+  private void callUpdateSslContext(String endpointHostname) {
     mockCallback = mock(SslContextProvider.Callback.class);
-    when(mockCallback.getHostname()).thenReturn(HOSTNAME);
+    when(mockCallback.getHostname()).thenReturn(endpointHostname);
     Executor mockExecutor = mock(Executor.class);
     doReturn(mockExecutor).when(mockCallback).getExecutor();
-    supplier.updateSslContext(mockCallback);
+    supplier.updateSslContext(mockCallback, null);
   }
 
   @Test
   public void get_updateSecret() {
-    prepareSupplier(false);
-    callUpdateSslContext();
+    prepareSupplier(false, null, "");
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
     verify(mockTlsContextManager, times(2))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(""));
     verify(mockTlsContextManager, times(0))
-        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(HOSTNAME));
+        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(""));
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
         ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext, HOSTNAME);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext), HOSTNAME);
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(""));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
-    supplier.updateSslContext(mockCallback);
+    supplier.updateSslContext(mockCallback, null);
     verify(mockTlsContextManager, times(3))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(""));
+  }
+
+  @Test
+  public void autoHostSniFalse_usesSniFromUpstreamTlsContext() {
+    prepareSupplier(false, SNI_IN_UTC, SNI_IN_UTC);
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
+    verify(mockTlsContextManager, times(2))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
+    verify(mockTlsContextManager, times(0))
+            .releaseClientSslContextProvider(any(SslContextProvider.class), eq(SNI_IN_UTC));
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+            ArgumentCaptor.forClass(SslContextProvider.Callback.class);
+    verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
+    SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
+    assertThat(capturedCallback).isNotNull();
+    SslContext mockSslContext = mock(SslContext.class);
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    verify(mockTlsContextManager, times(1))
+            .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI_IN_UTC));
+    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
+    supplier.updateSslContext(mockCallback, null);
+    verify(mockTlsContextManager, times(3))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
+  }
+
+  @Test
+  public void autoHostSniTrue_usesSniFromEndpointHostname() {
+    prepareSupplier(true, SNI_IN_UTC, ENDPOINT_HOSTNAME_FROM_ATTR);
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
+    verify(mockTlsContextManager, times(2))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(ENDPOINT_HOSTNAME_FROM_ATTR));
+    verify(mockTlsContextManager, times(0))
+            .releaseClientSslContextProvider(any(SslContextProvider.class), eq(ENDPOINT_HOSTNAME_FROM_ATTR));
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+            ArgumentCaptor.forClass(SslContextProvider.Callback.class);
+    verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
+    SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
+    assertThat(capturedCallback).isNotNull();
+    SslContext mockSslContext = mock(SslContext.class);
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    verify(mockTlsContextManager, times(1))
+            .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(ENDPOINT_HOSTNAME_FROM_ATTR));
+    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
+    when(mockCallback.getHostname()).thenReturn(ENDPOINT_HOSTNAME_FROM_ATTR);
+    supplier.updateSslContext(mockCallback, null);
+    verify(mockTlsContextManager, times(3))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(ENDPOINT_HOSTNAME_FROM_ATTR));
+  }
+
+  @Test
+  public void autoHostSniTrue_endpointHostNameIsNull_usesSniFromUpstreamTlsContext() {
+    prepareSupplier(true, SNI_IN_UTC, SNI_IN_UTC);
+    callUpdateSslContext(null);
+    verify(mockTlsContextManager, times(2))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
+    verify(mockTlsContextManager, times(0))
+            .releaseClientSslContextProvider(any(SslContextProvider.class), eq(SNI_IN_UTC));
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+            ArgumentCaptor.forClass(SslContextProvider.Callback.class);
+    verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
+    SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
+    assertThat(capturedCallback).isNotNull();
+    SslContext mockSslContext = mock(SslContext.class);
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    verify(mockTlsContextManager, times(1))
+            .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI_IN_UTC));
+    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
+    when(mockCallback.getHostname()).thenReturn(null);
+    supplier.updateSslContext(mockCallback, null);
+    verify(mockTlsContextManager, times(3))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
+  }
+
+  @Test
+  public void autoHostSniTrue_endpointHostNameIsEmpty_usesSniFromUpstreamTlsContext() {
+    prepareSupplier(true, SNI_IN_UTC, SNI_IN_UTC);
+    callUpdateSslContext("");
+    verify(mockTlsContextManager, times(2))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
+    verify(mockTlsContextManager, times(0))
+            .releaseClientSslContextProvider(any(SslContextProvider.class), eq(SNI_IN_UTC));
+    ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
+            ArgumentCaptor.forClass(SslContextProvider.Callback.class);
+    verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
+    SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
+    assertThat(capturedCallback).isNotNull();
+    SslContext mockSslContext = mock(SslContext.class);
+    capturedCallback.updateSslContext(mockSslContext);
+    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    verify(mockTlsContextManager, times(1))
+            .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI_IN_UTC));
+    SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
+    when(mockCallback.getHostname()).thenReturn("");
+    supplier.updateSslContext(mockCallback, null);
+    verify(mockTlsContextManager, times(3))
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(SNI_IN_UTC));
   }
 
   @Test
   public void get_onException() {
-    prepareSupplier(false);
-    callUpdateSslContext();
+    prepareSupplier(false, null, "");
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
         ArgumentCaptor.forClass(SslContextProvider.Callback.class);
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
@@ -110,33 +210,33 @@ public class SslContextProviderSupplierTest {
     capturedCallback.onException(exception);
     verify(mockCallback, times(1)).onException(eq(exception));
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(""));
   }
 
   @Test
   public void testClose() {
-    prepareSupplier(false);
-    callUpdateSslContext();
+    prepareSupplier(false, null, "");
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
     supplier.close();
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
-    supplier.updateSslContext(mockCallback);
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(""));
+    supplier.updateSslContext(mockCallback, null);
     verify(mockTlsContextManager, times(3))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(""));
     verify(mockTlsContextManager, times(1))
-        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(HOSTNAME));
+        .releaseClientSslContextProvider(any(SslContextProvider.class), eq(""));
   }
 
   @Test
   public void testClose_nullSslContextProvider() {
-    prepareSupplier(false);
+    prepareSupplier(false, null, "");
     doThrow(new NullPointerException()).when(mockTlsContextManager)
-        .releaseClientSslContextProvider(null, HOSTNAME);
+        .releaseClientSslContextProvider(null, "");
     supplier.close();
     verify(mockTlsContextManager, never())
-        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(HOSTNAME));
-    callUpdateSslContext();
+        .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(""));
+    callUpdateSslContext(ENDPOINT_HOSTNAME_FROM_ATTR);
     verify(mockTlsContextManager, times(1))
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(HOSTNAME));
+        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext), eq(""));
   }
 }

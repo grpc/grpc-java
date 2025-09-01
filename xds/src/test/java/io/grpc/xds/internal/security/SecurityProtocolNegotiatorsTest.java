@@ -87,6 +87,7 @@ import org.junit.runners.JUnit4;
 public class SecurityProtocolNegotiatorsTest {
 
   private static final String HOSTNAME = "hostname";
+  private static final String SNI_IN_UTC = "sni-in-upstream-tls-context";
 
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
@@ -170,7 +171,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContext(SslContext sslContext, String sni) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 
@@ -178,7 +179,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        });
+        }, null);
     assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -194,6 +195,78 @@ public class SecurityProtocolNegotiatorsTest {
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ClientTlsHandler");
     CommonCertProviderTestUtils.register0();
+  }
+
+  @Test
+  public void sniInClientSecurityHandler_autoHostSniIsTrue_usesEndpointHostname() {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+                    CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil
+                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+            new SslContextProviderSupplier(upstreamTlsContext,
+                    new TlsContextManagerImpl(bootstrapInfoForClient));
+
+    ClientSecurityHandler clientSecurityHandler =
+            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(HOSTNAME);
+  }
+
+  @Test
+  public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsEmpty_usesSniFromUpstreamTlsContext() {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+                    CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil
+                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+            new SslContextProviderSupplier(upstreamTlsContext,
+                    new TlsContextManagerImpl(bootstrapInfoForClient));
+
+    ClientSecurityHandler clientSecurityHandler =
+            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, "");
+
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
+  }
+
+  @Test
+  public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsNull_usesSniFromUpstreamTlsContext() {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+                    CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil
+                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+            new SslContextProviderSupplier(upstreamTlsContext,
+                    new TlsContextManagerImpl(bootstrapInfoForClient));
+
+    ClientSecurityHandler clientSecurityHandler =
+            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, null);
+
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
+  }
+
+  @Test
+  public void sniInClientSecurityHandler_autoHostSniIsFalse_usesSniFromUpstreamTlsContext() {
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+                    CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil
+                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, false);
+    SslContextProviderSupplier sslContextProviderSupplier =
+            new SslContextProviderSupplier(upstreamTlsContext,
+                    new TlsContextManagerImpl(bootstrapInfoForClient));
+
+    ClientSecurityHandler clientSecurityHandler =
+            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
   }
 
   @Test
@@ -247,7 +320,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContext(SslContext sslContext, String sni) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 
@@ -255,7 +328,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        });
+        }, null);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertThat(executor.runDueTasks()).isEqualTo(1);
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -383,7 +456,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContext(SslContext sslContext, String sni) {
+          public void updateSslContext(SslContext sslContext) {
             future.set(sslContext);
           }
 
@@ -391,7 +464,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        });
+        }, null);
     executor.runDueTasks();
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     Object fromFuture = future.get(5, TimeUnit.SECONDS);
@@ -416,7 +489,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,

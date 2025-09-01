@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -89,6 +90,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
@@ -609,8 +611,8 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          sni != null? sni : grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, x509ExtendedTrustManager);
+          !Strings.isNullOrEmpty(sni)? sni : grpcHandler.getAuthority(),
+          this.executor, negotiationLogger, handshakeCompleteRunnable, null, x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
 
@@ -637,13 +639,13 @@ final class ProtocolNegotiators {
     private final X509TrustManager x509ExtendedTrustManager;
     private SSLEngine sslEngine;
 
-    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String sni,
+    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
                      Executor executor, ChannelLogger negotiationLogger,
                      Optional<Runnable> handshakeCompleteRunnable,
-                     X509TrustManager x509ExtendedTrustManager) {
+                     ClientTlsProtocolNegotiator clientTlsProtocolNegotiator, X509TrustManager x509ExtendedTrustManager) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
-      HostPort hostPort = parseAuthority(sni);
+      HostPort hostPort = parseAuthority(authority);
       this.host = hostPort.host;
       this.port = hostPort.port;
       this.executor = executor;

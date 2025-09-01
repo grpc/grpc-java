@@ -20,17 +20,16 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.netty.GrpcSslContexts;
+import com.google.common.base.Strings;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
-import io.grpc.xds.internal.security.certprovider.CertProviderClientSslContextProvider;
 import io.netty.handler.ssl.SslContext;
+
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-import javax.net.ssl.SSLException;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -58,29 +57,17 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   /** Updates SslContext via the passed callback. */
-  public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
+  public synchronized void updateSslContext(final SslContextProvider.Callback callback, String sni) {
     checkNotNull(callback, "callback");
     try {
-      String sni;
-      if (tlsContext instanceof UpstreamTlsContext) {
-        UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-        sni = upstreamTlsContext.getAutoHostSni() ? callback.getHostname() : upstreamTlsContext.getSni();
-      } else {
-        sni = null;
-      }
-      if (!shutdown) {
-        if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider(sni);
-        }
-      }
       // we want to increment the ref-count so call findOrCreate again...
       final SslContextProvider toRelease = getSslContextProvider(sni);
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext, String sni) {
-              callback.updateSslContext(sslContext, sni);
+            public void updateSslContext(SslContext sslContext) {
+              callback.updateSslContext(sslContext);
               releaseSslContextProvider(toRelease, sni);
             }
 
