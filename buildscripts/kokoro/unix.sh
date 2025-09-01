@@ -38,6 +38,10 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
+
+export CFLAGS=""
+export CXXFLAGS=""
+export LDFLAGS=""
 # Configure OS-specific build flags.
 if [[ "$(uname -s)" == "Darwin" ]]; then
   # For universal binaries on macOS, instruct clang to build for both architectures.
