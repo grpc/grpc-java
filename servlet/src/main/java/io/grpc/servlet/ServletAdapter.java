@@ -45,6 +45,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
@@ -72,18 +73,23 @@ import javax.servlet.http.HttpServletResponse;
 public final class ServletAdapter {
 
   static final Logger logger = Logger.getLogger(ServletAdapter.class.getName());
+  static final Function<HttpServletRequest, String> DEFAULT_METHOD_NAME_RESOLVER =
+          req -> req.getRequestURI().substring(1); // remove the leading "/"
 
   private final ServerTransportListener transportListener;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
+  private final Function<HttpServletRequest, String> methodNameResolver;
   private final int maxInboundMessageSize;
   private final Attributes attributes;
 
   ServletAdapter(
       ServerTransportListener transportListener,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      Function<HttpServletRequest, String> methodNameResolver,
       int maxInboundMessageSize) {
     this.transportListener = transportListener;
     this.streamTracerFactories = streamTracerFactories;
+    this.methodNameResolver = methodNameResolver;
     this.maxInboundMessageSize = maxInboundMessageSize;
     attributes = transportListener.transportReady(Attributes.EMPTY);
   }
@@ -119,7 +125,7 @@ public final class ServletAdapter {
 
     AsyncContext asyncCtx = req.startAsync(req, resp);
 
-    String method = req.getRequestURI().substring(1); // remove the leading "/"
+    String method = methodNameResolver.apply(req);
     Metadata headers = getHeaders(req);
 
     if (logger.isLoggable(FINEST)) {
