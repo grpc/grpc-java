@@ -316,14 +316,11 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
+    cancelAsyncIfNeeded(preAuthResultFuture);
+    cancelAsyncIfNeeded(authResultFuture);
 
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
-
-    cancelAsync(preAuthResultFuture);
-    cancelAsync(authResultFuture);
-    preAuthResultFuture = null;
-    authResultFuture = null;
   }
 
   @Override
@@ -404,7 +401,7 @@ public final class BinderClientTransport extends BinderTransport
    * Useful when the caller wants to cancel while holding locks but the future is visible to
    * user code which might have added listeners to run on directExecutor().
    */
-  private void cancelAsync(@Nullable ListenableFuture<?> future) {
+  private void cancelAsyncIfNeeded(@Nullable ListenableFuture<?> future) {
     if (future != null && !future.isDone()) {
       offloadExecutor.execute(() -> future.cancel(false));
     }
