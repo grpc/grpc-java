@@ -16,11 +16,8 @@
 
 package io.grpc.xds.internal.security;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Strings;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -30,6 +27,8 @@ import io.netty.handler.ssl.SslContext;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
