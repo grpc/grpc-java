@@ -54,6 +54,9 @@ import javax.annotation.Nullable;
 @VisibleForTesting
 public final class SecurityProtocolNegotiators {
 
+  static boolean useChannelAuthorityIfNoSniApplicable =
+          GrpcUtil.getFlag("GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE", false);
+
   /** Name associated with individual address, if available (e.g., DNS name). */
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
@@ -216,8 +219,12 @@ public final class SecurityProtocolNegotiators {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
       EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
       UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-      sni = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
+      String sniVal = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
               ? endpointHostname : upstreamTlsContext.getSni();
+      if (Strings.isNullOrEmpty(sniVal) && useChannelAuthorityIfNoSniApplicable) {
+        sniVal = grpcHandler.getAuthority();
+      }
+      sni = sniVal;
     }
 
     @VisibleForTesting

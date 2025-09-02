@@ -88,6 +88,7 @@ public class SecurityProtocolNegotiatorsTest {
 
   private static final String HOSTNAME = "hostname";
   private static final String SNI_IN_UTC = "sni-in-upstream-tls-context";
+  private static final String FAKE_AUTHORITY = "authority";
 
   private final GrpcHttp2ConnectionHandler grpcHandler =
       FakeGrpcHttp2ConnectionHandler.newHandler();
@@ -267,6 +268,29 @@ public class SecurityProtocolNegotiatorsTest {
             new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
     assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
+  }
+
+  @Test
+  public void emptySni_useChannelAuthorityIfNoSniApplicableIsTrue_usesChannelAuthority() {
+    SecurityProtocolNegotiators.useChannelAuthorityIfNoSniApplicable = true;
+    try {
+      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+              .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
+                      CA_PEM_FILE, null, null, null, null, null);
+      UpstreamTlsContext upstreamTlsContext =
+              CommonTlsContextTestsUtil
+                      .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
+      SslContextProviderSupplier sslContextProviderSupplier =
+              new SslContextProviderSupplier(upstreamTlsContext,
+                      new TlsContextManagerImpl(bootstrapInfoForClient));
+
+      ClientSecurityHandler clientSecurityHandler =
+              new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+
+      assertThat(clientSecurityHandler.getSni()).isEqualTo(FAKE_AUTHORITY);
+    } finally {
+      SecurityProtocolNegotiators.useChannelAuthorityIfNoSniApplicable = false;
+    }
   }
 
   @Test
@@ -533,7 +557,7 @@ public class SecurityProtocolNegotiatorsTest {
 
     @Override
     public String getAuthority() {
-      return "authority";
+      return FAKE_AUTHORITY;
     }
   }
 }
