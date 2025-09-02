@@ -32,14 +32,16 @@ import javax.annotation.Nullable;
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 public final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
 
+  private final String sniForSanMatching;
+
   CertProviderClientSslContextProvider(
-      Node node,
-      @Nullable Map<String, CertificateProviderInfo> certProviders,
-      CommonTlsContext.CertificateProviderInstance certInstance,
-      CommonTlsContext.CertificateProviderInstance rootCertInstance,
-      CertificateValidationContext staticCertValidationContext,
-      UpstreamTlsContext upstreamTlsContext,
-      String sni, CertificateProviderStore certificateProviderStore) {
+          Node node,
+          @Nullable Map<String, CertificateProviderInfo> certProviders,
+          CommonTlsContext.CertificateProviderInstance certInstance,
+          CommonTlsContext.CertificateProviderInstance rootCertInstance,
+          CertificateValidationContext staticCertValidationContext,
+          UpstreamTlsContext upstreamTlsContext,
+          String sniForSanMatching, CertificateProviderStore certificateProviderStore) {
     super(
         node,
         certProviders,
@@ -48,11 +50,12 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
+    this.sniForSanMatching = upstreamTlsContext.getAutoSniSanValidation()? sniForSanMatching : null;
   }
 
   @Override
   protected final SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContextdationContext)
+          CertificateValidationContext certificateValidationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     // Null rootCertInstance implies hasSystemRootCerts because of the check in
@@ -62,12 +65,12 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
         sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedSpiffeTrustMap,
-              certificateValidationContextdationContext));
+              certificateValidationContext, sniForSanMatching));
       } else {
         sslContextBuilder = sslContextBuilder.trustManager(
             new XdsTrustManagerFactory(
                 savedTrustedRoots.toArray(new X509Certificate[0]),
-                certificateValidationContextdationContext));
+                certificateValidationContext, sniForSanMatching));
       }
     }
     if (isMtls()) {

@@ -75,12 +75,14 @@ public final class EnvoyServerProtoData {
 
     private final String sni;
     private final boolean auto_host_sni;
+    private final boolean auto_sni_san_validation;
 
     @VisibleForTesting
     public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
       super(commonTlsContext);
       this.sni = null;
       this.auto_host_sni = false;
+      this.auto_sni_san_validation = false;
     }
 
     @VisibleForTesting
@@ -88,6 +90,7 @@ public final class EnvoyServerProtoData {
       super(upstreamTlsContext.getCommonTlsContext());
       this.sni = upstreamTlsContext.getSni();
       this.auto_host_sni = upstreamTlsContext.getAutoHostSni();
+      this.auto_sni_san_validation = upstreamTlsContext.getAutoSniSanValidation();
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
@@ -102,6 +105,10 @@ public final class EnvoyServerProtoData {
 
     public boolean getAutoHostSni() {
       return auto_host_sni;
+    }
+
+    public boolean getAutoSniSanValidation() {
+      return auto_sni_san_validation;
     }
 
     @Override
