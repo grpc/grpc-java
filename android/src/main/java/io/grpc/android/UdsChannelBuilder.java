@@ -64,7 +64,7 @@ public final class UdsChannelBuilder {
    * @param path unix file system path to use for Unix Domain Socket.
    * @param namespace the type of the namespace that the path belongs to.
    */
-  @SuppressWarnings("NullAway")
+  @SuppressWarnings("ConstantConditions")
   public static ManagedChannelBuilder<?> forPath(String path, Namespace namespace) {
     if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
       throw new UnsupportedOperationException("OkHttpChannelBuilder not found on the classpath");
