@@ -64,6 +64,7 @@ public final class UdsChannelBuilder {
    * @param path unix file system path to use for Unix Domain Socket.
    * @param namespace the type of the namespace that the path belongs to.
    */
+  @SuppressWarnings("NullAway")
   public static ManagedChannelBuilder<?> forPath(String path, Namespace namespace) {
     if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
       throw new UnsupportedOperationException("OkHttpChannelBuilder not found on the classpath");
@@ -82,8 +83,7 @@ public final class UdsChannelBuilder {
       OKHTTP_CHANNEL_BUILDER_CLASS
           .getMethod("socketFactory", SocketFactory.class)
           .invoke(builder, new UdsSocketFactory(path, namespace));
-        assert builder != null;
-        return builder.proxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR);
+      return builder.proxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR);
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Failed to create OkHttpChannelBuilder", e);
     } catch (NoSuchMethodException e) {
