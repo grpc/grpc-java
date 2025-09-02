@@ -53,9 +53,6 @@ guava-jre = "com.google.guava:guava:33.4.8-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
 jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
-# Using javax.annotation is fine as it is part of the JDK, we don't want to depend on J2EE
-# where it is relocated to as org.apache.tomcat:tomcat-annotations-api. See issue #9179.
-javax-annotation = "org.apache.tomcat:annotations-api:6.0.53"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"

@@ -34,8 +34,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api')
-    compileOnly libraries.javax.servlet.api,
-            libraries.javax.annotation // java 9, 10 needs it
+    compileOnly libraries.javax.servlet.api
 
     implementation project(':grpc-core'),
             libraries.guava

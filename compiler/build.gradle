@@ -147,11 +147,9 @@ sourceSets {
 
 dependencies {
     testImplementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            libraries.javax.annotation
+            project(':grpc-stub')
     testLiteImplementation project(':grpc-protobuf-lite'),
-            project(':grpc-stub'),
-            libraries.javax.annotation
+            project(':grpc-stub')
 }
 
 tasks.named("compileTestJava").configure {

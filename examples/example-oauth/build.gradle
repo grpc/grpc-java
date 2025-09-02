@@ -31,8 +31,6 @@ dependencies {
     implementation "io.grpc:grpc-auth:${grpcVersion}"
     implementation "com.google.auth:google-auth-library-oauth2-http:1.23.0"
 
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
