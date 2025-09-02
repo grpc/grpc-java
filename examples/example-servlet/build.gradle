@@ -23,8 +23,7 @@ dependencies {
             "io.grpc:grpc-servlet:${grpcVersion}",
             "io.grpc:grpc-stub:${grpcVersion}"
 
-    compileOnly "javax.servlet:javax.servlet-api:4.0.1",
-            "org.apache.tomcat:annotations-api:6.0.53"
+    compileOnly "javax.servlet:javax.servlet-api:4.0.1"
 }
 
 protobuf {

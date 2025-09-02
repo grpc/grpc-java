@@ -22,7 +22,6 @@ dependencies {
             libraries.auto.value.annotations,
             libraries.guava
     annotationProcessor libraries.auto.value
-    compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
             project(':grpc-grpclb'),
             project(':grpc-inprocess'),

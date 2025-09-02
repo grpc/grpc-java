@@ -34,7 +34,6 @@ dependencies {
     implementation "io.opentelemetry:opentelemetry-sdk-metrics:${openTelemetryVersion}"
     implementation "io.opentelemetry:opentelemetry-exporter-logging:${openTelemetryVersion}"
     implementation "io.opentelemetry:opentelemetry-exporter-prometheus:${openTelemetryPrometheusVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
 
