@@ -63,10 +63,7 @@ model {
                 linker.executable = 's390x-linux-gnu-g++'
             }
             target("loongarch_64")
-            target("riscv64") {
-                cppCompiler.executable = 'riscv64-linux-gnu-g++'
-                linker.executable = 'riscv64-linux-gnu-g++'
-            }
+            target("riscv64")
         }
         clang(Clang) {
             target("aarch_64") {}
