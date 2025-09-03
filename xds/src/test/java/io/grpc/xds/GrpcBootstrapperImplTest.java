@@ -32,10 +32,11 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
@@ -45,6 +46,8 @@ import io.grpc.xds.client.XdsInitializationException;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.TrustManager;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -934,21 +937,16 @@ public class GrpcBootstrapperImplTest {
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
     assertThat(serverInfo.implSpecificConfig()).isInstanceOf(TlsChannelCredentials.class);
-    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
 
-    assertThat(info.certProviders()).hasSize(1);
-    ImmutableMap<String, CertificateProviderInfo> certProviderInfo = info.certProviders();
-    assertThat(certProviderInfo.keySet()).containsExactly("mtls_channel_creds_identity_certs");
-    CertificateProviderInfo mtlsChannelCredCertProviderInfo =
-        certProviderInfo.get("mtls_channel_creds_identity_certs");
-    assertThat(mtlsChannelCredCertProviderInfo.config().keySet())
-        .containsExactly("ca_certificate_file", "certificate_file", "private_key_file");
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("ca_certificate_file"))
-        .isEqualTo(rootCertPath);
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("certificate_file"))
-        .isEqualTo(certChainPath);
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("private_key_file"))
-        .isEqualTo(privateKeyPath);
+    TlsChannelCredentials tlsChannelCredentials =
+        (TlsChannelCredentials) serverInfo.implSpecificConfig();
+    assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
+    KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
+    assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
+    assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
+    TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
+    assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
+
   }
 
   private static BootstrapperImpl.FileReader createFileReader(

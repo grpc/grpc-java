@@ -26,7 +26,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.TrustManager;
@@ -50,7 +49,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
   private final List<KeyManager> keyManagers;
   private final byte[] rootCertificates;
   private final List<TrustManager> trustManagers;
-  private final Map<String, ?> customCertificatesConfig;
 
   TlsChannelCredentials(Builder builder) {
     fakeFeature = builder.fakeFeature;
@@ -60,7 +58,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
     keyManagers = builder.keyManagers;
     rootCertificates = builder.rootCertificates;
     trustManagers = builder.trustManagers;
-    customCertificatesConfig = builder.customCertificatesConfig;
   }
 
   /**
@@ -122,21 +119,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
    */
   public List<TrustManager> getTrustManagers() {
     return trustManagers;
-  }
-
-  /**
-   * Returns custom certificates config. It contains following entries:
-   *
-   * <ul>
-   *   <li>{@code "ca_certificate_file"} key containing the path to the root certificate file</li>
-   *   <li>{@code "certificate_file"} key containing the path to the identity certificate file</li>
-   *   <li>{@code "private_key_file"} key containing the path to the private key</li>
-   *   <li>{@code "refresh_interval"} key specifying the frequency of updates to the above
-   * files</li>
-   * </ul>
-   */
-  public Map<String, ?> getCustomCertificatesConfig() {
-    return customCertificatesConfig;
   }
 
   /**
@@ -246,7 +228,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
     private List<KeyManager> keyManagers;
     private byte[] rootCertificates;
     private List<TrustManager> trustManagers;
-    private Map<String, ?> customCertificatesConfig;
 
     private Builder() {}
 
@@ -371,11 +352,6 @@ public final class TlsChannelCredentials extends ChannelCredentials {
           Arrays.asList(trustManagers)));
       clearTrustManagers();
       this.trustManagers = trustManagerList;
-      return this;
-    }
-
-    public Builder customCertificatesConfig(Map<String, ?> customCertificatesConfig) {
-      this.customCertificatesConfig = customCertificatesConfig;
       return this;
     }
 

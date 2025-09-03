@@ -16,21 +16,28 @@
 
 package io.grpc.xds.internal;
 
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import io.grpc.ChannelCredentials;
 import io.grpc.InternalServiceProviders;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.testing.TestUtils;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
-import java.io.File;
 import java.util.Map;
-import org.junit.Rule;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.TrustManager;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -38,9 +45,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class TlsXdsCredentialsProviderTest {
   private TlsXdsCredentialsProvider provider = new TlsXdsCredentialsProvider();
-
-  @Rule
-  public TemporaryFolder tempFolder = new TemporaryFolder();
 
   @Test
   public void provided() {
@@ -82,28 +86,30 @@ public class TlsXdsCredentialsProviderTest {
 
   @Test
   public void channelCredentialsWhenInvalidConfig() throws Exception {
-    File certFile = tempFolder.newFile(new String("identity.cert"));
-    Map<String, ?> jsonConfig = ImmutableMap.of("certificate_file", certFile.toString());
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    Map<String, ?> jsonConfig = ImmutableMap.of("certificate_file", certChainPath.toString());
     assertNull(provider.newChannelCredentials(jsonConfig));
   }
 
   @Test
   public void channelCredentialsWhenValidConfig() throws Exception {
-    File trustFile = tempFolder.newFile(new String("root.cert"));
-    File certFile = tempFolder.newFile(new String("identity.cert"));
-    File keyFile = tempFolder.newFile(new String("private.key"));
+    String rootCertPath = TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath();
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    String privateKeyPath = TestUtils.loadCert(CLIENT_KEY_FILE).getAbsolutePath();
 
     Map<String, ?> jsonConfig = ImmutableMap.of(
-        "ca_certificate_file", trustFile.toString(),
-        "certificate_file", certFile.toString(),
-        "private_key_file", keyFile.toString());
+        "ca_certificate_file", rootCertPath,
+        "certificate_file", certChainPath,
+        "private_key_file", privateKeyPath);
 
     ChannelCredentials creds = provider.newChannelCredentials(jsonConfig);
     assertSame(TlsChannelCredentials.class, creds.getClass());
-    assertSame(((TlsChannelCredentials) creds).getCustomCertificatesConfig(), jsonConfig);
-
-    trustFile.delete();
-    certFile.delete();
-    keyFile.delete();
+    TlsChannelCredentials tlsChannelCredentials = (TlsChannelCredentials) creds;
+    assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
+    KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
+    assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
+    assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
+    TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
+    assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
   }
 }

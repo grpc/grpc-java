@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.security.certprovider;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -93,27 +94,30 @@ public final class FileWatcherCertificateProviderProvider implements Certificate
         timeProvider);
   }
 
+  private static String checkForNullAndGet(Map<String, ?> map, String key) {
+    return checkNotNull(JsonUtil.getString(map, key), "'" + key + "' is required in the config");
+  }
+
   private static Config validateAndTranslateConfig(Object config) {
     checkArgument(config instanceof Map, "Only Map supported for config");
     @SuppressWarnings("unchecked") Map<String, ?> map = (Map<String, ?>)config;
 
     Config configObj = new Config();
-    configObj.certFile = JsonUtil.getString(map, CERT_FILE_KEY);
-    configObj.keyFile = JsonUtil.getString(map, KEY_FILE_KEY);
-    if ((configObj.certFile != null) != (configObj.keyFile != null)) {
-      throw new NullPointerException(
-          String.format("'%s' and '%s' must be both set or both unset",
-              CERT_FILE_KEY, KEY_FILE_KEY));
-    }
-    if (!map.containsKey(ROOT_FILE_KEY)
-        && !map.containsKey(CERT_FILE_KEY)
-        && (!enableSpiffe || !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY))) {
-      throw new NullPointerException("must be watching either root or identity certificates");
-    }
-    if (enableSpiffe && map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
-      configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
+    configObj.certFile = checkForNullAndGet(map, CERT_FILE_KEY);
+    configObj.keyFile = checkForNullAndGet(map, KEY_FILE_KEY);
+    if (enableSpiffe) {
+      if (!map.containsKey(ROOT_FILE_KEY) && !map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
+        throw new NullPointerException(
+            String.format("either '%s' or '%s' is required in the config",
+                ROOT_FILE_KEY, SPIFFE_TRUST_MAP_FILE_KEY));
+      }
+      if (map.containsKey(SPIFFE_TRUST_MAP_FILE_KEY)) {
+        configObj.spiffeTrustMapFile = JsonUtil.getString(map, SPIFFE_TRUST_MAP_FILE_KEY);
+      } else {
+        configObj.rootFile = JsonUtil.getString(map, ROOT_FILE_KEY);
+      }
     } else {
-      configObj.rootFile = JsonUtil.getString(map, ROOT_FILE_KEY);
+      configObj.rootFile = checkForNullAndGet(map, ROOT_FILE_KEY);
     }
     String refreshIntervalString = JsonUtil.getString(map, REFRESH_INTERVAL_KEY);
     if (refreshIntervalString != null) {
