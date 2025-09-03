@@ -70,6 +70,13 @@ public class TlsXdsCredentialsProviderTest {
   }
 
   @Test
+  public void channelCredentialsWhenInvalidRefreshInterval() {
+    Map<String, ?> jsonConfig = ImmutableMap.of(
+        "refresh_interval", "invalid-duration-format");
+    assertNull(provider.newChannelCredentials(jsonConfig));
+  }
+
+  @Test
   public void channelCredentialsWhenNotExistingTrustFileConfig() {
     Map<String, ?> jsonConfig = ImmutableMap.of(
         "ca_certificate_file", "/tmp/not-exisiting-file.txt");
@@ -100,7 +107,8 @@ public class TlsXdsCredentialsProviderTest {
     Map<String, ?> jsonConfig = ImmutableMap.of(
         "ca_certificate_file", rootCertPath,
         "certificate_file", certChainPath,
-        "private_key_file", privateKeyPath);
+        "private_key_file", privateKeyPath,
+        "refresh_interval", "440s");
 
     ChannelCredentials creds = provider.newChannelCredentials(jsonConfig);
     assertSame(TlsChannelCredentials.class, creds.getClass());
