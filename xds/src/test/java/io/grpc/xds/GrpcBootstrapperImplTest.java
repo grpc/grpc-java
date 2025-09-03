@@ -33,7 +33,6 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
@@ -938,21 +937,6 @@ public class GrpcBootstrapperImplTest {
                 "ca_certificate_file", rootCertPath,
                 "certificate_file", certChainPath,
                 "private_key_file", privateKeyPath)));
-    assertThat(info.node()).isEqualTo(getNodeBuilder().build());
-
-    assertThat(info.certProviders()).hasSize(1);
-    ImmutableMap<String, CertificateProviderInfo> certProviderInfo = info.certProviders();
-    assertThat(certProviderInfo.keySet()).containsExactly("mtls_channel_creds_identity_certs");
-    CertificateProviderInfo mtlsChannelCredCertProviderInfo =
-        certProviderInfo.get("mtls_channel_creds_identity_certs");
-    assertThat(mtlsChannelCredCertProviderInfo.config().keySet())
-        .containsExactly("ca_certificate_file", "certificate_file", "private_key_file");
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("ca_certificate_file"))
-        .isEqualTo(rootCertPath);
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("certificate_file"))
-        .isEqualTo(certChainPath);
-    assertThat(mtlsChannelCredCertProviderInfo.config().get("private_key_file"))
-        .isEqualTo(privateKeyPath);
   }
 
   private static BootstrapperImpl.FileReader createFileReader(

@@ -19,9 +19,10 @@ package io.grpc.xds.internal;
 import io.grpc.ChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.JsonUtil;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.io.File;
-import java.io.IOException;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -33,6 +34,9 @@ import java.util.logging.Logger;
 public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final Logger logger = Logger.getLogger(TlsXdsCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "tls";
+  private static final String CERT_FILE_KEY = "certificate_file";
+  private static final String KEY_FILE_KEY = "private_key_file";
+  private static final String ROOT_FILE_KEY = "ca_certificate_file";
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
@@ -43,11 +47,13 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
     }
 
     // use trust certificate file path from bootstrap config if provided; else use system default
-    String rootCertPath = JsonUtil.getString(jsonConfig, "ca_certificate_file");
+    String rootCertPath = JsonUtil.getString(jsonConfig, ROOT_FILE_KEY);
     if (rootCertPath != null) {
       try {
-        builder.trustManager(new File(rootCertPath));
-      } catch (IOException e) {
+        AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+        trustManager.updateTrustCredentials(new File(rootCertPath));
+        builder.trustManager(trustManager);
+      } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read root certificates", e);
         return null;
       }
@@ -55,12 +61,14 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
 
     // use certificate chain and private key file paths from bootstrap config if provided. Mind that
     // both JSON values must be either set (mTLS case) or both unset (TLS case)
-    String certChainPath = JsonUtil.getString(jsonConfig, "certificate_file");
-    String privateKeyPath = JsonUtil.getString(jsonConfig, "private_key_file");
+    String certChainPath = JsonUtil.getString(jsonConfig, CERT_FILE_KEY);
+    String privateKeyPath = JsonUtil.getString(jsonConfig, KEY_FILE_KEY);
     if (certChainPath != null && privateKeyPath != null) {
       try {
-        builder.keyManager(new File(certChainPath), new File(privateKeyPath));
-      } catch (IOException e) {
+        AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
+        keyManager.updateIdentityCredentials(new File(certChainPath), new File(privateKeyPath));
+        builder.keyManager(keyManager);
+      } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
         return null;
       }
@@ -69,11 +77,6 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       return null;
     }
 
-    // save json config when custom certificate paths were provided in a bootstrap
-    if (rootCertPath != null || certChainPath != null) {
-      builder.customCertificatesConfig(jsonConfig);
-    }
-    
     return builder.build();
   }
 
