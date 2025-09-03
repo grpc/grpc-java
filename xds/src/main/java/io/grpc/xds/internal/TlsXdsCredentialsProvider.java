@@ -16,14 +16,21 @@
 
 package io.grpc.xds.internal;
 
+import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.ChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
 import java.io.File;
+import java.text.ParseException;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,6 +44,10 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
   private static final String CERT_FILE_KEY = "certificate_file";
   private static final String KEY_FILE_KEY = "private_key_file";
   private static final String ROOT_FILE_KEY = "ca_certificate_file";
+  private static final String REFRESH_INTERVAL_KEY = "refresh_interval";
+  private static final long REFRESH_INTERVAL_DEFAULT = 600L;
+  private static final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory =
+      ScheduledExecutorServiceFactory.DEFAULT_INSTANCE;
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
@@ -46,12 +57,29 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       return builder.build();
     }
 
+    // use refresh interval from bootstrap config if provided; else defaults to 600s
+    long refreshIntervalSeconds = REFRESH_INTERVAL_DEFAULT;
+    String refreshIntervalFromConfig = JsonUtil.getString(jsonConfig, REFRESH_INTERVAL_KEY);
+    if (refreshIntervalFromConfig != null) {
+      try {
+        Duration duration = Durations.parse(refreshIntervalFromConfig);
+        refreshIntervalSeconds = Durations.toSeconds(duration);
+      } catch (ParseException e) {
+        logger.log(Level.WARNING, "Unable to parse refresh interval", e);
+        return null;
+      }
+    }
+
     // use trust certificate file path from bootstrap config if provided; else use system default
     String rootCertPath = JsonUtil.getString(jsonConfig, ROOT_FILE_KEY);
     if (rootCertPath != null) {
       try {
         AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-        trustManager.updateTrustCredentials(new File(rootCertPath));
+        trustManager.updateTrustCredentials(
+            new File(rootCertPath),
+            refreshIntervalSeconds,
+            TimeUnit.SECONDS,
+            scheduledExecutorServiceFactory.create());
         builder.trustManager(trustManager);
       } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read root certificates", e);
@@ -66,7 +94,12 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
     if (certChainPath != null && privateKeyPath != null) {
       try {
         AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
-        keyManager.updateIdentityCredentials(new File(certChainPath), new File(privateKeyPath));
+        keyManager.updateIdentityCredentials(
+            new File(certChainPath),
+            new File(privateKeyPath),
+            refreshIntervalSeconds,
+            TimeUnit.SECONDS,
+            scheduledExecutorServiceFactory.create());
         builder.keyManager(keyManager);
       } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
@@ -95,4 +128,18 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
     return 5;
   }
 
+  abstract static class ScheduledExecutorServiceFactory {
+
+    private static final ScheduledExecutorServiceFactory DEFAULT_INSTANCE =
+        new ScheduledExecutorServiceFactory() {
+
+          @Override
+          ScheduledExecutorService create() {
+            return Executors.newSingleThreadScheduledExecutor(
+              GrpcUtil.getThreadFactory("grpc-certificate-files-%d", true));
+          }
+        };
+
+    abstract ScheduledExecutorService create();
+  }
 }
