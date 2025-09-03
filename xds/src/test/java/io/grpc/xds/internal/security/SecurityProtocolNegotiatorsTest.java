@@ -28,9 +28,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -146,6 +144,30 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
+  public void clientSecurityProtocolNegotiatorNewHandler_autoHostSni_hostnameIsPassedToClientSecurityHandler() {
+    UpstreamTlsContext upstreamTlsContext =
+            CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, true);
+    ClientSecurityProtocolNegotiator pn =
+            new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
+    GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+    ChannelLogger logger = mock(ChannelLogger.class);
+    doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
+    when(mockHandler.getNegotiationLogger()).thenReturn(logger);
+    TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
+    when(mockHandler.getEagAttributes())
+            .thenReturn(
+                    Attributes.newBuilder()
+                            .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
+                            .set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                            .build());
+    ChannelHandler newHandler = pn.newHandler(mockHandler);
+    assertThat(newHandler).isNotNull();
+    assertThat(newHandler).isInstanceOf(ClientSecurityHandler.class);
+    assertThat(((ClientSecurityHandler) newHandler).getSni()).isEqualTo(FAKE_AUTHORITY);
+  }
+
+  @Test
   public void clientSecurityHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
     FakeClock executor = new FakeClock();
@@ -195,59 +217,6 @@ public class SecurityProtocolNegotiatorsTest {
     // ProtocolNegotiators.ClientTlsHandler.class not accessible, get canonical name
     assertThat(iterator.next().getValue().getClass().getCanonicalName())
         .contains("ProtocolNegotiators.ClientTlsHandler");
-    CommonCertProviderTestUtils.register0();
-  }
-  
-  @Test
-  public void clientSecurityHandler_addLast()
-          throws InterruptedException, TimeoutException, ExecutionException {
-    FakeClock executor = new FakeClock();
-    CommonCertProviderTestUtils.register(executor);
-    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-                    CA_PEM_FILE, null, null, null, null, null);
-    UpstreamTlsContext upstreamTlsContext =
-            CommonTlsContextTestsUtil
-                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
-
-    SslContextProviderSupplier sslContextProviderSupplier =
-            new SslContextProviderSupplier(upstreamTlsContext,
-                    new TlsContextManagerImpl(bootstrapInfoForClient));
-    ClientSecurityHandler clientSecurityHandler =
-            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
-    pipeline.addLast(clientSecurityHandler);
-    channelHandlerCtx = pipeline.context(clientSecurityHandler);
-    assertNotNull(channelHandlerCtx);
-
-    // kick off protocol negotiation.
-    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
-    final SettableFuture<Object> future = SettableFuture.create();
-    sslContextProviderSupplier
-            .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
-              @Override
-              public void updateSslContext(SslContext sslContext) {
-                future.set(sslContext);
-              }
-
-              @Override
-              protected void onException(Throwable throwable) {
-                future.set(throwable);
-              }
-            }, null);
-    assertThat(executor.runDueTasks()).isEqualTo(1);
-    channel.runPendingTasks();
-    Object fromFuture = future.get(2, TimeUnit.SECONDS);
-    assertThat(fromFuture).isInstanceOf(SslContext.class);
-    channel.runPendingTasks();
-    channelHandlerCtx = pipeline.context(clientSecurityHandler);
-    assertThat(channelHandlerCtx).isNull();
-
-    // pipeline should have SslHandler and ClientTlsHandler
-    Iterator<Map.Entry<String, ChannelHandler>> iterator = pipeline.iterator();
-    assertThat(iterator.next().getValue()).isInstanceOf(SslHandler.class);
-    // ProtocolNegotiators.ClientTlsHandler.class not accessible, get canonical name
-    assertThat(iterator.next().getValue().getClass().getCanonicalName())
-            .contains("ProtocolNegotiators.ClientTlsHandler");
     CommonCertProviderTestUtils.register0();
   }
 
