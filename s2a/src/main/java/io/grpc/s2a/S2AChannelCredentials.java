@@ -34,6 +34,7 @@ import io.grpc.s2a.internal.channel.S2AHandshakerServiceChannel;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.grpc.s2a.internal.handshaker.S2AProtocolNegotiatorFactory;
 import io.grpc.s2a.internal.handshaker.S2AStub;
+import io.netty.handler.ssl.OpenSsl;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -49,11 +50,15 @@ public final class S2AChannelCredentials {
    * @param s2aAddress the address of the S2A server used to secure the connection.
    * @param s2aChannelCredentials the credentials to be used when connecting to the S2A.
    * @return a {@code S2AChannelCredentials.Builder} instance.
+   * @throws IllegalStateException if netty-tcnative (a required runtime dependency of S2A)
+   *      is not available.
    */
   public static Builder newBuilder(String s2aAddress, ChannelCredentials s2aChannelCredentials) {
     checkArgument(!isNullOrEmpty(s2aAddress), "S2A address must not be null or empty.");
     checkNotNull(s2aChannelCredentials, "S2A channel credentials must not be null");
-    checkState(isPlatformSupported(), "S2A is not suported on Windows or MacOS Intel");
+    checkState(isTcnativeAvailable(), "netty-tcnative is not available, S2A requires a" 
+        + "dependency on netty-tcnative. You may be running on an unsupported platform"
+        + "for netty-tcnative, such as Windows or MacOS Intel");
     return new Builder(s2aAddress, s2aChannelCredentials);
   }
 
@@ -134,18 +139,12 @@ public final class S2AChannelCredentials {
   }
 
   /**
-   * S2A has a runtime dependency on netty-tcnative. This function returns true
-   * if netty-tcnative is supported on the current platform.
+   * This function returns true if netty-tcnative and its OpenSSL support are available.
    * 
-   * @return whether S2A is supported on current platform
+   * @return whether netty-tcnative and its OpenSSL support are available.
    */
-  private static boolean isPlatformSupported() {
-    if (System.getProperty("os.name").contains("Windows")
-          || (System.getProperty("os.name").contains("OS X")
-              && System.getProperty("os.arch").contains("x86_64"))) {
-      return false;
-    }
-    return true;
+  private static boolean isTcnativeAvailable() {
+    return OpenSsl.isAvailable();
   }
 
   private S2AChannelCredentials() {}
