@@ -388,6 +388,23 @@ public abstract class XdsClient {
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
       Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    return addClusterLocalityStats(serverInfo, clusterName, edsServiceName, locality, null);
+  }
+
+  /**
+   * Adds load stats for the specified locality (in the specified cluster with edsServiceName) by
+   * using the returned object to record RPCs. Load stats recorded with the returned object will
+   * be reported to the load reporting server. The returned object is reference counted and the
+   * caller should use {@link LoadStatsManager2.ClusterLocalityStats#release} to release its
+   * <i>hard</i> reference when it is safe to stop reporting RPC loads for the specified locality
+   * in the future.
+   *
+   * @param backendMetricPropagation Configuration for which backend metrics should be propagated
+   *     to LRS load reports. If null, all metrics will be propagated (legacy behavior).
+   */
+  public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
+      Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      Locality locality, @Nullable BackendMetricPropagation backendMetricPropagation) {
     throw new UnsupportedOperationException();
   }
 
