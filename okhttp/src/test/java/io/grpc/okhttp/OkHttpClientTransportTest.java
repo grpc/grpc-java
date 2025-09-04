@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.MISCARRIED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
+import static io.grpc.internal.SimpleDisconnectError.SUBCHANNEL_SHUTDOWN;
 import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
 import static io.grpc.okhttp.Headers.HTTP_SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
@@ -72,8 +73,10 @@ import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GoAwayDisconnectError;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.OkHttpFrameLogger.Direction;
 import io.grpc.okhttp.internal.Protocol;
@@ -280,7 +283,8 @@ public class OkHttpClientTransportTest {
         null);
     clientTransport.start(transportListener);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture());
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture(),
+        eq(new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR)));
     Status capturedStatus = statusCaptor.getValue();
     assertEquals("Timed out waiting for second handshake thread. "
         + "The transport executor pool may have run out of threads",
@@ -481,7 +485,8 @@ public class OkHttpClientTransportTest {
     assertEquals(NETWORK_ISSUE_MESSAGE, listener1.status.getCause().getMessage());
     assertEquals(Status.INTERNAL.getCode(), listener2.status.getCode());
     assertEquals(NETWORK_ISSUE_MESSAGE, listener2.status.getCause().getMessage());
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -507,7 +512,8 @@ public class OkHttpClientTransportTest {
     assertEquals(0, activeStreamCount());
     assertEquals(Status.INTERNAL.getCode(), listener.status.getCode());
     assertEquals(ERROR_MESSAGE, listener.status.getCause().getMessage());
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -523,7 +529,8 @@ public class OkHttpClientTransportTest {
     frameReader.nextFrameAtEndOfStream();
     listener.waitUntilStreamClosed();
     assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -565,7 +572,8 @@ public class OkHttpClientTransportTest {
         HeadersMode.HTTP_20_HEADERS);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -577,7 +585,8 @@ public class OkHttpClientTransportTest {
         1000, 1000);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -1173,7 +1182,8 @@ public class OkHttpClientTransportTest {
     clientTransport.shutdown(SHUTDOWN_REASON);
 
     assertEquals(2, activeStreamCount());
-    verify(transportListener).transportShutdown(same(SHUTDOWN_REASON));
+    verify(transportListener).transportShutdown(same(SHUTDOWN_REASON),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
 
     stream1.cancel(Status.CANCELLED);
     stream2.cancel(Status.CANCELLED);
@@ -1207,7 +1217,8 @@ public class OkHttpClientTransportTest {
     frameHandler().goAway(3, ErrorCode.CANCEL, ByteString.EMPTY);
 
     // Transport should be in STOPPING state.
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, never()).transportTerminated();
 
     // Stream 2 should be closed.
@@ -1277,7 +1288,8 @@ public class OkHttpClientTransportTest {
     // Should only have the first message delivered.
     assertEquals(message, listener.messages.get(0));
     verify(frameWriter, timeout(TIME_OUT_MS)).rstStream(eq(startId), eq(ErrorCode.CANCEL));
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -1588,7 +1600,8 @@ public class OkHttpClientTransportTest {
         (int) buffer.size());
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -1608,7 +1621,8 @@ public class OkHttpClientTransportTest {
     frameHandler().windowUpdate(5, 73);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
-    verify(transportListener).transportShutdown(isA(Status.class));
+    verify(transportListener).transportShutdown(isA(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     shutdownAndVerify();
   }
@@ -1822,7 +1836,8 @@ public class OkHttpClientTransportTest {
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
+    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     Status status = captor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
     assertTrue(status.getCause().toString(), status.getCause() instanceof IOException);
@@ -1853,7 +1868,8 @@ public class OkHttpClientTransportTest {
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
+    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     Status status = captor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
     assertSame(exception, status.getCause());
@@ -1903,7 +1919,8 @@ public class OkHttpClientTransportTest {
     });
     sock.getOutputStream().flush();
 
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class));
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(isA(Status.class),
+        eq(SUBCHANNEL_SHUTDOWN));
     while (sock.getInputStream().read() != -1) {}
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     sock.close();
@@ -1944,7 +1961,8 @@ public class OkHttpClientTransportTest {
     assertEquals(-1, sock.getInputStream().read());
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
+        eq(SUBCHANNEL_SHUTDOWN));
     Status error = captor.getValue();
     assertTrue("Status didn't contain error code: " + captor.getValue(),
         error.getDescription().contains("500"));
@@ -1981,7 +1999,8 @@ public class OkHttpClientTransportTest {
     sock.close();
 
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture());
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
+        eq(SUBCHANNEL_SHUTDOWN));
     Status error = captor.getValue();
     assertTrue("Status didn't contain proxy: " + captor.getValue(),
         error.getDescription().contains("proxy"));
@@ -2017,7 +2036,8 @@ public class OkHttpClientTransportTest {
     assertEquals("Host: theservice:80", reader.readLine());
     while (!"".equals(reader.readLine())) {}
 
-    verify(transportListener, timeout(200)).transportShutdown(any(Status.class));
+    verify(transportListener, timeout(200)).transportShutdown(any(Status.class),
+        eq(SUBCHANNEL_SHUTDOWN));
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
     sock.close();
   }

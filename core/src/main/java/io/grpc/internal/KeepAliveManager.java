@@ -262,9 +262,9 @@ public class KeepAliveManager {
    * Default client side {@link KeepAlivePinger}.
    */
   public static final class ClientKeepAlivePinger implements KeepAlivePinger {
-    private final ConnectionClientTransport transport;
+    private final ManagedClientDisconnectTransport transport;
 
-    public ClientKeepAlivePinger(ConnectionClientTransport transport) {
+    public ClientKeepAlivePinger(ManagedClientDisconnectTransport transport) {
       this.transport = transport;
     }
 
@@ -277,7 +277,8 @@ public class KeepAliveManager {
         @Override
         public void onFailure(Status cause) {
           transport.shutdownNow(Status.UNAVAILABLE.withDescription(
-              "Keepalive failed. The connection is likely gone"));
+                  "Keepalive failed. The connection is likely gone"),
+              SimpleDisconnectError.CONNECTION_TIMED_OUT);
         }
       }, MoreExecutors.directExecutor());
     }
@@ -285,7 +286,8 @@ public class KeepAliveManager {
     @Override
     public void onPingTimeout() {
       transport.shutdownNow(Status.UNAVAILABLE.withDescription(
-          "Keepalive failed. The connection is likely gone"));
+              "Keepalive failed. The connection is likely gone"),
+          SimpleDisconnectError.CONNECTION_TIMED_OUT);
     }
   }
 }

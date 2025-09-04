@@ -63,6 +63,7 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
@@ -1403,7 +1404,7 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void transportShutdown(Status s) {}
+    public void transportShutdown(Status s, DisconnectError e) {}
 
     @Override
     public void transportTerminated() {}

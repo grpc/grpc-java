@@ -37,11 +37,14 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FailingClientStream;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
+import io.grpc.internal.ManagedClientDisconnectTransport;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
@@ -68,7 +71,7 @@ import javax.annotation.Nullable;
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
-class NettyClientTransport implements ConnectionClientTransport {
+class NettyClientTransport implements ConnectionClientTransport, ManagedClientDisconnectTransport {
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -231,8 +234,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     EventLoop eventLoop = group.next();
     if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
       keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls);
+          new ClientKeepAlivePinger(this), eventLoop, keepAliveTimeNanos,
+          keepAliveTimeoutNanos, keepAliveWithoutCalls);
     }
 
     handler = NettyClientHandler.newHandler(
@@ -291,7 +294,8 @@ class NettyClientTransport implements ConnectionClientTransport {
           // could use GlobalEventExecutor (which is what regFuture would use for notifying
           // listeners in this case), but avoiding on-demand thread creation in an error case seems
           // a good idea and is probably clearer threading.
-          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull);
+          lifecycleManager.notifyTerminated(statusExplainingWhyTheChannelIsNull,
+              SimpleDisconnectError.UNKNOWN);
         }
       };
     }
@@ -323,7 +327,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (!future.isSuccess()) {
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()),
+              SimpleDisconnectError.UNKNOWN);
         }
       }
     });
@@ -357,12 +362,17 @@ class NettyClientTransport implements ConnectionClientTransport {
 
   @Override
   public void shutdownNow(final Status reason) {
+    shutdownNow(reason, SimpleDisconnectError.UNKNOWN);
+  }
+
+  @Override
+  public void shutdownNow(final Status reason, DisconnectError disconnectError) {
     // Notifying of termination is automatically done when the channel closes.
     if (channel != null && channel.isOpen()) {
       handler.getWriteQueue().enqueue(new Runnable() {
         @Override
         public void run() {
-          lifecycleManager.notifyShutdown(reason);
+          lifecycleManager.notifyShutdown(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
           channel.write(new ForcefulCloseCommand(reason));
         }
       }, true);
