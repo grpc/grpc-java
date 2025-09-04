@@ -17,6 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -28,6 +31,9 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.internal.testing.TestUtils;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -40,6 +46,8 @@ import io.grpc.xds.client.XdsInitializationException;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.TrustManager;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -896,6 +904,49 @@ public class GrpcBootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
+  }
+
+  @Test
+  public void parseTlsChannelCredentialsWithCustomCertificatesConfig()
+      throws XdsInitializationException, IOException {
+    String rootCertPath = TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath();
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    String privateKeyPath = TestUtils.loadCert(CLIENT_KEY_FILE).getAbsolutePath();
+
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\n"
+        + "          \"type\": \"tls\","
+        + "          \"config\": {\n"
+        + "            \"ca_certificate_file\": \"" + rootCertPath + "\",\n"
+        + "            \"certificate_file\": \"" + certChainPath + "\",\n"
+        + "            \"private_key_file\": \"" + privateKeyPath + "\"\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(TlsChannelCredentials.class);
+
+    TlsChannelCredentials tlsChannelCredentials =
+        (TlsChannelCredentials) serverInfo.implSpecificConfig();
+    assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
+    KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
+    assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
+    assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
+    TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
+    assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
+
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
