@@ -141,6 +141,15 @@ static std::set<std::string> java_keywords = {
   // additional ones added by us
   "true",
   "false",
+  "clone",
+  "equals",
+  "finalize",
+  "getClass",
+  "hashCode",
+  "notify",
+  "notifyAll",
+  "toString",
+  "wait",
 };
 
 // Adjust a method name prefix identifier to follow the JavaBean spec:
