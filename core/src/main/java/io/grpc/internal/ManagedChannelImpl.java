@@ -2055,7 +2055,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   private final class DelayedTransportListener implements ManagedClientTransport.Listener {
     @Override
-    public void transportShutdown(Status s) {
+    public void transportShutdown(Status s, DisconnectError e) {
       checkState(shutdown.get(), "Channel must have been shut down");
     }
 

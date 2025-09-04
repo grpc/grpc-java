@@ -326,7 +326,8 @@ public abstract class AbstractTransportTest {
     runIfNotNull(client.start(mockClientTransportListener));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    inOrder.verify(mockClientTransportListener).transportShutdown(statusCaptor.capture());
+    inOrder.verify(mockClientTransportListener).transportShutdown(statusCaptor.capture(),
+        any(DisconnectError.class));
     assertCodeEquals(Status.UNAVAILABLE, statusCaptor.getValue());
     inOrder.verify(mockClientTransportListener).transportTerminated();
     verify(mockClientTransportListener, never()).transportReady();
@@ -342,7 +343,8 @@ public abstract class AbstractTransportTest {
     Status shutdownReason = Status.UNAVAILABLE.withDescription("shutdown called");
     client.shutdown(shutdownReason);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
-    inOrder.verify(mockClientTransportListener).transportShutdown(same(shutdownReason));
+    inOrder.verify(mockClientTransportListener).transportShutdown(same(shutdownReason),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     inOrder.verify(mockClientTransportListener).transportTerminated();
     verify(mockClientTransportListener, never()).transportInUse(anyBoolean());
   }
@@ -358,7 +360,8 @@ public abstract class AbstractTransportTest {
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     client.shutdown(Status.UNAVAILABLE);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
-    inOrder.verify(mockClientTransportListener).transportShutdown(any(Status.class));
+    inOrder.verify(mockClientTransportListener).transportShutdown(any(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     inOrder.verify(mockClientTransportListener).transportTerminated();
     assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     server.shutdown();
@@ -454,7 +457,8 @@ public abstract class AbstractTransportTest {
     serverTransport.shutdown();
     serverTransport = null;
 
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     assertTrue(serverListener.waitForShutdown(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     // A new server should be able to start listening, since the current server has given up
@@ -504,7 +508,8 @@ public abstract class AbstractTransportTest {
     client.shutdownNow(status);
     client = null;
 
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportInUse(false);
     assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -543,7 +548,8 @@ public abstract class AbstractTransportTest {
     serverTransport.shutdownNow(shutdownStatus);
     serverTransport = null;
 
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
+        any(DisconnectError.class));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportInUse(false);
     assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));
@@ -591,7 +597,8 @@ public abstract class AbstractTransportTest {
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     stream.start(clientStreamListener);
     client.shutdown(Status.UNAVAILABLE);
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
     ClientTransport.PingCallback mockPingCallback = mock(ClientTransport.PingCallback.class);
     try {
       client.ping(mockPingCallback, MoreExecutors.directExecutor());
@@ -635,7 +642,8 @@ public abstract class AbstractTransportTest {
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     stream.start(clientStreamListener);
     client.shutdown(Status.UNAVAILABLE);
-    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
+        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
 
     ClientStream stream2 = client.newStream(
         methodDescriptor, new Metadata(), callOptions, tracers);

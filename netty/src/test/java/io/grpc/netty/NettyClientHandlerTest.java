@@ -68,6 +68,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import io.grpc.internal.TransportTracer;
@@ -765,7 +766,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   public void nonExistentStream() throws Exception {
     Status status = Status.INTERNAL.withDescription("zz");
 
-    lifecycleManager.notifyShutdown(status);
+    lifecycleManager.notifyShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     // Stream creation can race with the transport shutting down, with the create command already
     // enqueued.
     ChannelFuture future1 = createStream();

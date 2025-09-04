@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -104,13 +105,14 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void clientKeepAlivePinger_pingTimeout() {
-    ConnectionClientTransport transport = mock(ConnectionClientTransport.class);
+    ManagedClientDisconnectTransport transport = mock(ManagedClientDisconnectTransport.class);
     ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
 
     pinger.onPingTimeout();
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(transport).shutdownNow(statusCaptor.capture());
+    verify(transport).shutdownNow(statusCaptor.capture(),
+        eq(SimpleDisconnectError.CONNECTION_TIMED_OUT));
     Status status = statusCaptor.getValue();
     assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(status.getDescription()).isEqualTo(
@@ -119,7 +121,7 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void clientKeepAlivePinger_pingFailure() {
-    ConnectionClientTransport transport = mock(ConnectionClientTransport.class);
+    ManagedClientDisconnectTransport transport = mock(ManagedClientDisconnectTransport.class);
     ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
     pinger.ping();
     ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =
@@ -130,7 +132,8 @@ public final class KeepAliveManagerTest {
     pingCallback.onFailure(Status.UNAVAILABLE.withDescription("I must write descriptions"));
 
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    verify(transport).shutdownNow(statusCaptor.capture());
+    verify(transport).shutdownNow(statusCaptor.capture(),
+        eq(SimpleDisconnectError.CONNECTION_TIMED_OUT));
     Status status = statusCaptor.getValue();
     assertThat(status.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(status.getDescription()).isEqualTo(

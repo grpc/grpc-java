@@ -34,11 +34,14 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.DisconnectError;
+import io.grpc.internal.GoAwayDisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
 import io.netty.buffer.ByteBuf;
@@ -478,7 +481,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     logger.fine("Network channel being closed by the application.");
     if (ctx.channel().isActive()) { // Ignore notification that the socket was closed
       lifecycleManager.notifyShutdown(
-          Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"));
+          Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"),
+          SimpleDisconnectError.UNKNOWN);
     }
     super.close(ctx, promise);
   }
@@ -491,7 +495,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     try {
       logger.fine("Network channel is closed");
       Status status = Status.UNAVAILABLE.withDescription("Network closed for unknown reason");
-      lifecycleManager.notifyShutdown(status);
+      lifecycleManager.notifyShutdown(status, SimpleDisconnectError.UNKNOWN);
       final Status streamStatus;
       if (channelInactiveReason != null) {
         streamStatus = channelInactiveReason;
@@ -512,7 +516,7 @@ class NettyClientHandler extends AbstractNettyHandler {
           }
         });
       } finally {
-        lifecycleManager.notifyTerminated(status);
+        lifecycleManager.notifyTerminated(status, SimpleDisconnectError.UNKNOWN);
       }
     } finally {
       // Close any open streams
@@ -560,7 +564,8 @@ class NettyClientHandler extends AbstractNettyHandler {
   protected void onConnectionError(ChannelHandlerContext ctx,  boolean outbound, Throwable cause,
       Http2Exception http2Ex) {
     logger.log(Level.FINE, "Caught a connection error", cause);
-    lifecycleManager.notifyShutdown(Utils.statusFromThrowable(cause));
+    lifecycleManager.notifyShutdown(Utils.statusFromThrowable(cause),
+        SimpleDisconnectError.SOCKET_ERROR);
     // Parent class will shut down the Channel
     super.onConnectionError(ctx, outbound, cause, http2Ex);
   }
@@ -667,7 +672,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       if (!connection().goAwaySent()) {
         logger.fine("Stream IDs have been exhausted for this connection. "
                 + "Initiating graceful shutdown of the connection.");
-        lifecycleManager.notifyShutdown(e.getStatus());
+        lifecycleManager.notifyShutdown(e.getStatus(), SimpleDisconnectError.UNKNOWN);
         close(ctx(), ctx().newPromise());
       }
       return;
@@ -893,7 +898,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private void gracefulClose(ChannelHandlerContext ctx, GracefulCloseCommand msg,
       ChannelPromise promise) throws Exception {
-    lifecycleManager.notifyShutdown(msg.getStatus());
+    lifecycleManager.notifyShutdown(msg.getStatus(), SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     // Explicitly flush to create any buffered streams before sending GOAWAY.
     // TODO(ejona): determine if the need to flush is a bug in Netty
     flush(ctx);
@@ -929,13 +934,15 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void goingAway(long errorCode, byte[] debugData) {
     Status finalStatus = statusFromH2Error(
         Status.Code.UNAVAILABLE, "GOAWAY shut down transport", errorCode, debugData);
-    lifecycleManager.notifyGracefulShutdown(finalStatus);
+    DisconnectError disconnectError = new GoAwayDisconnectError(
+        GrpcUtil.Http2Error.forCode(errorCode));
+    lifecycleManager.notifyGracefulShutdown(finalStatus, disconnectError);
     abruptGoAwayStatus = statusFromH2Error(
         Status.Code.UNAVAILABLE, "Abrupt GOAWAY closed unsent stream", errorCode, debugData);
     // While this _should_ be UNAVAILABLE, Netty uses the wrong stream id in the GOAWAY when it
     // fails streams due to HPACK failures (e.g., header list too large). To be more conservative,
     // we assume any sent streams may be related to the GOAWAY. This should rarely impact users
-    // since the main time servers should use abrupt GOAWAYs is if there is a protocol error, and if
+    // since the main time servers should use abrupt GOAWAYs if there is a protocol error, and if
     // there wasn't a protocol error the error code was probably NO_ERROR which is mapped to
     // UNAVAILABLE. https://github.com/netty/netty/issues/10670
     final Status abruptGoAwayStatusConservative = statusFromH2Error(
@@ -950,7 +957,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     // This can cause reentrancy, but should be minor since it is normal to handle writes in
     // response to a read. Also, the call stack is rather shallow at this point
     clientWriteQueue.drainNow();
-    if (lifecycleManager.notifyShutdown(finalStatus)) {
+    if (lifecycleManager.notifyShutdown(finalStatus, disconnectError)) {
       // This is for the only RPCs that are actually covered by the GOAWAY error code. All other
       // RPCs were not observed by the remote and so should be UNAVAILABLE.
       channelInactiveReason = statusFromH2Error(
