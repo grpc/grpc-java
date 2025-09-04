@@ -60,6 +60,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DecoratingHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
@@ -70,6 +71,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
+import io.netty.handler.codec.http2.EmptyHttp2Headers;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -480,8 +482,10 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
 
       if (!HTTP_METHOD.contentEquals(headers.method())) {
+        Http2Headers extraHeaders = new DefaultHttp2Headers();
+        extraHeaders.add(HttpHeaderNames.ALLOW, HTTP_METHOD);
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
-            String.format("Method '%s' is not supported", headers.method()));
+            String.format("Method '%s' is not supported", headers.method()), extraHeaders);
         return;
       }
 
@@ -868,7 +872,13 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void respondWithHttpError(
-      ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
+          ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
+    respondWithHttpError(ctx, streamId, code, statusCode, msg, EmptyHttp2Headers.INSTANCE);
+  }
+
+  private void respondWithHttpError(
+      ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg,
+      Http2Headers extraHeaders) {
     Metadata metadata = new Metadata();
     metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
     metadata.put(InternalStatus.MESSAGE_KEY, msg);
@@ -880,6 +890,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     for (int i = 0; i < serialized.length; i += 2) {
       headers.add(new AsciiString(serialized[i], false), new AsciiString(serialized[i + 1], false));
     }
+    headers.add(extraHeaders);
     encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
     ByteBuf msgBuf = ByteBufUtil.writeUtf8(ctx.alloc(), msg);
     encoder().writeData(ctx, streamId, msgBuf, 0, true, ctx.newPromise());
