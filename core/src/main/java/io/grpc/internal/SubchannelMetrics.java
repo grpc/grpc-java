@@ -22,7 +22,6 @@ import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
-import javax.annotation.Nullable;
 
 final class SubchannelMetrics {
 
