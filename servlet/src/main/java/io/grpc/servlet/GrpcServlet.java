@@ -31,7 +31,7 @@ import javax.servlet.http.HttpServletResponse;
  * "/full-service-name/short-method-name".
  * If you use application server and want to get access to grpc from non root path
  * for example {@code /deployment-name/full-service-name/short-method-name}
- * you must override {@link #getMethod()}.
+ * you must override {@link #getMethod(HttpServletRequest)}.
  * <a href=https://github.com/grpc/grpc-java/pull/11825>More info</a>.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
