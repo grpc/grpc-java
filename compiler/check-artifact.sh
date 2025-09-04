@@ -61,10 +61,10 @@ checkArch ()
         assertEq "$format" "elf64-x86-64" $LINENO
       elif [[ "$ARCH" == aarch_64 ]]; then
         assertEq "$format" "elf64-little" $LINENO
-      elif [[ "$ARCH" == loongarch_64 ]]; then
-        echo $format
       elif [[ "$ARCH" == riscv64 ]]; then
         assertEq "$format" "elf64-littleriscv" $LINENO
+      elif [[ "$ARCH" == loongarch_64 ]]; then
+        echo $format
 	assertEq "$format" "elf64-loongarch" $LINENO
       elif [[ "$ARCH" == ppcle_64 ]]; then
         format="$(powerpc64le-linux-gnu-objdump -f "$1" | grep -o "file format .*$" | grep -o "[^ ]*$")"
