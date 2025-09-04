@@ -316,12 +316,9 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
-    if (preAuthResultFuture != null) {
-      preAuthResultFuture.cancel(false); // No effect if already complete.
-    }
-    if (authResultFuture != null) {
-      authResultFuture.cancel(false); // No effect if already complete.
-    }
+    cancelAsyncIfNeeded(preAuthResultFuture);
+    cancelAsyncIfNeeded(authResultFuture);
+
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
   }
@@ -397,6 +394,17 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   protected void handlePingResponse(Parcel parcel) {
     pingTracker.onPingResponse(parcel.readInt());
+  }
+
+  /**
+   * Enqueues a future for cancellation later, on another thread.
+   * Useful when the caller wants to cancel while holding locks but the future is visible to
+   * user code which might have added listeners to run on directExecutor().
+   */
+  private void cancelAsyncIfNeeded(@Nullable ListenableFuture<?> future) {
+    if (future != null && !future.isDone()) {
+      offloadExecutor.execute(() -> future.cancel(false));
+    }
   }
 
   private static ClientStream newFailingClientStream(
