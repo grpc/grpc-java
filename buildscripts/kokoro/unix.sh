@@ -38,14 +38,11 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
+GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 
-# Configure OS-specific build flags.
+# For universal binaries on macOS, signal Gradle to use universal flags.
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  # For universal binaries on macOS, signal Gradle to use universal flags.
   GRADLE_FLAGS+=" -PbuildUniversal=true"
-else
-  # For Linux, build for a single, specific architecture.
-  GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 fi
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
