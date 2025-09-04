@@ -285,16 +285,19 @@ final class OpenTelemetryMetricsModule {
   static final class CallAttemptsTracerFactory extends ClientStreamTracer.Factory {
     private final OpenTelemetryMetricsModule module;
     private final String target;
-    private final Stopwatch attemptStopwatch;
+    private final Stopwatch attemptDelayStopwatch;
     private final Stopwatch callStopWatch;
     @GuardedBy("lock")
     private boolean callEnded;
     private final String fullMethodName;
     private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
     private Status status;
+    private long retryDelayNanos;
     private long callLatencyNanos;
     private final Object lock = new Object();
     private final AtomicLong attemptsPerCall = new AtomicLong();
+    private final AtomicLong hedgedAttemptsPerCall = new AtomicLong();
+    private final AtomicLong transparentRetriesPerCall = new AtomicLong();
     @GuardedBy("lock")
     private int activeStreams;
     @GuardedBy("lock")
@@ -309,7 +312,7 @@ final class OpenTelemetryMetricsModule {
       this.target = checkNotNull(target, "target");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.callPlugins = checkNotNull(callPlugins, "callPlugins");
-      this.attemptStopwatch = module.stopwatchSupplier.get();
+      this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
@@ -329,8 +332,9 @@ final class OpenTelemetryMetricsModule {
           // This can be the case when the call is cancelled but a retry attempt is created.
           return new ClientStreamTracer() {};
         }
-        if (++activeStreams == 1 && attemptStopwatch.isRunning()) {
-          attemptStopwatch.stop();
+        if (++activeStreams == 1 && attemptDelayStopwatch.isRunning()) {
+          attemptDelayStopwatch.stop();
+          retryDelayNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
       }
       // Skip recording for the first time, since it is already recorded in
@@ -344,7 +348,11 @@ final class OpenTelemetryMetricsModule {
           module.resource.clientAttemptCountCounter().add(1, attribute);
         }
       }
-      if (!info.isTransparentRetry()) {
+      if (info.isTransparentRetry()) {
+        transparentRetriesPerCall.incrementAndGet();
+      } else if (info.isHedging()) {
+        hedgedAttemptsPerCall.incrementAndGet();
+      } else {
         attemptsPerCall.incrementAndGet();
       }
       return newClientTracer(info);
@@ -367,7 +375,7 @@ final class OpenTelemetryMetricsModule {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (--activeStreams == 0) {
-          attemptStopwatch.start();
+          attemptDelayStopwatch.start();
           if (callEnded && !finishedCallToBeRecorded) {
             shouldRecordFinishedCall = true;
             finishedCallToBeRecorded = true;
@@ -402,19 +410,61 @@ final class OpenTelemetryMetricsModule {
     void recordFinishedCall() {
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
-        tracer.attemptNanos = attemptStopwatch.elapsed(TimeUnit.NANOSECONDS);
+        tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
         tracer.statusCode = status.getCode();
         tracer.recordFinishedAttempt();
       }
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
-      io.opentelemetry.api.common.Attributes attribute =
-          io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
-              TARGET_KEY, target,
-              STATUS_KEY, status.getCode().toString());
 
+      // Base attributes
+      io.opentelemetry.api.common.Attributes baseAttributes =
+          io.opentelemetry.api.common.Attributes.of(
+              METHOD_KEY, fullMethodName,
+              TARGET_KEY, target
+          );
+
+      // Duration
       if (module.resource.clientCallDurationCounter() != null) {
-        module.resource.clientCallDurationCounter()
-            .record(callLatencyNanos * SECONDS_PER_NANO, attribute);
+        module.resource.clientCallDurationCounter().record(
+            callLatencyNanos * SECONDS_PER_NANO,
+            baseAttributes.toBuilder()
+                .put(STATUS_KEY, status.getCode().toString())
+                .build()
+        );
+      }
+
+      // Retry counts
+      if (module.resource.clientCallRetriesCounter() != null) {
+        long retriesPerCall = Math.max(attemptsPerCall.get() - 1, 0);
+        if (retriesPerCall > 0) {
+          module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
+        }
+      }
+
+      // Hedge counts
+      if (module.resource.clientCallHedgesCounter() != null) {
+        long hedges = hedgedAttemptsPerCall.get();
+        if (hedges > 0) {
+          module.resource.clientCallHedgesCounter()
+              .record(hedges, baseAttributes);
+        }
+      }
+
+      // Transparent Retry counts
+      if (module.resource.clientCallTransparentRetriesCounter() != null) {
+        long transparentRetries = transparentRetriesPerCall.get();
+        if (transparentRetries > 0) {
+          module.resource.clientCallTransparentRetriesCounter().record(
+              transparentRetries, baseAttributes);
+        }
+      }
+
+      // Retry delay
+      if (module.resource.clientCallRetryDelayCounter() != null) {
+        module.resource.clientCallRetryDelayCounter().record(
+            retryDelayNanos * SECONDS_PER_NANO,
+            baseAttributes
+        );
       }
     }
   }

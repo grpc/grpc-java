@@ -245,7 +245,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   // returns null means we should not create new sub streams, e.g. cancelled or
   // other close condition is met for retriableStream.
   @Nullable
-  private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
+  private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry,
+                                    boolean isHedgedStream) {
     int inFlight;
     do {
       inFlight = inFlightSubStreams.get();
@@ -266,7 +267,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry);
+    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry,
+        isHedgedStream);
     return sub;
   }
 
@@ -276,7 +278,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    */
   abstract ClientStream newSubstream(
       Metadata headers, ClientStreamTracer.Factory tracerFactory, int previousAttempts,
-      boolean isTransparentRetry);
+      boolean isTransparentRetry, boolean isHedgedStream);
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
   @VisibleForTesting
@@ -398,7 +400,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream(0, false);
+    Substream substream = createSubstream(0, false, false);
     if (substream == null) {
       return;
     }
@@ -471,7 +473,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // If this run is not cancelled, the value of state.hedgingAttemptCount won't change
       // until state.addActiveHedge() is called subsequently, even the state could possibly
       // change.
-      Substream newSubstream = createSubstream(state.hedgingAttemptCount, false);
+      Substream newSubstream = createSubstream(state.hedgingAttemptCount, false, true);
       if (newSubstream == null) {
         return;
       }
@@ -949,7 +951,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             || (rpcProgress == RpcProgress.REFUSED
                 && noMoreTransparentRetry.compareAndSet(false, true))) {
           // transparent retry
-          final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
+          final Substream newSubstream = createSubstream(substream.previousAttemptCount,
+              true, false);
           if (newSubstream == null) {
             return;
           }
@@ -1001,7 +1004,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             RetryPlan retryPlan = makeRetryDecision(status, trailers);
             if (retryPlan.shouldRetry) {
               // retry
-              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1, false);
+              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1,
+                  false, false);
               if (newSubstream == null) {
                 return;
               }
