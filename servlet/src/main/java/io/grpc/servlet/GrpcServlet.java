@@ -29,10 +29,9 @@ import javax.servlet.http.HttpServletResponse;
  * A simple servlet backed by a gRPC server. Must set {@code asyncSupported} to true. The {@code
  * /contextRoot/urlPattern} must match the gRPC services' path, which is
  * "/full-service-name/short-method-name".
- * If you use application server and want to get access to grpc from path
- * {@code /deployment-name/full-service-name/short-method-name}
- * you must use {@link GrpcServlet#REMOVE_CONTEXT_PATH} for remove
- * context path({@code deployment-name}) from method name.
+ * If you use application server and want to get access to grpc from non root path
+ * for example {@code /deployment-name/full-service-name/short-method-name}
+ * you must override {@link #getMethod()}.
  * <a href=https://github.com/grpc/grpc-java/pull/11825>More info</a>.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
@@ -42,19 +41,11 @@ import javax.servlet.http.HttpServletResponse;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public class GrpcServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
-  public static final String REMOVE_CONTEXT_PATH = "REMOVE_CONTEXT_PATH";
 
   private final ServletAdapter servletAdapter;
-  private boolean removeContextPath = false; // default value;
 
   GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
-  }
-
-  @Override
-  public void init() throws ServletException {
-    super.init();
-    removeContextPath = Boolean.parseBoolean(getInitParameter(REMOVE_CONTEXT_PATH));
   }
 
   /**
@@ -73,12 +64,7 @@ public class GrpcServlet extends HttpServlet {
   }
 
   protected String getMethod(HttpServletRequest req) {
-    String method = req.getRequestURI();
-    if (removeContextPath) {
-      // remove context path used in application server
-      method = method.substring(req.getContextPath().length());
-    }
-    return method.substring(1); // remove the leading "/"
+    return req.getRequestURI().substring(1); // remove the leading "/"
   }
 
   @Override
