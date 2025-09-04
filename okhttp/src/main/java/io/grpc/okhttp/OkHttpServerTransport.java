@@ -774,7 +774,8 @@ final class OkHttpServerTransport implements ServerTransport,
       }
 
       if (!POST_METHOD.equals(httpMethod)) {
-        List<Header> extraHeaders = Lists.newArrayList(new Header(ByteString.encodeUtf8("allow"), POST_METHOD));
+        List<Header> extraHeaders = Lists.newArrayList(new Header(ByteString.encodeUtf8("allow"),
+                POST_METHOD));
         respondWithHttpError(streamId, inFinished, 405, Status.Code.INTERNAL,
             "HTTP Method is not supported: " + asciiString(httpMethod), extraHeaders);
         return;
@@ -1068,12 +1069,14 @@ final class OkHttpServerTransport implements ServerTransport,
     }
 
     private void respondWithHttpError(
-            int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg) {
-      respondWithHttpError(streamId, inFinished, httpCode, statusCode, msg, Collections.emptyList());
+        int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg) {
+      respondWithHttpError(streamId, inFinished, httpCode, statusCode, msg,
+              Collections.emptyList());
     }
 
     private void respondWithHttpError(
-        int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg, List<Header> extraHeaders) {
+        int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg,
+        List<Header> extraHeaders) {
       Metadata metadata = new Metadata();
       metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
       metadata.put(InternalStatus.MESSAGE_KEY, msg);

@@ -872,7 +872,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void respondWithHttpError(
-          ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
+      ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
     respondWithHttpError(ctx, streamId, code, statusCode, msg, EmptyHttp2Headers.INSTANCE);
   }
 
