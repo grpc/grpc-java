@@ -74,7 +74,7 @@ final class WrrLocalityLoadBalancer extends LoadBalancer {
     Map<String, Integer> localityWeights = new HashMap<>();
     for (EquivalentAddressGroup eag : resolvedAddresses.getAddresses()) {
       Attributes eagAttrs = eag.getAttributes();
-      String locality = eagAttrs.get(XdsAttributes.ATTR_LOCALITY_NAME);
+      String locality = eagAttrs.get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
       Integer localityWeight = eagAttrs.get(XdsAttributes.ATTR_LOCALITY_WEIGHT);
 
       if (locality == null) {

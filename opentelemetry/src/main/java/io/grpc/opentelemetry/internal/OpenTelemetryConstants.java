@@ -36,6 +36,12 @@ public final class OpenTelemetryConstants {
   public static final AttributeKey<String> BACKEND_SERVICE_KEY =
       AttributeKey.stringKey("grpc.lb.backend_service");
 
+  public static final AttributeKey<String> DISCONNECT_ERROR_KEY =
+      AttributeKey.stringKey("grpc.disconnect_error");
+
+  public static final AttributeKey<String> SECURITY_LEVEL_KEY =
+      AttributeKey.stringKey("grpc.security_level");
+
   public static final List<Double> LATENCY_BUCKETS =
       ImmutableList.of(
           0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
