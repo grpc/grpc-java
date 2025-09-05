@@ -93,6 +93,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private static final ByteString TE_TRAILERS = ByteString.encodeUtf8("trailers");
   private static final ByteString CONTENT_TYPE = ByteString.encodeUtf8("content-type");
   private static final ByteString CONTENT_LENGTH = ByteString.encodeUtf8("content-length");
+  private static final ByteString ALLOW = ByteString.encodeUtf8("allow");
 
   private final Config config;
   private final Variant variant = new Http2();
@@ -774,8 +775,7 @@ final class OkHttpServerTransport implements ServerTransport,
       }
 
       if (!POST_METHOD.equals(httpMethod)) {
-        List<Header> extraHeaders = Lists.newArrayList(new Header(ByteString.encodeUtf8("allow"),
-                POST_METHOD));
+        List<Header> extraHeaders = Lists.newArrayList(new Header(ALLOW, POST_METHOD));
         respondWithHttpError(streamId, inFinished, 405, Status.Code.INTERNAL,
             "HTTP Method is not supported: " + asciiString(httpMethod), extraHeaders);
         return;
