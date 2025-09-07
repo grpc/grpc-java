@@ -141,21 +141,25 @@ static std::set<std::string> java_keywords = {
   // additional ones added by us
   "true",
   "false",
-  "clone",
-  "equals",
-  "finalize",
-  "getClass",
-  "hashCode",
-  "notify",
-  "notifyAll",
-  "toString",
-  "wait",
+};
+
+// Methods on java.lang.Object that take no arguments.
+static std::set<std::string> java_object_methods = {
+    "clone",
+    "finalize",
+    "getClass",
+    "hashCode",
+    "notify",
+    "notifyAll",
+    "toString",
+    "wait",
 };
 
 // Adjust a method name prefix identifier to follow the JavaBean spec:
 //   - decapitalize the first letter
 //   - remove embedded underscores & capitalize the following letter
-//  Finally, if the result is a reserved java keyword, append an underscore.
+//  Finally, if the result is a reserved java keyword or an Object method,
+// append an underscore.
 static std::string MixedLower(std::string word) {
   std::string w;
   w += tolower(word[0]);
@@ -168,7 +172,8 @@ static std::string MixedLower(std::string word) {
       after_underscore = false;
     }
   }
-  if (java_keywords.find(w) != java_keywords.end()) {
+  if (java_keywords.find(w) != java_keywords.end() ||
+      java_object_methods.find(w) != java_object_methods.end()) {
     return w + "_";
   }
   return w;
