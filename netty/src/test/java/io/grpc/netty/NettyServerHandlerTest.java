@@ -539,13 +539,12 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .path(new AsciiString("/foo/bar"));
     ByteBuf headersFrame = headersFrame(STREAM_ID, headers);
     channelRead(headersFrame);
-    Http2Headers responseHeaders =
-        new DefaultHttp2Headers()
-            .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
-            .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
-            .status("" + 405)
-            .set(HttpHeaderNames.ALLOW, "POST")
-            .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+    Http2Headers responseHeaders = new DefaultHttp2Headers()
+        .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
+        .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
+        .status("" + 405)
+        .set(HttpHeaderNames.ALLOW, "POST")
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
 
     verifyWrite()
         .writeHeaders(

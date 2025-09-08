@@ -882,12 +882,8 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void respondWithHttpError(
-      ChannelHandlerContext ctx,
-      int streamId,
-      int code,
-      Status.Code statusCode,
-      String msg,
-      Http2Headers allowHeaders) {
+          ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg,
+          Http2Headers allowHeaders) {
     Metadata metadata = new Metadata();
     metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
     metadata.put(InternalStatus.MESSAGE_KEY, msg);

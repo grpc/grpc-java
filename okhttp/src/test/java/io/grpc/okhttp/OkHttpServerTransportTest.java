@@ -976,13 +976,12 @@ public class OkHttpServerTransportTest {
     clientFrameWriter.flush();
 
     String errorDescription = "HTTP Method is not supported: GET";
-    List<Header> responseHeaders =
-        Arrays.asList(
-            new Header(":status", "405"),
-            new Header("content-type", "text/plain; charset=utf-8"),
-            new Header("grpc-status", "" + Status.Code.INTERNAL.value()),
-            new Header("grpc-message", errorDescription),
-            new Header("allow", "POST"));
+    List<Header> responseHeaders = Arrays.asList(
+        new Header(":status", "405"),
+        new Header("content-type", "text/plain; charset=utf-8"),
+        new Header("grpc-status", "" + Status.Code.INTERNAL.value()),
+        new Header("grpc-message", errorDescription),
+        new Header("allow", "POST"));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
         .headers(false, false, 1, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);
@@ -1411,10 +1410,10 @@ public class OkHttpServerTransportTest {
       int streamId, int httpCode, Status.Code grpcCode, String errorDescription,
       List<Header> extraHeaders) throws Exception {
     List<Header> responseHeaders = Lists.newArrayList(
-          new Header(":status", "" + httpCode),
-          new Header("content-type", "text/plain; charset=utf-8"),
-          new Header("grpc-status", "" + grpcCode.value()),
-          new Header("grpc-message", errorDescription));
+        new Header(":status", "" + httpCode),
+        new Header("content-type", "text/plain; charset=utf-8"),
+        new Header("grpc-status", "" + grpcCode.value()),
+        new Header("grpc-message", errorDescription));
     responseHeaders.addAll(extraHeaders);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
