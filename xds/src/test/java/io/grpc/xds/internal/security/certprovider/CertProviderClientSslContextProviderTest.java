@@ -74,15 +74,26 @@ public class CertProviderClientSslContextProviderTest {
           Iterable<String> alpnProtocols,
           CertificateValidationContext staticCertValidationContext,
           boolean useSystemRootCerts) {
-    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
-            certInstanceName,
-            "cert-default",
-            rootInstanceName,
-            "root-default",
-            alpnProtocols,
-            staticCertValidationContext,
-            useSystemRootCerts);
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
+    if (useSystemRootCerts) {
+      upstreamTlsContext =
+              CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
+                      certInstanceName,
+                      "cert-default",
+                      rootInstanceName,
+                      "root-default",
+                      alpnProtocols,
+                      staticCertValidationContext);
+    } else {
+      upstreamTlsContext =
+              CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
+                      certInstanceName,
+                      "cert-default",
+                      rootInstanceName,
+                      "root-default",
+                      alpnProtocols,
+                      staticCertValidationContext);
+    }
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
@@ -187,7 +198,9 @@ public class CertProviderClientSslContextProviderTest {
                     null,
                     CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */ null,
-                    /* staticCertValidationContext= */ null,
+                    CertificateValidationContext.newBuilder()
+                            .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
+                            .build(),
                     true);
 
     assertThat(provider.savedKey).isNull();
