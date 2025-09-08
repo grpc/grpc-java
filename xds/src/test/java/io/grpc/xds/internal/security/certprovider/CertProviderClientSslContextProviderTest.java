@@ -68,11 +68,12 @@ public class CertProviderClientSslContextProviderTest {
 
   /** Helper method to build CertProviderClientSslContextProvider. */
   private CertProviderClientSslContextProvider getSslContextProvider(
-      String certInstanceName,
-      String rootInstanceName,
-      Bootstrapper.BootstrapInfo bootstrapInfo,
-      Iterable<String> alpnProtocols,
-      CertificateValidationContext staticCertValidationContext) {
+          String certInstanceName,
+          String rootInstanceName,
+          Bootstrapper.BootstrapInfo bootstrapInfo,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext,
+          boolean useSystemRootCerts) {
     EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
             certInstanceName,
@@ -80,7 +81,8 @@ public class CertProviderClientSslContextProviderTest {
             rootInstanceName,
             "root-default",
             alpnProtocols,
-            staticCertValidationContext);
+            staticCertValidationContext,
+            useSystemRootCerts);
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
@@ -122,7 +124,7 @@ public class CertProviderClientSslContextProviderTest {
             "gcp_id",
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -185,7 +187,8 @@ public class CertProviderClientSslContextProviderTest {
                     null,
                     CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */ null,
-                    /* staticCertValidationContext= */ null);
+                    /* staticCertValidationContext= */ null,
+                    true);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -305,7 +308,7 @@ public class CertProviderClientSslContextProviderTest {
             "gcp_id",
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
     QueuedExecutor queuedExecutor = new QueuedExecutor();
 
     TestCallback testCallback =
@@ -338,7 +341,7 @@ public class CertProviderClientSslContextProviderTest {
             "gcp_id",
             CommonBootstrapperTestUtils.getTestBootstrapInfo(),
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
@@ -375,7 +378,7 @@ public class CertProviderClientSslContextProviderTest {
                     "gcp_id",
                     CommonBootstrapperTestUtils.getTestBootstrapInfo(),
                     /* alpnProtocols= */null,
-                    staticCertValidationContext);
+                    staticCertValidationContext, false);
 
     TestCallback testCallback = new TestCallback(MoreExecutors.directExecutor());
     provider.addCallback(testCallback);
@@ -407,7 +410,7 @@ public class CertProviderClientSslContextProviderTest {
           /* rootInstanceName= */ null,
           CommonBootstrapperTestUtils.getTestBootstrapInfo(),
           /* alpnProtocols= */ null,
-          /* staticCertValidationContext= */ null);
+          /* staticCertValidationContext= */ null, false);
       fail("exception expected");
     } catch (UnsupportedOperationException expected) {
       assertThat(expected).hasMessageThat().contains("Unsupported configurations in "
@@ -430,7 +433,7 @@ public class CertProviderClientSslContextProviderTest {
         CertificateValidationContext.newBuilder()
             .setSystemRootCerts(
                 CertificateValidationContext.SystemRootCerts.newBuilder().build())
-            .build());
+            .build(), false);
   }
 
   static class QueuedExecutor implements Executor {

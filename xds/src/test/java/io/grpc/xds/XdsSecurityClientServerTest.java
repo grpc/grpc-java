@@ -563,7 +563,7 @@ public class XdsSecurityClientServerTest {
           CertificateValidationContext.newBuilder()
               .setSystemRootCerts(
                   CertificateValidationContext.SystemRootCerts.newBuilder().build())
-              .build());
+              .build(), false);
     }
     return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
         "google_cloud_private_spiffe-client", "ROOT", null,

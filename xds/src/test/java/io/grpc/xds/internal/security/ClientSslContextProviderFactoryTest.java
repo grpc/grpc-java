@@ -74,7 +74,7 @@ public class ClientSslContextProviderFactoryTest {
             "gcp_id",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -105,7 +105,7 @@ public class ClientSslContextProviderFactoryTest {
             "gcp_id",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
 
     CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
     builder = addFilenames(builder, "foo.pem", "foo.key", "root.pem");
@@ -135,7 +135,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    /* staticCertValidationContext= */ null);
+                    /* staticCertValidationContext= */ null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -169,7 +169,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    staticCertValidationContext);
+                    staticCertValidationContext, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -199,7 +199,7 @@ public class ClientSslContextProviderFactoryTest {
             "file_provider",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null);
+            /* staticCertValidationContext= */ null, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =

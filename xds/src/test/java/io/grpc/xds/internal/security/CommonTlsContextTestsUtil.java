@@ -165,7 +165,7 @@ public class CommonTlsContextTestsUtil {
         commonInstanceName,
         "ROOT",
         null,
-        null);
+        null, false);
   }
 
   /** Gets a cert from contents of a resource. */
@@ -182,7 +182,8 @@ public class CommonTlsContextTestsUtil {
       String rootInstanceName,
       String rootCertName,
       Iterable<String> alpnProtocols,
-      CertificateValidationContext staticCertValidationContext) {
+      CertificateValidationContext staticCertValidationContext,
+      boolean useSystemRootCerts) {
     CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
     if (certInstanceName != null) {
       builder =
@@ -193,7 +194,8 @@ public class CommonTlsContextTestsUtil {
     }
     builder =
         addCertificateValidationContext(
-            builder, rootInstanceName, rootCertName, staticCertValidationContext);
+            builder, rootInstanceName, rootCertName, staticCertValidationContext,
+                useSystemRootCerts);
     if (alpnProtocols != null) {
       builder.addAllAlpnProtocols(alpnProtocols);
     }
@@ -228,7 +230,8 @@ public class CommonTlsContextTestsUtil {
       CommonTlsContext.Builder builder,
       String rootInstanceName,
       String rootCertName,
-      CertificateValidationContext staticCertValidationContext) {
+      CertificateValidationContext staticCertValidationContext,
+      boolean useSystemRootCerts) {
     CertificateValidationContext.Builder contextBuilder;
     if (staticCertValidationContext == null) {
       contextBuilder = CertificateValidationContext.newBuilder();
@@ -240,7 +243,7 @@ public class CommonTlsContextTestsUtil {
           .setInstanceName(rootInstanceName)
           .setCertificateName(rootCertName));
       builder.setValidationContext(contextBuilder.build());
-    } else {
+    } else if (useSystemRootCerts) {
       builder.setValidationContext(contextBuilder.setSystemRootCerts(
           CertificateValidationContext.SystemRootCerts.getDefaultInstance())
               .build());
@@ -277,7 +280,8 @@ public class CommonTlsContextTestsUtil {
           @Nullable String rootInstanceName,
           @Nullable String rootCertName,
           Iterable<String> alpnProtocols,
-          CertificateValidationContext staticCertValidationContext) {
+          CertificateValidationContext staticCertValidationContext,
+          boolean useSystemRootCerts) {
     return buildUpstreamTlsContext(
         buildCommonTlsContextForCertProviderInstance(
             certInstanceName,
@@ -285,7 +289,8 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext));
+            staticCertValidationContext,
+            useSystemRootCerts));
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
@@ -324,7 +329,8 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext), requireClientCert);
+            staticCertValidationContext,
+false), requireClientCert);
   }
 
   /** Helper method to build DownstreamTlsContext for CertProvider tests. */
