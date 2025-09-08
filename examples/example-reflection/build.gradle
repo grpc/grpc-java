@@ -24,8 +24,6 @@ dependencies {
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-
 }
 
 protobuf {

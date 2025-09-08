@@ -21,7 +21,6 @@ dependencies {
             libraries.protobuf.java,
             libraries.guava.jre // JRE required by protobuf-java-util from grpclb
     def nettyDependency = implementation project(':grpc-netty')
-    compileOnly libraries.javax.annotation
 
     shadow configurations.implementation.getDependencies().minus(nettyDependency)
     shadow project(path: ':grpc-netty-shaded', configuration: 'shadow')
