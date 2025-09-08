@@ -229,9 +229,6 @@ public class CommonTlsContextTestsUtil {
       String rootInstanceName,
       String rootCertName,
       CertificateValidationContext staticCertValidationContext) {
-    if (staticCertValidationContext == null && rootInstanceName == null) {
-      return builder;
-    }
     CertificateValidationContext.Builder contextBuilder;
     if (staticCertValidationContext == null) {
       contextBuilder = CertificateValidationContext.newBuilder();
@@ -243,6 +240,10 @@ public class CommonTlsContextTestsUtil {
           .setInstanceName(rootInstanceName)
           .setCertificateName(rootCertName));
       builder.setValidationContext(contextBuilder.build());
+    } else {
+      builder.setValidationContext(contextBuilder.setSystemRootCerts(
+          CertificateValidationContext.SystemRootCerts.getDefaultInstance())
+              .build());
     }
     return builder.setCombinedValidationContext(CombinedCertificateValidationContext.newBuilder()
         .setDefaultValidationContext(contextBuilder));

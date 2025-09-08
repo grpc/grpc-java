@@ -138,6 +138,9 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   @Override
   public final void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+    if (isUsingSystemRootCerts) {
+      return;
+    }
     savedTrustedRoots = trustedRoots;
     updateSslContextWhenReady();
   }
