@@ -20,6 +20,7 @@ import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABL
 import static io.grpc.okhttp.OkHttpServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
@@ -52,6 +53,7 @@ import io.grpc.okhttp.internal.framed.Variant;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -91,6 +93,7 @@ final class OkHttpServerTransport implements ServerTransport,
   private static final ByteString TE_TRAILERS = ByteString.encodeUtf8("trailers");
   private static final ByteString CONTENT_TYPE = ByteString.encodeUtf8("content-type");
   private static final ByteString CONTENT_LENGTH = ByteString.encodeUtf8("content-length");
+  private static final ByteString ALLOW = ByteString.encodeUtf8("allow");
 
   private final Config config;
   private final Variant variant = new Http2();
@@ -772,8 +775,14 @@ final class OkHttpServerTransport implements ServerTransport,
       }
 
       if (!POST_METHOD.equals(httpMethod)) {
-        respondWithHttpError(streamId, inFinished, 405, Status.Code.INTERNAL,
-            "HTTP Method is not supported: " + asciiString(httpMethod));
+        List<Header> allowHeaders = Lists.newArrayList(new Header(ALLOW, POST_METHOD));
+        respondWithHttpError(
+            streamId,
+            inFinished,
+            405,
+            Status.Code.INTERNAL,
+            "HTTP Method is not supported: " + asciiString(httpMethod),
+            allowHeaders);
         return;
       }
 
@@ -1066,11 +1075,23 @@ final class OkHttpServerTransport implements ServerTransport,
 
     private void respondWithHttpError(
         int streamId, boolean inFinished, int httpCode, Status.Code statusCode, String msg) {
+      respondWithHttpError(
+          streamId, inFinished, httpCode, statusCode, msg, Collections.emptyList());
+    }
+
+    private void respondWithHttpError(
+        int streamId,
+        boolean inFinished,
+        int httpCode,
+        Status.Code statusCode,
+        String msg,
+        List<Header> allowHeaders) {
       Metadata metadata = new Metadata();
       metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
       metadata.put(InternalStatus.MESSAGE_KEY, msg);
       List<Header> headers =
           Headers.createHttpResponseHeaders(httpCode, "text/plain; charset=utf-8", metadata);
+      headers.addAll(allowHeaders);
       Buffer data = new Buffer().writeUtf8(msg);
 
       synchronized (lock) {
