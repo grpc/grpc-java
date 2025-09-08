@@ -320,8 +320,7 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext),
-        requireClientCert);
+            staticCertValidationContext), requireClientCert);
   }
 
   /** Helper method to build DownstreamTlsContext for CertProvider tests. */

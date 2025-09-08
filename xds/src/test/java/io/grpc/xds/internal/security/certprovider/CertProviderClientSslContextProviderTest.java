@@ -68,12 +68,12 @@ public class CertProviderClientSslContextProviderTest {
 
   /** Helper method to build CertProviderClientSslContextProvider. */
   private CertProviderClientSslContextProvider getSslContextProvider(
-          String certInstanceName,
-          String rootInstanceName,
-          Bootstrapper.BootstrapInfo bootstrapInfo,
-          Iterable<String> alpnProtocols,
-          CertificateValidationContext staticCertValidationContext,
-          boolean useSystemRootCerts) {
+      String certInstanceName,
+      String rootInstanceName,
+      Bootstrapper.BootstrapInfo bootstrapInfo,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext,
+      boolean useSystemRootCerts) {
     EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
     if (useSystemRootCerts) {
       upstreamTlsContext =
