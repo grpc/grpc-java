@@ -24,7 +24,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  */
 @ThreadSafe
-public interface ManagedClientDisconnectTransport extends ClientTransport {
+public interface ClientTransportWithDisconnectReason extends ClientTransport {
 
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are closed. Existing calls

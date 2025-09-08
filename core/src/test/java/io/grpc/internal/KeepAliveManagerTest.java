@@ -105,7 +105,8 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void clientKeepAlivePinger_pingTimeout() {
-    ManagedClientDisconnectTransport transport = mock(ManagedClientDisconnectTransport.class);
+    ClientTransportWithDisconnectReason transport =
+        mock(ClientTransportWithDisconnectReason.class);
     ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
 
     pinger.onPingTimeout();
@@ -121,7 +122,8 @@ public final class KeepAliveManagerTest {
 
   @Test
   public void clientKeepAlivePinger_pingFailure() {
-    ManagedClientDisconnectTransport transport = mock(ManagedClientDisconnectTransport.class);
+    ClientTransportWithDisconnectReason transport =
+        mock(ClientTransportWithDisconnectReason.class);
     ClientKeepAlivePinger pinger = new ClientKeepAlivePinger(transport);
     pinger.ping();
     ArgumentCaptor<ClientTransport.PingCallback> pingCallbackCaptor =

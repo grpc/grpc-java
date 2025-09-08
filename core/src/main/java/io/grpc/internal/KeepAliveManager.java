@@ -262,9 +262,9 @@ public class KeepAliveManager {
    * Default client side {@link KeepAlivePinger}.
    */
   public static final class ClientKeepAlivePinger implements KeepAlivePinger {
-    private final ManagedClientDisconnectTransport transport;
+    private final ClientTransportWithDisconnectReason transport;
 
-    public ClientKeepAlivePinger(ManagedClientDisconnectTransport transport) {
+    public ClientKeepAlivePinger(ClientTransportWithDisconnectReason transport) {
       this.transport = transport;
     }
 
