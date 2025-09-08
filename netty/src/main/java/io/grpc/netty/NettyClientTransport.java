@@ -36,6 +36,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientTransportWithDisconnectReason;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FailingClientStream;
@@ -43,7 +44,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
-import io.grpc.internal.ManagedClientDisconnectTransport;
 import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
@@ -71,7 +71,8 @@ import javax.annotation.Nullable;
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
-class NettyClientTransport implements ConnectionClientTransport, ManagedClientDisconnectTransport {
+class NettyClientTransport implements ConnectionClientTransport,
+    ClientTransportWithDisconnectReason {
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;

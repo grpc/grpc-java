@@ -47,6 +47,7 @@ import io.grpc.StatusException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
+import io.grpc.internal.ClientTransportWithDisconnectReason;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GoAwayDisconnectError;
@@ -56,7 +57,6 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
-import io.grpc.internal.ManagedClientDisconnectTransport;
 import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SimpleDisconnectError;
@@ -133,7 +133,7 @@ import okio.Timeout;
  * A okhttp-based {@link ConnectionClientTransport} implementation.
  */
 class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler,
-      OutboundFlowController.Transport, ManagedClientDisconnectTransport {
+      OutboundFlowController.Transport, ClientTransportWithDisconnectReason {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   private static final String GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK =
