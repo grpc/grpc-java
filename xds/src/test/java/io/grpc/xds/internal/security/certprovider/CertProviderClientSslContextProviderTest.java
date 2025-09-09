@@ -193,15 +193,16 @@ public class CertProviderClientSslContextProviderTest {
     TestCertificateProvider.createAndRegisterProviderProvider(
             certificateProviderRegistry, watcherCaptor, "testca", 0);
     CertProviderClientSslContextProvider provider =
-            getSslContextProvider(
-                    "gcp_id",
-                    null,
-                    CommonBootstrapperTestUtils.getTestBootstrapInfo(),
-                    /* alpnProtocols= */ null,
-                    CertificateValidationContext.newBuilder()
-                            .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
-                            .build(),
-                    true);
+        getSslContextProvider(
+                "gcp_id",
+                null,
+            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
+            /* alpnProtocols= */ null,
+            CertificateValidationContext.newBuilder()
+                .setSystemRootCerts(
+                        CertificateValidationContext.SystemRootCerts.getDefaultInstance())
+                .build(),
+            true);
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
