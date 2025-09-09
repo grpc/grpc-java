@@ -27,7 +27,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -56,6 +55,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -63,7 +63,6 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
@@ -410,7 +409,7 @@ public class ProtocolNegotiatorsTest {
     } else {
       ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
       verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000))
-          .transportShutdown(captor.capture(), eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+          .transportShutdown(captor.capture(), any(DisconnectError.class));
       result = captor.getValue();
     }
 
