@@ -111,65 +111,65 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   private static boolean verifyDnsNamePrefix(
       String altNameFromCert, String sanToVerifyPrefix, boolean ignoreCase) {
-    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifyPrefix)) {
+    if (Strings.isNullOrEmpty(sanToVerifyPrefix)) {
       return false;
     }
     if ((ignoreCase
         ? sanToVerifyPrefix.toLowerCase(Locale.ROOT)
-        : sanToVerifyPrefix).indexOf('*') == -1) {
-      return ignoreCase
-          ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
-          sanToVerifyPrefix.toLowerCase(Locale.ROOT))
-          : altNameFromCert.startsWith(sanToVerifyPrefix);
+        : sanToVerifyPrefix).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyPrefix , ignoreCase);
     }
-    return verifyDnsNameWildcard(altNameFromCert, sanToVerifyPrefix , ignoreCase);
+    return ignoreCase
+            ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
+            sanToVerifyPrefix.toLowerCase(Locale.ROOT))
+            : altNameFromCert.startsWith(sanToVerifyPrefix);
   }
 
   private static boolean verifyDnsNameSuffix(
           String altNameFromCert, String sanToVerifySuffix, boolean ignoreCase) {
-    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifySuffix)) {
+    if (Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
     }
     if ((ignoreCase
         ? sanToVerifySuffix.toLowerCase(Locale.ROOT)
-        : sanToVerifySuffix).indexOf('*') == -1) {
-      return ignoreCase
-          ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
-          sanToVerifySuffix.toLowerCase(Locale.ROOT))
-          : altNameFromCert.endsWith(sanToVerifySuffix);
+        : sanToVerifySuffix).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySuffix , ignoreCase);
     }
-    return verifyDnsNameWildcard(altNameFromCert, sanToVerifySuffix , ignoreCase);
+    return ignoreCase
+            ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
+            sanToVerifySuffix.toLowerCase(Locale.ROOT))
+            : altNameFromCert.endsWith(sanToVerifySuffix);
   }
 
   private static boolean verifyDnsNameContains(
           String altNameFromCert, String sanToVerifySubstring, boolean ignoreCase) {
-    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifySubstring)) {
+    if (Strings.isNullOrEmpty(sanToVerifySubstring)) {
       return false;
     }
     if ((ignoreCase
         ? sanToVerifySubstring.toLowerCase(Locale.ROOT)
-        : sanToVerifySubstring).indexOf('*') == -1) {
-      return ignoreCase
-          ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
-          sanToVerifySubstring.toLowerCase(Locale.ROOT))
-          : altNameFromCert.contains(sanToVerifySubstring);
+        : sanToVerifySubstring).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySubstring , ignoreCase);
     }
-    return verifyDnsNameWildcard(altNameFromCert, sanToVerifySubstring , ignoreCase);
+    return ignoreCase
+            ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
+            sanToVerifySubstring.toLowerCase(Locale.ROOT))
+            : altNameFromCert.contains(sanToVerifySubstring);
   }
 
   private static boolean verifyDnsNameExact(
       String altNameFromCert, String sanToVerifyExact, boolean ignoreCase) {
-    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifyExact)) {
+    if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
     if ((ignoreCase
         ? sanToVerifyExact.toLowerCase(Locale.ROOT)
-        : sanToVerifyExact).indexOf('*') == -1) {
-      return ignoreCase
-          ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
-          : sanToVerifyExact.equals(altNameFromCert);
+        : sanToVerifyExact).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact , ignoreCase);
     }
-    return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact , ignoreCase);
+    return ignoreCase
+            ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
+            : sanToVerifyExact.equals(altNameFromCert);
   }
 
   private static boolean verifyDnsNameInSanList(
