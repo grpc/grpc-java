@@ -207,6 +207,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   // Override in child class.
   public final ListenableFuture<SocketStats> getStats() {
+    Attributes attributes = getAttributes();
     return Futures.immediateFuture(
         new InternalChannelz.SocketStats(
             /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
