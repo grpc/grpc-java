@@ -39,6 +39,7 @@ import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
+import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.binder.AndroidComponentAddress;
@@ -52,6 +53,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
+import io.grpc.internal.MockServerTransportListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import java.util.List;
@@ -301,13 +303,31 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     }
 
     assertThat(((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID))
-            .isEqualTo(myUid());
+        .isEqualTo(myUid());
   }
 
   @Test
   @Ignore("See BinderTransportTest#socketStats.")
   @Override
-  public void socketStats() {}
+  // We don't quite pass the official/abstract version of this test yet because
+  // today's binder client and server transports have different ideas of each others' address.
+  // TODO(#12347): Remove this @Override once this difference is resolved.
+  public void socketStats() throws Exception {
+    server.start(serverListener);
+    ManagedClientTransport client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+
+    SocketStats clientSocketStats = client.getStats().get();
+    assertThat(clientSocketStats.local).isInstanceOf(AndroidComponentAddress.class);
+    assertThat(((AndroidComponentAddress) clientSocketStats.remote).getPackage())
+        .isEqualTo(((AndroidComponentAddress) server.getListenSocketAddress()).getPackage());
+
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
+    SocketStats serverSocketStats = serverTransportListener.transport.getStats().get();
+    assertThat(serverSocketStats.local).isEqualTo(server.getListenSocketAddress());
+    assertThat(serverSocketStats.remote).isEqualTo(new BoundClientAddress(myUid()));
+  }
 
   @Test
   @Ignore("See BinderTransportTest#flowControlPushBack")

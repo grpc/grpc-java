@@ -18,7 +18,6 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static com.google.common.util.concurrent.Futures.immediateFuture;
 
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -28,10 +27,13 @@ import android.os.TransactionTooLargeException;
 import androidx.annotation.BinderThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Verify;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Internal;
+import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
@@ -205,7 +207,14 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   // Override in child class.
   public final ListenableFuture<SocketStats> getStats() {
-    return immediateFuture(null);
+    return Futures.immediateFuture(
+        new InternalChannelz.SocketStats(
+            /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
+            /* local= */ attributes.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR),
+            /* remote= */ attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR),
+            // TODO: Binder doesn't use sockets yet we are still forced to provide a SocketOptions.
+            new InternalChannelz.SocketOptions.Builder().build(),
+            /* security= */ null));
   }
 
   // Override in child class.
