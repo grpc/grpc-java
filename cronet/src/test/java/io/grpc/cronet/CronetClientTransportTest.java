@@ -34,7 +34,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ClientStreamListener;
-import io.grpc.internal.DisconnectError
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.TransportTracer;
