@@ -324,7 +324,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     return delegate.getAcceptedIssuers();
   }
 
-  private static boolean verifyDnsNameWildcard(
+  public static boolean verifyDnsNameWildcard(
           String altNameFromCert, String sanToVerify, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerify)) {
       return false;
