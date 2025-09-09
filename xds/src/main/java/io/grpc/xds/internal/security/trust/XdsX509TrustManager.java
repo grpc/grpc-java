@@ -114,7 +114,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifyPrefix)) {
       return false;
     }
-    if ((ignoreCase ? sanToVerifyPrefix.toLowerCase() : sanToVerifyPrefix).indexOf('*') == -1) {
+    if ((ignoreCase
+        ? sanToVerifyPrefix.toLowerCase(Locale.ROOT)
+        : sanToVerifyPrefix).indexOf('*') == -1) {
       return ignoreCase
           ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
           sanToVerifyPrefix.toLowerCase(Locale.ROOT))
@@ -128,7 +130,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
     }
-    if ((ignoreCase ? sanToVerifySuffix.toLowerCase() : sanToVerifySuffix).indexOf('*') == -1) {
+    if ((ignoreCase
+        ? sanToVerifySuffix.toLowerCase(Locale.ROOT)
+        : sanToVerifySuffix).indexOf('*') == -1) {
       return ignoreCase
           ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
           sanToVerifySuffix.toLowerCase(Locale.ROOT))
@@ -143,7 +147,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return false;
     }
     if ((ignoreCase
-        ? sanToVerifySubstring.toLowerCase()
+        ? sanToVerifySubstring.toLowerCase(Locale.ROOT)
         : sanToVerifySubstring).indexOf('*') == -1) {
       return ignoreCase
           ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
@@ -158,7 +162,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
-    if ((ignoreCase ? sanToVerifyExact.toLowerCase() : sanToVerifyExact).indexOf('*') == -1) {
+    if ((ignoreCase
+        ? sanToVerifyExact.toLowerCase(Locale.ROOT)
+        : sanToVerifyExact).indexOf('*') == -1) {
       return ignoreCase
           ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
           : sanToVerifyExact.equals(altNameFromCert);
@@ -323,9 +329,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerify)) {
       return false;
     }
-    String[] certLabels = (ignoreCase ? altNameFromCert.toLowerCase() : altNameFromCert)
+    String[] certLabels = (ignoreCase ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert)
             .split("\\.", -1);
-    String[] sanLabels = (ignoreCase ? sanToVerify.toLowerCase() : sanToVerify)
+    String[] sanLabels = (ignoreCase ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify)
             .split("\\.", -1);
     if (certLabels.length != sanLabels.length) {
       return false;
@@ -346,8 +352,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     int starIndex = sanLabel.indexOf('*');
     String prefix = sanLabel.substring(0, starIndex);
     String suffix = sanLabel.substring(starIndex + 1);
-
-    if (certLabel.length() < (prefix).length() + suffix.length()) {
+    if (certLabel.length() < prefix.length() + suffix.length()) {
       return false;
     }
     return certLabel.startsWith(prefix) && certLabel.endsWith(suffix);
