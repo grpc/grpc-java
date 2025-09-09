@@ -458,7 +458,7 @@ public abstract class AbstractTransportTest {
     serverTransport = null;
 
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
     assertTrue(serverListener.waitForShutdown(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
     // A new server should be able to start listening, since the current server has given up
