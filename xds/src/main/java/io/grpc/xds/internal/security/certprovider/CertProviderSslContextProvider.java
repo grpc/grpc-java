@@ -183,8 +183,9 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   protected final boolean isNormalTlsAndClientSide() {
-    // We don't do (rootCertInstance != null || isUsingSystemRootCerts) here because of where this method is called
-    // from. With the rootCertInstance being null when using system root certs, there is nothing to update.
+    // We don't do (rootCertInstance != null || isUsingSystemRootCerts) here because of how this
+    // method is used. With the rootCertInstance being null when using system root certs, there
+    // is nothing to update in the SslContext
     return rootCertInstance != null && certInstance == null;
   }
 
