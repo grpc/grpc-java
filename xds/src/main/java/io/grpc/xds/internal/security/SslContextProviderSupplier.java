@@ -68,7 +68,7 @@ public final class SslContextProviderSupplier implements Closeable {
       }
 
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider();
+      final SslContextProvider toRelease = getSslContextProvider(sni);
       // When using system root certs on client side, SslContext updates via CertificateProvider is
       // only required if Mtls is also enabled, i.e. tlsContext has a cert provider instance.
       if (tlsContext instanceof UpstreamTlsContext
@@ -77,7 +77,7 @@ public final class SslContextProviderSupplier implements Closeable {
         callback.getExecutor().execute(() -> {
           try {
             callback.updateSslContext(GrpcSslContexts.forClient().build());
-            releaseSslContextProvider(toRelease);
+            releaseSslContextProvider(toRelease, sni);
           } catch (SSLException e) {
             callback.onException(e);
           }
@@ -89,13 +89,13 @@ public final class SslContextProviderSupplier implements Closeable {
               @Override
               public void updateSslContext(SslContext sslContext) {
                 callback.updateSslContext(sslContext);
-                releaseSslContextProvider(toRelease);
+                releaseSslContextProvider(toRelease, sni);
               }
 
               @Override
               public void onException(Throwable throwable) {
                 callback.onException(throwable);
-                releaseSslContextProvider(toRelease);
+                releaseSslContextProvider(toRelease, sni);
               }
             });
       }
