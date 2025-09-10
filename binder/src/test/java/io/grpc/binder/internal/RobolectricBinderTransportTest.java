@@ -307,7 +307,6 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   }
 
   @Test
-  @Ignore("See BinderTransportTest#socketStats.")
   @Override
   // We don't quite pass the official/abstract version of this test yet because
   // today's binder client and server transports have different ideas of each others' address.
