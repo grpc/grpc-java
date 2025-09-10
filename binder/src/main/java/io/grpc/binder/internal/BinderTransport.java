@@ -18,6 +18,7 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.util.concurrent.Futures.immediateFuture;
 
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -27,7 +28,6 @@ import android.os.TransactionTooLargeException;
 import androidx.annotation.BinderThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Verify;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
@@ -208,7 +208,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   // Override in child class.
   public final ListenableFuture<SocketStats> getStats() {
     Attributes attributes = getAttributes();
-    return Futures.immediateFuture(
+    return immediateFuture(
         new InternalChannelz.SocketStats(
             /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
             /* local= */ attributes.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR),
