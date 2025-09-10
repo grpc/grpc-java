@@ -213,7 +213,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
             /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
             /* local= */ attributes.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR),
             /* remote= */ attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR),
-            // TODO: Binder doesn't use sockets yet we are still forced to provide a SocketOptions.
+            // TODO: SocketOptions are meaningless for binder but we're still forced to provide one.
             new InternalChannelz.SocketOptions.Builder().build(),
             /* security= */ null));
   }
