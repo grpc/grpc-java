@@ -187,11 +187,9 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  /**
-   * Note this route will not really be invoked since {@link SslContextProviderSupplier} will
-   * shortcircuit creating the certificate provider and directly invoke the callback with the
-   * SslContext in this case.
-   */
+  // Note: This code flow will not really be invoked since {@link SslContextProviderSupplier} will
+  // shortcircuit creating the certificate provider and directly invoke the callback with the
+  // SslContext in this case.
   public void testProviderForClient_systemRootCerts_regularTls() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
