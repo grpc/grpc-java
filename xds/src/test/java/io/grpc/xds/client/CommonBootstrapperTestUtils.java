@@ -18,8 +18,6 @@ package io.grpc.xds.client;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ChannelCredentials;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
@@ -35,7 +33,6 @@ import javax.annotation.Nullable;
 
 public class CommonBootstrapperTestUtils {
   public static final String SERVER_URI = "trafficdirector.googleapis.com";
-  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private static final String SERVER_URI_CUSTOM_AUTHORITY = "trafficdirector2.googleapis.com";
   private static final String SERVER_URI_EMPTY_AUTHORITY = "trafficdirector3.googleapis.com";
   public static final String LDS_RESOURCE = "listener.googleapis.com";
@@ -203,7 +200,8 @@ public class CommonBootstrapperTestUtils {
 
     List<ServerInfo> serverInfos = new ArrayList<>();
     for (String uri : serverUris) {
-      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true, false));
+      serverInfos.add(
+          ServerInfo.create(uri, ImmutableMap.of("type", "insecure"), false, true,false));
     }
     EnvoyProtoData.Node node = EnvoyProtoData.Node.newBuilder().setId("node-id").build();
 
@@ -214,13 +212,17 @@ public class CommonBootstrapperTestUtils {
             "authority.xds.com",
             Bootstrapper.AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
+                ImmutableList.of(
+                    Bootstrapper.ServerInfo.create(
+                        SERVER_URI_CUSTOM_AUTHORITY,
+                        ImmutableMap.of("type", "insecure")))),
             "",
             Bootstrapper.AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+                ImmutableList.of(
+                    Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY,
+                        ImmutableMap.of("type", "insecure"))))))
         .certProviders(ImmutableMap.of("cert-instance-name",
             Bootstrapper.CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
         .build();

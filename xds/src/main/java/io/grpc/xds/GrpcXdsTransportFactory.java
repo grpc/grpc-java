@@ -19,6 +19,8 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
@@ -28,9 +30,15 @@ import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsTransportFactory;
+import java.io.Closeable;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
@@ -42,7 +50,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   }
 
   @Override
-  public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
+  public XdsTransport create(Bootstrapper.ServerInfo serverInfo) throws XdsInitializationException {
     return new GrpcXdsTransport(serverInfo, callCredentials);
   }
 
@@ -56,8 +64,9 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     private final ManagedChannel channel;
     private final CallCredentials callCredentials;
+    private final ImmutableList<Closeable> resources;
 
-    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) throws XdsInitializationException {
       this(serverInfo, null);
     }
 
@@ -66,9 +75,27 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       this(channel, null);
     }
 
-    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials)
+        throws XdsInitializationException {
       String target = serverInfo.target();
-      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      Map<String, ?> implSpecificConfig = serverInfo.implSpecificConfig();
+      String type = JsonUtil.getString(implSpecificConfig, "type");
+      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      Map<String, ?> config = JsonUtil.getObject(implSpecificConfig, "config");
+      if (config == null) {
+        config = ImmutableMap.of();
+      }
+      ChannelCredentials channelCredentials = provider.newChannelCredentials(config);
+      if (channelCredentials == null) {
+        throw new XdsInitializationException(
+            "Cannot create channel credentials of type " + type + " for target " + target);
+      }
+      // if {@code ChannelCredentials} instance has allocated resource of any type, save them to be
+      // released once the channel is shutdown
+      this.resources = (channelCredentials instanceof ResourceAllocatingChannelCredentials)
+          ? ((ResourceAllocatingChannelCredentials) channelCredentials).getAllocatedResources()
+          : ImmutableList.<Closeable>of();
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
@@ -79,6 +106,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     public GrpcXdsTransport(ManagedChannel channel, CallCredentials callCredentials) {
       this.channel = checkNotNull(channel, "channel");
       this.callCredentials = callCredentials;
+      this.resources = ImmutableList.<Closeable>of();
     }
 
     @Override
@@ -99,6 +127,9 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     @Override
     public void shutdown() {
       channel.shutdown();
+      for (Closeable resource : resources) {
+        GrpcUtil.closeQuietly(resource);
+      }
     }
 
     private class XdsStreamingCall<ReqT, RespT> implements
