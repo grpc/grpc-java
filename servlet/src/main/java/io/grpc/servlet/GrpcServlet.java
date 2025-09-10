@@ -28,6 +28,10 @@ import javax.servlet.http.HttpServletResponse;
  * A simple servlet backed by a gRPC server. Must set {@code asyncSupported} to true. The {@code
  * /contextRoot/urlPattern} must match the gRPC services' path, which is
  * "/full-service-name/short-method-name".
+ * If you use application server and want to get access to grpc from non root path
+ * for example {@code /deployment-name/full-service-name/short-method-name}
+ * you must override {@link #getMethod(HttpServletRequest)}.
+ * <a href=https://github.com/grpc/grpc-java/pull/11825>More info</a>.
  *
  * <p>The API is experimental. The authors would like to know more about the real usecases. Users
  * are welcome to provide feedback by commenting on
@@ -59,6 +63,10 @@ public class GrpcServlet extends HttpServlet {
     return serverBuilder.buildServletAdapter();
   }
 
+  protected String getMethod(HttpServletRequest req) {
+    return req.getRequestURI().substring(1); // remove the leading "/"
+  }
+
   @Override
   protected final void doGet(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
@@ -68,7 +76,7 @@ public class GrpcServlet extends HttpServlet {
   @Override
   protected final void doPost(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
-    servletAdapter.doPost(request, response);
+    servletAdapter.doPost(getMethod(request), request, response);
   }
 
   @Override
