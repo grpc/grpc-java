@@ -116,7 +116,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     this.channelz = Preconditions.checkNotNull(channelz);
     this.delayedTransport.start(new ManagedClientTransport.Listener() {
         @Override
-        public void transportShutdown(Status s) {
+        public void transportShutdown(Status s, DisconnectError e) {
           // Don't care
         }
 
