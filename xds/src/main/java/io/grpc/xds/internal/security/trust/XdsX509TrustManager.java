@@ -120,9 +120,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return verifyDnsNameWildcard(altNameFromCert, sanToVerifyPrefix , ignoreCase);
     }
     return ignoreCase
-            ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
+        ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
             sanToVerifyPrefix.toLowerCase(Locale.ROOT))
-            : altNameFromCert.startsWith(sanToVerifyPrefix);
+        : altNameFromCert.startsWith(sanToVerifyPrefix);
   }
 
   private static boolean verifyDnsNameSuffix(
@@ -168,8 +168,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact , ignoreCase);
     }
     return ignoreCase
-            ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
-            : sanToVerifyExact.equals(altNameFromCert);
+        ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
+        : sanToVerifyExact.equals(altNameFromCert);
   }
 
   private static boolean verifyDnsNameInSanList(
