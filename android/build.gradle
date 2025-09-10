@@ -7,20 +7,20 @@ plugins {
 description = 'gRPC: Android'
 
 android {
-    namespace 'io.grpc.android'
+    namespace = 'io.grpc.android'
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
     compileSdkVersion 34
     defaultConfig {
-        minSdkVersion 21
+        minSdkVersion 22
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
-    lintOptions { abortOnError true }
+    lintOptions { abortOnError = true }
     publishing {
         singleVariant('release') {
             withSourcesJar()

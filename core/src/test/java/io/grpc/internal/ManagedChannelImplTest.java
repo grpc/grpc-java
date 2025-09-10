@@ -1768,6 +1768,19 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void subchannelsRequestConnectionNoopAfterShutdown() {
+    createChannel();
+    Subchannel sub1 =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+
+    shutdownSafely(helper, sub1);
+    requestConnectionSafely(helper, sub1);
+    verify(mockTransportFactory, never())
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+  }
+
+  @Test
   public void subchannelsNoConnectionShutdownNow() {
     createChannel();
     createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -3844,8 +3857,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
-    assertThat(resolvedAddresses.getAttributes()
-        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =
@@ -3951,8 +3962,6 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).acceptResolvedAddresses(resolvedAddressCaptor.capture());
     ResolvedAddresses resolvedAddresses = resolvedAddressCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).isEqualTo(nameResolverFactory.servers);
-    assertThat(resolvedAddresses.getAttributes()
-        .get(RetryingNameResolver.RESOLUTION_RESULT_LISTENER_KEY)).isNotNull();
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel =

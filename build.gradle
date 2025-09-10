@@ -21,11 +21,11 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.74.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.76.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/maven2/"
+            url = "https://maven-central.storage-download.googleapis.com/maven2/"
             metadataSources {
                 mavenPom()
                 ignoreGradleMetadataRedirection()
@@ -238,12 +238,12 @@ subprojects {
 
         // At a test failure, log the stack trace to the console so that we don't
         // have to open the HTML in a browser.
-        tasks.named("test").configure {
+        tasks.withType(Test).configureEach {
             testLogging {
                 exceptionFormat = 'full'
-                showExceptions true
-                showCauses true
-                showStackTraces true
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
             }
             maxHeapSize = '1500m'
         }
@@ -389,11 +389,11 @@ subprojects {
                         url = new File(rootProject.repositoryDir).toURI()
                     } else {
                         String stagingUrl
+                        String baseUrl = "https://ossrh-staging-api.central.sonatype.com/service/local"
                         if (rootProject.hasProperty('repositoryId')) {
-                            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                                    rootProject.repositoryId
+                            stagingUrl = "${baseUrl}/staging/deployByRepositoryId/" + rootProject.repositoryId
                         } else {
-                            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
+                            stagingUrl = "${baseUrl}/staging/deploy/maven2/"
                         }
                         credentials {
                             if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
@@ -402,7 +402,7 @@ subprojects {
                             }
                         }
                         def releaseUrl = stagingUrl
-                        def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
+                        def snapshotUrl = 'https://central.sonatype.com/repository/maven-snapshots/'
                         url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
                     }
                 }
@@ -410,7 +410,7 @@ subprojects {
         }
 
         signing {
-            required false
+            required = false
             sign publishing.publications.maven
         }
 

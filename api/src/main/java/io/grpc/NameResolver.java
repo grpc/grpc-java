@@ -239,6 +239,9 @@ public abstract class NameResolver {
      * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be
      * called.
      *
+     * <p>Newer NameResolver implementations should prefer calling onResult2. This method exists to
+     * facilitate older {@link Listener} implementations to migrate to {@link Listener2}.
+     *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
      */
@@ -248,6 +251,10 @@ public abstract class NameResolver {
      * Handles a name resolving error from the resolver. The listener is responsible for eventually
      * invoking {@link NameResolver#refresh()} to re-attempt resolution.
      *
+     * <p>New NameResolver implementations should prefer calling onResult2 which will have the
+     * address resolution error in {@link ResolutionResult}'s addressesOrError. This method exists
+     * to facilitate older implementations using {@link Listener} to migrate to {@link Listener2}.
+     *
      * @param error a non-OK status
      * @since 1.21.0
      */
@@ -255,9 +262,14 @@ public abstract class NameResolver {
     public abstract void onError(Status error);
 
     /**
-     * Handles updates on resolved addresses and attributes.
+     * Handles updates on resolved addresses and attributes. Must be called from the same
+     * {@link SynchronizationContext} available in {@link NameResolver.Args} that is passed
+     * from the channel.
      *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @param resolutionResult the resolved server addresses or error in address resolution,
+     *     attributes, and Service Config or error
+     * @return status indicating whether the resolutionResult was accepted by the listener,
+     *     typically the result from a load balancer.
      * @since 1.66
      */
     public Status onResult2(ResolutionResult resolutionResult) {
@@ -303,6 +315,7 @@ public abstract class NameResolver {
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
     @Nullable private final MetricRecorder metricRecorder;
+    @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
     private Args(Builder builder) {
@@ -316,6 +329,7 @@ public abstract class NameResolver {
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
       this.metricRecorder = builder.metricRecorder;
+      this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
@@ -447,6 +461,18 @@ public abstract class NameResolver {
       return metricRecorder;
     }
 
+    /**
+     * Returns the {@link NameResolverRegistry} that the Channel uses to look for {@link
+     * NameResolver}s.
+     *
+     * @since 1.74.0
+     */
+    public NameResolverRegistry getNameResolverRegistry() {
+      if (nameResolverRegistry == null) {
+        throw new IllegalStateException("NameResolverRegistry is not set in Builder");
+      }
+      return nameResolverRegistry;
+    }
 
     @Override
     public String toString() {
@@ -461,6 +487,7 @@ public abstract class NameResolver {
           .add("executor", executor)
           .add("overrideAuthority", overrideAuthority)
           .add("metricRecorder", metricRecorder)
+          .add("nameResolverRegistry", nameResolverRegistry)
           .toString();
     }
 
@@ -480,6 +507,7 @@ public abstract class NameResolver {
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
+      builder.setNameResolverRegistry(nameResolverRegistry);
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
@@ -508,6 +536,7 @@ public abstract class NameResolver {
       private Executor executor;
       private String overrideAuthority;
       private MetricRecorder metricRecorder;
+      private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
 
       Builder() {
@@ -611,6 +640,16 @@ public abstract class NameResolver {
        */
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
         this.metricRecorder = metricRecorder;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getNameResolverRegistry}.  This is an optional field.
+       *
+       * @since 1.74.0
+       */
+      public Builder setNameResolverRegistry(NameResolverRegistry registry) {
+        this.nameResolverRegistry = registry;
         return this;
       }
 

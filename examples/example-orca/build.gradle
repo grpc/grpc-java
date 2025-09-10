@@ -16,16 +16,14 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.5'
+def grpcVersion = '1.76.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.25.8'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-xds:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
-
 }
 
 protobuf {

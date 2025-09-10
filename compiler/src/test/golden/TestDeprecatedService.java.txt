@@ -8,7 +8,7 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * </pre>
  */
 @javax.annotation.Generated(
-    value = "by gRPC proto compiler (version 1.74.0-SNAPSHOT)",
+    value = "by gRPC proto compiler (version 1.76.0-SNAPSHOT)",
     comments = "Source: grpc/testing/compiler/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 @java.lang.Deprecated
@@ -203,8 +203,8 @@ public final class TestDeprecatedServiceGrpc {
      * </pre>
      */
     @java.lang.Deprecated
-    public io.grpc.testing.compiler.Test.SimpleResponse deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.compiler.Test.SimpleResponse deprecatedMethod(io.grpc.testing.compiler.Test.SimpleRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getDeprecatedMethodMethod(), getCallOptions(), request);
     }
   }

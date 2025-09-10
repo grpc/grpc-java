@@ -21,8 +21,8 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.74.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.25.5'
+def grpcVersion = '1.76.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.25.8'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -30,8 +30,6 @@ dependencies {
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.jsonwebtoken:jjwt:0.9.1"
     implementation "javax.xml.bind:jaxb-api:2.3.1"
-
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 

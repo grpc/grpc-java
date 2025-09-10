@@ -18,6 +18,7 @@ package io.grpc.xds.internal.security;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
@@ -26,6 +27,7 @@ import io.netty.handler.ssl.SslContext;
 
 import java.util.HashSet;
 import java.util.Objects;
+import javax.net.ssl.SSLException;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -66,22 +68,37 @@ public final class SslContextProviderSupplier implements Closeable {
       }
 
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider(sni);
-      toRelease.addCallback(
-          new SslContextProvider.Callback(callback.getExecutor()) {
+      final SslContextProvider toRelease = getSslContextProvider();
+      // When using system root certs on client side, SslContext updates via CertificateProvider is
+      // only required if Mtls is also enabled, i.e. tlsContext has a cert provider instance.
+      if (tlsContext instanceof UpstreamTlsContext
+          && !CommonTlsContextUtil.hasCertProviderInstance(tlsContext.getCommonTlsContext())
+          && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())) {
+        callback.getExecutor().execute(() -> {
+          try {
+            callback.updateSslContext(GrpcSslContexts.forClient().build());
+            releaseSslContextProvider(toRelease);
+          } catch (SSLException e) {
+            callback.onException(e);
+          }
+        });
+      } else {
+        toRelease.addCallback(
+            new SslContextProvider.Callback(callback.getExecutor()) {
 
-            @Override
-            public void updateSslContext(SslContext sslContext) {
-              callback.updateSslContext(sslContext);
-              releaseSslContextProvider(toRelease, sni);
-            }
+              @Override
+              public void updateSslContext(SslContext sslContext) {
+                callback.updateSslContext(sslContext);
+                releaseSslContextProvider(toRelease);
+              }
 
-            @Override
-            public void onException(Throwable throwable) {
-              callback.onException(throwable);
-              releaseSslContextProvider(toRelease, sni);
-            }
-          });
+              @Override
+              public void onException(Throwable throwable) {
+                callback.onException(throwable);
+                releaseSslContextProvider(toRelease);
+              }
+            });
+      }
     } catch (final Throwable throwable) {
       callback.getExecutor().execute(new Runnable() {
         @Override

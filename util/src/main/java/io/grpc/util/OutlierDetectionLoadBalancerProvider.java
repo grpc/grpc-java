@@ -16,6 +16,7 @@
 
 package io.grpc.util;
 
+import com.google.common.base.Ticker;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -23,7 +24,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
-import io.grpc.internal.TimeProvider;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.FailurePercentageEjection;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig.SuccessRateEjection;
@@ -34,7 +34,7 @@ public final class OutlierDetectionLoadBalancerProvider extends LoadBalancerProv
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new OutlierDetectionLoadBalancer(helper, TimeProvider.SYSTEM_TIME_PROVIDER);
+    return new OutlierDetectionLoadBalancer(helper, Ticker.systemTicker());
   }
 
   @Override

@@ -24,7 +24,9 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
+import com.google.common.primitives.UnsignedInts;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -40,6 +42,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -52,6 +55,7 @@ import javax.annotation.Nullable;
 public abstract class MultiChildLoadBalancer extends LoadBalancer {
 
   private static final Logger logger = Logger.getLogger(MultiChildLoadBalancer.class.getName());
+  private static final int OFFSET_SEED = new Random().nextInt();
   // Modify by replacing the list to release memory when no longer used.
   private List<ChildLbState> childLbStates = new ArrayList<>(0);
   private final Helper helper;
@@ -168,9 +172,15 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
         childLbState = createChildLbState(entry.getKey());
       }
       newChildLbStates.add(childLbState);
-      if (entry.getValue() != null) {
+    }
+    // Use a random start position for child updates to weakly "shuffle" connection creation order.
+    // The network will often add noise to the creation order, but this avoids giving earlier
+    // children a consistent head start.
+    for (ChildLbState childLbState : offsetIterable(newChildLbStates, OFFSET_SEED)) {
+      ResolvedAddresses addresses = newChildAddresses.get(childLbState.getKey());
+      if (addresses != null) {
         // update child LB
-        Status newStatus = childLbState.lb.acceptResolvedAddresses(entry.getValue());
+        Status newStatus = childLbState.lb.acceptResolvedAddresses(addresses);
         if (!newStatus.isOk()) {
           status = newStatus;
         }
@@ -186,6 +196,19 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
       childLbState.shutdown();
     }
     return status;
+  }
+
+  @VisibleForTesting
+  static <T> Iterable<T> offsetIterable(Collection<T> c, int seed) {
+    int pos;
+    if (c.isEmpty()) {
+      pos = 0;
+    } else {
+      pos = UnsignedInts.remainder(seed, c.size());
+    }
+    return Iterables.concat(
+        Iterables.skip(c, pos),
+        Iterables.limit(c, pos));
   }
 
   @Nullable
@@ -245,6 +268,8 @@ public abstract class MultiChildLoadBalancer extends LoadBalancer {
     private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
 
+    @SuppressWarnings("this-escape")
+    // TODO(okshiva): Fix 'this-escape' from the constructor before making the API public.
     public ChildLbState(Object key, LoadBalancer.Factory policyFactory) {
       this.key = key;
       this.lb = policyFactory.newLoadBalancer(createChildHelper());

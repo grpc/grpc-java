@@ -1,6 +1,6 @@
 buildscript {
     dependencies {
-        classpath 'com.google.guava:guava:30.0-android'
+        classpath 'com.google.guava:guava:33.4.8-android'
     }
 }
 

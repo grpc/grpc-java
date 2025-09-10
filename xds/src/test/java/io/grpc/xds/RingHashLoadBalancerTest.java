@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Iterables;
 import com.google.common.primitives.UnsignedInteger;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
@@ -260,7 +261,7 @@ public class RingHashLoadBalancerTest {
   private void verifyConnection(int times) {
     for (int i = 0; i < times; i++) {
       Subchannel connectOnce = connectionRequestedQueue.poll();
-      assertWithMessage("Null connection is at (%s) of (%s)", i, times)
+      assertWithMessage("Expected %s new connections, but found %s", times, i)
           .that(connectOnce).isNotNull();
       clearInvocations(connectOnce);
     }
@@ -647,7 +648,7 @@ public class RingHashLoadBalancerTest {
         getSubchannel(servers, 2),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     verifyConnection(0);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();
@@ -1111,6 +1112,19 @@ public class RingHashLoadBalancerTest {
           picker.pickSubchannel(getDefaultPickSubchannelArgs(random.nextLong())).getSubchannel());
     }
     assertThat(picks).containsExactly(subchannel1);
+  }
+
+  @Test
+  public void config_equalsTester() {
+    new EqualsTester()
+        .addEqualityGroup(
+            new RingHashConfig(1, 2, "headerA"),
+            new RingHashConfig(1, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 1, "headerA"))
+        .addEqualityGroup(new RingHashConfig(2, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 2, "headerB"))
+        .addEqualityGroup(new RingHashConfig(1, 2, ""))
+        .testEquals();
   }
 
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,

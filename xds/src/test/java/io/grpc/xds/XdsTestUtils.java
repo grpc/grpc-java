@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -38,10 +37,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.envoyproxy.envoy.config.route.v3.Route;
-import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
@@ -52,14 +48,20 @@ import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.StatusOr;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.client.XdsTransportFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -300,20 +302,7 @@ public class XdsTestUtils {
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
                                                     String clusterName) {
-    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder =
-        io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
-            .setName(rdsName)
-            .addDomains(authority)
-            .addRoutes(
-                Route.newBuilder()
-                    .setMatch(
-                        RouteMatch.newBuilder().setPrefix("/").build())
-                    .setRoute(
-                        RouteAction.newBuilder().setCluster(clusterName)
-                            .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                            .build()));
-    io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+    return ControlPlaneRule.buildRouteConfiguration(authority, rdsName, clusterName);
   }
 
   static Cluster buildAggCluster(String name, List<String> childNames) {
@@ -362,6 +351,32 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
+  }
+
+  public static XdsClient createXdsClient(
+      List<String> serverUris,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock) {
+    return createXdsClient(
+        CommonBootstrapperTestUtils.buildBootStrap(serverUris),
+        xdsTransportFactory,
+        fakeClock,
+        new XdsClientMetricReporter() {});
+  }
+
+  /** Calls {@link CommonBootstrapperTestUtils#createXdsClient} with gRPC-specific values. */
+  public static XdsClient createXdsClient(
+      Bootstrapper.BootstrapInfo bootstrapInfo,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock,
+      XdsClientMetricReporter xdsClientMetricReporter) {
+    return CommonBootstrapperTestUtils.createXdsClient(
+          bootstrapInfo,
+          xdsTransportFactory,
+          fakeClock,
+          new ExponentialBackoffPolicy.Provider(),
+          MessagePrinter.INSTANCE,
+          xdsClientMetricReporter);
   }
 
   /**
