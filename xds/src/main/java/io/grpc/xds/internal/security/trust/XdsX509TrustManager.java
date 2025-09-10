@@ -137,7 +137,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
-            sanToVerifySuffix.toLowerCase(Locale.ROOT))
+                sanToVerifySuffix.toLowerCase(Locale.ROOT))
             : altNameFromCert.endsWith(sanToVerifySuffix);
   }
 
@@ -153,7 +153,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
-            sanToVerifySubstring.toLowerCase(Locale.ROOT))
+                sanToVerifySubstring.toLowerCase(Locale.ROOT))
             : altNameFromCert.contains(sanToVerifySubstring);
   }
 
