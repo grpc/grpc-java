@@ -29,11 +29,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.ChannelCredentials;
 import io.grpc.InternalServiceProviders;
+import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.Closeable;
 import java.util.Map;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.TrustManager;
@@ -111,13 +113,20 @@ public class TlsXdsCredentialsProviderTest {
         "refresh_interval", "440s");
 
     ChannelCredentials creds = provider.newChannelCredentials(jsonConfig);
-    assertSame(TlsChannelCredentials.class, creds.getClass());
-    TlsChannelCredentials tlsChannelCredentials = (TlsChannelCredentials) creds;
+    assertSame(ResourceAllocatingChannelCredentials.class, creds.getClass());
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) creds;
+    TlsChannelCredentials tlsChannelCredentials =
+        (TlsChannelCredentials) resourceAllocatingChannelCredentials.getChannelCredentials();
     assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
     KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
     assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
     assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
     TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
     assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
+    assertThat(resourceAllocatingChannelCredentials.getAllocatedResources()).hasSize(3);
+    for (Closeable resource : resourceAllocatingChannelCredentials.getAllocatedResources()) {
+      resource.close();
+    }
   }
 }

@@ -16,15 +16,18 @@
 
 package io.grpc.xds.internal;
 
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
 import io.grpc.ChannelCredentials;
+import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.Closeable;
 import java.io.File;
 import java.text.ParseException;
 import java.util.Map;
@@ -51,10 +54,10 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    TlsChannelCredentials.Builder builder = TlsChannelCredentials.newBuilder();
+    TlsChannelCredentials.Builder tlsChannelCredsBuilder = TlsChannelCredentials.newBuilder();
 
     if (jsonConfig == null) {
-      return builder.build();
+      return tlsChannelCredsBuilder.build();
     }
 
     // use refresh interval from bootstrap config if provided; else defaults to 600s
@@ -70,17 +73,22 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       }
     }
 
+    ImmutableList.Builder<Closeable> resourcesBuilder = ImmutableList.builder();
+    ScheduledExecutorService scheduledExecutorService = null;
+
     // use trust certificate file path from bootstrap config if provided; else use system default
     String rootCertPath = JsonUtil.getString(jsonConfig, ROOT_FILE_KEY);
     if (rootCertPath != null) {
       try {
+        scheduledExecutorService = scheduledExecutorServiceFactory.create();
         AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-        trustManager.updateTrustCredentials(
+        Closeable trustManagerFuture = trustManager.updateTrustCredentials(
             new File(rootCertPath),
             refreshIntervalSeconds,
             TimeUnit.SECONDS,
-            scheduledExecutorServiceFactory.create());
-        builder.trustManager(trustManager);
+            scheduledExecutorService);
+        resourcesBuilder.add(trustManagerFuture);
+        tlsChannelCredsBuilder.trustManager(trustManager);
       } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read root certificates", e);
         return null;
@@ -93,14 +101,18 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
     String privateKeyPath = JsonUtil.getString(jsonConfig, KEY_FILE_KEY);
     if (certChainPath != null && privateKeyPath != null) {
       try {
+        if (scheduledExecutorService == null) {
+          scheduledExecutorService = scheduledExecutorServiceFactory.create();
+        }
         AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
-        keyManager.updateIdentityCredentials(
+        Closeable keyManagerFuture = keyManager.updateIdentityCredentials(
             new File(certChainPath),
             new File(privateKeyPath),
             refreshIntervalSeconds,
             TimeUnit.SECONDS,
-            scheduledExecutorServiceFactory.create());
-        builder.keyManager(keyManager);
+            scheduledExecutorService);
+        resourcesBuilder.add(keyManagerFuture);
+        tlsChannelCredsBuilder.keyManager(keyManager);
       } catch (Exception e) {
         logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
         return null;
@@ -110,7 +122,17 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       return null;
     }
 
-    return builder.build();
+    // if executor was initialized, add it to allocated resource list
+    if (scheduledExecutorService != null) {
+      resourcesBuilder.add(asCloseable(scheduledExecutorService));
+    }
+
+    return ResourceAllocatingChannelCredentials.create(
+      tlsChannelCredsBuilder.build(), resourcesBuilder.build());
+  }
+
+  private static Closeable asCloseable(ScheduledExecutorService scheduledExecutorService) {
+    return () -> scheduledExecutorService.shutdownNow();
   }
 
   @Override
