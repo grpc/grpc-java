@@ -90,7 +90,6 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
@@ -502,7 +501,8 @@ final class ProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that does HTTP CONNECT proxy negotiation.
    */
   public static ProtocolNegotiator httpProxy(final SocketAddress proxyAddress,
-                                             final @Nullable String proxyUsername, final @Nullable String proxyPassword,
+                                             final @Nullable String proxyUsername,
+                                             final @Nullable String proxyPassword,
                                              final ProtocolNegotiator negotiator) {
     Preconditions.checkNotNull(negotiator, "negotiator");
     Preconditions.checkNotNull(proxyAddress, "proxyAddress");
@@ -611,8 +611,9 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          !Strings.isNullOrEmpty(sni)? sni : grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, null, x509ExtendedTrustManager);
+          !Strings.isNullOrEmpty(sni) ? sni : grpcHandler.getAuthority(),
+          this.executor, negotiationLogger, handshakeCompleteRunnable, null,
+          x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
 
@@ -642,7 +643,8 @@ final class ProtocolNegotiators {
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
                      Executor executor, ChannelLogger negotiationLogger,
                      Optional<Runnable> handshakeCompleteRunnable,
-                     ClientTlsProtocolNegotiator clientTlsProtocolNegotiator, X509TrustManager x509ExtendedTrustManager) {
+                     ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
+                     X509TrustManager x509ExtendedTrustManager) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
@@ -754,8 +756,8 @@ final class ProtocolNegotiators {
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
-                                       ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
-                                       X509TrustManager x509ExtendedTrustManager, String sni) {
+      ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
+      X509TrustManager x509ExtendedTrustManager, String sni) {
     return new ClientTlsProtocolNegotiator(sslContext, executorPool, handshakeCompleteRunnable,
         x509ExtendedTrustManager, sni);
   }
@@ -766,12 +768,12 @@ final class ProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
-                                       X509TrustManager x509ExtendedTrustManager) {
+      X509TrustManager x509ExtendedTrustManager) {
     return tls(sslContext, null, Optional.absent(), x509ExtendedTrustManager, null);
   }
 
   public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext,
-                                                                  X509TrustManager x509ExtendedTrustManager) {
+      X509TrustManager x509ExtendedTrustManager) {
     return new TlsProtocolNegotiatorClientFactory(sslContext, x509ExtendedTrustManager);
   }
 

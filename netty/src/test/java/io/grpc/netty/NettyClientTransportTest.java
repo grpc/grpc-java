@@ -149,7 +149,6 @@ import org.mockito.junit.MockitoRule;
 public class NettyClientTransportTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final String SNI = "sni";
   private static final SslContext SSL_CONTEXT = createSslContext();
 
   @Mock
@@ -837,7 +836,7 @@ public class NettyClientTransportTest {
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
-        Optional.absent(), null, SNI);
+        Optional.absent(), null, null);
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);

@@ -41,9 +41,9 @@ public final class InternalProtocolNegotiators {
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
-                                                                  ObjectPool<? extends Executor> executorPool,
-                                                                  Optional<Runnable> handshakeCompleteRunnable,
-                                                                  String sni) {
+          ObjectPool<? extends Executor> executorPool,
+          Optional<Runnable> handshakeCompleteRunnable,
+          String sni) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
         executorPool, handshakeCompleteRunnable, null, sni);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
@@ -72,7 +72,8 @@ public final class InternalProtocolNegotiators {
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
    */
-  public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext, String sni) {
+  public static InternalProtocolNegotiator.ProtocolNegotiator tls(
+      SslContext sslContext, String sni) {
     return tls(sslContext, null, Optional.absent(), sni);
   }
 
