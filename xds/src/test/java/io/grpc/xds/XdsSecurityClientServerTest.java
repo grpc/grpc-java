@@ -211,7 +211,8 @@ public class XdsSecurityClientServerTest {
    * Uses common_tls_context.combined_validation_context in upstream_tls_context.
    */
   @Test
-  public void tlsClientServer_useSystemRootCerts_useCombinedValidationContext() throws Exception {
+  public void tlsClientServer_useSystemRootCerts_noMtls_useCombinedValidationContext()
+      throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -222,7 +223,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -238,7 +239,7 @@ public class XdsSecurityClientServerTest {
    * Uses common_tls_context.validation_context in upstream_tls_context.
    */
   @Test
-  public void tlsClientServer_useSystemRootCerts_validationContext() throws Exception {
+  public void tlsClientServer_useSystemRootCerts_noMtls_validationContext() throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa().toAbsolutePath();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -249,13 +250,36 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, false, SAN_TO_MATCH);
+              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
     } finally {
       Files.deleteIfExists(trustStoreFilePath.toAbsolutePath());
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  @Test
+  public void tlsClientServer_useSystemRootCerts_mtls() throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, true);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
     }
   }
@@ -276,7 +300,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, "server1.test.google.in");
+              CLIENT_PEM_FILE, true, "server1.test.google.in", false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -309,7 +333,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -590,13 +614,14 @@ public class XdsSecurityClientServerTest {
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
       String clientKeyFile,
       String clientPemFile,
-      boolean useCombinedValidationContext, String sanToMatch) {
+      boolean useCombinedValidationContext, String sanToMatch, boolean isMtls) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, null);
     if (useCombinedValidationContext) {
       return CommonTlsContextTestsUtil.buildUpstreamTlsContextForCertProviderInstance(
-          "google_cloud_private_spiffe-client", "ROOT", null,
+          isMtls ? "google_cloud_private_spiffe-client" : null,
+          isMtls ? "ROOT" : null, null,
           null, null,
           CertificateValidationContext.newBuilder()
               .setSystemRootCerts(
