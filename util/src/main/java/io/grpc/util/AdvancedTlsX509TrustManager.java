@@ -22,6 +22,7 @@ import com.google.errorprone.annotations.InlineMe;
 import io.grpc.ExperimentalApi;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
@@ -339,6 +340,9 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws IOException, GeneralSecurityException {
     long newTime = checkNotNull(trustCertFile, "trustCertFile").lastModified();
+    if (newTime == 0 && !trustCertFile.exists()) {
+      throw new FileNotFoundException("Certificate not found: " + trustCertFile.getAbsolutePath());
+    }
     if (newTime == oldTime) {
       return oldTime;
     }
