@@ -54,11 +54,11 @@ public class SslContextProviderSupplierTest {
 
   private void prepareSupplier() {
     upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+            CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
-        .when(mockTlsContextManager)
-        .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
+            .when(mockTlsContextManager)
+            .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
     supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
   }
 
