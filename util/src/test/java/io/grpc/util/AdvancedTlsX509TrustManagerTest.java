@@ -20,7 +20,6 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,7 +30,6 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.testing.TlsTesting;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.Socket;
@@ -156,8 +154,8 @@ public class AdvancedTlsX509TrustManagerTest {
     Exception thrown = assertThrows(
             Exception.class, () -> readAndUpdateMethod.invoke(trustManager, nonExistentFile, 0L));
 
-    assertTrue("Should throw FileNotFoundException, but got: " + thrown.getCause(),
-        thrown.getCause() instanceof FileNotFoundException);
+    assertEquals(thrown.getCause().getMessage(),
+        "Certificate not found: " + nonExistentFile.getAbsolutePath());
   }
 
   @Test
