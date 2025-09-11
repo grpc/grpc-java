@@ -158,12 +158,12 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (isNormalTlsAndClientSide()) {
+    } else if (isRegularTlsAndClientSide()) {
       if (savedTrustedRoots != null || savedSpiffeTrustMap != null) {
         updateSslContext();
         clearKeysAndCerts();
       }
-    } else if (isNormalTlsAndServerSide()) {
+    } else if (isRegularTlsAndServerSide()) {
       if (savedKey != null) {
         updateSslContext();
         clearKeysAndCerts();
@@ -182,14 +182,14 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     return certInstance != null && (rootCertInstance != null || isUsingSystemRootCerts);
   }
 
-  protected final boolean isNormalTlsAndClientSide() {
+  protected final boolean isRegularTlsAndClientSide() {
     // We don't do (rootCertInstance != null || isUsingSystemRootCerts) here because of how this
     // method is used. With the rootCertInstance being null when using system root certs, there
     // is nothing to update in the SslContext
     return rootCertInstance != null && certInstance == null;
   }
 
-  protected final boolean isNormalTlsAndServerSide() {
+  protected final boolean isRegularTlsAndServerSide() {
     return certInstance != null && rootCertInstance == null;
   }
 
