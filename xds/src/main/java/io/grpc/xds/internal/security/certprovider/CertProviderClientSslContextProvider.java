@@ -33,6 +33,8 @@ import javax.net.ssl.SSLException;
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
 
+  private final String sniForSanMatching;
+
   CertProviderClientSslContextProvider(
           Node node,
           @Nullable Map<String, CertificateProviderInfo> certProviders,

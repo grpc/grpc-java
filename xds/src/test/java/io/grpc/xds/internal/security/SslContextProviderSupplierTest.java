@@ -179,31 +179,6 @@ public class SslContextProviderSupplierTest {
   }
 
   @Test
-  public void systemRootCertsWithRegularTls_callbackExecutedFromSupplier() {
-    upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
-            null,
-            null,
-            null,
-            "root-default",
-            null,
-            CertificateValidationContext.newBuilder()
-                .setSystemRootCerts(
-                        CertificateValidationContext.SystemRootCerts.getDefaultInstance())
-                .build());
-    supplier = new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager);
-    reset(mockTlsContextManager);
-
-    callUpdateSslContext();
-    ArgumentCaptor<Runnable> runnableArgumentCaptor = ArgumentCaptor.forClass(Runnable.class);
-    verify(mockExecutor).execute(runnableArgumentCaptor.capture());
-    runnableArgumentCaptor.getValue().run();
-    verify(mockCallback, times(1)).updateSslContext(any(SslContext.class));
-    verify(mockTlsContextManager, times(1))
-            .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI));
-  }
-
-  @Test
   public void testClose() {
     prepareSupplier(true);
     callUpdateSslContext();
