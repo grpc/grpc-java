@@ -24,19 +24,19 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
-
 import java.io.IOException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertStoreException;
-import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -106,8 +106,10 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     return sslContextBuilder;
   }
 
-  private X509Certificate[] getX509CertificatesFromSystemTrustStore() throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException {
-    TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+  private X509Certificate[] getX509CertificatesFromSystemTrustStore()
+      throws KeyStoreException, NoSuchAlgorithmException {
+    TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
+        TrustManagerFactory.getDefaultAlgorithm());
     trustManagerFactory.init((KeyStore) null);
 
     List<TrustManager> trustManagers = Arrays.asList(trustManagerFactory.getTrustManagers());
