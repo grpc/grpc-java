@@ -28,11 +28,10 @@ import java.security.cert.CertStoreException;
 import java.security.cert.X509Certificate;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.net.ssl.SSLException;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
-public final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
-
-  private final String sniForSanMatching;
+final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
 
   CertProviderClientSslContextProvider(
           Node node,
@@ -50,6 +49,17 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
+    // Null rootCertInstance implies hasSystemRootCerts because of the check in
+    // CertProviderClientSslContextProviderFactory.
+    if (rootCertInstance == null && !isMtls()) {
+      try {
+        // Instantiate sslContext so that addCallback will immediately update the callback with
+        // the SslContext.
+        sslContext = getSslContextBuilder(staticCertificateValidationContext).build();
+      } catch (SSLException | CertStoreException e) {
+        throw new RuntimeException(e);
+      }
+    }
     this.sniForSanMatching = upstreamTlsContext.getAutoSniSanValidation()? sniForSanMatching : null;
   }
 
@@ -58,8 +68,6 @@ public final class CertProviderClientSslContextProvider extends CertProviderSslC
           CertificateValidationContext certificateValidationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
-    // Null rootCertInstance implies hasSystemRootCerts because of the check in
-    // CertProviderClientSslContextProviderFactory.
     if (rootCertInstance != null) {
       if (savedSpiffeTrustMap != null) {
         sslContextBuilder = sslContextBuilder.trustManager(

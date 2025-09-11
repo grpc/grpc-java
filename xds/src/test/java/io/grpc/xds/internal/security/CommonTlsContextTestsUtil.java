@@ -234,6 +234,9 @@ public class CommonTlsContextTestsUtil {
       String rootInstanceName,
       String rootCertName,
       CertificateValidationContext staticCertValidationContext) {
+    if (staticCertValidationContext == null && rootInstanceName == null) {
+      return builder;
+    }
     CertificateValidationContext.Builder contextBuilder;
     if (staticCertValidationContext == null) {
       contextBuilder = CertificateValidationContext.newBuilder();

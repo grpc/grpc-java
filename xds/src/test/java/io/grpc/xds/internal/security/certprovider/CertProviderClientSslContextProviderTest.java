@@ -189,12 +189,7 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  /**
-   * Note this route will not really be invoked since {@link SslContextProviderSupplier} will
-   * shortcircuit creating the certificate provider and directly invoke the callback with the
-   * SslContext in this case.
-   */
-  public void testProviderForClient_systemRootCerts_regularTls() throws Exception {
+  public void testProviderForClient_systemRootCerts_regularTls() {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
             new CertificateProvider.DistributorWatcher[1];
     TestCertificateProvider.createAndRegisterProviderProvider(
@@ -214,7 +209,10 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContext()).isNull();
+    assertThat(provider.getSslContext()).isNotNull();
+    TestCallback testCallback =
+        CommonTlsContextTestsUtil.getValueThruCallback(provider);
+    assertThat(testCallback.updatedSslContext).isEqualTo(provider.getSslContext());
 
     assertThat(watcherCaptor[0]).isNull();
   }
