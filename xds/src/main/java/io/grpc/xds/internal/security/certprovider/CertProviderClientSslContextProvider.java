@@ -22,6 +22,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
@@ -60,9 +61,9 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
-    // Null rootCertInstance implies hasSystemRootCerts because of the check in
-    // CertProviderClientSslContextProviderFactory.
-    if (rootCertInstance == null && !isMtls()) {
+    if (rootCertInstance == null
+        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())
+        && !isMtls()) {
       try {
         // Instantiate sslContext so that addCallback will immediately update the callback with
         // the SslContext.
@@ -75,7 +76,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
 
   @Override
   protected final SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContextdationContext)
+          CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     if (rootCertInstance != null) {
@@ -83,19 +84,19 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedSpiffeTrustMap,
-              certificateValidationContextdationContext));
+              certificateValidationContext));
       } else {
         sslContextBuilder = sslContextBuilder.trustManager(
             new XdsTrustManagerFactory(
                 savedTrustedRoots.toArray(new X509Certificate[0]),
-                certificateValidationContextdationContext));
+                certificateValidationContext));
       }
     } else {
       try {
         sslContextBuilder = sslContextBuilder.trustManager(
             new XdsTrustManagerFactory(
                 getX509CertificatesFromSystemTrustStore(),
-                certificateValidationContextdationContext));
+                certificateValidationContext));
       } catch (KeyStoreException | NoSuchAlgorithmException e) {
         throw new CertStoreException(e);
       }
