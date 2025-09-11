@@ -693,10 +693,11 @@ static void PrintStub(
     (*vars)["input_type"] = MessageFullJavaName(method->input_type());
     (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     bool client_streaming = method->client_streaming();
-    bool mangle_object_methods = (call_type == BLOCKING_V2_CALL && client_streaming);
+    bool server_streaming = method->server_streaming();
+    bool mangle_object_methods = (call_type == BLOCKING_V2_CALL && client_streaming)
+      || (call_type == BLOCKING_CALL && client_streaming && server_streaming);
     (*vars)["lower_method_name"] = LowerMethodName(method, mangle_object_methods);
     (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
-    bool server_streaming = method->server_streaming();
 
     if (call_type == BLOCKING_CALL && client_streaming) {
       // Blocking client interface with client streaming is not available
