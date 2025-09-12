@@ -19,11 +19,13 @@ package io.grpc.binder.internal;
 import static android.os.IBinder.FLAG_ONEWAY;
 import static android.os.Process.myUid;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
 import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -51,6 +53,7 @@ import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
+import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -326,8 +329,8 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
     // Demonstrate that the transport is still working and that shutdown transaction was ignored.
     ClientTransport.PingCallback mockPingCallback = mock(ClientTransport.PingCallback.class);
-    client.ping(mockPingCallback, MoreExecutors.directExecutor());
-    verify(mockPingCallback, timeout(TIMEOUT_MS)).onSuccess(ArgumentMatchers.anyLong());
+    client.ping(mockPingCallback, directExecutor());
+    verify(mockPingCallback, timeout(TIMEOUT_MS)).onSuccess(anyLong());
 
     // Try again as the expected uid to demonstrate that this wasn't ignored for some other reason.
     sendShutdownTransportTransactionAsUid(client, serverUid);
