@@ -31,7 +31,6 @@ import io.grpc.testing.TlsTesting;
 import io.grpc.util.AdvancedTlsX509TrustManager.Verification;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateException;
@@ -146,16 +145,12 @@ public class AdvancedTlsX509TrustManagerTest {
   @Test
   public void missingFile_throwsFileNotFoundException() throws Exception {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-    Method readAndUpdateMethod =
-        AdvancedTlsX509TrustManager.class.getDeclaredMethod(
-            "readAndUpdate", File.class, long.class);
-    readAndUpdateMethod.setAccessible(true);
     File nonExistentFile = new File("missing_cert.pem");
-    Exception thrown = assertThrows(
-            Exception.class, () -> readAndUpdateMethod.invoke(trustManager, nonExistentFile, 0L));
-
-    assertEquals(thrown.getCause().getMessage(),
-        "Certificate not found: " + nonExistentFile.getAbsolutePath());
+    Exception thrown =
+        assertThrows(Exception.class, () -> trustManager.updateTrustCredentials(nonExistentFile));
+    assertNotNull(thrown);
+    assertEquals(thrown.getMessage(),
+        "Certificate file not found or not readable: " + nonExistentFile.getAbsolutePath());
   }
 
   @Test
