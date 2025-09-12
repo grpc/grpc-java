@@ -16,9 +16,13 @@
 
 package io.grpc.binder.internal;
 
+import android.os.Binder;
 import android.os.Parcel;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import io.grpc.binder.internal.LeakSafeOneWayBinder.TransactionHandler;
 import javax.annotation.Nullable;
 
 /** Constants and helpers for managing inbound / outbound transactions. */
@@ -98,5 +102,25 @@ final class TransactionUtils {
     parcel.setDataPosition(0);
     parcel.writeInt(flags);
     parcel.setDataPosition(pos);
+  }
+
+  /**
+   * Decorates the given {@link TransactionHandler} with a wrapper that only forwards transactions
+   * from the given `allowedCallingUid`.
+   */
+  static TransactionHandler newCallerFilteringHandler(
+      int allowedCallingUid, TransactionHandler wrapped) {
+    final Logger logger = Logger.getLogger(TransactionUtils.class.getName());
+    return new TransactionHandler() {
+      @Override
+      public boolean handleTransaction(int code, Parcel data) {
+        int callingUid = Binder.getCallingUid();
+        if (callingUid != allowedCallingUid) {
+          logger.log(Level.WARNING, "dropped txn from " + callingUid + " !=" + allowedCallingUid);
+          return false;
+        }
+        return wrapped.handleTransaction(code, data);
+      }
+    };
   }
 }
