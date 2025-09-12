@@ -273,7 +273,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   Status getClosedStatus() {
-    drainQuietly();
+    executor.drain();
     CloseState state = closeState.get();
     return (state == null) ? null : state.status;
   }
@@ -295,7 +295,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   boolean isReadReady() {
-    drainQuietly();
+    executor.drain();
 
     return !buffer.isEmpty();
   }
@@ -308,7 +308,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   boolean isWriteReady() {
-    drainQuietly();
+    executor.drain();
 
     return isWriteLegal() && call.isReady();
   }
@@ -323,14 +323,6 @@ public final class BlockingClientCall<ReqT, RespT> {
 
   ClientCall.Listener<RespT> getListener() {
     return new QueuingListener();
-  }
-
-  private void drainQuietly() {
-    try {
-      executor.drain();
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
   }
 
   private final class QueuingListener extends ClientCall.Listener<RespT> {
