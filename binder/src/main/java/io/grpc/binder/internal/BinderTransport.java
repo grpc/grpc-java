@@ -155,8 +155,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ScheduledExecutorService scheduledExecutorService;
   private final InternalLogId logId;
-  private final LeakSafeOneWayBinder incomingBinder;
 
+  @GuardedBy("this")
+  protected final LeakSafeOneWayBinder incomingBinder;
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
   protected final OneWayBinderProxy.Decorator binderDecorator;
 

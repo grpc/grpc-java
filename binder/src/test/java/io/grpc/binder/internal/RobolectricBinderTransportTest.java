@@ -16,12 +16,15 @@
 
 package io.grpc.binder.internal;
 
+import static android.os.IBinder.FLAG_ONEWAY;
 import static android.os.Process.myUid;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
 import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
+import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -38,6 +41,8 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.MoreExecutors;
+
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
@@ -48,6 +53,7 @@ import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.SecurityPolicies;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
+import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -64,6 +70,9 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -101,6 +110,9 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   @Rule public MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock AsyncSecurityPolicy mockClientSecurityPolicy;
+
+  @Captor
+  ArgumentCaptor<Status> statusCaptor;
 
   ApplicationInfo serverAppInfo;
   PackageInfo serverPkgInfo;
@@ -304,6 +316,41 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
     assertThat(((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID))
         .isEqualTo(myUid());
+  }
+
+  @Test
+  public void clientIgnoresTransactionFromNonServerUids() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+
+    int serverUid = ((ConnectionClientTransport) client).getAttributes().get(REMOTE_UID);
+    int someOtherUid = 1 + serverUid;
+    sendShutdownTransportTransactionAsUid(client, someOtherUid);
+
+    // Demonstrate that the transport is still working and that shutdown transaction was ignored.
+    ClientTransport.PingCallback mockPingCallback = mock(ClientTransport.PingCallback.class);
+    client.ping(mockPingCallback, MoreExecutors.directExecutor());
+    verify(mockPingCallback, timeout(TIMEOUT_MS)).onSuccess(ArgumentMatchers.anyLong());
+
+    // Try again as the expected uid to demonstrate that this wasn't ignored for some other reason.
+    sendShutdownTransportTransactionAsUid(client, serverUid);
+
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS))
+        .transportShutdown(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains("shutdown");
+  }
+
+  static void sendShutdownTransportTransactionAsUid(ClientTransport client, int sendingUid) {
+    int originalUid = Binder.getCallingUid();
+    try {
+      ShadowBinder.setCallingUid(sendingUid);
+      ((BinderClientTransport) client)
+              .incomingBinder.onTransact(SHUTDOWN_TRANSPORT, null, null, FLAG_ONEWAY);
+    } finally {
+      ShadowBinder.setCallingUid(originalUid);
+    }
   }
 
   @Test
