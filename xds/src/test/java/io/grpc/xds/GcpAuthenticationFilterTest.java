@@ -491,7 +491,7 @@ public class GcpAuthenticationFilterTest {
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("TEST_AUDIENCE"));
     try {
       CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
           .lbPolicyConfig(getWrrLbConfigAsMap());
       return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
     } catch (IOException ex) {
@@ -504,7 +504,7 @@ public class GcpAuthenticationFilterTest {
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("NEW_TEST_AUDIENCE"));
     try {
       CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
           .lbPolicyConfig(getWrrLbConfigAsMap());
       return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
     } catch (IOException ex) {
@@ -516,7 +516,7 @@ public class GcpAuthenticationFilterTest {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
     parsedMetadata.put("FILTER_INSTANCE_NAME", "TEST_AUDIENCE");
     CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-            CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+            CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap());
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
