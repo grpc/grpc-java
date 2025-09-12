@@ -118,9 +118,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
 
-  // TODO: Change this to a specific domain after
-  // https://github.com/grpc/grpc-java/issues/12326 is fixed
-  private static final String SAN_TO_MATCH = "*.test.google.fr";
+  private static final String SAN_TO_MATCH = "waterzooi.test.google.be";
 
   @Parameter
   public Boolean enableSpiffe;
