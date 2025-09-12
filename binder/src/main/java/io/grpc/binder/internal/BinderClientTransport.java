@@ -17,6 +17,7 @@ package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.binder.ApiConstants.PRE_AUTH_SERVER_OVERRIDE;
+import static io.grpc.binder.internal.TransactionUtils.newCallerFilteringHandler;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.Context;
@@ -46,6 +47,7 @@ import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.InboundParcelablePolicy;
 import io.grpc.binder.SecurityPolicy;
+import io.grpc.binder.internal.LeakSafeOneWayBinder.TransactionHandler;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
@@ -438,5 +440,13 @@ public final class BinderClientTransport extends BinderTransport
                 ? SecurityLevel.PRIVACY_AND_INTEGRITY
                 : SecurityLevel.INTEGRITY) // TODO: Have the SecrityPolicy decide this.
         .build();
+  }
+
+  @GuardedBy("this")
+  private void restrictIncomingBinderToCallsFrom(int allowedCallingUid) {
+    TransactionHandler currentHandler = incomingBinder.getHandler();
+    if (currentHandler != null) {
+      incomingBinder.setHandler(newCallerFilteringHandler(allowedCallingUid, currentHandler));
+    }
   }
 }

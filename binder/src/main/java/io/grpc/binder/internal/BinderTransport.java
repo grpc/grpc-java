@@ -160,6 +160,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @GuardedBy("this")
   private final LeakSafeOneWayBinder incomingBinder;
 
+  @GuardedBy("this")
+  protected final LeakSafeOneWayBinder incomingBinder;
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
   protected final OneWayBinderProxy.Decorator binderDecorator;
 
