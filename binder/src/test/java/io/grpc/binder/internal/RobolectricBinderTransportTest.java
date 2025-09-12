@@ -42,7 +42,6 @@ import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
-
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
@@ -347,7 +346,8 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     try {
       ShadowBinder.setCallingUid(sendingUid);
       ((BinderClientTransport) client)
-              .incomingBinder.onTransact(SHUTDOWN_TRANSPORT, null, null, FLAG_ONEWAY);
+          .getIncomingBinderForTesting()
+          .onTransact(SHUTDOWN_TRANSPORT, null, null, FLAG_ONEWAY);
     } finally {
       ShadowBinder.setCallingUid(originalUid);
     }
