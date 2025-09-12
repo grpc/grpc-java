@@ -118,7 +118,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
 
-  // TODO: Change this is a specific domain after
+  // TODO: Change this to a specific domain after
   // https://github.com/grpc/grpc-java/issues/12326 is fixed
   private static final String SAN_TO_MATCH = "*.test.google.fr";
 
@@ -223,7 +223,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -250,7 +250,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false);
+              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false, null);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -273,7 +273,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true, null);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -286,10 +286,11 @@ public class XdsSecurityClientServerTest {
 
   /**
    * Use system root ca cert for TLS channel - no mTLS.
-   * Subj Alt Names to match are specified in the validaton context.
+   * Subj Alt Names to match are specified in the validation context.
    */
   @Test
-  public void tlsClientServer_useSystemRootCerts_failureToMatchSubjAltNames() throws Exception {
+  public void tlsClientServer_useSystemRootCerts_noAutoSniValidation_failureToMatchSubjAltNames()
+      throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -300,7 +301,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, "server1.test.google.in", false);
+              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -311,6 +312,33 @@ public class XdsSecurityClientServerTest {
       assertThat(e.getCause().getCause()).isInstanceOf(CertificateException.class);
       assertThat(e.getCause().getCause().getMessage()).isEqualTo(
           "Peer certificate SAN check failed");
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath);
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  @Test
+  public void tlsClientServer_useSystemRootCerts_autoSniValidation()
+      throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true,
+              // won't be used
+              "server1.test.google.in",
+              false, SAN_TO_MATCH);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      unaryRpc(/* requestMessage= */ "buddy", blockingStub);
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
@@ -333,7 +361,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -615,7 +643,7 @@ public class XdsSecurityClientServerTest {
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
       String clientKeyFile,
       String clientPemFile,
-      boolean useCombinedValidationContext, String sanToMatch, boolean isMtls) {
+      boolean useCombinedValidationContext, String sanToMatch, boolean isMtls, String sni) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, null);
@@ -630,7 +658,7 @@ public class XdsSecurityClientServerTest {
               .addMatchSubjectAltNames(
                   StringMatcher.newBuilder()
                       .setExact(sanToMatch))
-              .build());
+              .build(), sni, false);
     }
     return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
         "google_cloud_private_spiffe-client", "ROOT", null,

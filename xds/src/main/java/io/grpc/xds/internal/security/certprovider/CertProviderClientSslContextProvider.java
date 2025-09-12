@@ -85,18 +85,23 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     if (rootCertInstance != null) {
       if (savedSpiffeTrustMap != null) {
         sslContextBuilder = sslContextBuilder.trustManager(
-          new XdsTrustManagerFactory(
-              savedSpiffeTrustMap,
-              certificateValidationContext, sniForSanMatching));
+            new XdsTrustManagerFactory(
+                savedSpiffeTrustMap,
+                certificateValidationContext, sniForSanMatching));
       } else {
-        try {
-          sslContextBuilder = sslContextBuilder.trustManager(
-              new XdsTrustManagerFactory(
-                  getX509CertificatesFromSystemTrustStore(),
-                  certificateValidationContext));
-        } catch (KeyStoreException | NoSuchAlgorithmException e) {
-          throw new CertStoreException(e);
-        }
+        sslContextBuilder = sslContextBuilder.trustManager(
+            new XdsTrustManagerFactory(
+                savedTrustedRoots.toArray(new X509Certificate[0]),
+                certificateValidationContext, sniForSanMatching));
+      }
+    } else {
+      try {
+        sslContextBuilder = sslContextBuilder.trustManager(
+            new XdsTrustManagerFactory(
+                getX509CertificatesFromSystemTrustStore(),
+                certificateValidationContext, sniForSanMatching));
+      } catch (KeyStoreException | NoSuchAlgorithmException e) {
+        throw new CertStoreException(e);
       }
     }
     if (isMtls()) {

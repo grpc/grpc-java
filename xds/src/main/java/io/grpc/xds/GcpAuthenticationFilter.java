@@ -198,8 +198,6 @@ final class GcpAuthenticationFilter implements Filter {
         } else {
           callOptions = callOptions.withCallCredentials(newCallCredentials);
         }
-        logger.log(XdsLogLevel.INFO, "Time to expiry of the auth token=" + callOptions.getDeadline().timeRemaining(
-            TimeUnit.SECONDS));
         return next.newCall(method, callOptions);
       }
     };

@@ -124,7 +124,7 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, false);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, false, false);
     ClientSecurityProtocolNegotiator pn =
         new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -146,7 +146,7 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_autoHostSni_hostnameIsPassedToClientSecurityHandler() {
     UpstreamTlsContext upstreamTlsContext =
-            CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, true);
+            CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, true, false);
     ClientSecurityProtocolNegotiator pn =
             new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);

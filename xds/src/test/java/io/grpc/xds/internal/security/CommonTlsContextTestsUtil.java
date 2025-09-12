@@ -149,9 +149,12 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
-      CommonTlsContext commonTlsContext, String sni, boolean autoHostSni) {
+      CommonTlsContext commonTlsContext, String sni, boolean autoHostSni, boolean autoSniSanValidation) {
     UpstreamTlsContext.Builder upstreamTlsContext =
-        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).setAutoHostSni(autoHostSni);
+        UpstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .setAutoHostSni(autoHostSni)
+            .setAutoSniSanValidation(autoSniSanValidation);
     if (sni != null) {
       upstreamTlsContext.setSni(sni);
     }
@@ -290,7 +293,7 @@ public class CommonTlsContextTestsUtil {
             rootCertName,
             alpnProtocols,
             staticCertValidationContext),
-        sni, autoHostSni);
+        sni, autoHostSni, false);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
@@ -309,7 +312,7 @@ public class CommonTlsContextTestsUtil {
             rootInstanceName,
             rootCertName,
             alpnProtocols,
-            staticCertValidationContext), null, false);
+            staticCertValidationContext), null, false, false);
   }
 
   /** Helper method to build DownstreamTlsContext for CertProvider tests. */
