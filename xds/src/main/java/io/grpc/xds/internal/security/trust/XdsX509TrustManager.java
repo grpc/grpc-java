@@ -114,6 +114,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifyPrefix)) {
       return false;
     }
+    if ((ignoreCase
+        ? sanToVerifyPrefix.toLowerCase(Locale.ROOT)
+        : sanToVerifyPrefix).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyPrefix , ignoreCase);
+    }
     return ignoreCase
         ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
             sanToVerifyPrefix.toLowerCase(Locale.ROOT))
@@ -124,6 +129,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
           String altNameFromCert, String sanToVerifySuffix, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
+    }
+    if ((ignoreCase
+        ? sanToVerifySuffix.toLowerCase(Locale.ROOT)
+        : sanToVerifySuffix).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySuffix , ignoreCase);
     }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
@@ -136,6 +146,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifySubstring)) {
       return false;
     }
+    if ((ignoreCase
+        ? sanToVerifySubstring.toLowerCase(Locale.ROOT)
+        : sanToVerifySubstring).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySubstring , ignoreCase);
+    }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
                 sanToVerifySubstring.toLowerCase(Locale.ROOT))
@@ -146,6 +161,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       String altNameFromCert, String sanToVerifyExact, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
+    }
+    if ((ignoreCase
+        ? sanToVerifyExact.toLowerCase(Locale.ROOT)
+        : sanToVerifyExact).contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact , ignoreCase);
     }
     return ignoreCase
         ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
@@ -302,5 +322,39 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return result.toArray(new X509Certificate[0]);
     }
     return delegate.getAcceptedIssuers();
+  }
+
+  public static boolean verifyDnsNameWildcard(
+          String altNameFromCert, String sanToVerify, boolean ignoreCase) {
+    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerify)) {
+      return false;
+    }
+    String[] certLabels = (ignoreCase ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert)
+            .split("\\.", -1);
+    String[] sanLabels = (ignoreCase ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify)
+            .split("\\.", -1);
+    if (certLabels.length != sanLabels.length) {
+      return false;
+    }
+    if ((int) sanLabels[0].chars().filter(ch -> ch == '*').count() != 1
+            || sanLabels[0].startsWith("xn--")) {
+      return false;
+    }
+    for (int i = 1; i < sanLabels.length; i++) {
+      if (!sanLabels[i].equals(certLabels[i])) {
+        return false;
+      }
+    }
+    return labelWildcardMatch(certLabels[0], sanLabels[0]);
+  }
+
+  private static boolean labelWildcardMatch(String certLabel, String sanLabel) {
+    int starIndex = sanLabel.indexOf('*');
+    String prefix = sanLabel.substring(0, starIndex);
+    String suffix = sanLabel.substring(starIndex + 1);
+    if (certLabel.length() < prefix.length() + suffix.length()) {
+      return false;
+    }
+    return certLabel.startsWith(prefix) && certLabel.endsWith(suffix);
   }
 }
