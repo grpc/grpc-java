@@ -31,7 +31,9 @@ import com.google.common.base.Verify;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Internal;
+import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
@@ -205,7 +207,15 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   // Override in child class.
   public final ListenableFuture<SocketStats> getStats() {
-    return immediateFuture(null);
+    Attributes attributes = getAttributes();
+    return immediateFuture(
+        new InternalChannelz.SocketStats(
+            /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
+            /* local= */ attributes.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR),
+            /* remote= */ attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR),
+            // TODO: SocketOptions are meaningless for binder but we're still forced to provide one.
+            new InternalChannelz.SocketOptions.Builder().build(),
+            /* security= */ null));
   }
 
   // Override in child class.
