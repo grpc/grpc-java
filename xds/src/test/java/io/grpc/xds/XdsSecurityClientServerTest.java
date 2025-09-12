@@ -611,6 +611,7 @@ public class XdsSecurityClientServerTest {
         .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
   }
 
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
       String clientKeyFile,
       String clientPemFile,
