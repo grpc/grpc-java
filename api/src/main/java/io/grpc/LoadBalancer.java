@@ -855,9 +855,11 @@ public abstract class LoadBalancer {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 
+      private static final Object[][] EMPTY_CUSTOM_OPTIONS = new Object[0][2];
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
-      private Object[][] customOptions = new Object[0][2];
+      private Object[][] customOptions = EMPTY_CUSTOM_OPTIONS;
 
       Builder() {
       }
