@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
@@ -67,7 +66,7 @@ public class XdsServerTestHelper {
       Bootstrapper.BootstrapInfo.builder()
           .servers(Arrays.asList(
               Bootstrapper.ServerInfo.create(
-                  SERVER_URI, InsecureChannelCredentials.create())))
+                  SERVER_URI, ImmutableMap.of("type", "insecure"))))
           .node(BOOTSTRAP_NODE)
           .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
           .build();

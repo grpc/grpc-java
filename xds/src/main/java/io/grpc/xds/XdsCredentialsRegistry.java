@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.InternalServiceProviders;
 import java.util.ArrayList;
@@ -145,6 +146,14 @@ final class XdsCredentialsRegistry {
   @Nullable
   public synchronized XdsCredentialsProvider getProvider(String name) {
     return effectiveProviders.get(checkNotNull(name, "name"));
+  }
+
+  /**
+   * Returns list of registered xds credential names. Each provider declares its name via
+   * {@link XdsCredentialsProvider#getName}.
+   */
+  public synchronized ImmutableSet<String> getSupportedCredentialNames() {
+    return effectiveProviders.keySet();
   }
 
   @VisibleForTesting

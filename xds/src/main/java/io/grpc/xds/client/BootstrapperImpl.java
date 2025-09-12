@@ -76,8 +76,8 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract String getJsonContent() throws IOException, XdsInitializationException;
 
-  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
-      throws XdsInitializationException;
+  protected abstract ImmutableMap<String, ?> getImplSpecificConfig(
+      Map<String, ?> serverConfig, String serverUri) throws XdsInitializationException;
 
 
   /**
@@ -253,7 +253,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
 
-      Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
+      ImmutableMap<String, ?> implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean resourceTimerIsTransientError = false;
       boolean ignoreResourceDeletion = false;

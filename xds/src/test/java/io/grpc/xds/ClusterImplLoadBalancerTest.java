@@ -34,7 +34,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.FixedResultPicker;
@@ -116,7 +115,7 @@ public class ClusterImplLoadBalancerTest {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("api.google.com", InsecureChannelCredentials.create());
+      ServerInfo.create("api.google.com", ImmutableMap.of("type", "insecure"));
   private static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
           "endpoint-load-metrics-bin",
