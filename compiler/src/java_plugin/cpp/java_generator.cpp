@@ -143,11 +143,24 @@ static std::set<std::string> java_keywords = {
   "false",
 };
 
+// Methods on java.lang.Object that take no arguments.
+static std::set<std::string> java_object_methods = {
+    "clone",
+    "finalize",
+    "getClass",
+    "hashCode",
+    "notify",
+    "notifyAll",
+    "toString",
+    "wait",
+};
+
 // Adjust a method name prefix identifier to follow the JavaBean spec:
 //   - decapitalize the first letter
 //   - remove embedded underscores & capitalize the following letter
-//  Finally, if the result is a reserved java keyword, append an underscore.
-static std::string MixedLower(std::string word) {
+//  Finally, if the result is a reserved java keyword or an Object method,
+// append an underscore.
+static std::string MixedLower(std::string word, bool mangle_object_methods = false) {
   std::string w;
   w += tolower(word[0]);
   bool after_underscore = false;
@@ -159,7 +172,9 @@ static std::string MixedLower(std::string word) {
       after_underscore = false;
     }
   }
-  if (java_keywords.find(w) != java_keywords.end()) {
+  if (java_keywords.find(w) != java_keywords.end() ||
+      (mangle_object_methods &&
+       java_object_methods.find(w) != java_object_methods.end())) {
     return w + "_";
   }
   return w;
@@ -180,8 +195,9 @@ static std::string ToAllUpperCase(std::string word) {
   return w;
 }
 
-static inline std::string LowerMethodName(const MethodDescriptor* method) {
-  return MixedLower(std::string(method->name()));
+static inline std::string LowerMethodName(const MethodDescriptor* method,
+                                          bool mangle_object_methods = false) {
+  return MixedLower(std::string(method->name()), mangle_object_methods);
 }
 
 static inline std::string MethodPropertiesFieldName(const MethodDescriptor* method) {
@@ -676,10 +692,12 @@ static void PrintStub(
     const MethodDescriptor* method = service->method(i);
     (*vars)["input_type"] = MessageFullJavaName(method->input_type());
     (*vars)["output_type"] = MessageFullJavaName(method->output_type());
-    (*vars)["lower_method_name"] = LowerMethodName(method);
-    (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
     bool client_streaming = method->client_streaming();
     bool server_streaming = method->server_streaming();
+    bool mangle_object_methods = (call_type == BLOCKING_V2_CALL && client_streaming)
+      || (call_type == BLOCKING_CALL && client_streaming && server_streaming);
+    (*vars)["lower_method_name"] = LowerMethodName(method, mangle_object_methods);
+    (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
 
     if (call_type == BLOCKING_CALL && client_streaming) {
       // Blocking client interface with client streaming is not available
