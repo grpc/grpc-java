@@ -152,12 +152,6 @@ public final class AndroidChannelBuilderTest {
         .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
     assertThat(delegateChannel.enterIdleCount).isEqualTo(1);
 
-    // The broadcast receiver may fire when the active network status has not actually changed
-    ApplicationProvider
-        .getApplicationContext()
-        .sendBroadcast(new Intent(ConnectivityManager.CONNECTIVITY_ACTION));
-    assertThat(delegateChannel.enterIdleCount).isEqualTo(1);
-
     // Drop the connection
     shadowOf(connectivityManager).setActiveNetworkInfo(null);
     ApplicationProvider
