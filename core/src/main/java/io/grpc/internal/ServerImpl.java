@@ -809,15 +809,15 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose(Throwable throwable) {
+    private void internalClose(Throwable t) {
       // TODO(ejona86): this is not thread-safe :)
       String description = "Application error processing RPC";
-      Status statusToPropagate = Status.UNKNOWN.withDescription(description).withCause(throwable);
-      if (throwable instanceof StatusRuntimeException) {
-        StatusRuntimeException statusRuntimeException = (StatusRuntimeException) throwable;
+      Status statusToPropagate = Status.UNKNOWN.withDescription(description).withCause(t);
+      if (t instanceof StatusRuntimeException) {
+        StatusRuntimeException statusRuntimeException = (StatusRuntimeException) t;
         Status.Code code = statusRuntimeException.getStatus().getCode();
         if (code == Status.Code.RESOURCE_EXHAUSTED) {
-          statusToPropagate = statusRuntimeException.getStatus().withCause(throwable);
+          statusToPropagate = statusRuntimeException.getStatus().withCause(t);
         }
       }
       stream.close(statusToPropagate, new Metadata());
