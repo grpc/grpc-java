@@ -814,10 +814,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       String description = "Application error processing RPC";
       Status statusToPropagate = Status.UNKNOWN.withDescription(description).withCause(t);
       if (t instanceof StatusRuntimeException) {
-        StatusRuntimeException statusRuntimeException = (StatusRuntimeException) t;
-        Status.Code code = statusRuntimeException.getStatus().getCode();
-        if (code == Status.Code.RESOURCE_EXHAUSTED) {
-          statusToPropagate = statusRuntimeException.getStatus().withCause(t);
+        if (((StatusRuntimeException) t).getStatus().getCode() == Status.Code.RESOURCE_EXHAUSTED) {
+          statusToPropagate = ((StatusRuntimeException) t).getStatus().withCause(t);
         }
       }
       stream.close(statusToPropagate, new Metadata());
