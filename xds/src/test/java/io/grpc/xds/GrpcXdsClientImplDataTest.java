@@ -143,6 +143,7 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancer
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
@@ -2644,7 +2645,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
-    XdsClusterResource.isEnabledOrcaLrsPropagation = true;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
 
     ImmutableList<String> metricSpecs = ImmutableList.of(
         "cpu_utilization",
@@ -2675,7 +2676,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
         .isFalse();
 
-    XdsClusterResource.isEnabledOrcaLrsPropagation = false;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
   }
 
   @Test

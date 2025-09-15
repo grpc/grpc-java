@@ -80,6 +80,7 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildCo
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
@@ -138,9 +139,11 @@ public class ClusterResolverLoadBalancerTest {
   private final OutlierDetection outlierDetection = OutlierDetection.create(
       100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
       FailurePercentageEjection.create(100, 100, 100, 100));
+  private final BackendMetricPropagation backendMetricPropagation =
+      BackendMetricPropagation.fromMetricSpecs(Arrays.asList("cpu_utilization"));
   private final DiscoveryMechanism edsDiscoveryMechanism1 =
       DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          Collections.emptyMap(), null, null);
+          Collections.emptyMap(), null, backendMetricPropagation);
   private final DiscoveryMechanism edsDiscoveryMechanism2 =
       DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
           Collections.emptyMap(), null, null);
@@ -149,7 +152,7 @@ public class ClusterResolverLoadBalancerTest {
           Collections.emptyMap(), outlierDetection, null);
   private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
       DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null,
-          Collections.emptyMap(), null);
+          Collections.emptyMap(), backendMetricPropagation);
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -302,6 +305,7 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
         tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
+    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
     RingHashConfig ringHashConfig = (RingHashConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
@@ -830,6 +834,7 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
         Collections.<DropOverload>emptyList(), "pick_first");
+    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
     assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
         .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);

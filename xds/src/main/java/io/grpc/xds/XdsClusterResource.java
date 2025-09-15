@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.Bootstrapper.ServerInfo;
+import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -68,9 +69,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
   static boolean isEnabledXdsHttpConnect =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_HTTP_CONNECT", false);
-  @VisibleForTesting
-  static boolean isEnabledOrcaLrsPropagation =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", false);
 
   @VisibleForTesting
   static final String AGGREGATE_CLUSTER_TYPE_NAME = "envoy.clusters.aggregate";

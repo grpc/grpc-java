@@ -27,6 +27,7 @@ import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
 import io.grpc.xds.client.Stats.UpstreamLocalityStats;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -252,6 +253,59 @@ public class LoadStatsManager2Test {
         1L);
     assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isEqualTo(
         2.718);
+  }
+
+  @Test
+  public void recordMetrics_orcaLrsPropagationEnabled_specificMetrics() {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+    BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
+        Arrays.asList("cpu_utilization", "named_metrics.named1"));
+    ClusterLocalityStats stats = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1, backendMetricPropagation);
+
+    stats.recordTopLevelMetrics(0.8, 0.5, 0.0); // cpu, mem, app
+    stats.recordBackendLoadMetricStats(ImmutableMap.of("named1", 123.4, "named2", 567.8));
+    stats.recordCallFinished(Status.OK);
+    ClusterStats report = Iterables.getOnlyElement(
+        loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
+    UpstreamLocalityStats localityStats =
+        Iterables.getOnlyElement(report.upstreamLocalityStatsList());
+
+    assertThat(localityStats.loadMetricStatsMap()).containsKey("cpu_utilization");
+    assertThat(localityStats.loadMetricStatsMap().get("cpu_utilization").totalMetricValue())
+        .isWithin(TOLERANCE).of(0.8);
+    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("mem_utilization");
+    assertThat(localityStats.loadMetricStatsMap()).containsKey("named_metrics.named1");
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named1").totalMetricValue())
+        .isWithin(TOLERANCE).of(123.4);
+    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
+  }
+
+  @Test
+  public void recordMetrics_orcaLrsPropagationEnabled_wildcardNamedMetrics() {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+    BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
+        Arrays.asList("named_metrics.*"));
+    ClusterLocalityStats stats = loadStatsManager.getClusterLocalityStats(
+        CLUSTER_NAME1, EDS_SERVICE_NAME1, LOCALITY1, backendMetricPropagation);
+
+    stats.recordBackendLoadMetricStats(ImmutableMap.of("named1", 123.4, "named2", 567.8));
+    stats.recordCallFinished(Status.OK);
+    ClusterStats report = Iterables.getOnlyElement(
+        loadStatsManager.getClusterStatsReports(CLUSTER_NAME1));
+    UpstreamLocalityStats localityStats =
+        Iterables.getOnlyElement(report.upstreamLocalityStatsList());
+
+    assertThat(localityStats.loadMetricStatsMap()).containsKey("named_metrics.named1");
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named1").totalMetricValue())
+        .isWithin(TOLERANCE).of(123.4);
+    assertThat(localityStats.loadMetricStatsMap()).containsKey("named_metrics.named2");
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named2").totalMetricValue())
+        .isWithin(TOLERANCE).of(567.8);
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test

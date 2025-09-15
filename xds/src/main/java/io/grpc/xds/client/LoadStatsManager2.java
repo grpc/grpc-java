@@ -58,7 +58,7 @@ public final class LoadStatsManager2 {
   private final Map<String, Map<String,
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
-  static boolean isEnabledOrcaLrsPropagation =
+  public static boolean isEnabledOrcaLrsPropagation =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", false);
 
   @VisibleForTesting
@@ -414,10 +414,6 @@ public final class LoadStatsManager2 {
      */
     public synchronized void recordTopLevelMetrics(double cpuUtilization, double memUtilization,
         double applicationUtilization) {
-      if (!isEnabledOrcaLrsPropagation) {
-        return;
-      }
-
       if (backendMetricPropagation.propagateCpuUtilization && cpuUtilization > 0) {
         updateLoadMetricStats("cpu_utilization", cpuUtilization);
       }

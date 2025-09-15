@@ -431,7 +431,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         serverLrsClientMap.get(serverInfo).startLoadReporting();
       }
     });
-
     return loadCounter;
   }
 
