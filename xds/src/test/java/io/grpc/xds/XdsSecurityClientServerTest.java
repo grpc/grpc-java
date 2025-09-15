@@ -221,7 +221,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -248,7 +248,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false, null);
+              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false, null, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -271,7 +271,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true, null);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true, null, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -299,7 +299,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null);
+              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -330,9 +330,12 @@ public class XdsSecurityClientServerTest {
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
               CLIENT_PEM_FILE, true,
-              // won't be used
+              // SAN matcher in CommonValidationContext. Will be overridden by autoSniSanValidation
               "server1.test.google.in",
-              false, SAN_TO_MATCH);
+              false,
+              // SNI in UpstreamTlsContext
+              SAN_TO_MATCH,
+              true);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -359,7 +362,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null);
+              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -641,7 +644,11 @@ public class XdsSecurityClientServerTest {
   private UpstreamTlsContext setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(
       String clientKeyFile,
       String clientPemFile,
-      boolean useCombinedValidationContext, String sanToMatch, boolean isMtls, String sni) {
+      boolean useCombinedValidationContext,
+      String sanToMatch,
+      boolean isMtls,
+      String sniInUpstreamTlsContext,
+      boolean autoSniSanValidation) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, null);
@@ -656,7 +663,7 @@ public class XdsSecurityClientServerTest {
               .addMatchSubjectAltNames(
                   StringMatcher.newBuilder()
                       .setExact(sanToMatch))
-              .build(), sni, false);
+              .build(), sniInUpstreamTlsContext, false, autoSniSanValidation);
     }
     return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
         "google_cloud_private_spiffe-client", "ROOT", null,

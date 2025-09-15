@@ -63,6 +63,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
+    this.sniForSanMatching = upstreamTlsContext.getAutoSniSanValidation()? sniForSanMatching : null;
     if (rootCertInstance == null
         && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())
         && !isMtls()) {
@@ -74,7 +75,6 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         throw new RuntimeException(e);
       }
     }
-    this.sniForSanMatching = upstreamTlsContext.getAutoSniSanValidation()? sniForSanMatching : null;
   }
 
   @Override

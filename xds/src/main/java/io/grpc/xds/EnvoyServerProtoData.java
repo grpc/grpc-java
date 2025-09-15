@@ -96,7 +96,8 @@ public final class EnvoyServerProtoData {
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
         io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             upstreamTlsContext) {
-      return new UpstreamTlsContext(upstreamTlsContext);
+      UpstreamTlsContext o = new UpstreamTlsContext(upstreamTlsContext);
+      return o;
     }
 
     public String getSni() {
@@ -113,7 +114,12 @@ public final class EnvoyServerProtoData {
 
     @Override
     public String toString() {
-      return "UpstreamTlsContext{" + "commonTlsContext=" + commonTlsContext + '}';
+      return "UpstreamTlsContext{" +
+          "commonTlsContext=" + commonTlsContext
+          + "sni=" + sni
+          + "\nauto_host_sni=" + auto_host_sni
+          + "\nauto_sni_san_validation=" + auto_sni_san_validation
+          + "}";
     }
   }
 

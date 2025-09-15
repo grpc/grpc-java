@@ -94,7 +94,7 @@ public class CertProviderClientSslContextProviderTest {
                       "root-default",
                       alpnProtocols,
                       staticCertValidationContext,
-                  null, false);
+                  null, false, false);
     }
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(

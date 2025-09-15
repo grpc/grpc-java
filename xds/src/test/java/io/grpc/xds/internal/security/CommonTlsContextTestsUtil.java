@@ -173,7 +173,7 @@ public class CommonTlsContextTestsUtil {
         null,
         null,
         sni,
-        autoHostSni);
+        autoHostSni, false);
   }
 
   /** Gets a cert from contents of a resource. */
@@ -284,7 +284,10 @@ public class CommonTlsContextTestsUtil {
       @Nullable String rootInstanceName,
       @Nullable String rootCertName,
       Iterable<String> alpnProtocols,
-      CertificateValidationContext staticCertValidationContext, String sni, boolean autoHostSni) {
+      CertificateValidationContext staticCertValidationContext,
+      String sni,
+      boolean autoHostSni,
+      boolean autoSniSanValidation) {
     return buildUpstreamTlsContext(
         buildCommonTlsContextForCertProviderInstance(
             certInstanceName,
@@ -293,7 +296,7 @@ public class CommonTlsContextTestsUtil {
             rootCertName,
             alpnProtocols,
             staticCertValidationContext),
-        sni, autoHostSni, false);
+        sni, autoHostSni, autoSniSanValidation);
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */

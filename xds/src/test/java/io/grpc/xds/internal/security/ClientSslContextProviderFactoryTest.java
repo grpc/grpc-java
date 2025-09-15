@@ -79,7 +79,7 @@ public class ClientSslContextProviderFactoryTest {
             "gcp_id",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null, null, false);
+            /* staticCertValidationContext= */ null, null, false, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -138,7 +138,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    /* staticCertValidationContext= */ null, null, false);
+                    /* staticCertValidationContext= */ null, null, false, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -172,7 +172,7 @@ public class ClientSslContextProviderFactoryTest {
                     "gcp_id",
                     "root-default",
                     /* alpnProtocols= */ null,
-                    staticCertValidationContext, null, false);
+                    staticCertValidationContext, null, false, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
@@ -202,7 +202,7 @@ public class ClientSslContextProviderFactoryTest {
             "file_provider",
             "root-default",
             /* alpnProtocols= */ null,
-            /* staticCertValidationContext= */ null, null, false);
+            /* staticCertValidationContext= */ null, null, false, false);
 
     Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
     clientSslContextProviderFactory =
