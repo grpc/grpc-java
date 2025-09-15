@@ -77,6 +77,7 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.ServerImplBuilder.ClientTransportServersBuilder;
@@ -1540,6 +1541,99 @@ public class ServerImplTest {
         .getServerSockets(id(server), id(transport), /*maxPageSize=*/ 1);
     assertThat(after.sockets).isEmpty();
     assertTrue(after.end);
+  }
+
+  @Test
+  public void testInternalClose_nonProtocolStatusRuntimeExceptionBecomesUnknown() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+
+    StatusRuntimeException statusRuntimeException
+        = new StatusRuntimeException(Status.PERMISSION_DENIED.withDescription("denied"));
+    doThrow(statusRuntimeException).when(mockListener).onReady();
+    listener.onReady();
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (RuntimeException t) {
+      assertSame(statusRuntimeException, t);
+      ensureServerStateNotLeaked();
+    }
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Code.UNKNOWN, status.getCode());
+    assertEquals("Application error processing RPC", status.getDescription());
+    assertEquals(statusRuntimeException, status.getCause());
+    assertTrue(metadataCaptor.getValue().keys().isEmpty());
+  }
+
+  @Test
+  public void testInternalClose_otherExceptionBecomesUnknown() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+
+    RuntimeException expectedT = new RuntimeException();
+    doThrow(expectedT).when(mockListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
+    listener.messagesAvailable(mock(StreamListener.MessageProducer.class));
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (RuntimeException t) {
+      assertSame(expectedT, t);
+      ensureServerStateNotLeaked();
+    }
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Code.UNKNOWN, status.getCode());
+    assertEquals("Application error processing RPC", status.getDescription());
+    assertEquals(expectedT, status.getCause());
+    assertTrue(metadataCaptor.getValue().keys().isEmpty());
+  }
+
+  @Test
+  public void testInternalClose_propagatesResourceExhausted() {
+    JumpToApplicationThreadServerStreamListener listener
+        = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+    ServerStreamListener mockListener = mock(ServerStreamListener.class);
+    listener.setListener(mockListener);
+
+    StatusRuntimeException statusRuntimeException
+            = new StatusRuntimeException(Status.RESOURCE_EXHAUSTED.withDescription("exhausted"));
+    doThrow(statusRuntimeException).when(mockListener)
+        .messagesAvailable(any(StreamListener.MessageProducer.class));
+    listener.messagesAvailable(mock(StreamListener.MessageProducer.class));
+    try {
+      executor.runDueTasks();
+      fail("Expected exception");
+    } catch (RuntimeException t) {
+      assertSame(statusRuntimeException, t);
+    }
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.RESOURCE_EXHAUSTED, status.getCode());
+    assertEquals("exhausted", status.getDescription());
+    assertEquals(statusRuntimeException, status.getCause());
+    assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
   private void createAndStartServer() throws IOException {

@@ -56,6 +56,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
@@ -808,10 +809,18 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /**
      * Like {@link ServerCall#close(Status, Metadata)}, but thread-safe for internal use.
      */
-    private void internalClose(Throwable t) {
+    private void internalClose(Throwable throwable) {
       // TODO(ejona86): this is not thread-safe :)
       String description = "Application error processing RPC";
-      stream.close(Status.UNKNOWN.withDescription(description).withCause(t), new Metadata());
+      Status statusToPropagate = Status.UNKNOWN.withDescription(description).withCause(throwable);
+      if (throwable instanceof StatusRuntimeException) {
+        StatusRuntimeException statusRuntimeException = (StatusRuntimeException) throwable;
+        Status.Code code = statusRuntimeException.getStatus().getCode();
+        if (code == Status.Code.RESOURCE_EXHAUSTED) {
+          statusToPropagate = statusRuntimeException.getStatus().withCause(throwable);
+        }
+      }
+      stream.close(statusToPropagate, new Metadata());
     }
 
     @Override
