@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -73,11 +72,6 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
   private final LoadBalancer delegate;
   private ClusterState clusterState;
 
-  ClusterResolverLoadBalancer(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
   ClusterResolverLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.delegate = lbRegistry.getProvider(PRIORITY_POLICY_NAME).newLoadBalancer(helper);
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");

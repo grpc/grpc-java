@@ -25,6 +25,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
@@ -41,6 +42,15 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvider {
+  private final LoadBalancerRegistry lbRegistry;
+
+  public ClusterResolverLoadBalancerProvider() {
+    this.lbRegistry = null;
+  }
+
+  ClusterResolverLoadBalancerProvider(LoadBalancerRegistry lbRegistry) {
+    this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+  }
 
   @Override
   public boolean isAvailable() {
@@ -65,7 +75,11 @@ public final class ClusterResolverLoadBalancerProvider extends LoadBalancerProvi
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new ClusterResolverLoadBalancer(helper);
+    LoadBalancerRegistry lbRegistry = this.lbRegistry;
+    if (lbRegistry == null) {
+      lbRegistry = LoadBalancerRegistry.getDefaultRegistry();
+    }
+    return new ClusterResolverLoadBalancer(helper, lbRegistry);
   }
 
   static final class ClusterResolverConfig {
