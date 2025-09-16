@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
@@ -134,10 +135,9 @@ public final class ServletAdapter {
     }
 
     Long timeoutNanos = headers.get(TIMEOUT_KEY);
-    if (timeoutNanos == null) {
-      timeoutNanos = 0L;
-    }
-    asyncCtx.setTimeout(TimeUnit.NANOSECONDS.toMillis(timeoutNanos));
+    asyncCtx.setTimeout(timeoutNanos != null
+        ? TimeUnit.NANOSECONDS.toMillis(timeoutNanos) + ASYNC_TIMEOUT_SAFETY_MARGIN
+        : 0);
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, method, headers);
 
@@ -163,6 +163,12 @@ public final class ServletAdapter {
         .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
     asyncCtx.addListener(new GrpcAsyncListener(stream, logId));
   }
+
+  /**
+   * Deadlines are managed via Context, servlet async timeout is not supposed to happen.
+   */
+  @VisibleForTesting
+  static final long ASYNC_TIMEOUT_SAFETY_MARGIN = 5_000;
 
   // This method must use Enumeration and its members, since that is the only way to read headers
   // from the servlet api.
