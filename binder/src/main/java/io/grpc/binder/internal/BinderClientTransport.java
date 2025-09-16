@@ -25,6 +25,8 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Process;
+import androidx.annotation.BinderThread;
+import androidx.annotation.MainThread;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -71,6 +73,7 @@ public final class BinderClientTransport extends BinderTransport
   private final Executor offloadExecutor;
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
+  private final ClientHandshake handshake;
 
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
@@ -122,6 +125,7 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+    this.handshake = new LegacyClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
 
@@ -331,7 +335,6 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
-    int remoteUid = Binder.getCallingUid();
     if (inState(TransportState.SETUP)) {
       int version = parcel.readInt();
       IBinder binder = parcel.readStrongBinder();
@@ -366,6 +369,7 @@ public final class BinderClientTransport extends BinderTransport
     @GuardedBy("BinderClientTransport.this")
     public void handleSetupTransport(OneWayBinderProxy binder) {
       int remoteUid = Binder.getCallingUid();
+      restrictIncomingBinderToCallsFrom(remoteUid);
       attributes = setSecurityAttrs(attributes, remoteUid);
       authResultFuture = checkServerAuthorizationAsync(remoteUid);
       Futures.addCallback(
@@ -376,16 +380,15 @@ public final class BinderClientTransport extends BinderTransport
               synchronized (BinderClientTransport.this) {
                 handleAuthResult(binder, result);
               }
+            }
 
-              @Override
-              public void onFailure(Throwable t) {
-                handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
-      }
+            @Override
+            public void onFailure(Throwable t) {
+              BinderClientTransport.this.handleAuthResult(t);
+            }
+          },
+          offloadExecutor);
     }
-  }
 
     @GuardedBy("BinderClientTransport.this")
     private void handleAuthResult(OneWayBinderProxy binder, Status authorization) {
