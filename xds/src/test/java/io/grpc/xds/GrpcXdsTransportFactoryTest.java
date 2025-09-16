@@ -18,13 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.BindableService;
 import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -95,7 +95,7 @@ public class GrpcXdsTransportFactoryTest {
         new GrpcXdsTransportFactory(null)
             .create(
                 Bootstrapper.ServerInfo.create(
-                    "localhost:" + server.getPort(), InsecureChannelCredentials.create()));
+                    "localhost:" + server.getPort(), ImmutableMap.of("type", "insecure")));
     MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
     XdsTransportFactory.StreamingCall<DiscoveryRequest, DiscoveryResponse> streamingCall =

@@ -38,7 +38,6 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusRequest;
 import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.envoyproxy.envoy.type.matcher.v3.NodeMatcher;
 import io.grpc.Deadline;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -79,7 +78,7 @@ public class CsdsServiceTest {
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
   private static final BootstrapInfo BOOTSTRAP_INFO = BootstrapInfo.builder()
       .servers(ImmutableList.of(
-          ServerInfo.create(SERVER_URI, InsecureChannelCredentials.create())))
+          ServerInfo.create(SERVER_URI, ImmutableMap.of("type", "insecure"))))
       .node(BOOTSTRAP_NODE)
       .build();
   private static final FakeXdsClient XDS_CLIENT_NO_RESOURCES = new FakeXdsClient();

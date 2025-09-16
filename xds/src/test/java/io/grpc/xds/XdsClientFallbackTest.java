@@ -36,6 +36,7 @@ import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
@@ -346,8 +347,15 @@ public class XdsClientFallbackTest {
     XdsTransportFactory xdsTransportFactory = new XdsTransportFactory() {
       @Override
       public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-        ChannelCredentials channelCredentials =
-            (ChannelCredentials) serverInfo.implSpecificConfig();
+        ImmutableMap<String, ?> implSpecificConfig = serverInfo.implSpecificConfig();
+        String type = JsonUtil.getString(implSpecificConfig, "type");
+        XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+            .getProvider(type);
+        Map<String, ?> config = JsonUtil.getObject(implSpecificConfig, "config");
+        if (config == null) {
+          config = ImmutableMap.of();
+        }
+        ChannelCredentials channelCredentials = provider.newChannelCredentials(config);
         return new GrpcXdsTransportFactory.GrpcXdsTransport(
             Grpc.newChannelBuilder(serverInfo.target(), channelCredentials)
               .executor(executor)

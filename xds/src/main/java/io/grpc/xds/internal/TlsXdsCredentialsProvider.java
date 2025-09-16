@@ -16,21 +16,123 @@
 
 package io.grpc.xds.internal;
 
+import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.ChannelCredentials;
+import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.JsonUtil;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.io.Closeable;
+import java.io.File;
+import java.text.ParseException;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A wrapper class that supports {@link TlsChannelCredentials} for Xds
  * by implementing {@link XdsCredentialsProvider}.
  */
 public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
+  private static final Logger logger = Logger.getLogger(TlsXdsCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "tls";
+  private static final String CERT_FILE_KEY = "certificate_file";
+  private static final String KEY_FILE_KEY = "private_key_file";
+  private static final String ROOT_FILE_KEY = "ca_certificate_file";
+  private static final String REFRESH_INTERVAL_KEY = "refresh_interval";
+  private static final long REFRESH_INTERVAL_DEFAULT = 600L;
+  private static final ScheduledExecutorServiceFactory scheduledExecutorServiceFactory =
+      ScheduledExecutorServiceFactory.DEFAULT_INSTANCE;
 
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    return TlsChannelCredentials.create();
+    TlsChannelCredentials.Builder tlsChannelCredsBuilder = TlsChannelCredentials.newBuilder();
+
+    if (jsonConfig == null) {
+      return tlsChannelCredsBuilder.build();
+    }
+
+    // use refresh interval from bootstrap config if provided; else defaults to 600s
+    long refreshIntervalSeconds = REFRESH_INTERVAL_DEFAULT;
+    String refreshIntervalFromConfig = JsonUtil.getString(jsonConfig, REFRESH_INTERVAL_KEY);
+    if (refreshIntervalFromConfig != null) {
+      try {
+        Duration duration = Durations.parse(refreshIntervalFromConfig);
+        refreshIntervalSeconds = Durations.toSeconds(duration);
+      } catch (ParseException e) {
+        logger.log(Level.WARNING, "Unable to parse refresh interval", e);
+        return null;
+      }
+    }
+
+    ImmutableList.Builder<Closeable> resourcesBuilder = ImmutableList.builder();
+    ScheduledExecutorService scheduledExecutorService = null;
+
+    // use trust certificate file path from bootstrap config if provided; else use system default
+    String rootCertPath = JsonUtil.getString(jsonConfig, ROOT_FILE_KEY);
+    if (rootCertPath != null) {
+      try {
+        scheduledExecutorService = scheduledExecutorServiceFactory.create();
+        AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+        Closeable trustManagerFuture = trustManager.updateTrustCredentials(
+            new File(rootCertPath),
+            refreshIntervalSeconds,
+            TimeUnit.SECONDS,
+            scheduledExecutorService);
+        resourcesBuilder.add(trustManagerFuture);
+        tlsChannelCredsBuilder.trustManager(trustManager);
+      } catch (Exception e) {
+        logger.log(Level.WARNING, "Unable to read root certificates", e);
+        return null;
+      }
+    }
+
+    // use certificate chain and private key file paths from bootstrap config if provided. Mind that
+    // both JSON values must be either set (mTLS case) or both unset (TLS case)
+    String certChainPath = JsonUtil.getString(jsonConfig, CERT_FILE_KEY);
+    String privateKeyPath = JsonUtil.getString(jsonConfig, KEY_FILE_KEY);
+    if (certChainPath != null && privateKeyPath != null) {
+      try {
+        if (scheduledExecutorService == null) {
+          scheduledExecutorService = scheduledExecutorServiceFactory.create();
+        }
+        AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
+        Closeable keyManagerFuture = keyManager.updateIdentityCredentials(
+            new File(certChainPath),
+            new File(privateKeyPath),
+            refreshIntervalSeconds,
+            TimeUnit.SECONDS,
+            scheduledExecutorService);
+        resourcesBuilder.add(keyManagerFuture);
+        tlsChannelCredsBuilder.keyManager(keyManager);
+      } catch (Exception e) {
+        logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
+        return null;
+      }
+    } else if (certChainPath != null || privateKeyPath != null) {
+      logger.log(Level.WARNING, "Certificate chain and private key must be both set or unset");
+      return null;
+    }
+
+    // if executor was initialized, add it to allocated resource list
+    if (scheduledExecutorService != null) {
+      resourcesBuilder.add(asCloseable(scheduledExecutorService));
+    }
+
+    return ResourceAllocatingChannelCredentials.create(
+      tlsChannelCredsBuilder.build(), resourcesBuilder.build());
+  }
+
+  private static Closeable asCloseable(ScheduledExecutorService scheduledExecutorService) {
+    return () -> scheduledExecutorService.shutdownNow();
   }
 
   @Override
@@ -48,4 +150,18 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
     return 5;
   }
 
+  abstract static class ScheduledExecutorServiceFactory {
+
+    private static final ScheduledExecutorServiceFactory DEFAULT_INSTANCE =
+        new ScheduledExecutorServiceFactory() {
+
+          @Override
+          ScheduledExecutorService create() {
+            return Executors.newSingleThreadScheduledExecutor(
+              GrpcUtil.getThreadFactory("grpc-certificate-files-%d", true));
+          }
+        };
+
+    abstract ScheduledExecutorService create();
+  }
 }

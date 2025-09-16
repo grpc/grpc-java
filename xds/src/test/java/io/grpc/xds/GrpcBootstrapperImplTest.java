@@ -17,6 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -24,10 +27,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import io.grpc.InsecureChannelCredentials;
-import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -115,7 +117,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -169,11 +171,11 @@ public class GrpcBootstrapperImplTest {
     assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
     assertThat(serverInfoList.get(0).implSpecificConfig())
-        .isInstanceOf(TlsChannelCredentials.class);
+        .isEqualTo(ImmutableMap.of("type", "tls"));
     assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
     assertThat(serverInfoList.get(1).implSpecificConfig())
-        .isInstanceOf(InsecureChannelCredentials.class);
+        .isEqualTo(ImmutableMap.of("type", "insecure"));
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -217,7 +219,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));;
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -288,7 +290,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));;
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -583,7 +585,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -605,7 +607,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -627,7 +629,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -650,7 +652,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
@@ -672,7 +674,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -896,6 +898,45 @@ public class GrpcBootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
+  }
+
+  @Test
+  public void parseTlsChannelCredentialsWithCustomCertificatesConfig()
+      throws XdsInitializationException, IOException {
+    String rootCertPath = TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath();
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    String privateKeyPath = TestUtils.loadCert(CLIENT_KEY_FILE).getAbsolutePath();
+
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\n"
+        + "          \"type\": \"tls\","
+        + "          \"config\": {\n"
+        + "            \"ca_certificate_file\": \"" + rootCertPath + "\",\n"
+        + "            \"certificate_file\": \"" + certChainPath + "\",\n"
+        + "            \"private_key_file\": \"" + privateKeyPath + "\"\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.implSpecificConfig()).isEqualTo(
+        ImmutableMap.of(
+            "type", "tls",
+            "config", ImmutableMap.of(
+                "ca_certificate_file", rootCertPath,
+                "certificate_file", certChainPath,
+                "private_key_file", privateKeyPath)));
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
