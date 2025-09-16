@@ -114,11 +114,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifyPrefix)) {
       return false;
     }
-    if ((ignoreCase
-        ? sanToVerifyPrefix.toLowerCase(Locale.ROOT)
-        : sanToVerifyPrefix).contains("*")) {
-      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyPrefix , ignoreCase);
-    }
     return ignoreCase
         ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
             sanToVerifyPrefix.toLowerCase(Locale.ROOT))
@@ -130,11 +125,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
     }
-    if ((ignoreCase
-        ? sanToVerifySuffix.toLowerCase(Locale.ROOT)
-        : sanToVerifySuffix).contains("*")) {
-      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySuffix , ignoreCase);
-    }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
                 sanToVerifySuffix.toLowerCase(Locale.ROOT))
@@ -145,11 +135,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
           String altNameFromCert, String sanToVerifySubstring, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(sanToVerifySubstring)) {
       return false;
-    }
-    if ((ignoreCase
-        ? sanToVerifySubstring.toLowerCase(Locale.ROOT)
-        : sanToVerifySubstring).contains("*")) {
-      return verifyDnsNameWildcard(altNameFromCert, sanToVerifySubstring , ignoreCase);
     }
     return ignoreCase
             ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
@@ -326,35 +311,34 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   public static boolean verifyDnsNameWildcard(
           String altNameFromCert, String sanToVerify, boolean ignoreCase) {
-    if (Strings.isNullOrEmpty(altNameFromCert) || Strings.isNullOrEmpty(sanToVerify)) {
-      return false;
-    }
-    String[] certLabels = (ignoreCase ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert)
+    String[] pattern = (ignoreCase ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert)
             .split("\\.", -1);
-    String[] sanLabels = (ignoreCase ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify)
+    String[] dnsLabel = (ignoreCase ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify)
             .split("\\.", -1);
-    if (certLabels.length != sanLabels.length) {
+    if (pattern.length != dnsLabel.length) {
       return false;
     }
-    if ((int) sanLabels[0].chars().filter(ch -> ch == '*').count() != 1
-            || sanLabels[0].startsWith("xn--")) {
+    if ((int) dnsLabel[0].chars().filter(ch -> ch == '*').count() != 1
+            || dnsLabel[0].startsWith("xn--")) {
       return false;
     }
-    for (int i = 1; i < sanLabels.length; i++) {
-      if (!sanLabels[i].equals(certLabels[i])) {
+    for (int i = 1; i < dnsLabel.length; i++) {
+      if (!dnsLabel[i].equals(pattern[i])) {
         return false;
       }
     }
-    return labelWildcardMatch(certLabels[0], sanLabels[0]);
+    return labelWildcardMatch(pattern[0], dnsLabel[0]);
   }
 
-  private static boolean labelWildcardMatch(String certLabel, String sanLabel) {
-    int starIndex = sanLabel.indexOf('*');
-    String prefix = sanLabel.substring(0, starIndex);
-    String suffix = sanLabel.substring(starIndex + 1);
-    if (certLabel.length() < prefix.length() + suffix.length()) {
-      return false;
+  private static boolean labelWildcardMatch(String pattern, String dnsLabel) {
+    if ("*".equals(pattern)) {
+      return true;
     }
-    return certLabel.startsWith(prefix) && certLabel.endsWith(suffix);
+    int starIndex = dnsLabel.indexOf('*');
+    String prefix = dnsLabel.substring(0, starIndex);
+    String suffix = dnsLabel.substring(starIndex + 1);
+    return pattern.length() >= (dnsLabel.length() - 1)
+        && pattern.startsWith(prefix)
+        && pattern.endsWith(suffix);
   }
 }
