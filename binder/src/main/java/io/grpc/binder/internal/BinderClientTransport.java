@@ -356,7 +356,7 @@ public final class BinderClientTransport extends BinderTransport
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
 
-  class LegacyClientHandshake implements ClientHandshake {
+  class LegacyClientHandshake extends ClientHandshake {
     @Override
     @MainThread
     @GuardedBy("BinderClientTransport.this")
@@ -434,22 +434,22 @@ public final class BinderClientTransport extends BinderTransport
   /**
    * An abstraction of the client handshake, used to transition off a problematic legacy approach.
    */
-  interface ClientHandshake {
+  abstract class ClientHandshake {
     /**
      * Notifies the implementation that the binding has succeeded and we are now connected to the
      * server 'endpointBinder'.
      */
-    @GuardedBy("this")
+    @GuardedBy("BinderClientTransport.this")
     @MainThread
-    void onBound(OneWayBinderProxy endpointBinder);
+    abstract void onBound(OneWayBinderProxy endpointBinder);
 
     /**
      * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
      * server that can be reached at 'serverBinder'.
      */
-    @GuardedBy("this")
+    @GuardedBy("BinderClientTransport.this")
     @BinderThread
-    void handleSetupTransport(OneWayBinderProxy serverBinder);
+    abstract void handleSetupTransport(OneWayBinderProxy serverBinder);
   }
 
   private static ClientStream newFailingClientStream(
