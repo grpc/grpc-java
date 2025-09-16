@@ -574,6 +574,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   }
 
   @VisibleForTesting
+  @SuppressWarnings("GuardedBy")
   LeakSafeOneWayBinder getIncomingBinderForTesting() {
     return this.incomingBinder;
   }
