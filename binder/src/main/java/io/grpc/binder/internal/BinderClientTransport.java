@@ -432,12 +432,14 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   /**
-   * An abstraction of the client handshake, used to transition off a problematic legacy approach.
+   * A base for all implementations of the client handshake.
+   *
+   * <p>Supports a clean migration away from the legacy approach, one client at a time.
    */
   abstract class ClientHandshake {
     /**
      * Notifies the implementation that the binding has succeeded and we are now connected to the
-     * server 'endpointBinder'.
+     * server's "endpoint" which can be reached at 'endpointBinder'.
      */
     @GuardedBy("BinderClientTransport.this")
     @MainThread
