@@ -118,7 +118,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
 
-  private static final String SAN_TO_MATCH = "waterzooi.test.google.be";
+  private static final String SNI_IN_UTC = "waterzooi.test.google.be";
 
   @Parameter
   public Boolean enableSpiffe;
@@ -221,7 +221,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, null, false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -248,7 +248,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, false, SAN_TO_MATCH, false, null, false);
+              CLIENT_PEM_FILE, false, SNI_IN_UTC, false, null, false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -271,7 +271,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, true, null, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, true, null, false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -287,7 +287,7 @@ public class XdsSecurityClientServerTest {
    * Subj Alt Names to match are specified in the validation context.
    */
   @Test
-  public void tlsClientServer_useSystemRootCerts_noAutoSniValidation_failureToMatchSubjAltNames()
+  public void tlsClientServer_noAutoSniValidation_failureToMatchSubjAltNames()
       throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
@@ -299,7 +299,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null, false);
+              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null, false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -317,7 +317,7 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
-  public void tlsClientServer_useSystemRootCerts_autoSniValidation()
+  public void tlsClientServer_autoSniValidation_sniInUTC()
       throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
@@ -333,9 +333,69 @@ public class XdsSecurityClientServerTest {
               // SAN matcher in CommonValidationContext. Will be overridden by autoSniSanValidation
               "server1.test.google.in",
               false,
-              // SNI in UpstreamTlsContext
-              SAN_TO_MATCH,
-              true);
+              SNI_IN_UTC,
+              false, true);
+
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
+      unaryRpc(/* requestMessage= */ "buddy", blockingStub);
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath);
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  @Test
+  public void tlsClientServer_sni_san_validation_from_hostname()
+      throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true,
+              // SAN matcher in CommonValidationContext. Will be overridden by autoSniSanValidation
+              "server1.test.google.in",
+              false,
+              "",
+              true, true);
+
+      // TODO: Change this to foo.test.gooogle.fr that needs wildcard matching after
+      // https://github.com/grpc/grpc-java/pull/12345 is done
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+          getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY,
+              "waterzooi.test.google.be");
+      unaryRpc(/* requestMessage= */ "buddy", blockingStub);
+    } finally {
+      Files.deleteIfExists(trustStoreFilePath);
+      clearTrustStoreSystemProperties();
+    }
+  }
+
+  @Test
+  public void tlsClientServer_autoSniValidation_noSNIApplicable_usesMatcherFromCmnVdnCtx()
+      throws Exception {
+    Path trustStoreFilePath = getCacertFilePathForTestCa();
+    try {
+      setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
+      DownstreamTlsContext downstreamTlsContext =
+          setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
+              null, false, false);
+      buildServerWithTlsContext(downstreamTlsContext);
+
+      UpstreamTlsContext upstreamTlsContext =
+          setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, true,
+              // This is what will get used for the SAN validation since no SNI was used
+              "waterzooi.test.google.be",
+              false,
+              "",
+              false, true);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -362,7 +422,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SAN_TO_MATCH, false, null, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, null, false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -648,7 +708,7 @@ public class XdsSecurityClientServerTest {
       String sanToMatch,
       boolean isMtls,
       String sniInUpstreamTlsContext,
-      boolean autoSniSanValidation) {
+      boolean autoHostSni, boolean autoSniSanValidation) {
     bootstrapInfoForClient = CommonBootstrapperTestUtils
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, null);
@@ -663,7 +723,7 @@ public class XdsSecurityClientServerTest {
               .addMatchSubjectAltNames(
                   StringMatcher.newBuilder()
                       .setExact(sanToMatch))
-              .build(), sniInUpstreamTlsContext, false, autoSniSanValidation);
+              .build(), sniInUpstreamTlsContext, autoHostSni, autoSniSanValidation);
     }
     return CommonTlsContextTestsUtil.buildNewUpstreamTlsContextForCertProviderInstance(
         "google_cloud_private_spiffe-client", "ROOT", null,
@@ -748,8 +808,18 @@ public class XdsSecurityClientServerTest {
   }
 
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority)
-      throws URISyntaxException {
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority) {
+    return getBlockingStub(upstreamTlsContext, overrideAuthority, overrideAuthority);
+  }
+
+  // Two separate parameters for overrideAuthority and addrAttribute is for the SAN SNI validation test
+  // tlsClientServer_useSystemRootCerts_sni_san_validation_from_hostname that uses hostname passed for SNI.
+  // foo.test.google.fr is used for virtual host matching via authority but it can't be used
+  // for SNI in this testcase because foo.test.google.fr needs wildcard matching to match against *.test.google.fr
+  // in the certificate SNI, which isn't implemented yet (https://github.com/grpc/grpc-java/pull/12345 implements it)
+  // so use an exact match SAN such as waterzooi.test.google.be for SNI for this testcase.
+  private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String addrAttribute) {
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
             "sectest://localhost:" + port,
@@ -761,14 +831,16 @@ public class XdsSecurityClientServerTest {
     InetSocketAddress socketAddress =
         new InetSocketAddress(Inet4Address.getLoopbackAddress(), port);
     tlsContextManagerForClient = new TlsContextManagerImpl(bootstrapInfoForClient);
-    sslContextAttributes =
-        (upstreamTlsContext != null)
-            ? Attributes.newBuilder()
-                .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                    new SslContextProviderSupplier(
-                        upstreamTlsContext, tlsContextManagerForClient))
-                .build()
-            : Attributes.EMPTY;
+    Attributes.Builder sslContextAttributesBuilder = (upstreamTlsContext != null)
+        ? Attributes.newBuilder()
+        .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+            new SslContextProviderSupplier(
+                upstreamTlsContext, tlsContextManagerForClient))
+        : Attributes.newBuilder();
+    if (addrAttribute != null) {
+      sslContextAttributesBuilder.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, addrAttribute);
+    }
+    sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(
         ImmutableList.of(new EquivalentAddressGroup(socketAddress, sslContextAttributes)));
     return SimpleServiceGrpc.newBlockingStub(cleanupRule.register(channelBuilder.build()));
