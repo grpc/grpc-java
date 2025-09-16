@@ -32,6 +32,7 @@ import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
+import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricInstrumentRegistryAccessor;
 import io.grpc.MetricRecorder;
@@ -79,6 +80,9 @@ public class MetricRecorderImplTest {
   private final LongGaugeMetricInstrument longGaugeInstrument =
       registry.registerLongGauge("gauge0", DESCRIPTION, UNIT, REQUIRED_LABEL_KEYS,
           OPTIONAL_LABEL_KEYS, ENABLED);
+  private final LongUpDownCounterMetricInstrument longUpDownCounterInstrument =
+      registry.registerLongUpDownCounter("upDownCounter0", DESCRIPTION, UNIT,
+          REQUIRED_LABEL_KEYS, OPTIONAL_LABEL_KEYS, ENABLED);
   private MetricRecorder recorder;
 
   @Before
@@ -88,7 +92,7 @@ public class MetricRecorderImplTest {
 
   @Test
   public void addCounter() {
-    when(mockSink.getMeasuresSize()).thenReturn(4);
+    when(mockSink.getMeasuresSize()).thenReturn(6);
 
     recorder.addDoubleCounter(doubleCounterInstrument, 1.0, REQUIRED_LABEL_VALUES,
         OPTIONAL_LABEL_VALUES);
@@ -99,6 +103,12 @@ public class MetricRecorderImplTest {
         OPTIONAL_LABEL_VALUES);
     verify(mockSink, times(2)).addLongCounter(eq(longCounterInstrument), eq(1L),
         eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
+
+    recorder.addLongUpDownCounter(longUpDownCounterInstrument, -10, REQUIRED_LABEL_VALUES,
+        OPTIONAL_LABEL_VALUES);
+    verify(mockSink, times(2))
+        .addLongUpDownCounter(eq(longUpDownCounterInstrument), eq(-10L),
+            eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
 
     verify(mockSink, never()).updateMeasures(registry.getMetricInstruments());
   }
@@ -190,6 +200,13 @@ public class MetricRecorderImplTest {
     verify(mockSink, times(2))
         .registerBatchCallback(any(Runnable.class), eq(longGaugeInstrument));
     registration.close();
+
+    // Long UpDown Counter
+    recorder.addLongUpDownCounter(longUpDownCounterInstrument, -10, REQUIRED_LABEL_VALUES,
+        OPTIONAL_LABEL_VALUES);
+    verify(mockSink, times(12)).updateMeasures(anyList());
+    verify(mockSink, times(2)).addLongUpDownCounter(eq(longUpDownCounterInstrument), eq(-10L),
+        eq(REQUIRED_LABEL_VALUES), eq(OPTIONAL_LABEL_VALUES));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -205,6 +222,13 @@ public class MetricRecorderImplTest {
     when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addLongCounter(longCounterInstrument, 1, ImmutableList.of(),
+        OPTIONAL_LABEL_VALUES);
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void addLongUpDownCounterMismatchedRequiredLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(6);
+    recorder.addLongUpDownCounter(longUpDownCounterInstrument, 1, ImmutableList.of(),
         OPTIONAL_LABEL_VALUES);
   }
 
@@ -257,6 +281,13 @@ public class MetricRecorderImplTest {
     when(mockSink.getMeasuresSize()).thenReturn(4);
 
     recorder.addLongCounter(longCounterInstrument, 1, REQUIRED_LABEL_VALUES,
+        ImmutableList.of());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void addLongUpDownCounterMismatchedOptionalLabelValues() {
+    when(mockSink.getMeasuresSize()).thenReturn(6);
+    recorder.addLongUpDownCounter(longUpDownCounterInstrument, 1, REQUIRED_LABEL_VALUES,
         ImmutableList.of());
   }
 
