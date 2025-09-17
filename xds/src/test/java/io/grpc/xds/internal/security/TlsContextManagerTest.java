@@ -169,7 +169,7 @@ public class TlsContextManagerTest {
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
     SslContextProvider mockProvider = mock(SslContextProvider.class);
-    when(mockClientFactory.create(new AbstractMap.SimpleImmutableEntry("sni", upstreamTlsContext)))
+    when(mockClientFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI)))
         .thenReturn(mockProvider);
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext, SNI);

@@ -16,6 +16,8 @@
 
 package io.grpc.xds.internal.security.trust;
 
+import io.grpc.internal.GrpcUtil;
+
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,6 +31,8 @@ import java.security.cert.X509Certificate;
  * Contains certificate utility method(s).
  */
 public final class CertificateUtils {
+  public static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
+
   /**
    * Generates X509Certificate array from a file on disk.
    *

@@ -53,8 +53,6 @@ import javax.net.ssl.X509TrustManager;
  */
 final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
 
-  static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
-
   // ref: io.grpc.okhttp.internal.OkHostnameVerifier and
   // sun.security.x509.GeneralNameInterface
   private static final int ALT_DNS_NAME = 2;
@@ -220,7 +218,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
-    List<StringMatcher> verifyList = isXdsSniEnabled && !Strings.isNullOrEmpty(sniForSanMatching)
+    List<StringMatcher> verifyList = CertificateUtils.isXdsSniEnabled && !Strings.isNullOrEmpty(sniForSanMatching)
             ? ImmutableList.of(StringMatcher.newBuilder().setExact(sniForSanMatching).build())
             : certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {

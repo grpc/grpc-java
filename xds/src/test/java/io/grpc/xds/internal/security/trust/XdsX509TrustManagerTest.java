@@ -108,6 +108,7 @@ public class XdsX509TrustManagerTest {
   @Test
   public void missingPeerCerts() {
     if (useSniForSanMatching) {
+      CertificateUtils.isXdsSniEnabled = true;
       trustManager = new XdsX509TrustManager(
               CertificateValidationContext.getDefaultInstance(), mockDelegate, "foo.com");
     } else {
@@ -122,12 +123,17 @@ public class XdsX509TrustManagerTest {
       fail("no exception thrown");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
     }
   }
 
   @Test
   public void emptyArrayPeerCerts() {
     if (useSniForSanMatching) {
+      CertificateUtils.isXdsSniEnabled = true;
       trustManager = new XdsX509TrustManager(
               CertificateValidationContext.getDefaultInstance(), mockDelegate, "foo.com");
     } else {
@@ -142,12 +148,17 @@ public class XdsX509TrustManagerTest {
       fail("no exception thrown");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
     }
   }
 
   @Test
   public void noSansInPeerCerts() throws CertificateException, IOException {
     if (useSniForSanMatching) {
+      CertificateUtils.isXdsSniEnabled = true;
       trustManager = new XdsX509TrustManager(
               CertificateValidationContext.getDefaultInstance(), mockDelegate, "foo.com");
     } else {
@@ -164,13 +175,18 @@ public class XdsX509TrustManagerTest {
       fail("no exception thrown");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
     }
   }
 
   @Test
   public void oneSanInPeerCertsVerifies() throws CertificateException, IOException {
     if (useSniForSanMatching) {
-      trustManager = new XdsX509TrustManager(
+      CertificateUtils.isXdsSniEnabled = true;
+          trustManager = new XdsX509TrustManager(
               CertificateValidationContext.getDefaultInstance(), mockDelegate, "waterzooi.test.google.be");
     } else {
       StringMatcher stringMatcher =
@@ -183,25 +199,36 @@ public class XdsX509TrustManagerTest {
               CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
       trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     }
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
+    try {
+      X509Certificate[] certs =
+          CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+      trustManager.verifySubjectAltNameInChain(certs);
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
+    }
   }
 
   @Test
   public void autoSanSniValidation_overrides_subAltNamesToMatch() throws CertificateException, IOException {
-    StringMatcher stringMatcher =
-            StringMatcher.newBuilder()
-                    .setExact("notgonnabeused.test.google.be")
-                    .setIgnoreCase(false)
-                    .build();
-    @SuppressWarnings("deprecation")
-    CertificateValidationContext certContext =
-            CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
-    trustManager = new XdsX509TrustManager(certContext, mockDelegate, "waterzooi.test.google.be");
-    X509Certificate[] certs =
-            CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
+    CertificateUtils.isXdsSniEnabled = true;
+    try {
+      StringMatcher stringMatcher =
+          StringMatcher.newBuilder()
+              .setExact("notgonnabeused.test.google.be")
+              .setIgnoreCase(false)
+              .build();
+      @SuppressWarnings("deprecation")
+      CertificateValidationContext certContext =
+          CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+      trustManager = new XdsX509TrustManager(certContext, mockDelegate, "waterzooi.test.google.be");
+      X509Certificate[] certs =
+          CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+      trustManager.verifySubjectAltNameInChain(certs);
+    } finally {
+      CertificateUtils.isXdsSniEnabled = false;
+    }
   }
 
   @Test
@@ -487,6 +514,7 @@ public class XdsX509TrustManagerTest {
   public void oneSanInPeerCertsNotFoundException()
           throws CertificateException, IOException {
     if (useSniForSanMatching) {
+      CertificateUtils.isXdsSniEnabled = true;
       trustManager = new XdsX509TrustManager(CertificateValidationContext.getDefaultInstance(), mockDelegate,
               "x.foo.com");
     } else {
@@ -503,6 +531,10 @@ public class XdsX509TrustManagerTest {
       fail("no exception thrown");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
     }
   }
 
@@ -549,6 +581,7 @@ public class XdsX509TrustManagerTest {
     //    For example, *.example.com matches test.example.com but does not match
     //    sub.test.example.com.
     if (useSniForSanMatching) {
+      CertificateUtils.isXdsSniEnabled = true;
       trustManager = new XdsX509TrustManager(CertificateValidationContext.getDefaultInstance(),
               mockDelegate, "sub.abc.test.youtube.com");
     } else {
@@ -566,6 +599,10 @@ public class XdsX509TrustManagerTest {
       fail("no exception thrown");
     } catch (CertificateException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    } finally {
+      if (useSniForSanMatching) {
+        CertificateUtils.isXdsSniEnabled = false;
+      }
     }
   }
 

@@ -33,6 +33,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -193,7 +194,6 @@ public final class SecurityProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSecurityHandler
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
-    static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
 
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
@@ -218,7 +218,7 @@ public final class SecurityProtocolNegotiators {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
       EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
       UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-      if (isXdsSniEnabled) {
+      if (CertificateUtils.isXdsSniEnabled) {
         sni = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
             ? endpointHostname : upstreamTlsContext.getSni();
       } else {

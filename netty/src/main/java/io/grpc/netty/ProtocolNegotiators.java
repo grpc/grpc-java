@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -89,6 +90,7 @@ import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
@@ -641,16 +643,21 @@ final class ProtocolNegotiators {
     private final X509TrustManager x509ExtendedTrustManager;
     private SSLEngine sslEngine;
 
-    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
+    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String sniHostPort,
                      Executor executor, ChannelLogger negotiationLogger,
                      Optional<Runnable> handshakeCompleteRunnable,
                      ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
                      X509TrustManager x509ExtendedTrustManager) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
-      HostPort hostPort = parseAuthority(authority);
-      this.host = hostPort.host;
-      this.port = hostPort.port;
+      if (!Strings.isNullOrEmpty(sniHostPort)) {
+        HostPort hostPort = parseAuthority(sniHostPort);
+        this.host = hostPort.host;
+        this.port = hostPort.port;
+      } else {
+        this.host = null;
+        this.port = 0;
+      }
       this.executor = executor;
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
       this.x509ExtendedTrustManager = x509ExtendedTrustManager;
@@ -659,7 +666,11 @@ final class ProtocolNegotiators {
     @Override
     @IgnoreJRERequirement
     protected void handlerAdded0(ChannelHandlerContext ctx) {
-      sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      if (host != null) {
+        sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      } else {
+        sslEngine = sslContext.newEngine(ctx.alloc());
+      }
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
       sslEngine.setSSLParameters(sslParams);

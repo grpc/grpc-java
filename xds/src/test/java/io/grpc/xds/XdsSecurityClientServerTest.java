@@ -76,6 +76,7 @@ import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -315,6 +316,7 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_autoSniValidation_sniInUTC()
       throws Exception {
+    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -338,12 +340,14 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_sniFromHostname()
       throws Exception {
+    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -370,12 +374,14 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_noSNIApplicable_usesMatcherFromCmnVdnCtx()
       throws Exception {
+    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -399,6 +405,7 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
@@ -815,7 +822,7 @@ public class XdsSecurityClientServerTest {
   // in the certificate SNI, which isn't implemented yet (https://github.com/grpc/grpc-java/pull/12345 implements it)
   // so use an exact match SAN such as waterzooi.test.google.be for SNI for this testcase.
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String addrAttribute) {
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String addrNameAttribute) {
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
             "sectest://localhost:" + port,
@@ -833,8 +840,8 @@ public class XdsSecurityClientServerTest {
             new SslContextProviderSupplier(
                 upstreamTlsContext, tlsContextManagerForClient))
         : Attributes.newBuilder();
-    if (addrAttribute != null) {
-      sslContextAttributesBuilder.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, addrAttribute);
+    if (addrNameAttribute != null) {
+      sslContextAttributesBuilder.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, addrNameAttribute);
     }
     sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(

@@ -51,6 +51,7 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -145,7 +146,7 @@ public class SecurityProtocolNegotiatorsTest {
 
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_autoHostSni_hostnameIsPassedToClientSecurityHandler() {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, true, false);
@@ -168,7 +169,7 @@ public class SecurityProtocolNegotiatorsTest {
       assertThat(newHandler).isInstanceOf(ClientSecurityHandler.class);
       assertThat(((ClientSecurityHandler) newHandler).getSni()).isEqualTo(FAKE_AUTHORITY);
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
@@ -207,7 +208,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        }, null);
+        }, FAKE_AUTHORITY);
     assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -227,7 +228,7 @@ public class SecurityProtocolNegotiatorsTest {
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsTrue_usesEndpointHostname() {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
           .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
@@ -244,13 +245,13 @@ public class SecurityProtocolNegotiatorsTest {
 
       assertThat(clientSecurityHandler.getSni()).isEqualTo(HOSTNAME);
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsEmpty_usesSniFromUpstreamTlsContext() {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
           .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
@@ -267,13 +268,13 @@ public class SecurityProtocolNegotiatorsTest {
 
       assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsNull_usesSniFromUpstreamTlsContext() {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
           .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
@@ -290,13 +291,13 @@ public class SecurityProtocolNegotiatorsTest {
 
       assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsFalse_usesSniFromUpstreamTlsContext() {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
           .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
@@ -313,13 +314,13 @@ public class SecurityProtocolNegotiatorsTest {
 
       assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void sniFeatureNotEnabled_usesChannelAuthorityForSni() {
-    ClientSecurityHandler.isXdsSniEnabled = false;
+    CertificateUtils.isXdsSniEnabled = false;
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
             .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
                     CA_PEM_FILE, null, null, null, null, null);
@@ -498,7 +499,7 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
           throws InterruptedException, TimeoutException, ExecutionException {
-    ClientSecurityHandler.isXdsSniEnabled = true;
+    CertificateUtils.isXdsSniEnabled = true;
     try {
       FakeClock executor = new FakeClock();
       CommonCertProviderTestUtils.register(executor);
@@ -533,7 +534,7 @@ public class SecurityProtocolNegotiatorsTest {
             protected void onException(Throwable throwable) {
               future.set(throwable);
             }
-          }, null);
+          }, "");
       executor.runDueTasks();
       channel.runPendingTasks(); // need this for tasks to execute on eventLoop
       Object fromFuture = future.get(5, TimeUnit.SECONDS);
@@ -548,7 +549,7 @@ public class SecurityProtocolNegotiatorsTest {
       assertTrue(channel.isOpen());
       CommonCertProviderTestUtils.register0();
     } finally {
-      ClientSecurityHandler.isXdsSniEnabled = false;
+      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
