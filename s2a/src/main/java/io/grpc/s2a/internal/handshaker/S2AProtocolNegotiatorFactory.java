@@ -38,7 +38,6 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.InternalProtocolNegotiators.ProtocolNegotiationHandler;
-import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -260,7 +259,7 @@ public final class S2AProtocolNegotiatorFactory {
                               s2aStub.close();
                             }
                           }),
-                          null)
+                          null, false)
                       .newHandler(grpcHandler);
 
               // Delegate the rest of the handshake to the TLS handler. and remove the 

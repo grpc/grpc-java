@@ -836,7 +836,7 @@ public class NettyClientTransportTest {
         .keyManager(clientCert, clientKey)
         .build();
     ProtocolNegotiator negotiator = ProtocolNegotiators.tls(clientContext, clientExecutorPool,
-        Optional.absent(), null, null);
+        Optional.absent(), null, null, false);
     // after starting the client, the Executor in the client pool should be used
     assertEquals(true, clientExecutorPool.isInUse());
     final NettyClientTransport transport = newTransport(negotiator);

@@ -282,10 +282,6 @@ public class XdsSecurityClientServerTest {
     }
   }
 
-  /**
-   * Use system root ca cert for TLS channel - no mTLS.
-   * Subj Alt Names to match are specified in the validation context.
-   */
   @Test
   public void tlsClientServer_noAutoSniValidation_failureToMatchSubjAltNames()
       throws Exception {
@@ -346,7 +342,7 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
-  public void tlsClientServer_sni_san_validation_from_hostname()
+  public void tlsClientServer_autoSniValidation_sniFromHostname()
       throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {

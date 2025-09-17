@@ -54,9 +54,6 @@ import javax.annotation.Nullable;
 @VisibleForTesting
 public final class SecurityProtocolNegotiators {
 
-  static boolean useChannelAuthorityIfNoSniApplicable =
-          GrpcUtil.getFlag("GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE", false);
-
   /** Name associated with individual address, if available (e.g., DNS name). */
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
@@ -196,6 +193,8 @@ public final class SecurityProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSecurityHandler
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+    static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
+
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
     private final String sni;
@@ -219,12 +218,12 @@ public final class SecurityProtocolNegotiators {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
       EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
       UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-      String sniVal = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
-              ? endpointHostname : upstreamTlsContext.getSni();
-      if (Strings.isNullOrEmpty(sniVal) && useChannelAuthorityIfNoSniApplicable) {
-        sniVal = grpcHandler.getAuthority();
+      if (isXdsSniEnabled) {
+        sni = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
+            ? endpointHostname : upstreamTlsContext.getSni();
+      } else {
+        sni = grpcHandler.getAuthority();
       }
-      sni = sniVal;
     }
 
     @VisibleForTesting
@@ -250,7 +249,7 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext, sni).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(sslContext, sni, true).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);

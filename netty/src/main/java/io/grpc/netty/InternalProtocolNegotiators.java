@@ -38,14 +38,16 @@ public final class InternalProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
+   *
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
+   * @param isXdsTarget
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
-          ObjectPool<? extends Executor> executorPool,
-          Optional<Runnable> handshakeCompleteRunnable,
-          String sni) {
+                                                                  ObjectPool<? extends Executor> executorPool,
+                                                                  Optional<Runnable> handshakeCompleteRunnable,
+                                                                  String sni, boolean isXdsTarget) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
-        executorPool, handshakeCompleteRunnable, null, sni);
+        executorPool, handshakeCompleteRunnable, null, sni, isXdsTarget);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -73,8 +75,8 @@ public final class InternalProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(
-      SslContext sslContext, String sni) {
-    return tls(sslContext, null, Optional.absent(), sni);
+      SslContext sslContext, String sni, boolean isXdsTarget) {
+    return tls(sslContext, null, Optional.absent(), sni, isXdsTarget);
   }
 
   /**

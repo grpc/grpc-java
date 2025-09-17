@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -583,7 +582,7 @@ final class ProtocolNegotiators {
                                        ObjectPool<? extends Executor> executorPool,
                                        Optional<Runnable> handshakeCompleteRunnable,
                                        X509TrustManager x509ExtendedTrustManager,
-                                       String sni) {
+                                       String sni, boolean isXdsTarget) {
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       this.executorPool = executorPool;
       if (this.executorPool != null) {
@@ -592,6 +591,7 @@ final class ProtocolNegotiators {
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
       this.x509ExtendedTrustManager = x509ExtendedTrustManager;
       this.sni = sni;
+      this.isXdsTarget = isXdsTarget;
     }
 
     private final SslContext sslContext;
@@ -599,6 +599,7 @@ final class ProtocolNegotiators {
     private final Optional<Runnable> handshakeCompleteRunnable;
     private final X509TrustManager x509ExtendedTrustManager;
     private final String sni;
+    private final boolean isXdsTarget;
     private Executor executor;
 
     @Override
@@ -611,7 +612,7 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          !Strings.isNullOrEmpty(sni) ? sni : grpcHandler.getAuthority(),
+          isXdsTarget ? sni : grpcHandler.getAuthority(),
           this.executor, negotiationLogger, handshakeCompleteRunnable, null,
           x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
@@ -753,13 +754,14 @@ final class ProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
+   *
    * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
-      ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
-      X509TrustManager x509ExtendedTrustManager, String sni) {
+                                       ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
+                                       X509TrustManager x509ExtendedTrustManager, String sni, boolean isXdsTarget) {
     return new ClientTlsProtocolNegotiator(sslContext, executorPool, handshakeCompleteRunnable,
-        x509ExtendedTrustManager, sni);
+        x509ExtendedTrustManager, sni, isXdsTarget);
   }
 
   /**
@@ -769,7 +771,7 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
       X509TrustManager x509ExtendedTrustManager) {
-    return tls(sslContext, null, Optional.absent(), x509ExtendedTrustManager, null);
+    return tls(sslContext, null, Optional.absent(), x509ExtendedTrustManager, null, false);
   }
 
   public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext,

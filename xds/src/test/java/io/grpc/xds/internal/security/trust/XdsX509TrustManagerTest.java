@@ -189,7 +189,7 @@ public class XdsX509TrustManagerTest {
   }
 
   @Test
-  public void autoSanSniValidation_precedes_subAltNamesToMatch() throws CertificateException, IOException {
+  public void autoSanSniValidation_overrides_subAltNamesToMatch() throws CertificateException, IOException {
     StringMatcher stringMatcher =
             StringMatcher.newBuilder()
                     .setExact("notgonnabeused.test.google.be")

@@ -1271,7 +1271,7 @@ public class ProtocolNegotiatorsTest {
     }
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext,
-        null, Optional.absent(), null, null);
+        null, Optional.absent(), null, null, false);
     WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 

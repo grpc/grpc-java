@@ -27,6 +27,7 @@ import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SpiffeUtil;
 import java.net.Socket;
 import java.security.cert.CertificateException;
@@ -51,6 +52,8 @@ import javax.net.ssl.X509TrustManager;
  * SANs (subject-alternate-names) against the list in CertificateValidationContext.
  */
 final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
+
+  static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
 
   // ref: io.grpc.okhttp.internal.OkHostnameVerifier and
   // sun.security.x509.GeneralNameInterface
@@ -217,7 +220,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
-    List<StringMatcher> verifyList = !Strings.isNullOrEmpty(sniForSanMatching)
+    List<StringMatcher> verifyList = isXdsSniEnabled && !Strings.isNullOrEmpty(sniForSanMatching)
             ? ImmutableList.of(StringMatcher.newBuilder().setExact(sniForSanMatching).build())
             : certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {
