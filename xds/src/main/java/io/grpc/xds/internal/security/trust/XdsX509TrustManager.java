@@ -147,10 +147,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
-    if ((ignoreCase
-        ? sanToVerifyExact.toLowerCase(Locale.ROOT)
-        : sanToVerifyExact).contains("*")) {
-      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact , ignoreCase);
+    if (sanToVerifyExact.contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact, ignoreCase);
     }
     return ignoreCase
         ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
@@ -311,34 +309,41 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   public static boolean verifyDnsNameWildcard(
           String altNameFromCert, String sanToVerify, boolean ignoreCase) {
-    String[] pattern = (ignoreCase ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert)
-            .split("\\.", -1);
-    String[] dnsLabel = (ignoreCase ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify)
-            .split("\\.", -1);
-    if (pattern.length != dnsLabel.length) {
+    String[] splitPattern = splitAtFirstDelimiter(ignoreCase
+        ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
+    String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
+        ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert);
+    if (splitPattern.length < 2 || splitDnsName.length < 2) {
       return false;
     }
-    if ((int) dnsLabel[0].chars().filter(ch -> ch == '*').count() != 1
-            || dnsLabel[0].startsWith("xn--")) {
-      return false;
+    if (splitPattern[0].contains("*")
+        && !splitPattern[1].contains("*")
+        && !splitPattern[0].startsWith("xn--")) {
+      return splitDnsName[1].equals(splitPattern[1])
+          && labelWildcardMatch(splitDnsName[0], splitPattern[0]);
     }
-    for (int i = 1; i < dnsLabel.length; i++) {
-      if (!dnsLabel[i].equals(pattern[i])) {
-        return false;
-      }
-    }
-    return labelWildcardMatch(pattern[0], dnsLabel[0]);
+    return false;
   }
 
-  private static boolean labelWildcardMatch(String pattern, String dnsLabel) {
-    if ("*".equals(pattern)) {
+  private static boolean labelWildcardMatch(String dnsLabel, String pattern) {
+    final char glob = '*';
+    if (pattern.length() == 1 && pattern.charAt(0) == glob) {
       return true;
     }
-    int starIndex = dnsLabel.indexOf('*');
-    String prefix = dnsLabel.substring(0, starIndex);
-    String suffix = dnsLabel.substring(starIndex + 1);
-    return pattern.length() >= (dnsLabel.length() - 1)
-        && pattern.startsWith(prefix)
-        && pattern.endsWith(suffix);
+    if (pattern.chars().filter(ch -> ch == glob).count() == 1) {
+      String[] splitPattern = pattern.split("\\*", -1);
+      return (pattern.length() <= dnsLabel.length() + 1)
+          && dnsLabel.startsWith(splitPattern[0])
+          && dnsLabel.endsWith(splitPattern[1]);
+    }
+    return false;
+  }
+
+  private static String[] splitAtFirstDelimiter(String s) {
+    int index = s.indexOf(".");
+    if (index == -1) {
+      return new String[]{s};
+    }
+    return new String[]{s.substring(0, index), s.substring(index + 1)};
   }
 }
