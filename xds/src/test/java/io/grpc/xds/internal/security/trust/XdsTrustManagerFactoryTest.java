@@ -177,6 +177,19 @@ public class XdsTrustManagerFactoryTest {
   }
 
   @Test
+  public void constructorRootCert_nonStaticContext_systemRootCerts_valid()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
+    CertificateValidationContext certValidationContext = CertificateValidationContext.newBuilder()
+        .setTrustedCa(
+            DataSource.newBuilder().setFilename(TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath()))
+        .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
+        .build();
+    new XdsTrustManagerFactory(
+        new X509Certificate[] {x509Cert}, certValidationContext, null);
+  }
+
+  @Test
   public void constructorRootCert_checkServerTrusted_throwsException()
       throws CertificateException, IOException, CertStoreException {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);

@@ -81,7 +81,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       throws CertStoreException {
     if (validationContextIsStatic) {
       checkArgument(
-          certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
+          certificateValidationContext == null || !certificateValidationContext.hasTrustedCa()
+          || certificateValidationContext.hasSystemRootCerts(),
           "only static certificateValidationContext expected");
     }
     xdsX509TrustManager = createX509TrustManager(certs, certificateValidationContext, sniForSanMatching);
