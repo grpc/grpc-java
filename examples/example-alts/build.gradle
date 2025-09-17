@@ -27,7 +27,6 @@ def protocVersion = '3.25.8'
 dependencies {
     // grpc-alts transitively depends on grpc-netty-shaded, grpc-protobuf, and grpc-stub
     implementation "io.grpc:grpc-alts:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
 }
 
 protobuf {

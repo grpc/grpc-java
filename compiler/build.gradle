@@ -103,6 +103,12 @@ model {
                 cppCompiler.args "--std=c++14"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
+                if (project.hasProperty('buildUniversal') &&
+                        project.getProperty('buildUniversal').toBoolean() &&
+                        osdetector.os == "osx") {
+                    cppCompiler.args "-arch", "arm64", "-arch", "x86_64"
+                    linker.args "-arch", "arm64", "-arch", "x86_64"
+                }
                 if (osdetector.os == "osx") {
                     cppCompiler.args "-mmacosx-version-min=10.7", "-stdlib=libc++"
                     linker.args "-framework", "CoreFoundation"
@@ -147,11 +153,9 @@ sourceSets {
 
 dependencies {
     testImplementation project(':grpc-protobuf'),
-            project(':grpc-stub'),
-            libraries.javax.annotation
+            project(':grpc-stub')
     testLiteImplementation project(':grpc-protobuf-lite'),
-            project(':grpc-stub'),
-            libraries.javax.annotation
+            project(':grpc-stub')
 }
 
 tasks.named("compileTestJava").configure {

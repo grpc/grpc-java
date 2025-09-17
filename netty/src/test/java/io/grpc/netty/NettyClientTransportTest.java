@@ -151,6 +151,9 @@ public class NettyClientTransportTest {
 
   private static final SslContext SSL_CONTEXT = createSslContext();
 
+  @SuppressWarnings("InlineMeInliner") // Requires Java 11
+  private static final String LONG_STRING_OF_A = Strings.repeat("a", 128);
+
   @Mock
   private ManagedClientTransport.Listener clientTransportListener;
 
@@ -624,9 +627,6 @@ public class NettyClientTransportTest {
 
   @Test
   public void huffmanCodingShouldNotBePerformed() throws Exception {
-    @SuppressWarnings("InlineMeInliner") // Requires Java 11
-    String longStringOfA = Strings.repeat("a", 128);
-
     negotiator = ProtocolNegotiators.serverPlaintext();
     startServer();
 
@@ -637,7 +637,7 @@ public class NettyClientTransportTest {
 
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
-        longStringOfA);
+        LONG_STRING_OF_A);
 
     callMeMaybe(transport.start(clientTransportListener));
     verify(clientTransportListener, timeout(5000)).transportReady();
@@ -649,7 +649,7 @@ public class NettyClientTransportTest {
       public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
           throws Exception {
         if (msg instanceof ByteBuf) {
-          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(longStringOfA)) {
+          if (((ByteBuf) msg).toString(StandardCharsets.UTF_8).contains(LONG_STRING_OF_A)) {
             foundExpectedHeaderBytes.set(true);
           }
         }
@@ -661,6 +661,47 @@ public class NettyClientTransportTest {
 
     if (!foundExpectedHeaderBytes.get()) {
       fail("expected to find UTF-8 encoded 'a's in the header");
+    }
+  }
+
+  @Test
+  public void huffmanCodingShouldNotBePerformedOnServer() throws Exception {
+    negotiator = ProtocolNegotiators.serverPlaintext();
+
+    Metadata responseHeaders = new Metadata();
+    responseHeaders.put(Metadata.Key.of("test", Metadata.ASCII_STRING_MARSHALLER),
+        LONG_STRING_OF_A);
+
+    startServer(new EchoServerListener(responseHeaders));
+
+    NettyClientTransport transport = newTransport(ProtocolNegotiators.plaintext(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null, false,
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
+
+    callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
+
+    AtomicBoolean foundExpectedHeaderBytes = new AtomicBoolean(false);
+
+    // Add a handler to the client pipeline to inspect server's response
+    transport.channel().pipeline().addFirst(new ChannelDuplexHandler() {
+      @Override
+      public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        if (msg instanceof ByteBuf) {
+          String data = ((ByteBuf) msg).toString(StandardCharsets.UTF_8);
+          if (data.contains(LONG_STRING_OF_A)) {
+            foundExpectedHeaderBytes.set(true);
+          }
+        }
+        super.channelRead(ctx, msg);
+      }
+    });
+
+    new Rpc(transport).halfClose().waitForResponse();
+
+    if (!foundExpectedHeaderBytes.get()) {
+      fail("expected to find UTF-8 encoded 'a's in the response header sent by the server");
     }
   }
 
@@ -1115,7 +1156,16 @@ public class NettyClientTransportTest {
     startServer(100, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
   }
 
+  private void startServer(ServerListener serverListener) throws IOException {
+    startServer(100, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, serverListener);
+  }
+
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
+    startServer(maxStreamsPerConnection, maxHeaderListSize, serverListener);
+  }
+
+  private void startServer(int maxStreamsPerConnection, int maxHeaderListSize,
+      ServerListener serverListener) throws IOException {
     server =
         new NettyServer(
             TestUtils.testServerAddresses(new InetSocketAddress(0)),
@@ -1283,6 +1333,15 @@ public class NettyClientTransportTest {
     final List<NettyServerTransport> transports = new ArrayList<>();
     final List<EchoServerStreamListener> streamListeners =
             Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
+    Metadata responseHeaders;
+
+    public EchoServerListener() {
+      this(new Metadata());
+    }
+
+    public EchoServerListener(Metadata responseHeaders) {
+      this.responseHeaders = responseHeaders;
+    }
 
     @Override
     public ServerTransportListener transportCreated(final ServerTransport transport) {
@@ -1292,7 +1351,7 @@ public class NettyClientTransportTest {
         public void streamCreated(ServerStream stream, String method, Metadata headers) {
           EchoServerStreamListener listener = new EchoServerStreamListener(stream, headers);
           stream.setListener(listener);
-          stream.writeHeaders(new Metadata(), true);
+          stream.writeHeaders(responseHeaders, true);
           stream.request(1);
           streamListeners.add(listener);
         }

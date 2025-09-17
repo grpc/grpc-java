@@ -37,6 +37,7 @@ import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.Rou
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
+import io.envoyproxy.envoy.service.discovery.v3.Resource;
 import io.grpc.xds.client.MessagePrettyPrinter;
 
 /**
@@ -55,6 +56,7 @@ final class MessagePrinter implements MessagePrettyPrinter {
     private static JsonFormat.Printer newPrinter() {
       TypeRegistry.Builder registry =
           TypeRegistry.newBuilder()
+              .add(Resource.getDescriptor())
               .add(Listener.getDescriptor())
               .add(HttpConnectionManager.getDescriptor())
               .add(HTTPFault.getDescriptor())

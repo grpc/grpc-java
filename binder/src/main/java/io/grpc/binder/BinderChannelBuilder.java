@@ -309,26 +309,33 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   /**
-   * Specifies how and when to authorize the server.
+   * Specifies how and when to authorize a server against this channel's {@link SecurityPolicy}.
    *
-   * <p>The legacy client handshake uses the UID of the server process that sent the SETUP_TRANSPORT
-   * transaction for SecurityPolicy authorization. This is problematic for Android isolated
-   * processes which run as a completely different UID with none of the hosting app's privs. The new
-   * handshake checks the server *app*'s UID instead, which allows connections to Services hosted in
-   * isolated processes like normal.
+   * <p>The legacy authorization strategy considers the UID of the server *process* we connect to.
+   * This is problematic for services using the `android:isolatedProcess` feature which runs them
+   * under a different UID and without any of the privileges of the hosting app. The new and
+   * improved strategy uses the server *app's* UID instead, which lets clients authorize all types
+   * of servers in the same way, isolated or not.
    *
-   * <p>In order to learn the UID of the server *process*, the legacy handshake must send its
-   * secret client Binder to the server before authorizing it. This problematic because it allows a
-   * malicious man-in-the-middle server to forge responses.
+   * <p>The new and improved authorization strategy performs SecurityPolicy checks earlier the
+   * handshake, which allows subsequent transactions over the connection to proceed securely without
+   * further UID checks.
+   *
+   * <p>The server does not know which authorization strategy a client is using. Both strategies
+   * work with all versions of the grpc-binder server.
    *
    * <p>The default value of this property is true but it will become false in a future release.
-   * Clients that require a particular behavior should configure it explicitly using this method
-   * rather than relying on the default.
+   * Clients that require a particular authorization strategy should configure it explicitly using
+   * this method rather than relying on the default. Eventually support for the legacy behavior will
+   * be removed.
+   *
+   * <p>If moving to the new authorization strategy causes a robolectric test to fail, ensure your
+   * fake service component is registered with `ShadowPackageManager` using `addOrUpdateService()`.
    *
    * @return this
    */
-  public BinderChannelBuilder useLegacyHandshake(boolean legacyHandshake) {
-    transportFactoryBuilder.setUseLegacyHandshake(legacyHandshake);
+  public BinderChannelBuilder useLegacyAuthStrategy(boolean useLegacyAuthStrategy) {
+    transportFactoryBuilder.setUseLegacyAuthStrategy(useLegacyAuthStrategy);
     return this;
   }
 

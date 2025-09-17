@@ -56,7 +56,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final OneWayBinderProxy.Decorator binderDecorator;
   final long readyTimeoutMillis;
   final boolean preAuthorizeServers; // TODO(jdcormie): Default to true.
-  final boolean useLegacyHandshake;
+  final boolean useLegacyAuthStrategy;
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -78,7 +78,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     binderDecorator = checkNotNull(builder.binderDecorator);
     readyTimeoutMillis = builder.readyTimeoutMillis;
     preAuthorizeServers = builder.preAuthorizeServers;
-    useLegacyHandshake = builder.useLegacyHandshake;
+    useLegacyAuthStrategy = builder.useLegacyAuthStrategy;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
@@ -133,7 +133,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
     long readyTimeoutMillis = 60_000;
     boolean preAuthorizeServers;
-    boolean useLegacyHandshake = true; // TODO(jdcormie): Default to false.
+    boolean useLegacyAuthStrategy = true; // TODO(jdcormie): Default to false.
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -234,8 +234,8 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     }
 
     /** Specifies which version of the client handshake to use. */
-    public Builder setUseLegacyHandshake(boolean useLegacyHandshake) {
-      this.useLegacyHandshake = useLegacyHandshake;
+    public Builder setUseLegacyAuthStrategy(boolean useLegacyAuthStrategy) {
+      this.useLegacyAuthStrategy = useLegacyAuthStrategy;
       return this;
     }
   }

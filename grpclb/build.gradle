@@ -23,7 +23,6 @@ dependencies {
             libraries.protobuf.java,
             libraries.protobuf.java.util
     runtimeOnly libraries.errorprone.annotations
-    compileOnly libraries.javax.annotation
     testImplementation libraries.truth,
             project(':grpc-inprocess'),
             testFixtures(project(':grpc-core'))

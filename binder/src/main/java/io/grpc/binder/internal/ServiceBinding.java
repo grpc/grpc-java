@@ -25,7 +25,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
@@ -291,14 +290,8 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     return resolveInfo.serviceInfo;
   }
 
-  // The returned Context must be *retained* for any ongoing operations, e.g. registerReceiver().
   private Context getContextForTargetUser(String purpose) throws StatusException {
-    // This call races against unbind().
-    Context sourceContext = this.sourceContext;
-    if (sourceContext == null) {
-      throw Status.UNAVAILABLE.withDescription("Already unbound!").asException();
-    }
-
+    checkState(sourceContext != null, "Already unbound!");
     try {
       return targetUserHandle == null
           ? sourceContext
@@ -315,14 +308,18 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     sourceContext = null;
   }
 
+  @AnyThread
   @Override
   public ServiceInfo getConnectedServiceInfo() throws StatusException {
     try {
       return getContextForTargetUser("cross-user v2 handshake")
           .getPackageManager()
           .getServiceInfo(getConnectedServiceName(), /* flags= */ 0);
-    } catch (NameNotFoundException e) {
-      throw Status.UNIMPLEMENTED.withCause(e).withDescription("impossible race?").asException();
+    } catch (PackageManager.NameNotFoundException e) {
+      throw Status.UNIMPLEMENTED
+          .withCause(e)
+          .withDescription("connected remote service was uninstalled/disabled during handshake")
+          .asException();
     }
   }
 

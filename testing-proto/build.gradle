@@ -17,9 +17,7 @@ tasks.named("jar").configure {
 dependencies {
     api project(':grpc-protobuf'),
             project(':grpc-stub')
-    compileOnly libraries.javax.annotation
     testImplementation libraries.truth
-    testRuntimeOnly libraries.javax.annotation
     signature (libraries.signature.java) {
         artifact {
             extension = "signature"

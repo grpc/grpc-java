@@ -73,7 +73,21 @@ public final class LeakSafeOneWayBinder extends Binder {
     setHandler(null);
   }
 
-  /** Replaces the current {@link TransactionHandler} with `handler`. */
+  /** Returns the current {@link TransactionHandler} or null if already detached. */
+  public @Nullable TransactionHandler getHandler() {
+    return handler;
+  }
+
+  /**
+   * Replaces the current {@link TransactionHandler} with `handler`.
+   *
+   * <p>{@link TransactionHandler} mutations race against incoming transactions except in the
+   * special case where the caller is already handling an incoming transaction on this same {@link
+   * LeakSafeOneWayBinder} instance. In that case, mutations are safe and the provided 'handler' is
+   * guaranteed to be used for the very next transaction. This follows from the one-at-a-time
+   * property of one-way Binder transactions as explained by {@link
+   * TransactionHandler#handleTransaction}.
+   */
   public void setHandler(@Nullable TransactionHandler handler) {
     this.handler = handler;
   }

@@ -85,8 +85,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api')
-    compileOnly libraries.jakarta.servlet.api,
-            libraries.javax.annotation
+    compileOnly libraries.jakarta.servlet.api
 
     implementation project(':grpc-util'),
             project(':grpc-core'),

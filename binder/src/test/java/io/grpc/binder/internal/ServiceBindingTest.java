@@ -117,6 +117,32 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  public void testGetConnectedServiceInfo() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
+  }
+
+  @Test
+  public void testGetConnectedServiceInfoThrows() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+    shadowOf(appContext.getPackageManager()).removeService(serviceComponent);
+
+    StatusException se = assertThrows(StatusException.class, binding::getConnectedServiceInfo);
+    assertThat(se.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+  }
+
+  @Test
   public void testBindingIntent() throws Exception {
     shadowApplication.setComponentNameAndServiceForBindService(null, null);
     shadowApplication.setComponentNameAndServiceForBindServiceForIntent(
@@ -389,6 +415,7 @@ public final class ServiceBindingTest {
     allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
     binding =
         newBuilder()
+            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* uid= */ 0))
             .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
             .setTargetComponent(serviceComponent)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
@@ -426,7 +453,10 @@ public final class ServiceBindingTest {
     ShadowDevicePolicyManager devicePolicyManager =
         shadowOf(context.getSystemService(DevicePolicyManager.class));
     devicePolicyManager.setDeviceOwner(admin);
+    devicePolicyManager.setBindDeviceAdminTargetUsers(
+        Arrays.asList(UserHandle.getUserHandleForUid(userId)));
     shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
+    devicePolicyManager.setDeviceOwner(admin);
     devicePolicyManager.setBindDeviceAdminTargetUsers(Arrays.asList(generateUserHandle(userId)));
   }
 
@@ -444,7 +474,6 @@ public final class ServiceBindingTest {
 
     public boolean gotBoundEvent;
     public IBinder binder;
-    public ComponentName serviceName;
 
     public boolean gotUnboundEvent;
     public Status unboundReason;

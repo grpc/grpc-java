@@ -125,10 +125,10 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+    this.handshake =
+        factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new NewClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-    this.handshake =
-        factory.useLegacyHandshake ? new LegacyClientHandshake() : new NewClientHandshake();
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
@@ -369,6 +369,7 @@ public final class BinderClientTransport extends BinderTransport
     @GuardedBy("BinderClientTransport.this")
     public void handleSetupTransport(OneWayBinderProxy binder) {
       int remoteUid = Binder.getCallingUid();
+      restrictIncomingBinderToCallsFrom(remoteUid);
       attributes = setSecurityAttrs(attributes, remoteUid);
       authResultFuture = checkServerAuthorizationAsync(remoteUid);
       Futures.addCallback(
@@ -503,12 +504,14 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   /**
-   * An abstraction of the client handshake, used to transition off a problematic legacy approach.
+   * A base for all implementations of the client handshake.
+   *
+   * <p>Supports a clean migration away from the legacy approach, one client at a time.
    */
   abstract class ClientHandshake {
     /**
      * Notifies the implementation that the binding has succeeded and we are now connected to the
-     * server 'endpointBinder'.
+     * server's "endpoint" which can be reached at 'endpointBinder'.
      */
     @GuardedBy("BinderClientTransport.this")
     @MainThread
