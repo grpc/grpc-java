@@ -25,7 +25,6 @@ import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.junit.Assume.assumeThat;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
