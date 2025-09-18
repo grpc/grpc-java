@@ -330,17 +330,17 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (pattern.length() == 1 && pattern.charAt(0) == glob) {
       return true;
     }
-    if (pattern.chars().filter(ch -> ch == glob).count() == 1) {
-      String[] splitPattern = pattern.split("\\*", -1);
-      return (pattern.length() <= dnsLabel.length() + 1)
-          && dnsLabel.startsWith(splitPattern[0])
-          && dnsLabel.endsWith(splitPattern[1]);
+    int globIndex = pattern.indexOf(glob);
+    if (pattern.indexOf(glob, globIndex + 1) == -1) {
+      return dnsLabel.length() >= pattern.length() - 1
+          && dnsLabel.startsWith(pattern.substring(0, globIndex))
+          && dnsLabel.endsWith(pattern.substring(globIndex + 1));
     }
     return false;
   }
 
   private static String[] splitAtFirstDelimiter(String s) {
-    int index = s.indexOf(".");
+    int index = s.indexOf('.');
     if (index == -1) {
       return new String[]{s};
     }
