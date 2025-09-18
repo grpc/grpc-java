@@ -67,6 +67,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   // Longest time to wait, since the subscription to some resource, for concluding its absence.
   @VisibleForTesting
   public static final int INITIAL_RESOURCE_FETCH_TIMEOUT_SEC = 15;
+  public static final int EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC = 30;
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -675,6 +676,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
     private ResourceMetadata metadata;
     @Nullable
     private String errorDescription;
+    @Nullable
+    private Status lastError;
 
     ResourceSubscriber(XdsResourceType<T> type, String resource) {
       syncContext.throwIfNotInThisSynchronizationContext();
@@ -711,9 +714,14 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       watchers.put(watcher, watcherExecutor);
       T savedData = data;
       boolean savedAbsent = absent;
+      Status savedError = lastError;
       watcherExecutor.execute(() -> {
         if (errorDescription != null) {
           watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
+          return;
+        }
+        if (savedError != null) {
+          watcher.onError(savedError);
           return;
         }
         if (savedData != null) {
@@ -738,6 +746,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         // When client becomes ready, it triggers a restartTimer for all relevant subscribers.
         return;
       }
+      ServerInfo serverInfo = activeCpc.getServerInfo();
+      int timeoutSec = serverInfo.resourceTimerIsTransientError()
+          ? EXTENDED_RESOURCE_FETCH_TIMEOUT_SEC : INITIAL_RESOURCE_FETCH_TIMEOUT_SEC;
 
       class ResourceNotFound implements Runnable {
         @Override
@@ -761,8 +772,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         respTimer.cancel();
       }
       respTimer = syncContext.schedule(
-          new ResourceNotFound(), INITIAL_RESOURCE_FETCH_TIMEOUT_SEC, TimeUnit.SECONDS,
-          timeService);
+          new ResourceNotFound(), timeoutSec, TimeUnit.SECONDS, timeService);
     }
 
     void stopTimer() {
@@ -805,6 +815,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       this.metadata = ResourceMetadata
           .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
       absent = false;
+      lastError = null;
       if (resourceDeletionIgnored) {
         logger.log(XdsLogLevel.FORCE_INFO, "xds server {0}: server returned new version "
                 + "of resource for which we previously ignored a deletion: type {1} name {2}",
@@ -854,14 +865,22 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (!absent) {
         data = null;
         absent = true;
-        metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
+        lastError = null;
+        metadata = serverInfo.resourceTimerIsTransientError()
+            ? ResourceMetadata.newResourceMetadataTimeout()
+            : ResourceMetadata.newResourceMetadataDoesNotExist();
         for (ResourceWatcher<T> watcher : watchers.keySet()) {
           if (processingTracker != null) {
             processingTracker.startTask();
           }
           watchers.get(watcher).execute(() -> {
             try {
-              watcher.onResourceDoesNotExist(resource);
+              if (serverInfo.resourceTimerIsTransientError()) {
+                watcher.onError(Status.UNAVAILABLE.withDescription(
+                    "Timed out waiting for resource " + resource + " from xDS server"));
+              } else {
+                watcher.onResourceDoesNotExist(resource);
+              }
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
@@ -884,6 +903,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       Status errorAugmented = Status.fromCode(error.getCode())
           .withDescription(description + "nodeID: " + bootstrapInfo.node().getId())
           .withCause(error.getCause());
+      this.lastError = errorAugmented;
 
       for (ResourceWatcher<T> watcher : watchers.keySet()) {
         if (tracker != null) {

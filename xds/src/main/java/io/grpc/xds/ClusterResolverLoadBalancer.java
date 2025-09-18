@@ -168,8 +168,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
    */
   private final class ClusterResolverLbState extends LoadBalancer {
     private final Helper helper;
-    private final List<String> clusters = new ArrayList<>();
-    private final Map<String, ClusterState> clusterStates = new HashMap<>();
+    private ClusterState clusterState;
+    private String cluster;
     private Object endpointLbConfig;
     private ResolvedAddresses resolvedAddresses;
     private LoadBalancer childLb;
@@ -185,21 +185,18 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       ClusterResolverConfig config =
           (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       endpointLbConfig = config.lbConfig;
-      for (DiscoveryMechanism instance : config.discoveryMechanisms) {
-        clusters.add(instance.cluster);
-        ClusterState state;
-        if (instance.type == DiscoveryMechanism.Type.EDS) {
-          state = new EdsClusterState(instance.cluster, instance.edsServiceName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata, instance.outlierDetection);
-        } else {  // logical DNS
-          state = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
-              instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
-              instance.filterMetadata);
-        }
-        clusterStates.put(instance.cluster, state);
-        state.start();
+      DiscoveryMechanism instance = config.discoveryMechanism;
+      cluster = instance.cluster;
+      if (instance.type == DiscoveryMechanism.Type.EDS) {
+        clusterState = new EdsClusterState(instance.cluster, instance.edsServiceName,
+            instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+            instance.filterMetadata, instance.outlierDetection);
+      } else {  // logical DNS
+        clusterState = new LogicalDnsClusterState(instance.cluster, instance.dnsHostName,
+            instance.lrsServerInfo, instance.maxConcurrentRequests, instance.tlsContext,
+            instance.filterMetadata);
       }
+      clusterState.start();
       return Status.OK;
     }
 
@@ -215,9 +212,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
     @Override
     public void shutdown() {
-      for (ClusterState state : clusterStates.values()) {
-        state.shutdown();
-      }
+      clusterState.shutdown();
       if (childLb != null) {
         childLb.shutdown();
       }
@@ -229,24 +224,21 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
       List<String> priorities = new ArrayList<>();  // totally ordered priority list
 
       Status endpointNotFound = Status.OK;
-      for (String cluster : clusters) {
-        ClusterState state = clusterStates.get(cluster);
-        // Propagate endpoints to the child LB policy only after all clusters have been resolved.
-        if (!state.resolved && state.status.isOk()) {
-          return;
-        }
-        if (state.result != null) {
-          addresses.addAll(state.result.addresses);
-          priorityChildConfigs.putAll(state.result.priorityChildConfigs);
-          priorities.addAll(state.result.priorities);
-        } else {
-          endpointNotFound = state.status;
-        }
+      // Propagate endpoints to the child LB policy only after all clusters have been resolved.
+      if (!clusterState.resolved && clusterState.status.isOk()) {
+        return;
+      }
+      if (clusterState.result != null) {
+        addresses.addAll(clusterState.result.addresses);
+        priorityChildConfigs.putAll(clusterState.result.priorityChildConfigs);
+        priorities.addAll(clusterState.result.priorities);
+      } else {
+        endpointNotFound = clusterState.status;
       }
       if (addresses.isEmpty()) {
         if (endpointNotFound.isOk()) {
           endpointNotFound = Status.UNAVAILABLE.withDescription(
-              "No usable endpoint from cluster(s): " + clusters);
+              "No usable endpoint from cluster: " + cluster);
         } else {
           endpointNotFound =
               Status.UNAVAILABLE.withCause(endpointNotFound.getCause())
@@ -274,22 +266,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     }
 
     private void handleEndpointResolutionError() {
-      boolean allInError = true;
-      Status error = null;
-      for (String cluster : clusters) {
-        ClusterState state = clusterStates.get(cluster);
-        if (state.status.isOk()) {
-          allInError = false;
-        } else {
-          error = state.status;
-        }
-      }
-      if (allInError) {
+      if (!clusterState.status.isOk()) {
         if (childLb != null) {
-          childLb.handleNameResolutionError(error);
+          childLb.handleNameResolutionError(clusterState.status);
         } else {
           helper.updateBalancingState(
-              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+              TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(clusterState.status)));
         }
       }
     }
@@ -306,10 +288,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
 
       @Override
       public void refreshNameResolution() {
-        for (ClusterState state : clusterStates.values()) {
-          if (state instanceof LogicalDnsClusterState) {
-            ((LogicalDnsClusterState) state).refresh();
-          }
+        if (clusterState instanceof LogicalDnsClusterState) {
+          ((LogicalDnsClusterState) clusterState).refresh();
         }
       }
 
@@ -428,7 +408,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                   Attributes attr =
                       endpoint.eag().getAttributes().toBuilder()
                           .set(XdsAttributes.ATTR_LOCALITY, locality)
-                          .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                          .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
                           .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                               localityLbInfo.localityWeight())
                           .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
@@ -679,7 +659,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
               String localityName = localityName(LOGICAL_DNS_CLUSTER_LOCALITY);
               Attributes attr = eag.getAttributes().toBuilder()
                       .set(XdsAttributes.ATTR_LOCALITY, LOGICAL_DNS_CLUSTER_LOCALITY)
-                      .set(XdsAttributes.ATTR_LOCALITY_NAME, localityName)
+                      .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
                       .set(XdsAttributes.ATTR_ADDRESS_NAME, dnsHostName)
                       .build();
               eag = new EquivalentAddressGroup(eag.getAddresses(), attr);

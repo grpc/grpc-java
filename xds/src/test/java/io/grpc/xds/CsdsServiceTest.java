@@ -366,6 +366,8 @@ public class CsdsServiceTest {
           .isEqualTo(ClientResourceStatus.ACKED);
       assertThat(CsdsService.metadataStatusToClientStatus(ResourceMetadataStatus.NACKED))
           .isEqualTo(ClientResourceStatus.NACKED);
+      assertThat(CsdsService.metadataStatusToClientStatus(ResourceMetadataStatus.TIMEOUT))
+          .isEqualTo(ClientResourceStatus.TIMEOUT);
     }
 
     @Test

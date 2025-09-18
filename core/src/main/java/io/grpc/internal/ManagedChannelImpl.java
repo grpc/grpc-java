@@ -415,7 +415,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     LbHelperImpl lbHelper = new LbHelperImpl();
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
     // Delay setting lbHelper until fully initialized, since loadBalancerFactory is user code and
-    // may throw. We don't want to confuse our state, even if we will enter panic mode.
+    // may throw. We don't want to confuse our state, even if we enter panic mode.
     this.lbHelper = lbHelper;
 
     channelStateManager.gotoState(CONNECTING);
@@ -1464,7 +1464,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportFilters,
+          target,
+          lbHelper.getMetricRecorder());
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1895,7 +1897,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           subchannelLogger,
-          transportFilters);
+          transportFilters, target,
+          lbHelper.getMetricRecorder());
 
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel started")
@@ -1967,6 +1970,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void requestConnection() {
       syncContext.throwIfNotInThisSynchronizationContext();
       checkState(started, "not started");
+      if (shutdown) {
+        return;
+      }
       subchannel.obtainActiveTransport();
     }
 

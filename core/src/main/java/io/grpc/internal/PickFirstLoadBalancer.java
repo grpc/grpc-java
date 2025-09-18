@@ -134,7 +134,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     SubchannelPicker picker;
     switch (newState) {
       case IDLE:
-        picker = new RequestConnectionPicker(subchannel);
+        picker = new RequestConnectionPicker();
         break;
       case CONNECTING:
         // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
@@ -197,22 +197,12 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
   /** Picker that requests connection during the first pick, and returns noResult. */
   private final class RequestConnectionPicker extends SubchannelPicker {
-    private final Subchannel subchannel;
     private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
-
-    RequestConnectionPicker(Subchannel subchannel) {
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-    }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       if (connectionRequested.compareAndSet(false, true)) {
-        helper.getSynchronizationContext().execute(new Runnable() {
-            @Override
-            public void run() {
-              subchannel.requestConnection();
-            }
-          });
+        helper.getSynchronizationContext().execute(PickFirstLoadBalancer.this::requestConnection);
       }
       return PickResult.withNoResult();
     }

@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        jre: [8, 11, 17]
+        jre: [8, 11, 17, 21]
       fail-fast: false # Should swap to true if we grow a large matrix
 
     steps:
@@ -101,6 +101,9 @@ jobs:
 
     - name: Run bazel build
       run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
+
+    - name: Run bazel test
+      run: bazelisk test //... --enable_bzlmod=${{ matrix.bzlmod }}
 
     - name: Run example bazel build
       run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}

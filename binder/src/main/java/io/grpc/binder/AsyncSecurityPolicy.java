@@ -67,4 +67,25 @@ public abstract class AsyncSecurityPolicy extends SecurityPolicy {
    *     authorized.
    */
   public abstract ListenableFuture<Status> checkAuthorizationAsync(int uid);
+
+  /**
+   * Decides whether the given Android UID is authorized, without providing its raw integer value.
+   *
+   * <p>Calling this is equivalent to calling {@link SecurityPolicy#checkAuthorization(int)}, except
+   * the caller provides a {@link PeerUid} wrapper instead of the raw integer uid (known only to the
+   * transport). This allows a server to check additional application-layer security policy for
+   * itself *after* the call itself is authorized by the transport layer. Cross cutting application-
+   * layer checks could be done from a {@link io.grpc.ServerInterceptor}. Checks based on the
+   * substance of a request message could be done by the individual RPC method implementations
+   * themselves.
+   *
+   * <p>See #checkAuthorizationAsync(int) for details on the semantics. See {@link
+   * PeerUids#newPeerIdentifyingServerInterceptor()} for how to get a {@link PeerUid}.
+   *
+   * @param uid The Android UID to authenticate.
+   * @return A gRPC {@link Status} object, with OK indicating authorized.
+   */
+  public final ListenableFuture<Status> checkAuthorizationAsync(PeerUid uid) {
+    return checkAuthorizationAsync(uid.getUid());
+  }
 }

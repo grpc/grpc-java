@@ -17,12 +17,17 @@
 package io.grpc.binder.internal;
 
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.binder.internal.SystemApis.createContextAsUser;
 
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.UserHandle;
 import androidx.annotation.AnyThread;
@@ -30,6 +35,7 @@ import androidx.annotation.MainThread;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -183,18 +189,29 @@ final class ServiceBinding implements Bindable, ServiceConnection {
           bindResult = context.bindService(bindIntent, conn, flags);
           break;
         case BIND_SERVICE_AS_USER:
-          bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // We don't need SystemApis because bindServiceAsUser() is simply public in R+.
+            bindResult = context.bindServiceAsUser(bindIntent, conn, flags, targetUserHandle);
+          } else {
+            // TODO(#12279): Use SystemApis to make this work pre-R.
+            return Status.INTERNAL.withDescription("Cross user Channel requires Android R+");
+          }
           break;
         case DEVICE_POLICY_BIND_SEVICE_ADMIN:
           DevicePolicyManager devicePolicyManager =
               (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
-          bindResult =
-              devicePolicyManager.bindDeviceAdminServiceAsUser(
-                  channelCredentials.getDevicePolicyAdminComponentName(),
-                  bindIntent,
-                  conn,
-                  flags,
-                  targetUserHandle);
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            bindResult =
+                devicePolicyManager.bindDeviceAdminServiceAsUser(
+                    channelCredentials.getDevicePolicyAdminComponentName(),
+                    bindIntent,
+                    conn,
+                    flags,
+                    targetUserHandle);
+          } else {
+            return Status.INTERNAL.withDescription(
+                "Device policy admin binding requires Android R+");
+          }
           break;
       }
       if (!bindResult) {
@@ -247,6 +264,42 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     }
   }
 
+  @AnyThread
+  @Override
+  public ServiceInfo resolve() throws StatusException {
+    int flags = 0;
+    if (Build.VERSION.SDK_INT >= 29) {
+      // Filter out non-'directBootAware' <service>s when 'targetUserHandle' is locked. Here's why:
+      // Callers want 'bindIntent' to #resolve() to the same thing a follow-up call to #bind() will.
+      // But bindService() *always* ignores services that can't presently be created for lack of
+      // 'directBootAware'-ness. This flag explicitly tells resolveService() to act the same way.
+      flags |= PackageManager.MATCH_DIRECT_BOOT_AUTO;
+    }
+    ResolveInfo resolveInfo =
+        getContextForTargetUser("Cross-user pre-auth")
+            .getPackageManager()
+            .resolveService(bindIntent, flags);
+    if (resolveInfo == null) {
+      throw Status.UNIMPLEMENTED // Same status code as when bindService() returns false.
+          .withDescription("resolveService(" + bindIntent + " / " + targetUserHandle + ") was null")
+          .asException();
+    }
+    return resolveInfo.serviceInfo;
+  }
+
+  private Context getContextForTargetUser(String purpose) throws StatusException {
+    checkState(sourceContext != null, "Already unbound!");
+    try {
+      return targetUserHandle == null
+          ? sourceContext
+          : createContextAsUser(sourceContext, targetUserHandle, /* flags= */ 0);
+    } catch (ReflectiveOperationException e) {
+      throw Status.INTERNAL
+          .withDescription(purpose + " requires SDK_INT >= R and @SystemApi visibility")
+          .asException();
+    }
+  }
+
   @MainThread
   private void clearReferences() {
     sourceContext = null;
@@ -272,19 +325,32 @@ final class ServiceBinding implements Bindable, ServiceConnection {
   @Override
   @MainThread
   public void onServiceDisconnected(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE.withDescription("onServiceDisconnected: " + name));
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Server process crashed, exited or was killed (onServiceDisconnected): " + name));
   }
 
   @Override
   @MainThread
   public void onNullBinding(ComponentName name) {
-    unbindInternal(Status.UNIMPLEMENTED.withDescription("onNullBinding: " + name));
+    unbindInternal(
+        Status.UNIMPLEMENTED.withDescription(
+            "Remote Service returned null from onBind() for "
+                + bindIntent
+                + " (onNullBinding): "
+                + name));
   }
 
   @Override
   @MainThread
   public void onBindingDied(ComponentName name) {
-    unbindInternal(Status.UNAVAILABLE.withDescription("onBindingDied: " + name));
+    unbindInternal(
+        Status.UNAVAILABLE.withDescription(
+            "Remote Service component "
+                + name.getClassName()
+                + " was disabled, or its package "
+                + name.getPackageName()
+                + " was disabled, force-stopped, replaced or uninstalled (onBindingDied)."));
   }
 
   @VisibleForTesting

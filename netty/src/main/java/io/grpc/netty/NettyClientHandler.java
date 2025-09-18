@@ -738,14 +738,19 @@ class NettyClientHandler extends AbstractNettyHandler {
 
                 // Attach the client stream to the HTTP/2 stream object as user data.
                 stream.setHttp2Stream(http2Stream);
+                promise.setSuccess();
+              } else {
+                // Otherwise, the stream has been cancelled and Netty is sending a
+                // RST_STREAM frame which causes it to purge pending writes from the
+                // flow-controller and delete the http2Stream. The stream listener has already
+                // been notified of cancellation so there is nothing to do.
+                //
+                // This process has been observed to fail in some circumstances, leaving listeners
+                // unanswered. Ensure that some exception has been delivered consistent with the
+                // implied RST_STREAM result above.
+                Status status = Status.INTERNAL.withDescription("unknown stream for connection");
+                promise.setFailure(status.asRuntimeException());
               }
-              // Otherwise, the stream has been cancelled and Netty is sending a
-              // RST_STREAM frame which causes it to purge pending writes from the
-              // flow-controller and delete the http2Stream. The stream listener has already
-              // been notified of cancellation so there is nothing to do.
-
-              // Just forward on the success status to the original promise.
-              promise.setSuccess();
             } else {
               Throwable cause = future.cause();
               if (cause instanceof StreamBufferingEncoder.Http2GoAwayException) {
@@ -768,6 +773,19 @@ class NettyClientHandler extends AbstractNettyHandler {
             }
           }
         });
+    // When the HEADERS are not buffered because of MAX_CONCURRENT_STREAMS in
+    // StreamBufferingEncoder, the stream is created immediately even if the bytes of the HEADERS
+    // are delayed because the OS may have too much buffered and isn't accepting the write. The
+    // write promise is also delayed until flush(). However, we need to associate the netty stream
+    // with the transport state so that goingAway() and forcefulClose() and able to notify the
+    // stream of failures.
+    //
+    // This leaves a hole when MAX_CONCURRENT_STREAMS is reached, as http2Stream will be null, but
+    // it is better than nothing.
+    Http2Stream http2Stream = connection().stream(streamId);
+    if (http2Stream != null) {
+      http2Stream.setProperty(streamKey, stream);
+    }
   }
 
   /**
