@@ -331,7 +331,6 @@ final class XdsNameResolver extends NameResolver {
             .setServiceConfig(parsedServiceConfig)
             .build();
     if (!listener.onResult2(result).isOk()) {
-      // TODO: check if this is right
       resolveState.xdsDependencyManager.requestReresolution();
     }
   }
