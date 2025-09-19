@@ -935,11 +935,8 @@ public final class ClientCalls {
       }
     }
 
-    /**
-     * Executes all queued Runnables and if there were any wakes up any waiting threads.
-     */
-    public void drain() throws InterruptedException {
-      throwIfInterrupted();
+    /** Executes all queued Runnables and if there were any wakes up any waiting threads. */
+    void drain() {
       Runnable runnable;
       boolean didWork = false;
 
