@@ -21,6 +21,7 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ExperimentalApi;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.internal.GrpcUtil;
 import java.lang.reflect.InvocationTargetException;
 import javax.annotation.Nullable;
 import javax.net.SocketFactory;
@@ -63,6 +64,7 @@ public final class UdsChannelBuilder {
    * @param path unix file system path to use for Unix Domain Socket.
    * @param namespace the type of the namespace that the path belongs to.
    */
+  @SuppressWarnings("ConstantConditions")
   public static ManagedChannelBuilder<?> forPath(String path, Namespace namespace) {
     if (OKHTTP_CHANNEL_BUILDER_CLASS == null) {
       throw new UnsupportedOperationException("OkHttpChannelBuilder not found on the classpath");
@@ -81,7 +83,7 @@ public final class UdsChannelBuilder {
       OKHTTP_CHANNEL_BUILDER_CLASS
           .getMethod("socketFactory", SocketFactory.class)
           .invoke(builder, new UdsSocketFactory(path, namespace));
-      return builder;
+      return builder.proxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR);
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Failed to create OkHttpChannelBuilder", e);
     } catch (NoSuchMethodException e) {
