@@ -72,7 +72,8 @@ public final class SslContextProviderSupplier implements Closeable {
           new SslContextProvider.Callback(callback.getExecutor()) {
 
           @Override
-          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+          public void updateSslContextAndExtendedX509TrustManager(
+              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
             callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
             releaseSslContextProvider(toRelease, sni);
           }

@@ -203,8 +203,9 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
-            future.set(sslContext);
+          public void updateSslContextAndExtendedX509TrustManager(
+              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+            future.set(sslContextAndTm);
           }
 
           @Override
@@ -215,7 +216,7 @@ public class SecurityProtocolNegotiatorsTest {
     assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
-    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    assertThat(fromFuture).isInstanceOf(AbstractMap.SimpleImmutableEntry.class);
     channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(clientSecurityHandler);
     assertThat(channelHandlerCtx).isNull();
@@ -391,8 +392,9 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
-            future.set(sslContext);
+          public void updateSslContextAndExtendedX509TrustManager(
+              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+            future.set(sslContextAndTm);
           }
 
           @Override
@@ -403,7 +405,7 @@ public class SecurityProtocolNegotiatorsTest {
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertThat(executor.runDueTasks()).isEqualTo(1);
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
-    assertThat(fromFuture).isInstanceOf(SslContext.class);
+    assertThat(fromFuture).isInstanceOf(AbstractMap.SimpleImmutableEntry.class);
     channel.runPendingTasks();
     channelHandlerCtx = pipeline.context(SecurityProtocolNegotiators.ServerSecurityHandler.class);
     assertThat(channelHandlerCtx).isNull();
@@ -529,8 +531,9 @@ public class SecurityProtocolNegotiatorsTest {
       sslContextProviderSupplier
           .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
             @Override
-            public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
-              future.set(sslContext);
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+              future.set(sslContextAndTm);
             }
 
             @Override
@@ -541,7 +544,7 @@ public class SecurityProtocolNegotiatorsTest {
       executor.runDueTasks();
       channel.runPendingTasks(); // need this for tasks to execute on eventLoop
       Object fromFuture = future.get(5, TimeUnit.SECONDS);
-      assertThat(fromFuture).isInstanceOf(SslContext.class);
+      assertThat(fromFuture).isInstanceOf(AbstractMap.SimpleImmutableEntry.class);
       channel.runPendingTasks();
       channelHandlerCtx = pipeline.context(clientSecurityHandler);
       assertThat(channelHandlerCtx).isNull();

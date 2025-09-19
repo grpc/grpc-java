@@ -99,7 +99,8 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   }
 
   protected final void callPerformCallback(
-          Callback callback, final AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTmCopy) {
+          Callback callback,
+          final AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTmCopy) {
     performCallback(
         new SslContextGetter() {
           @Override

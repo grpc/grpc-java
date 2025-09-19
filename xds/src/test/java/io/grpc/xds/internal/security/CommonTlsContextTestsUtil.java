@@ -361,14 +361,15 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Perform some simple checks on sslContext. */
-  public static void doChecksOnSslContext(boolean server, AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext,
-                                          List<String> expectedApnProtos) {
+  public static void doChecksOnSslContext(boolean server,
+      AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm,
+      List<String> expectedApnProtos) {
     if (server) {
-      assertThat(sslContext.getKey().isServer()).isTrue();
+      assertThat(sslContextAndTm.getKey().isServer()).isTrue();
     } else {
-      assertThat(sslContext.getKey().isClient()).isTrue();
+      assertThat(sslContextAndTm.getKey().isClient()).isTrue();
     }
-    List<String> apnProtos = sslContext.getKey().applicationProtocolNegotiator().protocols();
+    List<String> apnProtos = sslContextAndTm.getKey().applicationProtocolNegotiator().protocols();
     assertThat(apnProtos).isNotNull();
     if (expectedApnProtos != null) {
       assertThat(apnProtos).isEqualTo(expectedApnProtos);

@@ -75,9 +75,8 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
     }
     setClientAuthValues(sslContextBuilder, trustManagerFactory);
     sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder);
-    return new AbstractMap.SimpleImmutableEntry(sslContextBuilder,
-        CertificateUtils.getX509ExtendedTrustManager(
-            Arrays.asList(trustManagerFactory.getTrustManagers())));
+    // TrustManager in the below return value is not used on the server side, so setting it to null
+    return new AbstractMap.SimpleImmutableEntry(sslContextBuilder, null);
   }
 
 }
