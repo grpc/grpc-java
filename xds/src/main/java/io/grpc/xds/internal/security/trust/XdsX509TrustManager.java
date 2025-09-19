@@ -313,7 +313,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
         ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
     String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
         ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert);
-    if (splitPattern.length < 2 || splitDnsName.length < 2) {
+    if (splitPattern == null || splitDnsName == null
+        || splitPattern.length < 2 || splitDnsName.length < 2) {
       return false;
     }
     if (splitPattern[0].contains("*")
@@ -339,10 +340,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     return false;
   }
 
+  @Nullable
   private static String[] splitAtFirstDelimiter(String s) {
     int index = s.indexOf('.');
     if (index == -1) {
-      return new String[]{s};
+      return null;
     }
     return new String[]{s.substring(0, index), s.substring(index + 1)};
   }
