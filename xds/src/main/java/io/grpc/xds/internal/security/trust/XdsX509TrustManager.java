@@ -79,7 +79,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-                      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates, @Nullable String sniForSanMatching) {
+      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates, @Nullable String sniForSanMatching) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
     this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;

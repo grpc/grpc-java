@@ -196,7 +196,6 @@ public final class SecurityProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSecurityHandler
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
-
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
     private final String sni;
@@ -321,10 +320,10 @@ public final class SecurityProtocolNegotiators {
       if (evt instanceof ProtocolNegotiationEvent) {
         ProtocolNegotiationEvent pne = (ProtocolNegotiationEvent)evt;
         SslContextProviderSupplier sslContextProviderSupplier = InternalProtocolNegotiationEvent
-            .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
+                .getAttributes(pne).get(ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER);
         if (sslContextProviderSupplier == null) {
           logger.log(Level.FINE, "No sslContextProviderSupplier found in filterChainMatch "
-                  + "for connection from {0} to {1}",
+              + "for connection from {0} to {1}",
               new Object[]{ctx.channel().remoteAddress(), ctx.channel().localAddress()});
           if (fallbackProtocolNegotiator == null) {
             ctx.fireExceptionCaught(new CertStoreException("No certificate source found!"));
@@ -406,7 +405,7 @@ public final class SecurityProtocolNegotiators {
               ctx.fireExceptionCaught(throwable);
             }
           },
-              null);
+      null);
     }
   }
 }

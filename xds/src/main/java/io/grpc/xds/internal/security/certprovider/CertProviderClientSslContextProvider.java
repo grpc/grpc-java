@@ -49,13 +49,14 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   private final String sniForSanMatching;
 
   CertProviderClientSslContextProvider(
-          Node node,
-          @Nullable Map<String, CertificateProviderInfo> certProviders,
-          CommonTlsContext.CertificateProviderInstance certInstance,
-          CommonTlsContext.CertificateProviderInstance rootCertInstance,
-          CertificateValidationContext staticCertValidationContext,
-          UpstreamTlsContext upstreamTlsContext,
-          String sniForSanMatching, CertificateProviderStore certificateProviderStore) {
+      Node node,
+      @Nullable Map<String, CertificateProviderInfo> certProviders,
+      CommonTlsContext.CertificateProviderInstance certInstance,
+      CommonTlsContext.CertificateProviderInstance rootCertInstance,
+      CertificateValidationContext staticCertValidationContext,
+      UpstreamTlsContext upstreamTlsContext,
+      String sniForSanMatching,
+      CertificateProviderStore certificateProviderStore) {
     super(
         node,
         certProviders,

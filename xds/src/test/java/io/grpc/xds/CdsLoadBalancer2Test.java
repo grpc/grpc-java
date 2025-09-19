@@ -124,7 +124,7 @@ public class CdsLoadBalancer2Test {
       .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
           .setServiceName(EDS_SERVICE_NAME)
           .setEdsConfig(ConfigSource.newBuilder()
-              .setAds(AggregatedConfigSource.newBuilder())))
+            .setAds(AggregatedConfigSource.newBuilder())))
       .build();
 
   private final FakeClock fakeClock = new FakeClock();
@@ -135,9 +135,9 @@ public class CdsLoadBalancer2Test {
       Arrays.asList("control-plane.example.com"),
       serverInfo -> new GrpcXdsTransportFactory.GrpcXdsTransport(
           InProcessChannelBuilder
-              .forName(serverInfo.target())
-              .directExecutor()
-              .build()),
+            .forName(serverInfo.target())
+            .directExecutor()
+            .build()),
       fakeClock);
   private final ServerInfo lrsServerInfo = xdsClient.getBootstrapInfo().servers().get(0);
   private XdsDependencyManager xdsDepManager;
@@ -227,16 +227,16 @@ public class CdsLoadBalancer2Test {
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-            .setServiceName(EDS_SERVICE_NAME)
-            .setEdsConfig(ConfigSource.newBuilder()
-                .setAds(AggregatedConfigSource.newBuilder())))
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
         .setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN)
         .setLrsServer(ConfigSource.newBuilder()
-            .setSelf(SelfConfigSource.getDefaultInstance()))
+          .setSelf(SelfConfigSource.getDefaultInstance()))
         .setCircuitBreakers(CircuitBreakers.newBuilder()
             .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                .setPriority(RoutingPriority.DEFAULT)
-                .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
+              .setPriority(RoutingPriority.DEFAULT)
+              .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
         .setTransportSocket(TransportSocket.newBuilder()
             .setName("envoy.transport_sockets.tls")
             .setTypedConfig(Any.pack(UpstreamTlsContext.newBuilder()
@@ -254,10 +254,10 @@ public class CdsLoadBalancer2Test {
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, upstreamTlsContext,
-            Collections.emptyMap(), io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
-                null, null, null, null, SuccessRateEjection.create(null, null, null, null),
-                FailurePercentageEjection.create(null, null, null, null))));
+          CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, upstreamTlsContext,
+          Collections.emptyMap(), io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
+              null, null, null, null, SuccessRateEjection.create(null, null, null, null),
+              FailurePercentageEjection.create(null, null, null, null))));
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("wrr_locality_experimental");

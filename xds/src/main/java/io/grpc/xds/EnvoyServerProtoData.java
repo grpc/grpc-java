@@ -138,7 +138,7 @@ public final class EnvoyServerProtoData {
         io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
             downstreamTlsContext) {
       return new DownstreamTlsContext(downstreamTlsContext.getCommonTlsContext(),
-          downstreamTlsContext.hasRequireClientCertificate());
+        downstreamTlsContext.hasRequireClientCertificate());
     }
 
     public boolean isRequireClientCertificate() {
@@ -224,10 +224,10 @@ public final class EnvoyServerProtoData {
     abstract String transportProtocol();
 
     public static FilterChainMatch create(int destinationPort,
-                                          ImmutableList<CidrRange> prefixRanges,
-                                          ImmutableList<String> applicationProtocols, ImmutableList<CidrRange> sourcePrefixRanges,
-                                          ConnectionSourceType connectionSourceType, ImmutableList<Integer> sourcePorts,
-                                          ImmutableList<String> serverNames, String transportProtocol) {
+        ImmutableList<CidrRange> prefixRanges,
+        ImmutableList<String> applicationProtocols, ImmutableList<CidrRange> sourcePrefixRanges,
+        ConnectionSourceType connectionSourceType, ImmutableList<Integer> sourcePorts,
+        ImmutableList<String> serverNames, String transportProtocol) {
       return new AutoValue_EnvoyServerProtoData_FilterChainMatch(
           destinationPort, prefixRanges, applicationProtocols, sourcePrefixRanges,
           connectionSourceType, sourcePorts, serverNames, transportProtocol);

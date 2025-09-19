@@ -25,7 +25,6 @@ import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
-
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.util.concurrent.Executor;
@@ -45,10 +44,11 @@ public final class InternalProtocolNegotiators {
    * @param executorPool             a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
-                                                                  ObjectPool<? extends Executor> executorPool,
-                                                                  Optional<Runnable> handshakeCompleteRunnable,
-                                                                  TrustManager extendedX509TrustManager,
-                                                                  String sni, boolean isXdsTarget) {
+          ObjectPool<? extends Executor> executorPool,
+          Optional<Runnable> handshakeCompleteRunnable,
+          TrustManager extendedX509TrustManager,
+          String sni,
+          boolean isXdsTarget) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
         executorPool, handshakeCompleteRunnable, (X509TrustManager) extendedX509TrustManager, sni,
         isXdsTarget);
@@ -163,7 +163,7 @@ public final class InternalProtocolNegotiators {
    * Internal version of {@link WaitUntilActiveHandler}.
    */
   public static ChannelHandler waitUntilActiveHandler(ChannelHandler next,
-                                                      ChannelLogger negotiationLogger) {
+      ChannelLogger negotiationLogger) {
     return new WaitUntilActiveHandler(next, negotiationLogger);
   }
 
@@ -185,7 +185,7 @@ public final class InternalProtocolNegotiators {
       extends ProtocolNegotiators.ProtocolNegotiationHandler {
 
     protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
-                                         ChannelLogger negotiationLogger) {
+       ChannelLogger negotiationLogger) {
       super(next, negotiatorName, negotiationLogger);
     }
 
