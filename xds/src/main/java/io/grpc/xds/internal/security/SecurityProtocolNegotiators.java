@@ -41,12 +41,14 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.security.cert.CertStoreException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.net.ssl.TrustManager;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s to provide the SSL
@@ -240,7 +242,8 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
               if (ctx.isRemoved()) {
                 return;
               }
@@ -249,7 +252,9 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext, sni, true).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(
+                      sslContextAndTm.getKey(), sni, true, sslContextAndTm.getValue())
+                      .newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
@@ -383,9 +388,10 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
               ChannelHandler handler =
-                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.serverTls(sslContextAndTm.getKey()).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               if (!ctx.isRemoved()) {

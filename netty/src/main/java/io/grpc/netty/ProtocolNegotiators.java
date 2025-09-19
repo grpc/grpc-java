@@ -104,15 +104,6 @@ final class ProtocolNegotiators {
   private static final EnumSet<TlsServerCredentials.Feature> understoodServerTlsFeatures =
       EnumSet.of(
           TlsServerCredentials.Feature.MTLS, TlsServerCredentials.Feature.CUSTOM_MANAGERS);
-  private static Class<?> x509ExtendedTrustManagerClass;
-
-  static {
-    try {
-      x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
-    } catch (ClassNotFoundException e) {
-      // Will disallow per-rpc authority override via call option.
-    }
-  }
 
   private ProtocolNegotiators() {
   }
@@ -149,15 +140,8 @@ final class ProtocolNegotiators {
           trustManagers = Arrays.asList(tmf.getTrustManagers());
         }
         builder.trustManager(new FixedTrustManagerFactory(trustManagers));
-        TrustManager x509ExtendedTrustManager = null;
-        if (x509ExtendedTrustManagerClass != null) {
-          for (TrustManager trustManager : trustManagers) {
-            if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
-              x509ExtendedTrustManager = trustManager;
-              break;
-            }
-          }
-        }
+        TrustManager x509ExtendedTrustManager =
+            CertificateUtils.getX509ExtendedTrustManager(trustManagers);
         return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build(),
             (X509TrustManager) x509ExtendedTrustManager));
       } catch (SSLException | GeneralSecurityException ex) {

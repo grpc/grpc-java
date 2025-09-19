@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.internal.CertificateUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
@@ -30,8 +31,11 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
+import java.util.Arrays;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.net.ssl.TrustManager;
 
 /** A server SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderServerSslContextProvider extends CertProviderSslContextProvider {
@@ -55,7 +59,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  protected final SslContextBuilder getSslContextBuilder(
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager> getSslContextBuilderAndExtendedX509TrustManager(
       CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException, CertificateException, IOException {
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);
@@ -71,7 +75,9 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
     }
     setClientAuthValues(sslContextBuilder, trustManagerFactory);
     sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder);
-    return sslContextBuilder;
+    return new AbstractMap.SimpleImmutableEntry(sslContextBuilder,
+        CertificateUtils.getX509ExtendedTrustManager(
+            Arrays.asList(trustManagerFactory.getTrustManagers())));
   }
 
 }

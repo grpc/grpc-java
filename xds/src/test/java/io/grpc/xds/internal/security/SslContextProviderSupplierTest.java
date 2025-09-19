@@ -31,6 +31,8 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
+
+import java.util.AbstractMap;
 import java.util.concurrent.Executor;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,6 +42,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+
+import javax.net.ssl.TrustManager;
 
 /**
  * Unit tests for {@link SslContextProviderSupplier}.
@@ -88,9 +92,10 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
-    SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+        mock(AbstractMap.SimpleImmutableEntry.class);
+    capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
+    verify(mockCallback, times(1)).updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
     verify(mockTlsContextManager, times(1))
         .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
@@ -112,9 +117,11 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
-    SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+        mock(AbstractMap.SimpleImmutableEntry.class);
+    capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
+    verify(mockCallback, times(1))
+        .updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
     verify(mockTlsContextManager, times(1))
             .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
@@ -166,9 +173,11 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
-    SslContext mockSslContext = mock(SslContext.class);
-    capturedCallback.updateSslContext(mockSslContext);
-    verify(mockCallback, times(1)).updateSslContext(eq(mockSslContext));
+    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+        mock(AbstractMap.SimpleImmutableEntry.class);
+    capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
+    verify(mockCallback, times(1))
+        .updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
     verify(mockTlsContextManager, times(1))
         .releaseClientSslContextProvider(eq(mockSslContextProvider), eq(SNI));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);

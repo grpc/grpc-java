@@ -36,10 +36,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
+import javax.net.ssl.TrustManager;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
@@ -359,14 +361,14 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Perform some simple checks on sslContext. */
-  public static void doChecksOnSslContext(boolean server, SslContext sslContext,
-      List<String> expectedApnProtos) {
+  public static void doChecksOnSslContext(boolean server, AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext,
+                                          List<String> expectedApnProtos) {
     if (server) {
-      assertThat(sslContext.isServer()).isTrue();
+      assertThat(sslContext.getKey().isServer()).isTrue();
     } else {
-      assertThat(sslContext.isClient()).isTrue();
+      assertThat(sslContext.getKey().isClient()).isTrue();
     }
-    List<String> apnProtos = sslContext.applicationProtocolNegotiator().protocols();
+    List<String> apnProtos = sslContext.getKey().applicationProtocolNegotiator().protocols();
     assertThat(apnProtos).isNotNull();
     if (expectedApnProtos != null) {
       assertThat(apnProtos).isEqualTo(expectedApnProtos);
@@ -392,7 +394,7 @@ public class CommonTlsContextTestsUtil {
 
   public static class TestCallback extends SslContextProvider.Callback {
 
-    public SslContext updatedSslContext;
+    public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> updatedSslContext;
     public Throwable updatedThrowable;
 
     public TestCallback(Executor executor) {
@@ -400,7 +402,7 @@ public class CommonTlsContextTestsUtil {
     }
 
     @Override
-    public void updateSslContext(SslContext sslContext) {
+    public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
       updatedSslContext = sslContext;
     }
 

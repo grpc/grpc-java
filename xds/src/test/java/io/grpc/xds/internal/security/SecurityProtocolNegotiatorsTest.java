@@ -72,6 +72,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.cert.CertStoreException;
+import java.util.AbstractMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -80,6 +81,8 @@ import java.util.concurrent.TimeoutException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import javax.net.ssl.TrustManager;
 
 /** Unit tests for {@link SecurityProtocolNegotiators}. */
 @RunWith(JUnit4.class)
@@ -200,7 +203,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContext(SslContext sslContext) {
+          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
             future.set(sslContext);
           }
 
@@ -388,7 +391,7 @@ public class SecurityProtocolNegotiatorsTest {
     sslContextProviderSupplier
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
-          public void updateSslContext(SslContext sslContext) {
+          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
             future.set(sslContext);
           }
 
@@ -526,7 +529,7 @@ public class SecurityProtocolNegotiatorsTest {
       sslContextProviderSupplier
           .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
               future.set(sslContext);
             }
 

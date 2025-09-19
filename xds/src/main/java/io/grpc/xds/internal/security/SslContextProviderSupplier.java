@@ -24,6 +24,8 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 
+import javax.net.ssl.TrustManager;
+import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -70,8 +72,8 @@ public final class SslContextProviderSupplier implements Closeable {
           new SslContextProvider.Callback(callback.getExecutor()) {
 
           @Override
-          public void updateSslContext(SslContext sslContext) {
-            callback.updateSslContext(sslContext);
+          public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+            callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
             releaseSslContextProvider(toRelease, sni);
           }
 
