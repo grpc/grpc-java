@@ -307,8 +307,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     return delegate.getAcceptedIssuers();
   }
 
-  public static boolean verifyDnsNameWildcard(
-          String altNameFromCert, String sanToVerify, boolean ignoreCase) {
+  private static boolean verifyDnsNameWildcard(
+      String altNameFromCert, String sanToVerify, boolean ignoreCase) {
     String[] splitPattern = splitAtFirstDelimiter(ignoreCase
         ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
     String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
@@ -328,7 +328,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   private static boolean labelWildcardMatch(String dnsLabel, String pattern) {
     final char glob = '*';
-    if (pattern.length() == 1 && pattern.charAt(0) == glob) {
+    // Check the special case of a single * pattern, as it's common.
+    if (pattern.equals("*")) {
       return true;
     }
     int globIndex = pattern.indexOf(glob);

@@ -21,10 +21,9 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
-import static io.grpc.xds.internal.security.trust.XdsX509TrustManager.verifyDnsNameWildcard;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -694,13 +693,13 @@ public class XdsX509TrustManagerTest {
     }
   }
 
-  @Test
-  public void testVerifyDnsNameExact_succeedsForValidWildcardSanNames()
-          throws CertificateException, IOException {
+  private void runDnsWildcardTest(
+      String sanPattern, String certFile, boolean ignoreCase, boolean expected)
+      throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder()
-            .setExact("*.test.youtube.com")
-            .setIgnoreCase(false)
+            .setExact(sanPattern)
+            .setIgnoreCase(ignoreCase)
             .build();
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
@@ -709,84 +708,25 @@ public class XdsX509TrustManagerTest {
             .build();
     trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  public void testVerifyDnsNameExact_succeedsForValidWildcardSanNames_ignoreCase()
-          throws CertificateException, IOException {
-    StringMatcher stringMatcher =
-        StringMatcher.newBuilder()
-            .setExact("*.TEST.YOUTUBE.com")
-            .setIgnoreCase(true)
-            .build();
-    @SuppressWarnings("deprecation")
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addMatchSubjectAltNames(stringMatcher)
-            .build();
-    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
-    trustManager.verifySubjectAltNameInChain(certs);
-  }
-
-  @Test
-  public void testVerifyDnsNameExact_failsForNotExactMatch_SanNames()
-          throws CertificateException, IOException {
-    StringMatcher stringMatcher =
-        StringMatcher.newBuilder()
-            .setExact("lyft.com")
-            .setIgnoreCase(false)
-            .build();
-    @SuppressWarnings("deprecation")
-    CertificateValidationContext certContext =
-        CertificateValidationContext.newBuilder()
-            .addMatchSubjectAltNames(stringMatcher)
-            .build();
-    trustManager = new XdsX509TrustManager(certContext, mockDelegate);
-    X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(certFile));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
-      fail("no exception thrown");
-    } catch (CertificateException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+      assertTrue(expected);
+    } catch (CertificateException certException) {
+      assertThat(certException).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
     }
   }
 
   @Test
-  public void testVerifyDnsNameWildcard() {
-    assertTrue(verifyDnsNameWildcard(".lyft.com", "*.lyft.com" , true));
-    assertTrue(verifyDnsNameWildcard("a.lyft.com", "*.lyft.com" , true));
-    assertTrue(verifyDnsNameWildcard("a.LYFT.com", "*.lyft.COM" , true));
-    assertTrue(verifyDnsNameWildcard("lyft.com", "*yft.com" , true));
-    assertTrue(verifyDnsNameWildcard("lyft.com", "*lyft.com" , true));
-    assertTrue(verifyDnsNameWildcard("lyft.com", "lyf*.com" , true));
-    assertTrue(verifyDnsNameWildcard("lyft.com", "lyft*.com" , true));
-    assertTrue(verifyDnsNameWildcard("lyft.com", "l*ft.com" , true));
-    assertTrue(verifyDnsNameWildcard("t.lyft.com", "t*.lyft.com" , true));
-    assertTrue(verifyDnsNameWildcard("test.lyft.com", "t*.lyft.com" , true));
-    assertTrue(verifyDnsNameWildcard("l-lots-of-stuff-ft.com", "l*ft.com" , true));
-    assertFalse(verifyDnsNameWildcard("t.lyft.com", "t*t.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "l*ft.co", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "ly?t.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "lf*t.com", true));
-    assertFalse(verifyDnsNameWildcard(".lyft.com", "*lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "**lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "lyft**.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "ly**ft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "lyft.c*m", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "*yft.c*m", true));
-    assertFalse(verifyDnsNameWildcard("test.lyft.com.extra", "*.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("a.b.lyft.com", "*.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("foo.test.com", "*.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "*.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("alyft.com", "*.lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("", "*lyft.com", true));
-    assertFalse(verifyDnsNameWildcard("lyft.com", "", true));
-    assertFalse(verifyDnsNameWildcard("xn--lyft.com", "*.xn--lyft.com", true));
+  public void testDnsWildcardPatterns() throws Exception {
+    runDnsWildcardTest("*.test.google.fr", SERVER_1_PEM_FILE, false, true);
+    runDnsWildcardTest("*.test.youtube.com", SERVER_1_PEM_FILE, false, true);
+    runDnsWildcardTest("waterzooi.test.google.be", SERVER_1_PEM_FILE, false, true);
+    runDnsWildcardTest("192.168.1.3", SERVER_1_PEM_FILE, false, true);
+    runDnsWildcardTest("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, true, true);
+    runDnsWildcardTest("*.test.google.com.au", SERVER_0_PEM_FILE, false, true);
+    runDnsWildcardTest("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, false, false);
+    runDnsWildcardTest("*waterzooi", SERVER_1_PEM_FILE, false, false);
   }
 
   private TestSslEngine buildTrustManagerAndGetSslEngine()
