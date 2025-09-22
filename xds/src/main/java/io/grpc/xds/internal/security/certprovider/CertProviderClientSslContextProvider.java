@@ -55,20 +55,19 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
           CertificateValidationContext certificateValidationContextdationContext)
       throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
-    // Null rootCertInstance implies hasSystemRootCerts because of the check in
-    // CertProviderClientSslContextProviderFactory.
-    if (rootCertInstance != null) {
-      if (savedSpiffeTrustMap != null) {
-        sslContextBuilder = sslContextBuilder.trustManager(
+    if (savedSpiffeTrustMap != null) {
+      sslContextBuilder = sslContextBuilder.trustManager(
+        new XdsTrustManagerFactory(
+            savedSpiffeTrustMap,
+            certificateValidationContextdationContext));
+    } else if (savedTrustedRoots != null) {
+      sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
-              savedSpiffeTrustMap,
+              savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContextdationContext));
-      } else {
-        sslContextBuilder = sslContextBuilder.trustManager(
-            new XdsTrustManagerFactory(
-                savedTrustedRoots.toArray(new X509Certificate[0]),
-                certificateValidationContextdationContext));
-      }
+    } else {
+      // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
+      throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
     }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
