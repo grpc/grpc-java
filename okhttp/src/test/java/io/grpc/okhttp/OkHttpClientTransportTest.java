@@ -2018,7 +2018,7 @@ public class OkHttpClientTransportTest {
         status.getDescription().contains("proxy"));
     assertEquals("Not UNAVAILABLE: " + statusCaptor.getValue(),
         Status.UNAVAILABLE.getCode(), status.getCode());
-    assertEquals(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN, error);
+    assertEquals(new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), error);
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
 
