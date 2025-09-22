@@ -1835,12 +1835,16 @@ public class OkHttpClientTransportTest {
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
-        any(DisconnectError.class));
-    Status status = captor.getValue();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<DisconnectError> errorCaptor = ArgumentCaptor.forClass(DisconnectError.class);
+
+    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture(),
+        errorCaptor.capture());
+    Status status = statusCaptor.getValue();
+    DisconnectError error = errorCaptor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
     assertTrue(status.getCause().toString(), status.getCause() instanceof IOException);
+    assertEquals(new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), error);
 
     MockStreamListener streamListener = new MockStreamListener();
     clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT, tracers)
@@ -1867,11 +1871,14 @@ public class OkHttpClientTransportTest {
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
-        any(DisconnectError.class));
-    Status status = captor.getValue();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<DisconnectError> errorCaptor = ArgumentCaptor.forClass(DisconnectError.class);
+    verify(listener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture(),
+        errorCaptor.capture());
+    Status status = statusCaptor.getValue();
+    DisconnectError error = errorCaptor.getValue();
     assertEquals(Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), error);
     assertSame(exception, status.getCause());
   }
 
@@ -1960,18 +1967,21 @@ public class OkHttpClientTransportTest {
 
     assertEquals(-1, sock.getInputStream().read());
 
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
-        any(DisconnectError.class));
-    Status error = captor.getValue();
-    assertTrue("Status didn't contain error code: " + captor.getValue(),
-        error.getDescription().contains("500"));
-    assertTrue("Status didn't contain error description: " + captor.getValue(),
-        error.getDescription().contains("OH NO"));
-    assertTrue("Status didn't contain error text: " + captor.getValue(),
-        error.getDescription().contains(errorText));
-    assertEquals("Not UNAVAILABLE: " + captor.getValue(),
-        Status.UNAVAILABLE.getCode(), error.getCode());
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<DisconnectError> errorCaptor = ArgumentCaptor.forClass(DisconnectError.class);
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture(),
+        errorCaptor.capture());
+    Status status = statusCaptor.getValue();
+    DisconnectError error = errorCaptor.getValue();
+    assertTrue("Status didn't contain error code: " + statusCaptor.getValue(),
+        status.getDescription().contains("500"));
+    assertTrue("Status didn't contain error description: " + statusCaptor.getValue(),
+        status.getDescription().contains("OH NO"));
+    assertTrue("Status didn't contain error text: " + statusCaptor.getValue(),
+        status.getDescription().contains(errorText));
+    assertEquals("Not UNAVAILABLE: " + statusCaptor.getValue(),
+        Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(new GoAwayDisconnectError(GrpcUtil.Http2Error.INTERNAL_ERROR), error);
     sock.close();
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
@@ -1998,14 +2008,17 @@ public class OkHttpClientTransportTest {
     serverSocket.close();
     sock.close();
 
-    ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(captor.capture(),
-        any(DisconnectError.class));
-    Status error = captor.getValue();
-    assertTrue("Status didn't contain proxy: " + captor.getValue(),
-        error.getDescription().contains("proxy"));
-    assertEquals("Not UNAVAILABLE: " + captor.getValue(),
-        Status.UNAVAILABLE.getCode(), error.getCode());
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<DisconnectError> errorCaptor = ArgumentCaptor.forClass(DisconnectError.class);
+    verify(transportListener, timeout(TIME_OUT_MS)).transportShutdown(statusCaptor.capture(),
+        errorCaptor.capture());
+    Status status = statusCaptor.getValue();
+    DisconnectError error = errorCaptor.getValue();
+    assertTrue("Status didn't contain proxy: " + statusCaptor.getValue(),
+        status.getDescription().contains("proxy"));
+    assertEquals("Not UNAVAILABLE: " + statusCaptor.getValue(),
+        Status.UNAVAILABLE.getCode(), status.getCode());
+    assertEquals(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN, error);
     verify(transportListener, timeout(TIME_OUT_MS)).transportTerminated();
   }
 

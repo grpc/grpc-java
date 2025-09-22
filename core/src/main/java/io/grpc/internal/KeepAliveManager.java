@@ -27,6 +27,7 @@ import io.grpc.Status;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages keepalive pings.
@@ -262,9 +263,34 @@ public class KeepAliveManager {
    * Default client side {@link KeepAlivePinger}.
    */
   public static final class ClientKeepAlivePinger implements KeepAlivePinger {
-    private final ClientTransportWithDisconnectReason transport;
 
-    public ClientKeepAlivePinger(ClientTransportWithDisconnectReason transport) {
+
+    /**
+     * A {@link ClientTransport} that has life-cycle management.
+     *
+     */
+    @ThreadSafe
+    public interface TransportWithDisconnectReason extends ClientTransport {
+
+      /**
+       * Initiates an orderly shutdown of the transport.  Existing streams continue, but the
+       * transport will not own any new streams.  New streams will either fail (once
+       * {@link ManagedClientTransport.Listener#transportShutdown} callback called), or be
+       * transferred off this transport (in which case they may succeed).  This method may only be
+       * called once.
+       */
+      void shutdown(Status reason, DisconnectError disconnectError);
+
+      /**
+       * Initiates a forceful shutdown in which preexisting and new calls are closed. Existing calls
+       * should be closed with the provided {@code reason} and {@code disconnectError}.
+       */
+      void shutdownNow(Status reason, DisconnectError disconnectError);
+    }
+
+    private final TransportWithDisconnectReason transport;
+
+    public ClientKeepAlivePinger(TransportWithDisconnectReason transport) {
       this.transport = transport;
     }
 

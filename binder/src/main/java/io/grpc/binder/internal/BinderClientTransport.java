@@ -304,7 +304,7 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   void notifyShutdown(Status status) {
-    clientTransportListener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+    clientTransportListener.transportShutdown(status, SimpleDisconnectError.UNKNOWN);
   }
 
   @Override

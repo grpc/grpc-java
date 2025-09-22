@@ -509,7 +509,7 @@ public abstract class AbstractTransportTest {
     client = null;
 
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportInUse(false);
     assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));

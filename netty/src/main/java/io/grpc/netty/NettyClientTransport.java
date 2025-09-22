@@ -36,7 +36,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
-import io.grpc.internal.ClientTransportWithDisconnectReason;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FailingClientStream;
@@ -72,7 +71,7 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport,
-    ClientTransportWithDisconnectReason {
+    ClientKeepAlivePinger.TransportWithDisconnectReason {
 
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -351,6 +350,11 @@ class NettyClientTransport implements ConnectionClientTransport,
 
   @Override
   public void shutdown(Status reason) {
+    shutdown(reason, SimpleDisconnectError.UNKNOWN);
+  }
+
+  @Override
+  public void shutdown(Status reason, DisconnectError disconnectError) {
     // start() could have failed
     if (channel == null) {
       return;
@@ -373,7 +377,7 @@ class NettyClientTransport implements ConnectionClientTransport,
       handler.getWriteQueue().enqueue(new Runnable() {
         @Override
         public void run() {
-          lifecycleManager.notifyShutdown(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+          lifecycleManager.notifyShutdown(reason, disconnectError);
           channel.write(new ForcefulCloseCommand(reason));
         }
       }, true);
