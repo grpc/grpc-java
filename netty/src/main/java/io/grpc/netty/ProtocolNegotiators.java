@@ -582,6 +582,9 @@ final class ProtocolNegotiators {
     private final Optional<Runnable> handshakeCompleteRunnable;
     private final X509TrustManager x509ExtendedTrustManager;
     private final String sni;
+    // For xds targets there may be no SNI determined, and no SNI may be sent in that case.
+    // Non xds-targets will always use channel authority for SNI. This field is used to handle
+    // the two cases differently.
     private final boolean isXdsTarget;
     private Executor executor;
 
