@@ -16,13 +16,10 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
-import static java.util.Objects.requireNonNull;
-
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
-import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
@@ -69,7 +66,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       CertificateProviderInfo certProviderInstanceConfig =
           getCertProviderConfig(certProviders, certInstance.getInstanceName());
       CertificateProvider.Watcher watcher = this;
-      if (!sharedCertInstance) {
+      if (!sharedCertInstance && !isUsingSystemRootCerts) {
         watcher = new IgnoreUpdatesWatcher(watcher, /* ignoreRootCertUpdates= */ true);
       }
       // TODO: Previously we'd hang if certProviderInstanceConfig were null or
@@ -156,9 +153,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   @Override
   public final void updateTrustedRoots(List<X509Certificate> trustedRoots) {
-    if (isUsingSystemRootCerts) {
-      return;
-    }
     savedTrustedRoots = trustedRoots;
     updateSslContextWhenReady();
   }
@@ -190,7 +184,9 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   private void clearKeysAndCerts() {
     savedKey = null;
-    savedTrustedRoots = null;
+    if (!isUsingSystemRootCerts) {
+      savedTrustedRoots = null;
+    }
     savedSpiffeTrustMap = null;
     savedCertChain = null;
   }
@@ -200,10 +196,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   protected final boolean isRegularTlsAndClientSide() {
-    // We don't do (rootCertInstance != null || isUsingSystemRootCerts) here because of how this
-    // method is used. With the rootCertInstance being null when using system root certs, there
-    // is nothing to update in the SslContext
-    return rootCertInstance != null && certInstance == null;
+    return (rootCertInstance != null || isUsingSystemRootCerts) && certInstance == null;
   }
 
   protected final boolean isRegularTlsAndServerSide() {
@@ -228,42 +221,5 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   interface NoExceptionCloseable extends Closeable {
     @Override
     void close();
-  }
-
-  static final class IgnoreUpdatesWatcher implements CertificateProvider.Watcher {
-    private final CertificateProvider.Watcher delegate;
-    private final boolean ignoreRootCertUpdates;
-
-    public IgnoreUpdatesWatcher(
-        CertificateProvider.Watcher delegate, boolean ignoreRootCertUpdates) {
-      this.delegate = requireNonNull(delegate, "delegate");
-      this.ignoreRootCertUpdates = ignoreRootCertUpdates;
-    }
-
-    @Override
-    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
-      if (ignoreRootCertUpdates) {
-        delegate.updateCertificate(key, certChain);
-      }
-    }
-
-    @Override
-    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
-      if (!ignoreRootCertUpdates) {
-        delegate.updateTrustedRoots(trustedRoots);
-      }
-    }
-
-    @Override
-    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
-      if (!ignoreRootCertUpdates) {
-        delegate.updateSpiffeTrustMap(spiffeTrustMap);
-      }
-    }
-
-    @Override
-    public void onError(Status errorStatus) {
-      delegate.onError(errorStatus);
-    }
   }
 }

@@ -282,10 +282,6 @@ public class XdsSecurityClientServerTest {
     }
   }
 
-  /**
-   * Use system root ca cert for TLS channel - no mTLS.
-   * Subj Alt Names to match are specified in the validaton context.
-   */
   @Test
   public void tlsClientServer_useSystemRootCerts_failureToMatchSubjAltNames() throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
@@ -317,7 +313,6 @@ public class XdsSecurityClientServerTest {
 
   /**
    * Use system root ca cert for TLS channel - mTLS.
-   * Uses common_tls_context.combined_validation_context in upstream_tls_context.
    */
   @Test
   public void tlsClientServer_useSystemRootCerts_requireClientAuth() throws Exception {
