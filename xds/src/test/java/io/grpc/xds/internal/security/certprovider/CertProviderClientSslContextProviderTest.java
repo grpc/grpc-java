@@ -206,7 +206,7 @@ public class CertProviderClientSslContextProviderTest {
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContext()).isNotNull();
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
