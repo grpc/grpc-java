@@ -339,6 +339,7 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
+        restrictIncomingBinderToCallsFrom(remoteUid);
         attributes = setSecurityAttrs(attributes, remoteUid);
         authResultFuture = checkServerAuthorizationAsync(remoteUid);
         Futures.addCallback(

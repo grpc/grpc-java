@@ -323,7 +323,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
     /** Respond to network changes. Only used on API levels < 24. */
     private class NetworkReceiver extends BroadcastReceiver {
-      private boolean isConnected = false;
 
       @SuppressWarnings("deprecation")
       @Override
@@ -331,9 +330,8 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         ConnectivityManager conn =
             (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
         android.net.NetworkInfo networkInfo = conn.getActiveNetworkInfo();
-        boolean wasConnected = isConnected;
-        isConnected = networkInfo != null && networkInfo.isConnected();
-        if (isConnected && !wasConnected) {
+
+        if (networkInfo != null && networkInfo.isConnected()) {
           delegate.enterIdle();
         }
       }

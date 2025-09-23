@@ -234,6 +234,13 @@ final class XdsNameResolver extends NameResolver {
     resolveState.start();
   }
 
+  @Override
+  public void refresh() {
+    if (resolveState != null) {
+      resolveState.refresh();
+    }
+  }
+
   private static String expandPercentS(String template, String replacement) {
     return template.replace("%s", replacement);
   }
@@ -323,7 +330,9 @@ final class XdsNameResolver extends NameResolver {
             .setAttributes(attrs)
             .setServiceConfig(parsedServiceConfig)
             .build();
-    listener.onResult2(result);
+    if (!listener.onResult2(result).isOk()) {
+      resolveState.xdsDependencyManager.requestReresolution();
+    }
   }
 
   /**
@@ -660,6 +669,10 @@ final class XdsNameResolver extends NameResolver {
 
     void start() {
       xdsDependencyManager.start(this);
+    }
+
+    void refresh() {
+      xdsDependencyManager.requestReresolution();
     }
 
     private void shutdown() {
