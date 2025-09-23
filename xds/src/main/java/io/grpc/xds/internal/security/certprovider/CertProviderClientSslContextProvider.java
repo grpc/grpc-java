@@ -22,25 +22,12 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
-import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
-import java.io.IOException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertStoreException;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import javax.annotation.Nullable;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
@@ -61,65 +48,30 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         staticCertValidationContext,
         upstreamTlsContext,
         certificateProviderStore);
-    if (rootCertInstance == null
-        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())
-        && !isMtls()) {
-      try {
-        // Instantiate sslContext so that addCallback will immediately update the callback with
-        // the SslContext.
-        sslContext = getSslContextBuilder(staticCertificateValidationContext).build();
-      } catch (CertStoreException | CertificateException | IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   @Override
   protected final SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContext)
-      throws CertificateException, IOException, CertStoreException {
+          CertificateValidationContext certificateValidationContextdationContext)
+      throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
-    if (rootCertInstance != null) {
-      if (savedSpiffeTrustMap != null) {
-        sslContextBuilder = sslContextBuilder.trustManager(
+    if (savedSpiffeTrustMap != null) {
+      sslContextBuilder = sslContextBuilder.trustManager(
+        new XdsTrustManagerFactory(
+            savedSpiffeTrustMap,
+            certificateValidationContextdationContext));
+    } else if (savedTrustedRoots != null) {
+      sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
-              savedSpiffeTrustMap,
-              certificateValidationContext));
-      } else {
-        sslContextBuilder = sslContextBuilder.trustManager(
-            new XdsTrustManagerFactory(
-                savedTrustedRoots.toArray(new X509Certificate[0]),
-                certificateValidationContext));
-      }
+              savedTrustedRoots.toArray(new X509Certificate[0]),
+              certificateValidationContextdationContext));
     } else {
-      try {
-        sslContextBuilder = sslContextBuilder.trustManager(
-            new XdsTrustManagerFactory(
-                getX509CertificatesFromSystemTrustStore(),
-                certificateValidationContext));
-      } catch (KeyStoreException | NoSuchAlgorithmException e) {
-        throw new CertStoreException(e);
-      }
+      // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
+      throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
     }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
     return sslContextBuilder;
-  }
-
-  private X509Certificate[] getX509CertificatesFromSystemTrustStore()
-      throws KeyStoreException, NoSuchAlgorithmException {
-    TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
-        TrustManagerFactory.getDefaultAlgorithm());
-    trustManagerFactory.init((KeyStore) null);
-
-    List<TrustManager> trustManagers = Arrays.asList(trustManagerFactory.getTrustManagers());
-    List<X509Certificate> rootCerts = trustManagers.stream()
-        .filter(X509TrustManager.class::isInstance)
-        .map(X509TrustManager.class::cast)
-        .map(trustManager -> Arrays.asList(trustManager.getAcceptedIssuers()))
-        .flatMap(Collection::stream)
-        .collect(Collectors.toList());
-    return rootCerts.toArray(new X509Certificate[rootCerts.size()]);
   }
 }

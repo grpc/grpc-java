@@ -16,14 +16,18 @@
 
 package io.grpc.xds.internal.security.certprovider;
 
+import static java.util.Objects.requireNonNull;
+
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext.CertificateProviderInstance;
+import io.grpc.Status;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import io.grpc.xds.internal.security.DynamicSslContextProvider;
+import java.io.Closeable;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -34,8 +38,8 @@ import javax.annotation.Nullable;
 abstract class CertProviderSslContextProvider extends DynamicSslContextProvider implements
     CertificateProvider.Watcher {
 
-  @Nullable private final CertificateProviderStore.Handle certHandle;
-  @Nullable private final CertificateProviderStore.Handle rootCertHandle;
+  @Nullable private final NoExceptionCloseable certHandle;
+  @Nullable private final NoExceptionCloseable rootCertHandle;
   @Nullable private final CertificateProviderInstance certInstance;
   @Nullable protected final CertificateProviderInstance rootCertInstance;
   @Nullable protected PrivateKey savedKey;
@@ -55,24 +59,35 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     super(tlsContext, staticCertValidationContext);
     this.certInstance = certInstance;
     this.rootCertInstance = rootCertInstance;
-    String certInstanceName = null;
-    if (certInstance != null && certInstance.isInitialized()) {
-      certInstanceName = certInstance.getInstanceName();
+    this.isUsingSystemRootCerts = rootCertInstance == null
+        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
+    boolean createCertInstance = certInstance != null && certInstance.isInitialized();
+    boolean createRootCertInstance = rootCertInstance != null && rootCertInstance.isInitialized();
+    boolean sharedCertInstance = createCertInstance && createRootCertInstance
+        && rootCertInstance.getInstanceName().equals(certInstance.getInstanceName());
+    if (createCertInstance) {
       CertificateProviderInfo certProviderInstanceConfig =
-          getCertProviderConfig(certProviders, certInstanceName);
+          getCertProviderConfig(certProviders, certInstance.getInstanceName());
+      CertificateProvider.Watcher watcher = this;
+      if (!sharedCertInstance) {
+        watcher = new IgnoreUpdatesWatcher(watcher, /* ignoreRootCertUpdates= */ true);
+      }
+      // TODO: Previously we'd hang if certProviderInstanceConfig were null or
+      // certInstance.isInitialized() == false. Now we'll proceed. Those should be errors, or are
+      // they impossible and should be assertions?
       certHandle = certProviderInstanceConfig == null ? null
           : certificateProviderStore.createOrGetProvider(
               certInstance.getCertificateName(),
               certProviderInstanceConfig.pluginName(),
               certProviderInstanceConfig.config(),
-              this,
-              true);
+              watcher,
+              true)::close;
     } else {
       certHandle = null;
     }
-    if (rootCertInstance != null
-        && rootCertInstance.isInitialized()
-        && !rootCertInstance.getInstanceName().equals(certInstanceName)) {
+    if (createRootCertInstance && sharedCertInstance) {
+      rootCertHandle = () -> { };
+    } else if (createRootCertInstance && !sharedCertInstance) {
       CertificateProviderInfo certProviderInstanceConfig =
           getCertProviderConfig(certProviders, rootCertInstance.getInstanceName());
       rootCertHandle = certProviderInstanceConfig == null ? null
@@ -80,13 +95,16 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
               rootCertInstance.getCertificateName(),
               certProviderInstanceConfig.pluginName(),
               certProviderInstanceConfig.config(),
-              this,
-              true);
+              new IgnoreUpdatesWatcher(this, /* ignoreRootCertUpdates= */ false),
+              false)::close;
+    } else if (rootCertInstance == null
+        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())) {
+      SystemRootCertificateProvider systemRootProvider = new SystemRootCertificateProvider(this);
+      systemRootProvider.start();
+      rootCertHandle = systemRootProvider::close;
     } else {
       rootCertHandle = null;
     }
-    this.isUsingSystemRootCerts = rootCertInstance == null
-        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
   }
 
   private static CertificateProviderInfo getCertProviderConfig(
@@ -153,8 +171,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   private void updateSslContextWhenReady() {
     if (isMtls()) {
-      if (savedKey != null
-          && (savedTrustedRoots != null || isUsingSystemRootCerts || savedSpiffeTrustMap != null)) {
+      if (savedKey != null && (savedTrustedRoots != null || savedSpiffeTrustMap != null)) {
         updateSslContext();
         clearKeysAndCerts();
       }
@@ -205,6 +222,48 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     }
     if (rootCertHandle != null) {
       rootCertHandle.close();
+    }
+  }
+
+  interface NoExceptionCloseable extends Closeable {
+    @Override
+    void close();
+  }
+
+  static final class IgnoreUpdatesWatcher implements CertificateProvider.Watcher {
+    private final CertificateProvider.Watcher delegate;
+    private final boolean ignoreRootCertUpdates;
+
+    public IgnoreUpdatesWatcher(
+        CertificateProvider.Watcher delegate, boolean ignoreRootCertUpdates) {
+      this.delegate = requireNonNull(delegate, "delegate");
+      this.ignoreRootCertUpdates = ignoreRootCertUpdates;
+    }
+
+    @Override
+    public void updateCertificate(PrivateKey key, List<X509Certificate> certChain) {
+      if (ignoreRootCertUpdates) {
+        delegate.updateCertificate(key, certChain);
+      }
+    }
+
+    @Override
+    public void updateTrustedRoots(List<X509Certificate> trustedRoots) {
+      if (!ignoreRootCertUpdates) {
+        delegate.updateTrustedRoots(trustedRoots);
+      }
+    }
+
+    @Override
+    public void updateSpiffeTrustMap(Map<String, List<X509Certificate>> spiffeTrustMap) {
+      if (!ignoreRootCertUpdates) {
+        delegate.updateSpiffeTrustMap(spiffeTrustMap);
+      }
+    }
+
+    @Override
+    public void onError(Status errorStatus) {
+      delegate.onError(errorStatus);
     }
   }
 }
