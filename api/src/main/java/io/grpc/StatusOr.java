@@ -22,25 +22,27 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
-import javax.annotation.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 /** Either a Status or a value. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/11563")
-public class StatusOr<T> {
-  private StatusOr(Status status, T value) {
+@NullMarked
+public class StatusOr<T extends @Nullable Object> {
+  private StatusOr(@Nullable Status status, @Nullable T value) {
+    assert status == null || value == null : "is `status` is not `null` then `value` should be `null`";
     this.status = status;
     this.value = value;
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> fromValue(@Nullable T value) {
-    StatusOr<T> result = new StatusOr<T>(null, value);
-    return result;
+  public static <T extends @Nullable Object> StatusOr<T> fromValue(T value) {
+    return new StatusOr<>(null, value);
   }
 
   /** Construct from a non-Ok status. */
-  public static <T> StatusOr<T> fromStatus(Status status) {
-    StatusOr<T> result = new StatusOr<T>(checkNotNull(status, "status"), null);
+  public static <T extends @Nullable Object> StatusOr<T> fromStatus(Status status) {
+    StatusOr<T> result = new StatusOr<>(checkNotNull(status, "status"), null);
     checkArgument(!status.isOk(), "cannot use OK status: %s", status);
     return result;
   }
@@ -54,7 +56,7 @@ public class StatusOr<T> {
    * Returns the value if set or throws exception if there is no value set. This method is meant
    * to be called after checking the return value of hasValue() first.
    */
-  public @Nullable T getValue() {
+  public T getValue() {
     if (status != null) {
       throw new IllegalStateException("No value present.");
     }
@@ -105,6 +107,6 @@ public class StatusOr<T> {
     return stringHelper.toString();
   }
 
-  private final Status status;
-  private final T value;
+  private final @Nullable Status status;
+  private final @Nullable T value;
 }
