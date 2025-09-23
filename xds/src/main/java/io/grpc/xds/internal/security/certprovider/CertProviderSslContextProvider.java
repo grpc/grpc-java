@@ -40,10 +40,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
 
   @Nullable private final NoExceptionCloseable certHandle;
   @Nullable private final NoExceptionCloseable rootCertHandle;
+  @Nullable private final CertificateProviderInstance certInstance;
+  @Nullable protected final CertificateProviderInstance rootCertInstance;
   @Nullable protected PrivateKey savedKey;
   @Nullable protected List<X509Certificate> savedCertChain;
   @Nullable protected List<X509Certificate> savedTrustedRoots;
   @Nullable protected Map<String, List<X509Certificate>> savedSpiffeTrustMap;
+  private final boolean isUsingSystemRootCerts;
 
   protected CertProviderSslContextProvider(
       Node node,
@@ -54,6 +57,10 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       BaseTlsContext tlsContext,
       CertificateProviderStore certificateProviderStore) {
     super(tlsContext, staticCertValidationContext);
+    this.certInstance = certInstance;
+    this.rootCertInstance = rootCertInstance;
+    this.isUsingSystemRootCerts = rootCertInstance == null
+        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
     boolean createCertInstance = certInstance != null && certInstance.isInitialized();
     boolean createRootCertInstance = rootCertInstance != null && rootCertInstance.isInitialized();
     boolean sharedCertInstance = createCertInstance && createRootCertInstance
@@ -186,15 +193,15 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   }
 
   protected final boolean isMtls() {
-    return certHandle != null && rootCertHandle != null;
+    return certInstance != null && (rootCertInstance != null || isUsingSystemRootCerts);
   }
 
   protected final boolean isClientSideTls() {
-    return rootCertHandle != null && certHandle == null;
+    return rootCertInstance != null && certInstance == null;
   }
 
   protected final boolean isServerSideTls() {
-    return certHandle != null && rootCertHandle == null;
+    return certInstance != null && rootCertInstance == null;
   }
 
   @Override
