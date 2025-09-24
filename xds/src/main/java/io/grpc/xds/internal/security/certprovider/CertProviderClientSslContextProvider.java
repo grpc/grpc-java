@@ -22,16 +22,16 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.internal.security.CommonTlsContextUtil;
 import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.security.cert.CertStoreException;
 import java.security.cert.X509Certificate;
 import java.util.AbstractMap;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.net.ssl.TrustManager;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
@@ -56,30 +56,13 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         upstreamTlsContext,
         certificateProviderStore);
     this.sniForSanMatching = upstreamTlsContext.getAutoSniSanValidation()? sniForSanMatching : null;
-    if (rootCertInstance == null
-        && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext())
-        && !isMtls()) {
-      try {
-        // Instantiate sslContext so that addCallback will immediately update the callback with
-        // the SslContext.
-        AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager> sslContextBuilderAndTm =
-            getSslContextBuilderAndExtendedX509TrustManager(staticCertificateValidationContext);
-        sslContextAndExtendedX509TrustManager = new AbstractMap.SimpleImmutableEntry(
-            sslContextBuilderAndTm.getKey().build(), sslContextBuilderAndTm.getValue());
-      } catch (CertStoreException | CertificateException | IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   @Override
-  protected final SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContextdationContext)
-      throws CertStoreException {
   protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
       getSslContextBuilderAndExtendedX509TrustManager(
           CertificateValidationContext certificateValidationContext)
-              throws CertificateException, IOException, CertStoreException {
+              throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     if (savedSpiffeTrustMap != null) {
       sslContextBuilder = sslContextBuilder.trustManager(
@@ -91,6 +74,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContext, sniForSanMatching));
+    }
     XdsTrustManagerFactory trustManagerFactory;
     if (rootCertInstance != null) {
       if (savedSpiffeTrustMap != null) {

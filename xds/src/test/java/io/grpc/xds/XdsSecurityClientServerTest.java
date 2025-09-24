@@ -85,7 +85,6 @@ import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
@@ -840,7 +839,7 @@ public class XdsSecurityClientServerTest {
                 upstreamTlsContext, tlsContextManagerForClient))
         : Attributes.newBuilder();
     if (addrNameAttribute != null) {
-      sslContextAttributesBuilder.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, addrNameAttribute);
+      sslContextAttributesBuilder.set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, addrNameAttribute);
     }
     sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(

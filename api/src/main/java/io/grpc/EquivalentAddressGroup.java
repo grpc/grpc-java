@@ -55,6 +55,10 @@ public final class EquivalentAddressGroup {
    */
   public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
+  /** Name associated with individual address, if available (e.g., DNS name). */
+  @Attr
+  public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 

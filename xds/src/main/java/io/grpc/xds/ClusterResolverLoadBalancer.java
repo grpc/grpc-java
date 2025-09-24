@@ -195,7 +195,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                     .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
                     .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                    .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, endpoint.hostname())
                     .build();
             EquivalentAddressGroup eag;
             if (config.isHttp11ProxyAvailable()) {

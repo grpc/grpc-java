@@ -93,7 +93,8 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
-        mock(AbstractMap.SimpleImmutableEntry.class);
+        (AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>)
+            mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1)).updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
     verify(mockTlsContextManager, times(1))
@@ -118,7 +119,8 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
-        mock(AbstractMap.SimpleImmutableEntry.class);
+        (AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>)
+            mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1))
         .updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
@@ -174,7 +176,8 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
-        mock(AbstractMap.SimpleImmutableEntry.class);
+        (AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>)
+            mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1))
         .updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));

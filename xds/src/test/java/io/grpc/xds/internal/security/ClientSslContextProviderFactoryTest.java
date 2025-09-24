@@ -87,13 +87,13 @@ public class ClientSslContextProviderFactoryTest {
             new ClientSslContextProviderFactory(
                     bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], false);
     // verify that bootstrapInfo is cached...
     sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
   }
@@ -120,7 +120,7 @@ public class ClientSslContextProviderFactoryTest {
             new ClientSslContextProviderFactory(
                     bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);
@@ -146,7 +146,7 @@ public class ClientSslContextProviderFactoryTest {
             new ClientSslContextProviderFactory(
                     bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-            clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+            clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);
@@ -180,7 +180,7 @@ public class ClientSslContextProviderFactoryTest {
             new ClientSslContextProviderFactory(bootstrapInfo,
                     certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-            clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+            clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);
@@ -210,7 +210,7 @@ public class ClientSslContextProviderFactoryTest {
             new ClientSslContextProviderFactory(
                     bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);
@@ -247,7 +247,7 @@ public class ClientSslContextProviderFactoryTest {
         new ClientSslContextProviderFactory(
             bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);
@@ -281,7 +281,7 @@ public class ClientSslContextProviderFactoryTest {
         new ClientSslContextProviderFactory(
             bootstrapInfo, certProviderClientSslContextProviderFactory);
     SslContextProvider sslContextProvider =
-        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry(upstreamTlsContext, SNI));
+        clientSslContextProviderFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI));
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
     verifyWatcher(sslContextProvider, watcherCaptor[0], true);

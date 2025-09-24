@@ -57,11 +57,6 @@ import javax.net.ssl.TrustManager;
 @VisibleForTesting
 public final class SecurityProtocolNegotiators {
 
-  /** Name associated with individual address, if available (e.g., DNS name). */
-  @EquivalentAddressGroup.Attr
-  public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
-
   // Prevent instantiation.
   private SecurityProtocolNegotiators() {
   }
@@ -155,7 +150,7 @@ public final class SecurityProtocolNegotiators {
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
-          grpcHandler.getEagAttributes().get(ATTR_ADDRESS_NAME));
+          grpcHandler.getEagAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME));
     }
 
     @Override

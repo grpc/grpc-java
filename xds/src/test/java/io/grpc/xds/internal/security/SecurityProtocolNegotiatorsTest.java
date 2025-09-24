@@ -36,6 +36,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -165,7 +166,7 @@ public class SecurityProtocolNegotiatorsTest {
               Attributes.newBuilder()
                   .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                       new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
-                  .set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                  .set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
                   .build());
       ChannelHandler newHandler = pn.newHandler(mockHandler);
       assertThat(newHandler).isNotNull();
