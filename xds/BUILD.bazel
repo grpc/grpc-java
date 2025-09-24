@@ -31,6 +31,7 @@ java_library(
         "//services:metrics",
         "//services:metrics_internal",
         "//stub",
+        "//third-party/zero-allocation-hashing",
         "//util",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
@@ -73,7 +74,6 @@ java_binary(
     srcs = glob(
         [
             "src/main/java/**/*.java",
-            "third_party/zero-allocation-hashing/main/java/**/*.java",
         ],
         exclude = ["src/main/java/io/grpc/xds/orca/**"],
     ),
