@@ -734,6 +734,8 @@ public class XdsX509TrustManagerTest {
         {new TestParam("waterzooi.test.google.be", SERVER_1_PEM_FILE, false, true)},
         {new TestParam("192.168.1.3", SERVER_1_PEM_FILE, false, true)},
         {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, true, true)},
+        {new TestParam("w*i.test.google.be", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("w*a.test.google.be", SERVER_1_PEM_FILE, false, false)},
         {new TestParam("*.test.google.com.au", SERVER_0_PEM_FILE, false, false)},
         {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, false, false)},
         {new TestParam("*waterzooi", SERVER_1_PEM_FILE, false, false)},
