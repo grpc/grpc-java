@@ -18,13 +18,13 @@ package io.grpc.xds.internal.security.trust;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_WILDCARD_DNS_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doReturn;
@@ -44,6 +44,7 @@ import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import javax.net.ssl.SSLEngine;
@@ -54,7 +55,8 @@ import javax.net.ssl.X509ExtendedTrustManager;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -62,7 +64,7 @@ import org.mockito.junit.MockitoRule;
 /**
  * Unit tests for {@link XdsX509TrustManager}.
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class XdsX509TrustManagerTest {
 
   @Rule
@@ -75,6 +77,12 @@ public class XdsX509TrustManagerTest {
   private SSLSession mockSession;
 
   private XdsX509TrustManager trustManager;
+
+  private final TestParam testCase;
+
+  public XdsX509TrustManagerTest(TestParam testCase) {
+    this.testCase = testCase;
+  }
 
   @Test
   public void nullCertContextTest() throws CertificateException, IOException {
@@ -693,13 +701,13 @@ public class XdsX509TrustManagerTest {
     }
   }
 
-  private void runDnsWildcardTest(
-      String sanPattern, String certFile, boolean ignoreCase, boolean expected)
+  @Test
+  public void testDnsWildcardPatterns()
       throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder()
-            .setExact(sanPattern)
-            .setIgnoreCase(ignoreCase)
+            .setExact(testCase.sanPattern)
+            .setIgnoreCase(testCase.ignoreCase)
             .build();
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
@@ -708,25 +716,33 @@ public class XdsX509TrustManagerTest {
             .build();
     trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(certFile));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(testCase.certFile));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
-      assertTrue(expected);
+      assertThat(testCase.expected).isTrue();
     } catch (CertificateException certException) {
+      assertThat(testCase.expected).isFalse();
       assertThat(certException).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
     }
   }
 
-  @Test
-  public void testDnsWildcardPatterns() throws Exception {
-    runDnsWildcardTest("*.test.google.fr", SERVER_1_PEM_FILE, false, true);
-    runDnsWildcardTest("*.test.youtube.com", SERVER_1_PEM_FILE, false, true);
-    runDnsWildcardTest("waterzooi.test.google.be", SERVER_1_PEM_FILE, false, true);
-    runDnsWildcardTest("192.168.1.3", SERVER_1_PEM_FILE, false, true);
-    runDnsWildcardTest("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, true, true);
-    runDnsWildcardTest("*.test.google.com.au", SERVER_0_PEM_FILE, false, true);
-    runDnsWildcardTest("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, false, false);
-    runDnsWildcardTest("*waterzooi", SERVER_1_PEM_FILE, false, false);
+  @Parameters(name = "{index}: {0}")
+  public static Collection<Object[]> getParameters() {
+    return Arrays.asList(new Object[][] {
+        {new TestParam("*.test.google.fr", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("*.test.youtube.com", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("waterzooi.test.google.be", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("192.168.1.3", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, true, true)},
+        {new TestParam("*.test.google.com.au", SERVER_0_PEM_FILE, false, false)},
+        {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, false, false)},
+        {new TestParam("*waterzooi", SERVER_1_PEM_FILE, false, false)},
+        {new TestParam("*.lyft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("ly**ft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("*yft.c*m", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("xn--*.lyft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+    });
   }
 
   private TestSslEngine buildTrustManagerAndGetSslEngine()
@@ -791,5 +807,19 @@ public class XdsX509TrustManagerTest {
     }
 
     private SSLParameters sslParameters;
+  }
+
+  private static class TestParam {
+    final String sanPattern;
+    final String certFile;
+    final boolean ignoreCase;
+    final boolean expected;
+
+    TestParam(String sanPattern, String certFile, boolean ignoreCase, boolean expected) {
+      this.sanPattern = sanPattern;
+      this.certFile = certFile;
+      this.ignoreCase = ignoreCase;
+      this.expected = expected;
+    }
   }
 }

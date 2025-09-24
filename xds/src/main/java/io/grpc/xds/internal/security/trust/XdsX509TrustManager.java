@@ -313,8 +313,10 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
         ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
     String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
         ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert);
-    if (splitPattern == null || splitDnsName == null
-        || splitPattern.length < 2 || splitDnsName.length < 2) {
+    if (splitPattern == null || splitDnsName == null) {
+      return false;
+    }
+    if (splitDnsName[0].startsWith("xn--")) {
       return false;
     }
     if (splitPattern[0].contains("*")
@@ -330,7 +332,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     final char glob = '*';
     // Check the special case of a single * pattern, as it's common.
     if (pattern.equals("*")) {
-      return true;
+      return !dnsLabel.isEmpty();
     }
     int globIndex = pattern.indexOf(glob);
     if (pattern.indexOf(glob, globIndex + 1) == -1) {
