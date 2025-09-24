@@ -40,7 +40,7 @@ public class LoadBalancerRegistryTest {
   @Test
   public void stockProviders() {
     LoadBalancerRegistry defaultRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    assertThat(defaultRegistry.providers()).hasSize(3);
+    assertThat(defaultRegistry.providers()).hasSize(4);
 
     LoadBalancerProvider pickFirst = defaultRegistry.getProvider("pick_first");
     assertThat(pickFirst).isInstanceOf(PickFirstLoadBalancerProvider.class);
@@ -56,6 +56,11 @@ public class LoadBalancerRegistryTest {
     assertThat(outlierDetection.getClass().getName()).isEqualTo(
         "io.grpc.util.OutlierDetectionLoadBalancerProvider");
     assertThat(roundRobin.getPriority()).isEqualTo(5);
+
+    LoadBalancerProvider randomSubsetting = defaultRegistry.getProvider("random_subsetting");
+    assertThat(randomSubsetting.getClass().getName()).isEqualTo(
+        "io.grpc.util.RandomSubsettingLoadBalancerProvider");
+    assertThat(randomSubsetting.getPriority()).isEqualTo(5);
   }
 
   @Test
