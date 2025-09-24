@@ -82,9 +82,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     } else {
       certHandle = null;
     }
-    if (createRootCertInstance && sharedCertInstance) {
-      rootCertHandle = () -> { };
-    } else if (createRootCertInstance && !sharedCertInstance) {
+    if (createRootCertInstance && !sharedCertInstance) {
       CertificateProviderInfo certProviderInstanceConfig =
           getCertProviderConfig(certProviders, rootCertInstance.getInstanceName());
       rootCertHandle = certProviderInstanceConfig == null ? null
