@@ -411,7 +411,6 @@ public class XdsSecurityClientServerTest {
 
   /**
    * Use system root ca cert for TLS channel - mTLS.
-   * Uses common_tls_context.combined_validation_context in upstream_tls_context.
    */
   @Test
   public void tlsClientServer_useSystemRootCerts_requireClientAuth() throws Exception {

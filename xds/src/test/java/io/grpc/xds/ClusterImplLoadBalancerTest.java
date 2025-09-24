@@ -1017,7 +1017,7 @@ public class ClusterImplLoadBalancerTest {
     Attributes.Builder attributes = Attributes.newBuilder()
         .set(XdsAttributes.ATTR_LOCALITY, locality)
         // Unique but arbitrary string
-        .set(XdsAttributes.ATTR_LOCALITY_NAME, locality.toString());
+        .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, locality.toString());
     if (authorityHostname != null) {
       attributes.set(SecurityProtocolNegotiators.ATTR_ADDRESS_NAME, authorityHostname);
     }

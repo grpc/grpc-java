@@ -361,7 +361,7 @@ public final class EnvoyServerProtoData {
         Integer minimumHosts = envoyOutlierDetection.hasSuccessRateMinimumHosts()
             ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
         Integer requestVolume = envoyOutlierDetection.hasSuccessRateRequestVolume()
-            ? envoyOutlierDetection.getSuccessRateMinimumHosts().getValue() : null;
+            ? envoyOutlierDetection.getSuccessRateRequestVolume().getValue() : null;
 
         successRateEjection = SuccessRateEjection.create(stdevFactor, enforcementPercentage,
             minimumHosts, requestVolume);

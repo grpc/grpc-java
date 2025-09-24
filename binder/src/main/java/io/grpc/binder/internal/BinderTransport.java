@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.Futures.immediateFuture;
+import static io.grpc.binder.internal.TransactionUtils.newCallerFilteringHandler;
 
 import android.os.DeadObjectException;
 import android.os.IBinder;
@@ -31,12 +32,15 @@ import com.google.common.base.Verify;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Internal;
+import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.binder.InboundParcelablePolicy;
+import io.grpc.binder.internal.LeakSafeOneWayBinder.TransactionHandler;
 import io.grpc.internal.ObjectPool;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -153,6 +157,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ScheduledExecutorService scheduledExecutorService;
   private final InternalLogId logId;
+  @GuardedBy("this")
   private final LeakSafeOneWayBinder incomingBinder;
 
   protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
@@ -205,7 +210,15 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   // Override in child class.
   public final ListenableFuture<SocketStats> getStats() {
-    return immediateFuture(null);
+    Attributes attributes = getAttributes();
+    return immediateFuture(
+        new InternalChannelz.SocketStats(
+            /* data= */ null, // TODO: Keep track of these stats with TransportTracer or similar.
+            /* local= */ attributes.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR),
+            /* remote= */ attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR),
+            // TODO: SocketOptions are meaningless for binder but we're still forced to provide one.
+            new InternalChannelz.SocketOptions.Builder().build(),
+            /* security= */ null));
   }
 
   // Override in child class.
@@ -466,6 +479,15 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     }
   }
 
+  @BinderThread
+  @GuardedBy("this")
+  protected void restrictIncomingBinderToCallsFrom(int allowedCallingUid) {
+    TransactionHandler currentHandler = incomingBinder.getHandler();
+    if (currentHandler != null) {
+      incomingBinder.setHandler(newCallerFilteringHandler(allowedCallingUid, currentHandler));
+    }
+  }
+
   @Nullable
   @GuardedBy("this")
   protected Inbound<?> createInbound(int callId) {
@@ -549,6 +571,11 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @VisibleForTesting
   Map<Integer, Inbound<?>> getOngoingCalls() {
     return ongoingCalls;
+  }
+
+  @VisibleForTesting
+  synchronized LeakSafeOneWayBinder getIncomingBinderForTesting() {
+    return this.incomingBinder;
   }
 
   private static Status statusFromRemoteException(RemoteException e) {

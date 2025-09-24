@@ -208,7 +208,7 @@ public class CertProviderClientSslContextProviderTest {
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
@@ -237,15 +237,8 @@ public class CertProviderClientSslContextProviderTest {
 
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
-
-    // now generate root cert update, will get ignored because of systemRootCerts config
-    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
@@ -253,6 +246,7 @@ public class CertProviderClientSslContextProviderTest {
         ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
 
     TestCallback testCallback =
@@ -263,23 +257,13 @@ public class CertProviderClientSslContextProviderTest {
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
 
-    // just do root cert update: sslContext should still be the same, will get ignored because of
-    // systemRootCerts config
-    watcherCaptor[0].updateTrustedRoots(
-        ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
-    testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
-    assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
-
     // now update id cert: sslContext should be updated i.e. different from the previous one
     watcherCaptor[0].updateCertificate(
         CommonCertProviderTestUtils.getPrivateKey(SERVER_1_KEY_FILE),
         ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.savedTrustedRoots).isNotNull();
     assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);

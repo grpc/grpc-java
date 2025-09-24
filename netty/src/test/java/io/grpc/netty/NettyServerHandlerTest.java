@@ -78,6 +78,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Error;
@@ -542,7 +543,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         .set(InternalStatus.CODE_KEY.name(), String.valueOf(Code.INTERNAL.value()))
         .set(InternalStatus.MESSAGE_KEY.name(), "Method 'FAKE' is not supported")
         .status("" + 405)
-        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8");
+        .set(CONTENT_TYPE_HEADER, "text/plain; charset=utf-8")
+        .set(HttpHeaderNames.ALLOW, HTTP_METHOD);
 
     verifyWrite()
         .writeHeaders(
