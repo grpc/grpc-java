@@ -31,9 +31,9 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValida
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
-
 import java.util.AbstractMap;
 import java.util.concurrent.Executor;
+import javax.net.ssl.TrustManager;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,8 +42,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-
-import javax.net.ssl.TrustManager;
 
 /**
  * Unit tests for {@link SslContextProviderSupplier}.

@@ -652,7 +652,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       case PLAINTEXT_UPGRADE:
         return ProtocolNegotiators.plaintextUpgrade();
       case TLS:
-        return ProtocolNegotiators.tls(sslContext, executorPool, Optional.absent(), null, null, false);
+        return ProtocolNegotiators.tls(
+            sslContext, executorPool, Optional.absent(), null, null, false);
       default:
         throw new IllegalArgumentException("Unsupported negotiationType: " + negotiationType);
     }

@@ -16,6 +16,8 @@
 
 package io.grpc.xds.internal.security;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import io.grpc.xds.EnvoyServerProtoData.BaseTlsContext;
@@ -23,14 +25,11 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
-
-import javax.net.ssl.TrustManager;
 import java.util.AbstractMap;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
-
-import static com.google.common.base.Preconditions.checkNotNull;
+import javax.net.ssl.TrustManager;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -58,7 +57,8 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   /** Updates SslContext via the passed callback. */
-  public synchronized void updateSslContext(final SslContextProvider.Callback callback, String sni) {
+  public synchronized void updateSslContext(
+      final SslContextProvider.Callback callback, String sni) {
     checkNotNull(callback, "callback");
     try {
       if (!shutdown) {
@@ -106,9 +106,11 @@ public final class SslContextProviderSupplier implements Closeable {
   private SslContextProvider getSslContextProvider(String sni) {
     if (tlsContext instanceof UpstreamTlsContext) {
       snisSentByClients.add(sni);
-      return tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext, sni);
+      return tlsContextManager.findOrCreateClientSslContextProvider(
+          (UpstreamTlsContext) tlsContext, sni);
     }
-    return tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
+    return tlsContextManager.findOrCreateServerSslContextProvider(
+        (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

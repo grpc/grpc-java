@@ -313,7 +313,7 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
-  public void tlsClientServer_autoSniValidation_sniInUTC()
+  public void tlsClientServer_autoSniValidation_sniInUtc()
       throws Exception {
     CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();

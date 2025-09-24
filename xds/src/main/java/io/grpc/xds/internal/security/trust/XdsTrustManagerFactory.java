@@ -63,13 +63,14 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   public XdsTrustManagerFactory(
-          X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext, String sniForSanMatching)
-          throws CertStoreException {
+      X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext,
+      String sniForSanMatching) throws CertStoreException {
     this(certs, staticCertificateValidationContext, true, sniForSanMatching);
   }
 
   public XdsTrustManagerFactory(Map<String, List<X509Certificate>> spiffeTrustMap,
-      CertificateValidationContext staticCertificateValidationContext, String sniForSanMatching) throws CertStoreException {
+      CertificateValidationContext staticCertificateValidationContext, String sniForSanMatching)
+      throws CertStoreException {
     this(spiffeTrustMap, staticCertificateValidationContext, true, sniForSanMatching);
   }
 
@@ -85,7 +86,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
           || certificateValidationContext.hasSystemRootCerts(),
           "only static certificateValidationContext expected");
     }
-    xdsX509TrustManager = createX509TrustManager(certs, certificateValidationContext, sniForSanMatching);
+    xdsX509TrustManager = createX509TrustManager(
+        certs, certificateValidationContext, sniForSanMatching);
   }
 
   private XdsTrustManagerFactory(
@@ -98,7 +100,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       checkArgument(
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
-      xdsX509TrustManager = createX509TrustManager(spiffeTrustMap, certificateValidationContext, sniForSanMatching);
+      xdsX509TrustManager = createX509TrustManager(
+          spiffeTrustMap, certificateValidationContext, sniForSanMatching);
     }
   }
 
@@ -125,14 +128,16 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   @VisibleForTesting
   static XdsX509TrustManager createX509TrustManager(
-      X509Certificate[] certs, CertificateValidationContext certContext, String sniForSanMatching) throws CertStoreException {
+      X509Certificate[] certs, CertificateValidationContext certContext, String sniForSanMatching)
+      throws CertStoreException {
     return new XdsX509TrustManager(certContext, createTrustManager(certs), sniForSanMatching);
   }
 
   @VisibleForTesting
   static XdsX509TrustManager createX509TrustManager(
       Map<String, List<X509Certificate>> spiffeTrustMapFile,
-      CertificateValidationContext certContext, String sniForSanMatching) throws CertStoreException {
+      CertificateValidationContext certContext, String sniForSanMatching)
+      throws CertStoreException {
     checkNotNull(spiffeTrustMapFile, "spiffeTrustMapFile");
     Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
     for (Map.Entry<String, List<X509Certificate>> entry:spiffeTrustMapFile.entrySet()) {

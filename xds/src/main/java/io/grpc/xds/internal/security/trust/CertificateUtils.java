@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.security.trust;
 
 import io.grpc.internal.GrpcUtil;
-
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;

@@ -37,7 +37,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompositeCallCredentials;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -46,13 +45,10 @@ import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
-import io.grpc.xds.client.XdsLogger;
-import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import javax.annotation.Nullable;
 
@@ -65,7 +61,6 @@ final class GcpAuthenticationFilter implements Filter {
   static final String TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.http.gcp_authn.v3.GcpAuthnFilterConfig";
   private final LruCache<String, CallCredentials> callCredentialsCache;
-  private final XdsLogger logger = XdsLogger.withLogId(InternalLogId.allocate("bootstrapper", null));
   final String filterInstanceName;
 
   GcpAuthenticationFilter(String name, int cacheSize) {

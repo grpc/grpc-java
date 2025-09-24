@@ -52,7 +52,8 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   }
 
   @Nullable
-  public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> getSslContextAndExtendedX509TrustManager() {
+  public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
+      getSslContextAndExtendedX509TrustManager() {
     return sslContextAndExtendedX509TrustManager;
   }
 
@@ -61,8 +62,9 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   /**
    * Gets a server or client side SslContextBuilder.
    */
-  protected abstract AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager> getSslContextBuilderAndExtendedX509TrustManager(
-      CertificateValidationContext certificateValidationContext)
+  protected abstract AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
+      getSslContextBuilderAndExtendedX509TrustManager(
+          CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException;
 
   // this gets called only when requested secrets are ready...
@@ -84,7 +86,8 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
         sslContextBuilderAndTm.getKey().applicationProtocolConfig(apn);
       }
       List<Callback> pendingCallbacksCopy;
-      AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndExtendedX09TrustManagerCopy;
+      AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
+          sslContextAndExtendedX09TrustManagerCopy;
       synchronized (pendingCallbacks) {
         sslContextAndExtendedX509TrustManager = new AbstractMap.SimpleImmutableEntry<>(
             sslContextBuilderAndTm.getKey().build(), sslContextBuilderAndTm.getValue());

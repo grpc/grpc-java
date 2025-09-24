@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.envoyproxy.envoy.config.core.v3.Node;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
-import io.grpc.internal.CertificateUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
@@ -32,7 +31,6 @@ import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.AbstractMap;
-import java.util.Arrays;
 import java.util.Map;
 import javax.annotation.Nullable;
 import javax.net.ssl.TrustManager;
@@ -55,13 +53,15 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
         rootCertInstance,
         staticCertValidationContext,
         downstreamTlsContext,
-        certificateProviderStore);
+        certificateProviderStore,
+        null);
   }
 
   @Override
-  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager> getSslContextBuilderAndExtendedX509TrustManager(
-      CertificateValidationContext certificateValidationContextdationContext)
-      throws CertStoreException, CertificateException, IOException {
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
+      getSslContextBuilderAndExtendedX509TrustManager(
+          CertificateValidationContext certificateValidationContextdationContext)
+          throws CertStoreException, CertificateException, IOException {
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);
     XdsTrustManagerFactory trustManagerFactory = null;
     if (isMtls() && savedSpiffeTrustMap != null) {
@@ -76,7 +76,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
     setClientAuthValues(sslContextBuilder, trustManagerFactory);
     sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder);
     // TrustManager in the below return value is not used on the server side, so setting it to null
-    return new AbstractMap.SimpleImmutableEntry(sslContextBuilder, null);
+    return new AbstractMap.SimpleImmutableEntry<>(sslContextBuilder, null);
   }
 
 }

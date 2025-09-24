@@ -995,7 +995,8 @@ public class ClusterResolverLoadBalancerTest {
     ServerInfo lrsServerInfo =
         ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
     UpstreamTlsContext tlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, false);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true, null, false);
     DiscoveryMechanism edsDiscoveryMechanism1 =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
             Collections.emptyMap(), null);

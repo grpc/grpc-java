@@ -44,6 +44,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable protected List<X509Certificate> savedTrustedRoots;
   @Nullable protected Map<String, List<X509Certificate>> savedSpiffeTrustMap;
   private final boolean isUsingSystemRootCerts;
+  // Logically this field belongs in the client cert provider subclass but it had to be kept here
+  // because of the whole lot of things that happen in this class's constructor when the client
+  // cert provider is created, and
+  // CertProviderClientSslContextProvider::getSslContextBuilderAndExtendedX509TrustManager gets
+  // called before the constructor is complete, and this field needs to be set in order to be
+  // passed on to the TrustManager constructor.
+  protected final String sniForSanMatching;
 
   protected CertProviderSslContextProvider(
       Node node,
@@ -52,10 +59,11 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
       CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
       BaseTlsContext tlsContext,
-      CertificateProviderStore certificateProviderStore) {
+      CertificateProviderStore certificateProviderStore, String sniForSanMatching) {
     super(tlsContext, staticCertValidationContext);
     this.certInstance = certInstance;
     this.rootCertInstance = rootCertInstance;
+    this.sniForSanMatching = sniForSanMatching;
     this.isUsingSystemRootCerts = rootCertInstance == null
         && CommonTlsContextUtil.isUsingSystemRootCerts(tlsContext.getCommonTlsContext());
     boolean createCertInstance = certInstance != null && certInstance.isInitialized();
@@ -100,10 +108,6 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     } else {
       rootCertHandle = null;
     }
-  }
-
-  public boolean isUsingSystemRootCerts() {
-    return this.isUsingSystemRootCerts;
   }
 
   private static CertificateProviderInfo getCertProviderConfig(

@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
@@ -33,6 +32,7 @@ import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -384,8 +384,8 @@ public final class SecurityProtocolNegotiators {
             @Override
             public void updateSslContextAndExtendedX509TrustManager(
                 AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
-              ChannelHandler handler =
-                  InternalProtocolNegotiators.serverTls(sslContextAndTm.getKey()).newHandler(grpcHandler);
+              ChannelHandler handler = InternalProtocolNegotiators.serverTls(
+                  sslContextAndTm.getKey()).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               if (!ctx.isRemoved()) {
@@ -399,8 +399,7 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-      null);
+          }, null);
     }
   }
 }

@@ -74,23 +74,25 @@ public final class EnvoyServerProtoData {
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
     private final String sni;
-    private final boolean auto_host_sni;
-    private final boolean auto_sni_san_validation;
+    private final boolean autoHostSni;
+    private final boolean autoSniSanValidation;
 
     @VisibleForTesting
     public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
       super(commonTlsContext);
       this.sni = null;
-      this.auto_host_sni = false;
-      this.auto_sni_san_validation = false;
+      this.autoHostSni = false;
+      this.autoSniSanValidation = false;
     }
 
     @VisibleForTesting
-    public UpstreamTlsContext(io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext upstreamTlsContext) {
+    public UpstreamTlsContext(
+        io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            upstreamTlsContext) {
       super(upstreamTlsContext.getCommonTlsContext());
       this.sni = upstreamTlsContext.getSni();
-      this.auto_host_sni = upstreamTlsContext.getAutoHostSni();
-      this.auto_sni_san_validation = upstreamTlsContext.getAutoSniSanValidation();
+      this.autoHostSni = upstreamTlsContext.getAutoHostSni();
+      this.autoSniSanValidation = upstreamTlsContext.getAutoSniSanValidation();
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
@@ -105,20 +107,20 @@ public final class EnvoyServerProtoData {
     }
 
     public boolean getAutoHostSni() {
-      return auto_host_sni;
+      return autoHostSni;
     }
 
     public boolean getAutoSniSanValidation() {
-      return auto_sni_san_validation;
+      return autoSniSanValidation;
     }
 
     @Override
     public String toString() {
-      return "UpstreamTlsContext{" +
-          "commonTlsContext=" + commonTlsContext
+      return "UpstreamTlsContext{"
+          + "commonTlsContext=" + commonTlsContext
           + "sni=" + sni
-          + "\nauto_host_sni=" + auto_host_sni
-          + "\nauto_sni_san_validation=" + auto_sni_san_validation
+          + "\nauto_host_sni=" + autoHostSni
+          + "\nauto_sni_san_validation=" + autoSniSanValidation
           + "}";
     }
   }

@@ -29,13 +29,12 @@ import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-
-import javax.net.ssl.TrustManager;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.util.AbstractMap;
 import java.util.concurrent.Executor;
+import javax.net.ssl.TrustManager;
 
 /**
  * A SslContextProvider is a "container" or provider of SslContext. This is used by gRPC-xds to
@@ -50,11 +49,9 @@ public abstract class SslContextProvider implements Closeable {
 
   @VisibleForTesting public abstract static class Callback {
     private final Executor executor;
-    private final String hostname;
 
     protected Callback(Executor executor) {
       this.executor = executor;
-      this.hostname = null;
     }
 
     @VisibleForTesting public Executor getExecutor() {

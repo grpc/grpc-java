@@ -24,7 +24,8 @@ import java.util.AbstractMap;
 
 /** Factory to create client-side SslContextProvider from UpstreamTlsContext. */
 final class ClientSslContextProviderFactory
-    implements ValueFactory<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>, SslContextProvider> {
+    implements ValueFactory<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>,
+        SslContextProvider> {
 
   private BootstrapInfo bootstrapInfo;
   private final CertProviderClientSslContextProviderFactory
@@ -42,7 +43,8 @@ final class ClientSslContextProviderFactory
 
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public SslContextProvider create(AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String> key) {
+  public SslContextProvider create(
+      AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String> key) {
     return certProviderClientSslContextProviderFactory.getProvider(
         key.getKey(), key.getValue(),
         bootstrapInfo.node().toEnvoyProtoNode(),

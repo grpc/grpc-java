@@ -27,7 +27,6 @@ import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
 import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SpiffeUtil;
 import java.net.Socket;
 import java.security.cert.CertificateException;
@@ -79,7 +78,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates, @Nullable String sniForSanMatching) {
+      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates,
+      @Nullable String sniForSanMatching) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
     this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;
@@ -218,7 +218,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
-    List<StringMatcher> verifyList = CertificateUtils.isXdsSniEnabled && !Strings.isNullOrEmpty(sniForSanMatching)
+    List<StringMatcher> verifyList =
+        CertificateUtils.isXdsSniEnabled && !Strings.isNullOrEmpty(sniForSanMatching)
             ? ImmutableList.of(StringMatcher.newBuilder().setExact(sniForSanMatching).build())
             : certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {

@@ -25,9 +25,9 @@ import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.util.concurrent.Executor;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-import java.util.concurrent.Executor;
 
 /**
  * Internal accessor for {@link ProtocolNegotiators}.
@@ -79,7 +79,8 @@ public final class InternalProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(
-      SslContext sslContext, String sni, boolean isXdsTarget, TrustManager extendedX509TrustManager) {
+      SslContext sslContext, String sni, boolean isXdsTarget,
+      TrustManager extendedX509TrustManager) {
     return tls(sslContext, null, Optional.absent(), extendedX509TrustManager, sni, isXdsTarget);
   }
 
@@ -185,7 +186,7 @@ public final class InternalProtocolNegotiators {
       extends ProtocolNegotiators.ProtocolNegotiationHandler {
 
     protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName,
-       ChannelLogger negotiationLogger) {
+        ChannelLogger negotiationLogger) {
       super(next, negotiatorName, negotiationLogger);
     }
 
