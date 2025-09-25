@@ -40,7 +40,7 @@ public final class InternalProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
-   * @param executorPool             a dedicated {@link Executor} pool for time-consuming TLS tasks
+   * @param executorPool a dedicated {@link Executor} pool for time-consuming TLS tasks
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
           ObjectPool<? extends Executor> executorPool,
@@ -66,6 +66,7 @@ public final class InternalProtocolNegotiators {
         negotiator.close();
       }
     }
+
     return new TlsNegotiator();
   }
 
