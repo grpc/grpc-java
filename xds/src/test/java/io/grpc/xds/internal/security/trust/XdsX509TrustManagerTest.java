@@ -78,10 +78,10 @@ public class XdsX509TrustManagerTest {
 
   private XdsX509TrustManager trustManager;
 
-  private final TestParam testCase;
+  private final TestParam testParam;
 
-  public XdsX509TrustManagerTest(TestParam testCase) {
-    this.testCase = testCase;
+  public XdsX509TrustManagerTest(TestParam testParam) {
+    this.testParam = testParam;
   }
 
   @Test
@@ -706,8 +706,8 @@ public class XdsX509TrustManagerTest {
       throws CertificateException, IOException {
     StringMatcher stringMatcher =
         StringMatcher.newBuilder()
-            .setExact(testCase.sanPattern)
-            .setIgnoreCase(testCase.ignoreCase)
+            .setExact(testParam.sanPattern)
+            .setIgnoreCase(testParam.ignoreCase)
             .build();
     @SuppressWarnings("deprecation")
     CertificateValidationContext certContext =
@@ -716,12 +716,12 @@ public class XdsX509TrustManagerTest {
             .build();
     trustManager = new XdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TlsTesting.loadCert(testCase.certFile));
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(testParam.certFile));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
-      assertThat(testCase.expected).isTrue();
+      assertThat(testParam.expected).isTrue();
     } catch (CertificateException certException) {
-      assertThat(testCase.expected).isFalse();
+      assertThat(testParam.expected).isFalse();
       assertThat(certException).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
     }
   }
