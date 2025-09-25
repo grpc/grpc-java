@@ -118,7 +118,7 @@ import org.junit.runners.Parameterized.Parameters;
  */
 @RunWith(Parameterized.class)
 public class XdsSecurityClientServerTest {
-
+ 
   private static final String SNI_IN_UTC = "waterzooi.test.google.be";
 
   @Parameter
@@ -313,6 +313,7 @@ public class XdsSecurityClientServerTest {
     }
   }
 
+
   @Test
   public void tlsClientServer_autoSniValidation_sniInUtc()
       throws Exception {
@@ -425,7 +426,6 @@ public class XdsSecurityClientServerTest {
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
               CLIENT_PEM_FILE, true, SNI_IN_UTC, false, null, false, false);
-
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");

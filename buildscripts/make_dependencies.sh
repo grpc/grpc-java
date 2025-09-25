@@ -3,8 +3,8 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=22.5
-ABSL_VERSION=20230125.4
+PROTOBUF_VERSION=26.1
+ABSL_VERSION=20250127.1
 CMAKE_VERSION=3.26.3
 
 # ARCH is x86_64 bit unless otherwise specified.
