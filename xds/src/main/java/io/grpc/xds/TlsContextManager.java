@@ -30,7 +30,7 @@ public interface TlsContextManager {
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
   SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext, String sni);
+      UpstreamTlsContext upstreamTlsContext);
 
   /**
    * Releases an instance of the given client-side {@link SslContextProvider}.
@@ -41,8 +41,7 @@ public interface TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
-  SslContextProvider releaseClientSslContextProvider(SslContextProvider sslContextProvider,
-      String sni);
+  SslContextProvider releaseClientSslContextProvider(SslContextProvider sslContextProvider);
 
   /**
    * Releases an instance of the given server-side {@link SslContextProvider}.

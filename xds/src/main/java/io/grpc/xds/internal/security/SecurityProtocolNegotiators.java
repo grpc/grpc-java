@@ -247,7 +247,7 @@ public final class SecurityProtocolNegotiators {
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
                   InternalProtocolNegotiators.tls(
-                      sslContextAndTm.getKey(), sni, true, sslContextAndTm.getValue())
+                      sslContextAndTm.getKey(), sni, sslContextAndTm.getValue())
                       .newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
@@ -260,8 +260,7 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          },
-          sni);
+          });
     }
 
     @Override

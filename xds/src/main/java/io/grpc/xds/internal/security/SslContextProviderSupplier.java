@@ -42,7 +42,6 @@ public final class SslContextProviderSupplier implements Closeable {
 
   private final BaseTlsContext tlsContext;
   private final TlsContextManager tlsContextManager;
-  private final Set<String> snisSentByClients = new HashSet<>();
   private SslContextProvider sslContextProvider;
   private boolean shutdown;
 
@@ -58,16 +57,16 @@ public final class SslContextProviderSupplier implements Closeable {
 
   /** Updates SslContext via the passed callback. */
   public synchronized void updateSslContext(
-      final SslContextProvider.Callback callback, String sni) {
+      final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
     try {
       if (!shutdown) {
         if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider(sni);
+          sslContextProvider = getSslContextProvider();
         }
       }
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider(sni);
+      final SslContextProvider toRelease = getSslContextProvider();
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
@@ -75,13 +74,13 @@ public final class SslContextProviderSupplier implements Closeable {
           public void updateSslContextAndExtendedX509TrustManager(
               AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
             callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
-            releaseSslContextProvider(toRelease, sni);
+            releaseSslContextProvider(toRelease);
           }
 
           @Override
           public void onException(Throwable throwable) {
             callback.onException(throwable);
-            releaseSslContextProvider(toRelease, sni);
+            releaseSslContextProvider(toRelease);
           }
         });
     } catch (final Throwable throwable) {
@@ -94,20 +93,18 @@ public final class SslContextProviderSupplier implements Closeable {
     }
   }
 
-  private void releaseSslContextProvider(SslContextProvider toRelease, String sni) {
+  private void releaseSslContextProvider(SslContextProvider toRelease) {
     if (tlsContext instanceof UpstreamTlsContext) {
-      tlsContextManager.releaseClientSslContextProvider(toRelease, sni);
-      snisSentByClients.remove(sni);
+      tlsContextManager.releaseClientSslContextProvider(toRelease);
     } else {
       tlsContextManager.releaseServerSslContextProvider(toRelease);
     }
   }
 
-  private SslContextProvider getSslContextProvider(String sni) {
+  private SslContextProvider getSslContextProvider() {
     if (tlsContext instanceof UpstreamTlsContext) {
-      snisSentByClients.add(sni);
       return tlsContextManager.findOrCreateClientSslContextProvider(
-          (UpstreamTlsContext) tlsContext, sni);
+          (UpstreamTlsContext) tlsContext);
     }
     return tlsContextManager.findOrCreateServerSslContextProvider(
         (DownstreamTlsContext) tlsContext);
@@ -122,9 +119,7 @@ public final class SslContextProviderSupplier implements Closeable {
   public synchronized void close() {
     if (sslContextProvider != null) {
       if (tlsContext instanceof UpstreamTlsContext) {
-        for (String sni: snisSentByClients) {
-          tlsContextManager.releaseClientSslContextProvider(sslContextProvider, sni);
-        }
+        tlsContextManager.releaseClientSslContextProvider(sslContextProvider);
       } else {
         tlsContextManager.releaseServerSslContextProvider(sslContextProvider);
       }

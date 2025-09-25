@@ -72,7 +72,7 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   @Override
   public SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext, String sni) {
+      UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     return mapForClients.get(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, sni));
   }

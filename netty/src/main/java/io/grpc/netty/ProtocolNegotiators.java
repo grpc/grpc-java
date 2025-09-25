@@ -564,7 +564,7 @@ final class ProtocolNegotiators {
 
     public ClientTlsProtocolNegotiator(SslContext sslContext,
         ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
-        X509TrustManager x509ExtendedTrustManager, String sni, boolean isXdsTarget) {
+        X509TrustManager x509ExtendedTrustManager, String sni) {
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
       this.executorPool = executorPool;
       if (this.executorPool != null) {
@@ -573,7 +573,6 @@ final class ProtocolNegotiators {
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
       this.x509ExtendedTrustManager = x509ExtendedTrustManager;
       this.sni = sni;
-      this.isXdsTarget = isXdsTarget;
     }
 
     private final SslContext sslContext;
@@ -581,10 +580,6 @@ final class ProtocolNegotiators {
     private final Optional<Runnable> handshakeCompleteRunnable;
     private final X509TrustManager x509ExtendedTrustManager;
     private final String sni;
-    // For xds targets there may be no SNI determined, and no SNI may be sent in that case.
-    // Non xds-targets will always use channel authority for SNI. This field is used to handle
-    // the two cases differently.
-    private final boolean isXdsTarget;
     private Executor executor;
 
     @Override
@@ -597,7 +592,7 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          isXdsTarget ? sni : grpcHandler.getAuthority(),
+          sni != null? sni : grpcHandler.getAuthority(),
           this.executor, negotiationLogger, handshakeCompleteRunnable, null,
           x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
@@ -753,9 +748,9 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
       ObjectPool<? extends Executor> executorPool, Optional<Runnable> handshakeCompleteRunnable,
-      X509TrustManager x509ExtendedTrustManager, String sni, boolean isXdsTarget) {
+      X509TrustManager x509ExtendedTrustManager, String sni) {
     return new ClientTlsProtocolNegotiator(sslContext, executorPool, handshakeCompleteRunnable,
-        x509ExtendedTrustManager, sni, isXdsTarget);
+        x509ExtendedTrustManager, sni);
   }
 
   /**

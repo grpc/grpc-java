@@ -47,11 +47,9 @@ public final class InternalProtocolNegotiators {
           ObjectPool<? extends Executor> executorPool,
           Optional<Runnable> handshakeCompleteRunnable,
           TrustManager extendedX509TrustManager,
-          String sni,
-          boolean isXdsTarget) {
+          String sni) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
-        executorPool, handshakeCompleteRunnable, (X509TrustManager) extendedX509TrustManager, sni,
-        isXdsTarget);
+        executorPool, handshakeCompleteRunnable, (X509TrustManager) extendedX509TrustManager, sni);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -79,9 +77,9 @@ public final class InternalProtocolNegotiators {
    * may happen immediately, even before the TLS Handshake is complete.
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(
-      SslContext sslContext, String sni, boolean isXdsTarget,
+      SslContext sslContext, String sni,
       TrustManager extendedX509TrustManager) {
-    return tls(sslContext, null, Optional.absent(), extendedX509TrustManager, sni, isXdsTarget);
+    return tls(sslContext, null, Optional.absent(), extendedX509TrustManager, sni);
   }
 
   /**

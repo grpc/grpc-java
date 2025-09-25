@@ -1259,7 +1259,7 @@ public class ClusterImplLoadBalancerTest {
   private static final class FakeTlsContextManager implements TlsContextManager {
     @Override
     public SslContextProvider findOrCreateClientSslContextProvider(
-        UpstreamTlsContext upstreamTlsContext, String sni) {
+        UpstreamTlsContext upstreamTlsContext) {
       SslContextProvider sslContextProvider = mock(SslContextProvider.class);
       when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
       return sslContextProvider;
