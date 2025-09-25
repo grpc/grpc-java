@@ -918,7 +918,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        null, null);
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -957,7 +957,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        null, null);
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
     pipeline.replace(SslHandler.class, null, goodSslHandler);
     pipeline.fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
@@ -982,7 +982,7 @@ public class ProtocolNegotiatorsTest {
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
-        null, null);
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(handler);
 
     final AtomicReference<Throwable> error = new AtomicReference<>();
@@ -1011,7 +1011,7 @@ public class ProtocolNegotiatorsTest {
   public void clientTlsHandler_closeDuringNegotiation() throws Exception {
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", null, noopLogger, Optional.absent(),
-        null, null);
+        getClientTlsProtocolNegotiator(), null);
     pipeline.addLast(new WriteBufferingAndExceptionHandler(handler));
     ChannelFuture pendingWrite = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
 
@@ -1021,6 +1021,12 @@ public class ProtocolNegotiatorsTest {
     assertThat(pendingWrite.cause()).isInstanceOf(StatusRuntimeException.class);
     assertThat(Status.fromThrowable(pendingWrite.cause()).getCode())
         .isEqualTo(Status.Code.UNAVAILABLE);
+  }
+
+  private ClientTlsProtocolNegotiator getClientTlsProtocolNegotiator() throws SSLException {
+    return new ClientTlsProtocolNegotiator(GrpcSslContexts.forClient().trustManager(
+        TlsTesting.loadCert("ca.pem")).build(),
+        null, Optional.absent(), null, "");
   }
 
   @Test

@@ -55,7 +55,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
 
   @Override
   protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
-      getSslContextBuilderAndExtendedX509TrustManager(
+  getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
               throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();

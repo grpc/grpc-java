@@ -42,9 +42,9 @@ final class ClientSslContextProviderFactory
 
   /** Creates an SslContextProvider from the given UpstreamTlsContext. */
   @Override
-  public SslContextProvider create(UpstreamTlsContext key) {
+  public SslContextProvider create(UpstreamTlsContext upstreamTlsContext) {
     return certProviderClientSslContextProviderFactory.getProvider(
-        key,
+        upstreamTlsContext,
         bootstrapInfo.node().toEnvoyProtoNode(),
         bootstrapInfo.certProviders());
   }

@@ -261,7 +261,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          });
+          }
+      );
     }
 
     @Override
@@ -351,13 +352,13 @@ public final class SecurityProtocolNegotiators {
 
   @VisibleForTesting
   static final class ServerSecurityHandler
-      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+          extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
 
     ServerSecurityHandler(
-        GrpcHttp2ConnectionHandler grpcHandler,
-        SslContextProviderSupplier sslContextProviderSupplier) {
+            GrpcHttp2ConnectionHandler grpcHandler,
+            SslContextProviderSupplier sslContextProviderSupplier) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -399,7 +400,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          });
+          }
+      );
     }
   }
 }

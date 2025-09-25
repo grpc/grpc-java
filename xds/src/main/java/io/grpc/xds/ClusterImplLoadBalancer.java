@@ -153,8 +153,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childSwitchLb.handleResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes.toBuilder()
-                .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
-                .build())
+              .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
+              .build())
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
     return Status.OK;
@@ -321,7 +321,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           (lrsServerInfo == null)
               ? null
               : xdsClient.addClusterLocalityStats(lrsServerInfo, cluster,
-              edsServiceName, locality);
+                  edsServiceName, locality);
 
       return new ClusterLocality(localityStats, localityName);
     }
@@ -363,7 +363,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       sslContextProviderSupplier =
           tlsContext != null
               ? new SslContextProviderSupplier(tlsContext,
-              (TlsContextManager) xdsClient.getSecurityConfig())
+                                               (TlsContextManager) xdsClient.getSecurityConfig())
               : null;
     }
 
@@ -378,9 +378,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       private final Map<String, Struct> filterMetadata;
 
       private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-                                              List<DropOverload> dropPolicies,
-                                              long maxConcurrentRequests,
-                                              Map<String, Struct> filterMetadata) {
+          List<DropOverload> dropPolicies,
+          long maxConcurrentRequests,
+          Map<String, Struct> filterMetadata) {
         this.delegate = delegate;
         this.dropPolicies = dropPolicies;
         this.maxConcurrentRequests = maxConcurrentRequests;

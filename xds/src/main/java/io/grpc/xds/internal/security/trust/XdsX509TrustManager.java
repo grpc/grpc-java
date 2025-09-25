@@ -66,7 +66,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private final boolean autoSniSanValidation;
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      X509ExtendedTrustManager delegate, boolean autoSniSanValidation) {
+                      X509ExtendedTrustManager delegate,
+                      boolean autoSniSanValidation) {
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
@@ -75,7 +76,8 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates, boolean autoSniSanValidation) {
+      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates,
+      boolean autoSniSanValidation) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
     this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;
@@ -110,7 +112,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   private static boolean verifyDnsNameSafeRegex(
-      String altNameFromCert, RegexMatcher sanToVerifySafeRegex) {
+          String altNameFromCert, RegexMatcher sanToVerifySafeRegex) {
     Pattern safeRegExMatch = Pattern.compile(sanToVerifySafeRegex.getRegex());
     return safeRegExMatch.matches(altNameFromCert);
   }
@@ -122,30 +124,30 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     }
     return ignoreCase
         ? altNameFromCert.toLowerCase(Locale.ROOT).startsWith(
-        sanToVerifyPrefix.toLowerCase(Locale.ROOT))
+            sanToVerifyPrefix.toLowerCase(Locale.ROOT))
         : altNameFromCert.startsWith(sanToVerifyPrefix);
   }
 
   private static boolean verifyDnsNameSuffix(
-      String altNameFromCert, String sanToVerifySuffix, boolean ignoreCase) {
+          String altNameFromCert, String sanToVerifySuffix, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(sanToVerifySuffix)) {
       return false;
     }
     return ignoreCase
-        ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
-        sanToVerifySuffix.toLowerCase(Locale.ROOT))
-        : altNameFromCert.endsWith(sanToVerifySuffix);
+            ? altNameFromCert.toLowerCase(Locale.ROOT).endsWith(
+                sanToVerifySuffix.toLowerCase(Locale.ROOT))
+            : altNameFromCert.endsWith(sanToVerifySuffix);
   }
 
   private static boolean verifyDnsNameContains(
-      String altNameFromCert, String sanToVerifySubstring, boolean ignoreCase) {
+          String altNameFromCert, String sanToVerifySubstring, boolean ignoreCase) {
     if (Strings.isNullOrEmpty(sanToVerifySubstring)) {
       return false;
     }
     return ignoreCase
-        ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
-        sanToVerifySubstring.toLowerCase(Locale.ROOT))
-        : altNameFromCert.contains(sanToVerifySubstring);
+            ? altNameFromCert.toLowerCase(Locale.ROOT).contains(
+                sanToVerifySubstring.toLowerCase(Locale.ROOT))
+            : altNameFromCert.contains(sanToVerifySubstring);
   }
 
   private static boolean verifyDnsNameExact(

@@ -70,19 +70,19 @@ public final class SslContextProviderSupplier implements Closeable {
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
-          @Override
-          public void updateSslContextAndExtendedX509TrustManager(
-              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
-            callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
-            releaseSslContextProvider(toRelease);
-          }
+            @Override
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+              callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
+              releaseSslContextProvider(toRelease);
+            }
 
-          @Override
-          public void onException(Throwable throwable) {
-            callback.onException(throwable);
-            releaseSslContextProvider(toRelease);
-          }
-        });
+            @Override
+            public void onException(Throwable throwable) {
+              callback.onException(throwable);
+              releaseSslContextProvider(toRelease);
+            }
+          });
     } catch (final Throwable throwable) {
       callback.getExecutor().execute(new Runnable() {
         @Override
@@ -102,12 +102,10 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   private SslContextProvider getSslContextProvider() {
-    if (tlsContext instanceof UpstreamTlsContext) {
-      return tlsContextManager.findOrCreateClientSslContextProvider(
-          (UpstreamTlsContext) tlsContext);
-    }
-    return tlsContextManager.findOrCreateServerSslContextProvider(
-        (DownstreamTlsContext) tlsContext);
+    return tlsContext instanceof UpstreamTlsContext
+        ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
+        : tlsContextManager.findOrCreateServerSslContextProvider
+            ((DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

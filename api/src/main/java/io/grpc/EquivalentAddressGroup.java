@@ -55,7 +55,6 @@ public final class EquivalentAddressGroup {
    */
   public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
-
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 

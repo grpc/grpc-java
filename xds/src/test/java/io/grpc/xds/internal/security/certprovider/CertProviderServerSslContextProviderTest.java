@@ -127,7 +127,7 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
@@ -135,11 +135,11 @@ public class CertProviderServerSslContextProviderTest {
         ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
     assertThat(provider.savedKey).isNotNull();
     assertThat(provider.savedCertChain).isNotNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
 
     // now generate root cert update
     watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
@@ -168,7 +168,7 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
   }
@@ -196,7 +196,7 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
@@ -204,11 +204,11 @@ public class CertProviderServerSslContextProviderTest {
             ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
     assertThat(provider.savedKey).isNotNull();
     assertThat(provider.savedCertChain).isNotNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
 
     // now generate root cert update
     watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
@@ -237,7 +237,7 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
     assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
   }
@@ -294,14 +294,14 @@ public class CertProviderServerSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
 
     // now generate cert update
     watcherCaptor[0].updateCertificate(
             CommonCertProviderTestUtils.getPrivateKey(SERVER_0_KEY_FILE),
             ImmutableList.of(getCertFromResourceName(SERVER_0_PEM_FILE)));
 
-    assertThat(provider.getSslContextAndExtendedX509TrustManager()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNull();

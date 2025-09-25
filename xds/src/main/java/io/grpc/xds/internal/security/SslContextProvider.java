@@ -114,7 +114,7 @@ public abstract class SslContextProvider implements Closeable {
   public abstract void addCallback(Callback callback);
 
   protected final void performCallback(
-      final SslContextGetter sslContextGetter, final Callback callback) {
+          final SslContextGetter sslContextGetter, final Callback callback) {
     checkNotNull(sslContextGetter, "sslContextGetter");
     checkNotNull(callback, "callback");
     callback.executor.execute(

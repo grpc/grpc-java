@@ -25,7 +25,6 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.internal.security.ReferenceCountingMap.ValueFactory;
-import java.util.AbstractMap;
 
 /**
  * Class to manage {@link SslContextProvider} objects created from inputs we get from xDS. Used by
@@ -72,6 +71,8 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   public SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
+    CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
+    upstreamTlsContext = new UpstreamTlsContext(builder.build());
     return mapForClients.get(upstreamTlsContext);
   }
 

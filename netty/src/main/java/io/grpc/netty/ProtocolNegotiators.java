@@ -131,7 +131,7 @@ final class ProtocolNegotiators {
           trustManagers = tlsCreds.getTrustManagers();
         } else if (tlsCreds.getRootCertificates() != null) {
           trustManagers = Arrays.asList(CertificateUtils.createTrustManager(
-                new ByteArrayInputStream(tlsCreds.getRootCertificates())));
+                  new ByteArrayInputStream(tlsCreds.getRootCertificates())));
         } else { // else use system default
           TrustManagerFactory tmf = TrustManagerFactory.getInstance(
               TrustManagerFactory.getDefaultAlgorithm());
@@ -142,7 +142,7 @@ final class ProtocolNegotiators {
         TrustManager x509ExtendedTrustManager =
             CertificateUtils.getX509ExtendedTrustManager(trustManagers);
         return FromChannelCredentialsResult.negotiator(tlsClientFactory(builder.build(),
-            (X509TrustManager) x509ExtendedTrustManager));
+                (X509TrustManager) x509ExtendedTrustManager));
       } catch (SSLException | GeneralSecurityException ex) {
         log.log(Level.FINE, "Exception building SslContext", ex);
         return FromChannelCredentialsResult.error(
@@ -458,7 +458,7 @@ final class ProtocolNegotiators {
         }
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
         if (!sslContext.applicationProtocolNegotiator().protocols().contains(
-            sslHandler.applicationProtocol())) {
+                sslHandler.applicationProtocol())) {
           logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed for new client.", null);
           ctx.fireExceptionCaught(unavailableException(
               "Failed protocol negotiation: Unable to find compatible protocol"));
@@ -618,18 +618,21 @@ final class ProtocolNegotiators {
     private final int port;
     private Executor executor;
     private final Optional<Runnable> handshakeCompleteRunnable;
-    private final X509TrustManager x509ExtendedTrustManager;
+    private final X509TrustManager x509TrustManager;
     private SSLEngine sslEngine;
 
-    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String sniHostPort,
+    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority,
         Executor executor, ChannelLogger negotiationLogger,
         Optional<Runnable> handshakeCompleteRunnable,
         ClientTlsProtocolNegotiator clientTlsProtocolNegotiator,
-        X509TrustManager x509ExtendedTrustManager) {
+        X509TrustManager x509TrustManager) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
-      if (!Strings.isNullOrEmpty(sniHostPort)) {
-        HostPort hostPort = parseAuthority(sniHostPort);
+      // TODO: For empty authority and fallback flag
+      // GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE present, we should parse authority
+      // but prevent it from being used for SAN validation in the TrustManager.
+      if (authority != null && !authority.isEmpty()) {
+        HostPort hostPort = parseAuthority(authority);
         this.host = hostPort.host;
         this.port = hostPort.port;
       } else {
@@ -638,7 +641,7 @@ final class ProtocolNegotiators {
       }
       this.executor = executor;
       this.handshakeCompleteRunnable = handshakeCompleteRunnable;
-      this.x509ExtendedTrustManager = x509ExtendedTrustManager;
+      this.x509TrustManager = x509TrustManager;
     }
 
     @Override
@@ -706,7 +709,7 @@ final class ProtocolNegotiators {
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
           .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
           .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, new X509AuthorityVerifier(
-              sslEngine, x509ExtendedTrustManager))
+              sslEngine, x509TrustManager))
           .build();
       replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs).withSecurity(security));
       if (handshakeCompleteRunnable.isPresent()) {
@@ -1058,8 +1061,8 @@ final class ProtocolNegotiators {
     protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
       ProtocolNegotiationEvent existingPne = getProtocolNegotiationEvent();
       Attributes attrs = existingPne.getAttributes().toBuilder()
-            .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, (authority) -> Status.OK)
-            .build();
+              .set(GrpcAttributes.ATTR_AUTHORITY_VERIFIER, (authority) -> Status.OK)
+              .build();
       replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs));
       fireProtocolNegotiationEvent(ctx);
     }

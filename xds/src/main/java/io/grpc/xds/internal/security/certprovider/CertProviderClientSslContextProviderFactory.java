@@ -54,7 +54,8 @@ public final class CertProviderClientSslContextProviderFactory {
    * Creates a {@link CertProviderClientSslContextProvider}.
    */
   public SslContextProvider getProvider(
-      UpstreamTlsContext upstreamTlsContext, Node node,
+      UpstreamTlsContext upstreamTlsContext,
+      Node node,
       @Nullable Map<String, CertificateProviderInfo> certProviders) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();

@@ -158,7 +158,7 @@ public class CdsLoadBalancer2Test {
     lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental",
         new LeastRequestLoadBalancerProvider()));
     lbRegistry.register(new FakeLoadBalancerProvider("wrr_locality_experimental",
-        new WrrLocalityLoadBalancerProvider()));
+          new WrrLocalityLoadBalancerProvider()));
     CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
     lbRegistry.register(cdsLoadBalancerProvider);
     loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
@@ -269,24 +269,24 @@ public class CdsLoadBalancer2Test {
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.LOGICAL_DNS)
         .setLoadAssignment(ClusterLoadAssignment.newBuilder()
-            .addEndpoints(LocalityLbEndpoints.newBuilder()
-                .addLbEndpoints(LbEndpoint.newBuilder()
-                    .setEndpoint(Endpoint.newBuilder()
-                        .setAddress(Address.newBuilder()
-                            .setSocketAddress(SocketAddress.newBuilder()
-                                .setAddress("dns.example.com")
-                                .setPortValue(1111)))))))
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addLbEndpoints(LbEndpoint.newBuilder()
+              .setEndpoint(Endpoint.newBuilder()
+                .setAddress(Address.newBuilder()
+                  .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("dns.example.com")
+                    .setPortValue(1111)))))))
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-            .setServiceName(EDS_SERVICE_NAME)
-            .setEdsConfig(ConfigSource.newBuilder()
-                .setAds(AggregatedConfigSource.newBuilder())))
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
         .setLbPolicy(Cluster.LbPolicy.LEAST_REQUEST)
         .setLrsServer(ConfigSource.newBuilder()
-            .setSelf(SelfConfigSource.getDefaultInstance()))
+          .setSelf(SelfConfigSource.getDefaultInstance()))
         .setCircuitBreakers(CircuitBreakers.newBuilder()
             .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                .setPriority(RoutingPriority.DEFAULT)
-                .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
+              .setPriority(RoutingPriority.DEFAULT)
+              .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
         .setTransportSocket(TransportSocket.newBuilder()
             .setName("envoy.transport_sockets.tls")
             .setTypedConfig(Any.pack(UpstreamTlsContext.newBuilder()
@@ -303,8 +303,8 @@ public class CdsLoadBalancer2Test {
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
         DiscoveryMechanism.forLogicalDns(
-            CLUSTER, "dns.example.com:1111", lrsServerInfo, 100L, upstreamTlsContext,
-            Collections.emptyMap()));
+          CLUSTER, "dns.example.com:1111", lrsServerInfo, 100L, upstreamTlsContext,
+          Collections.emptyMap()));
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
         .isEqualTo("wrr_locality_experimental");
@@ -326,8 +326,8 @@ public class CdsLoadBalancer2Test {
     Cluster cluster = EDS_CLUSTER.toBuilder()
         .setCircuitBreakers(CircuitBreakers.newBuilder()
             .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                .setPriority(RoutingPriority.DEFAULT)
-                .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
+              .setPriority(RoutingPriority.DEFAULT)
+              .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
     startXdsDepManager();
@@ -337,14 +337,14 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forEds(
+          DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null));
 
     cluster = EDS_CLUSTER.toBuilder()
         .setCircuitBreakers(CircuitBreakers.newBuilder()
             .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                .setPriority(RoutingPriority.DEFAULT)
-                .setMaxRequests(UInt32Value.newBuilder().setValue(200))))
+              .setPriority(RoutingPriority.DEFAULT)
+              .setMaxRequests(UInt32Value.newBuilder().setValue(200))))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
@@ -352,7 +352,7 @@ public class CdsLoadBalancer2Test {
     childBalancer = Iterables.getOnlyElement(childBalancers);
     childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forEds(
+          DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, 200L, null, Collections.emptyMap(), null));
   }
 
@@ -366,7 +366,7 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forEds(
+          DiscoveryMechanism.forEds(
             CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null));
 
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
@@ -397,7 +397,7 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
     assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forEds(
+          DiscoveryMechanism.forEds(
             clusterName, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null));
 
     assertThat(this.lastXdsConfig.getClusters()).containsKey(clusterName);
@@ -419,44 +419,44 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         // CLUSTER (aggr.) -> [cluster1 (aggr.), cluster2 (logical DNS), cluster3 (EDS)]
         CLUSTER, Cluster.newBuilder()
-            .setName(CLUSTER)
-            .setClusterType(Cluster.CustomClusterType.newBuilder()
-                .setName("envoy.clusters.aggregate")
-                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                    .addClusters(cluster1)
-                    .addClusters(cluster2)
-                    .addClusters(cluster3)
-                    .build())))
-            .setLbPolicy(Cluster.LbPolicy.RING_HASH)
-            .build(),
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster1)
+                .addClusters(cluster2)
+                .addClusters(cluster3)
+                .build())))
+          .setLbPolicy(Cluster.LbPolicy.RING_HASH)
+          .build(),
         // cluster1 (aggr.) -> [cluster3 (EDS), cluster4 (EDS)]
         cluster1, Cluster.newBuilder()
-            .setName(cluster1)
-            .setClusterType(Cluster.CustomClusterType.newBuilder()
-                .setName("envoy.clusters.aggregate")
-                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                    .addClusters(cluster3)
-                    .addClusters(cluster4)
-                    .build())))
-            .build(),
+          .setName(cluster1)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster3)
+                .addClusters(cluster4)
+                .build())))
+          .build(),
         cluster2, Cluster.newBuilder()
-            .setName(cluster2)
-            .setType(Cluster.DiscoveryType.LOGICAL_DNS)
-            .setLoadAssignment(ClusterLoadAssignment.newBuilder()
-                .addEndpoints(LocalityLbEndpoints.newBuilder()
-                    .addLbEndpoints(LbEndpoint.newBuilder()
-                        .setEndpoint(Endpoint.newBuilder()
-                            .setAddress(Address.newBuilder()
-                                .setSocketAddress(SocketAddress.newBuilder()
-                                    .setAddress("dns.example.com")
-                                    .setPortValue(1111)))))))
-            .build(),
+          .setName(cluster2)
+          .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+          .setLoadAssignment(ClusterLoadAssignment.newBuilder()
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+              .addLbEndpoints(LbEndpoint.newBuilder()
+                .setEndpoint(Endpoint.newBuilder()
+                  .setAddress(Address.newBuilder()
+                    .setSocketAddress(SocketAddress.newBuilder()
+                      .setAddress("dns.example.com")
+                      .setPortValue(1111)))))))
+          .build(),
         cluster3, EDS_CLUSTER.toBuilder()
             .setName(cluster3)
             .setCircuitBreakers(CircuitBreakers.newBuilder()
                 .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-                    .setPriority(RoutingPriority.DEFAULT)
-                    .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
+                  .setPriority(RoutingPriority.DEFAULT)
+                  .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
             .build(),
         cluster4, EDS_CLUSTER.toBuilder().setName(cluster4).build()));
     startXdsDepManager();
@@ -466,14 +466,14 @@ public class CdsLoadBalancer2Test {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLoadBalancerProvider.PriorityLbConfig childLbConfig =
-        (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
+            (PriorityLoadBalancerProvider.PriorityLbConfig) childBalancer.config;
     assertThat(childLbConfig.priorities).hasSize(3);
     assertThat(childLbConfig.priorities.get(0)).isEqualTo(cluster3);
     assertThat(childLbConfig.priorities.get(1)).isEqualTo(cluster4);
     assertThat(childLbConfig.priorities.get(2)).isEqualTo(cluster2);
     assertThat(childLbConfig.childConfigs).hasSize(3);
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig3 =
-        childLbConfig.childConfigs.get(cluster3);
+            childLbConfig.childConfigs.get(cluster3);
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig3.childConfig)
             .getPolicyName())
@@ -485,7 +485,7 @@ public class CdsLoadBalancer2Test {
             .getPolicyName())
         .isEqualTo("cds_experimental");
     PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig childConfig2 =
-        childLbConfig.childConfigs.get(cluster2);
+            childLbConfig.childConfigs.get(cluster2);
     assertThat(
         GracefulSwitchLoadBalancerAccessor.getChildProvider(childConfig2.childConfig)
             .getPolicyName())
@@ -542,12 +542,12 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         // CLUSTER (aggr.) -> []
         CLUSTER, Cluster.newBuilder()
-            .setName(CLUSTER)
-            .setClusterType(Cluster.CustomClusterType.newBuilder()
-                .setName("envoy.clusters.aggregate")
-                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                    .build())))
-            .build()));
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .build())))
+          .build()));
     startXdsDepManager();
 
     verify(helper)
@@ -571,14 +571,14 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         // CLUSTER (aggr.) -> [cluster1 (missing)]
         CLUSTER, Cluster.newBuilder()
-            .setName(CLUSTER)
-            .setClusterType(Cluster.CustomClusterType.newBuilder()
-                .setName("envoy.clusters.aggregate")
-                .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
-                    .addClusters(cluster1)
-                    .build())))
-            .setLbPolicy(Cluster.LbPolicy.RING_HASH)
-            .build()));
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster1)
+                .build())))
+          .setLbPolicy(Cluster.LbPolicy.RING_HASH)
+          .build()));
     startXdsDepManager();
 
     verify(helper).updateBalancingState(
@@ -604,9 +604,9 @@ public class CdsLoadBalancer2Test {
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-            .setServiceName(EDS_SERVICE_NAME)
-            .setEdsConfig(ConfigSource.newBuilder()
-                .setAds(AggregatedConfigSource.newBuilder())))
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
     startXdsDepManager();
@@ -627,16 +627,16 @@ public class CdsLoadBalancer2Test {
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-            .setServiceName(EDS_SERVICE_NAME)
-            .setEdsConfig(ConfigSource.newBuilder()
-                .setAds(AggregatedConfigSource.newBuilder())))
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
         .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
             .addPolicies(Policy.newBuilder()
-                .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
-                    .setTypedConfig(Any.pack(TypedStruct.newBuilder()
-                        .setTypeUrl("type.googleapis.com/unknownLb")
-                        .setValue(Struct.getDefaultInstance())
-                        .build())))))
+              .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(TypedStruct.newBuilder()
+                    .setTypeUrl("type.googleapis.com/unknownLb")
+                    .setValue(Struct.getDefaultInstance())
+                    .build())))))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
     startXdsDepManager();
@@ -654,17 +654,17 @@ public class CdsLoadBalancer2Test {
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.EDS)
         .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-            .setServiceName(EDS_SERVICE_NAME)
-            .setEdsConfig(ConfigSource.newBuilder()
-                .setAds(AggregatedConfigSource.newBuilder())))
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
         .setLoadBalancingPolicy(LoadBalancingPolicy.newBuilder()
             .addPolicies(Policy.newBuilder()
-                .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
-                    .setTypedConfig(Any.pack(TypedStruct.newBuilder()
-                        .setTypeUrl("type.googleapis.com/ring_hash_experimental")
-                        .setValue(Struct.newBuilder()
-                            .putFields("minRingSize", Value.newBuilder().setNumberValue(-1).build()))
-                        .build())))))
+              .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(TypedStruct.newBuilder()
+                    .setTypeUrl("type.googleapis.com/ring_hash_experimental")
+                    .setValue(Struct.newBuilder()
+                      .putFields("minRingSize", Value.newBuilder().setNumberValue(-1).build()))
+                    .build())))))
         .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
     startXdsDepManager();
@@ -693,9 +693,9 @@ public class CdsLoadBalancer2Test {
           loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
               .setAddresses(Collections.emptyList())
               .setAttributes(Attributes.newBuilder()
-                  .set(XdsAttributes.XDS_CONFIG, xdsConfig.getValue())
-                  .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
-                  .build())
+                .set(XdsAttributes.XDS_CONFIG, xdsConfig.getValue())
+                .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+                .build())
               .setLoadBalancingPolicyConfig(cdsConfig)
               .build());
         });

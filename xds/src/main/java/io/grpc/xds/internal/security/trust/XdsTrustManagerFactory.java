@@ -63,8 +63,8 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   public XdsTrustManagerFactory(
-      X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext,
-      boolean autoSniSanValidation) throws CertStoreException {
+          X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext,
+          boolean autoSniSanValidation) throws CertStoreException {
     this(certs, staticCertificateValidationContext, true, autoSniSanValidation);
   }
 

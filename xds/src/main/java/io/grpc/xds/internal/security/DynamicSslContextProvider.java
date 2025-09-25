@@ -43,7 +43,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   protected final List<Callback> pendingCallbacks = new ArrayList<>();
   @Nullable protected final CertificateValidationContext staticCertificateValidationContext;
   @Nullable protected AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
-      sslContextAndExtendedX509TrustManager;
+      sslContextAndTrustManager;
 
   protected DynamicSslContextProvider(
       BaseTlsContext tlsContext, CertificateValidationContext staticCertValidationContext) {
@@ -53,17 +53,15 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   @Nullable
   public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
-      getSslContextAndExtendedX509TrustManager() {
-    return sslContextAndExtendedX509TrustManager;
+  getSslContextAndTrustManager() {
+    return sslContextAndTrustManager;
   }
 
   protected abstract CertificateValidationContext generateCertificateValidationContext();
 
-  /**
-   * Gets a server or client side SslContextBuilder.
-   */
+  /** Gets a server or client side SslContextBuilder. */
   protected abstract AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
-      getSslContextBuilderAndExtendedX509TrustManager(
+  getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException;
 
@@ -73,7 +71,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
       CertificateValidationContext localCertValidationContext =
           generateCertificateValidationContext();
       AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager> sslContextBuilderAndTm =
-          getSslContextBuilderAndExtendedX509TrustManager(localCertValidationContext);
+          getSslContextBuilderAndTrustManager(localCertValidationContext);
       CommonTlsContext commonTlsContext = getCommonTlsContext();
       if (commonTlsContext != null && commonTlsContext.getAlpnProtocolsCount() > 0) {
         List<String> alpnList = commonTlsContext.getAlpnProtocolsList();
@@ -89,9 +87,9 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
       AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
           sslContextAndExtendedX09TrustManagerCopy;
       synchronized (pendingCallbacks) {
-        sslContextAndExtendedX509TrustManager = new AbstractMap.SimpleImmutableEntry<>(
+        sslContextAndTrustManager = new AbstractMap.SimpleImmutableEntry<>(
             sslContextBuilderAndTm.getKey().build(), sslContextBuilderAndTm.getValue());
-        sslContextAndExtendedX09TrustManagerCopy = sslContextAndExtendedX509TrustManager;
+        sslContextAndExtendedX09TrustManagerCopy = sslContextAndTrustManager;
         pendingCallbacksCopy = clonePendingCallbacksAndClear();
       }
       makePendingCallbacks(sslContextAndExtendedX09TrustManagerCopy, pendingCallbacksCopy);
@@ -121,8 +119,8 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
     // if there is a computed sslContext just send it
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextCopy = null;
     synchronized (pendingCallbacks) {
-      if (sslContextAndExtendedX509TrustManager != null) {
-        sslContextCopy = sslContextAndExtendedX509TrustManager;
+      if (sslContextAndTrustManager != null) {
+        sslContextCopy = sslContextAndTrustManager;
       } else {
         pendingCallbacks.add(callback);
       }
