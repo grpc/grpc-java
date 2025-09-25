@@ -77,7 +77,6 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.UpstreamLocalityStats;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProvider;
