@@ -23,25 +23,6 @@ subprojects {
     group = "io.grpc"
     version = "1.77.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
-    plugins.withId("com.android.base") {
-        android {
-            lint {
-                abortOnError true
-                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
-                    warningsAsErrors true
-                }
-            }
-        }
-        tasks.withType(JavaCompile).configureEach {
-            it.options.compilerArgs += [
-                    "-Xlint:all"
-            ]
-            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
-                it.options.compilerArgs += ["-Werror"]
-            }
-        }
-    }
-
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
             url = "https://maven-central.storage-download.googleapis.com/maven2/"
@@ -213,6 +194,25 @@ subprojects {
         // Disable Error Prone
         tasks.withType(JavaCompile).configureEach {
             options.errorprone.enabled = false
+        }
+    }
+
+    plugins.withId("com.android.base") {
+        android {
+            lint {
+                abortOnError true
+                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                    warningsAsErrors true
+                }
+            }
+        }
+        tasks.withType(JavaCompile).configureEach {
+            it.options.compilerArgs += [
+                    "-Xlint:all"
+            ]
+            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                it.options.compilerArgs += ["-Werror"]
+            }
         }
     }
 
