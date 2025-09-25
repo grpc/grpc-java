@@ -1807,7 +1807,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     private void handleErrorInSyncContext(Status error) {
-      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+      logger.log(Level.FINE, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
       realChannel.onConfigError();
       if (lastResolutionState != ResolutionState.ERROR) {
