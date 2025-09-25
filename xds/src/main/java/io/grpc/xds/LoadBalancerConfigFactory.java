@@ -32,6 +32,7 @@ import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.least_request.v3.LeastRequest;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.pick_first.v3.PickFirst;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.random_subsetting.v3.RandomSubsetting;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.ring_hash.v3.RingHash;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
@@ -91,6 +92,9 @@ class LoadBalancerConfigFactory {
   static final String SHUFFLE_ADDRESS_LIST_FIELD_NAME = "shuffleAddressList";
 
   static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
+
+  static final String RANDOM_SUBSETTING_FIELD_NAME = "random_subsetting";
+  static final String SUBSET_SIZE = "subsetSize";
 
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
@@ -201,6 +205,20 @@ class LoadBalancerConfigFactory {
   }
 
   /**
+   * Builds a service config JSON object for the random_subsetting load balancer config based on the
+   * given config values.
+   */
+  private static ImmutableMap<String, ?> buildRandomSubsettingConfig(
+      RandomSubsetting randomSubsetting) {
+    return ImmutableMap.of(
+        RANDOM_SUBSETTING_FIELD_NAME,
+        ImmutableMap.of(
+            SUBSET_SIZE, randomSubsetting.getSubsetSize(),
+            CHILD_POLICY_FIELD, randomSubsetting.getChildPolicy()
+        ));
+  }
+
+  /**
    * Responsible for converting from a {@code envoy.config.cluster.v3.LoadBalancingPolicy} proto
    * message to a gRPC service config format.
    */
@@ -236,6 +254,9 @@ class LoadBalancerConfigFactory {
                 typedConfig.unpack(ClientSideWeightedRoundRobin.class));
           } else if (typedConfig.is(PickFirst.class)) {
             serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
+          } else if (typedConfig.is(RandomSubsetting.class)) {
+            serviceConfig = convertRandomSubsettingConfig(
+                typedConfig.unpack(RandomSubsetting.class));
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -322,6 +343,14 @@ class LoadBalancerConfigFactory {
      */
     private static ImmutableMap<String, ?> convertPickFirstConfig(PickFirst pickFirst) {
       return buildPickFirstConfig(pickFirst.getShuffleAddressList());
+    }
+
+    /**
+     * "Converts" a random_subsetting configuration to service config format.
+     */
+    private static ImmutableMap<String, ?> convertRandomSubsettingConfig(
+        RandomSubsetting randomSubsetting) {
+      return buildRandomSubsettingConfig(randomSubsetting);
     }
 
     /**
