@@ -53,6 +53,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.orca.OrcaPerRequestUtil;
@@ -241,9 +242,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
       if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
         String hostname = args.getAddresses().get(0).getAttributes()
-            .get(EquivalentAddressGroup.ATTR_ADDRESS_NAME);
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
@@ -439,7 +440,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
                 result.getSubchannel().getAttributes().get(
-                    EquivalentAddressGroup.ATTR_ADDRESS_NAME));
+                    XdsInternalAttributes.ATTR_ADDRESS_NAME));
           }
         }
         return result;

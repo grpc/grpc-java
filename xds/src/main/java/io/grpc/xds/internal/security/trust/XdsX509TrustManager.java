@@ -245,7 +245,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, new ArrayList<>());
   }
 
   @Override
@@ -270,6 +270,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
     List<StringMatcher> sniMatchers = null;
@@ -295,7 +296,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   private List<StringMatcher> getAutoSniSanMatchers(SSLParameters sslParams) {
     List<StringMatcher> sniNamesToMatch = new ArrayList<>();
-    if (CertificateUtils.isXdsSniEnabled) {
+    if (CertificateUtils.isXdsSniEnabled && autoSniSanValidation) {
       List<SNIServerName> serverNames = sslParams.getServerNames();
       if (serverNames != null) {
         for (SNIServerName serverName : serverNames) {

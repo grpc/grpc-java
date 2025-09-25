@@ -42,7 +42,6 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
       CommonTlsContext.CertificateProviderInstance rootCertInstance,
       CertificateValidationContext staticCertValidationContext,
       UpstreamTlsContext upstreamTlsContext,
-      String sniForSanMatching,
       CertificateProviderStore certificateProviderStore) {
     super(
         node,
@@ -51,8 +50,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         rootCertInstance,
         staticCertValidationContext,
         upstreamTlsContext,
-        certificateProviderStore,
-        upstreamTlsContext.getAutoSniSanValidation() ? sniForSanMatching : null);
+        certificateProviderStore);
   }
 
   @Override

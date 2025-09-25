@@ -51,7 +51,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link CertProviderClientSslContextProvider}. */
 @RunWith(JUnit4.class)
 public class CertProviderClientSslContextProviderTest {
-  private static final String SNI = "sni";
   private static final Logger logger =
       Logger.getLogger(CertProviderClientSslContextProviderTest.class.getName());
 
@@ -99,7 +98,7 @@ public class CertProviderClientSslContextProviderTest {
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
-            SNI, bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
   }
 
@@ -121,7 +120,7 @@ public class CertProviderClientSslContextProviderTest {
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
             upstreamTlsContext,
-            SNI, bootstrapInfo.node().toEnvoyProtoNode(),
+            bootstrapInfo.node().toEnvoyProtoNode(),
             bootstrapInfo.certProviders());
   }
 

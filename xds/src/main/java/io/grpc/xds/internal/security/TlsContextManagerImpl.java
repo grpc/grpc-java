@@ -35,8 +35,7 @@ import java.util.AbstractMap;
  */
 public final class TlsContextManagerImpl implements TlsContextManager {
 
-  private final ReferenceCountingMap<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>,
-      SslContextProvider> mapForClients;
+  private final ReferenceCountingMap<UpstreamTlsContext, SslContextProvider> mapForClients;
   private final ReferenceCountingMap<DownstreamTlsContext, SslContextProvider> mapForServers;
 
   /**
@@ -50,8 +49,7 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   @VisibleForTesting
   TlsContextManagerImpl(
-      ValueFactory<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>,
-          SslContextProvider> clientFactory,
+      ValueFactory<UpstreamTlsContext, SslContextProvider> clientFactory,
       ValueFactory<DownstreamTlsContext, SslContextProvider> serverFactory) {
     checkNotNull(clientFactory, "clientFactory");
     checkNotNull(serverFactory, "serverFactory");
@@ -74,16 +72,14 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   public SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    return mapForClients.get(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, sni));
+    return mapForClients.get(upstreamTlsContext);
   }
 
   @Override
   public SslContextProvider releaseClientSslContextProvider(
-      SslContextProvider clientSslContextProvider, String sni) {
+      SslContextProvider clientSslContextProvider) {
     checkNotNull(clientSslContextProvider, "clientSslContextProvider");
-    return mapForClients.release(
-        new AbstractMap.SimpleImmutableEntry<>(
-            clientSslContextProvider.getUpstreamTlsContext(), sni),
+    return mapForClients.release(clientSslContextProvider.getUpstreamTlsContext(),
         clientSslContextProvider);
   }
 

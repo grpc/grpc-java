@@ -77,6 +77,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.UpstreamLocalityStats;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProvider;
@@ -811,10 +812,10 @@ public class ClusterImplLoadBalancerTest {
               new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
       });
-      assertThat(subchannel.getAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME)).isEqualTo(
+      assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
           "authority-host-name");
       for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-        assertThat(eag.getAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME))
+        assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
             .isEqualTo("authority-host-name");
       }
 
@@ -863,9 +864,9 @@ public class ClusterImplLoadBalancerTest {
       }
     });
     // Sub Channel wrapper args won't have the address name although addresses will.
-    assertThat(subchannel.getAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME)).isNull();
+    assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isNull();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME))
+      assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
           .isEqualTo("authority-host-name");
     }
 
@@ -1019,7 +1020,7 @@ public class ClusterImplLoadBalancerTest {
         // Unique but arbitrary string
         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, locality.toString());
     if (authorityHostname != null) {
-      attributes.set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, authorityHostname);
+      attributes.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, authorityHostname);
     }
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
         attributes.build());
@@ -1267,7 +1268,7 @@ public class ClusterImplLoadBalancerTest {
 
     @Override
     public SslContextProvider releaseClientSslContextProvider(
-        SslContextProvider sslContextProvider, String sni) {
+        SslContextProvider sslContextProvider) {
       // no-op
       return null;
     }

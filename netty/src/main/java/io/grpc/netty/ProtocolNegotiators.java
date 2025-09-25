@@ -760,7 +760,7 @@ final class ProtocolNegotiators {
    */
   public static ProtocolNegotiator tls(SslContext sslContext,
       X509TrustManager x509ExtendedTrustManager) {
-    return tls(sslContext, null, Optional.absent(), x509ExtendedTrustManager, null, false);
+    return tls(sslContext, null, Optional.absent(), x509ExtendedTrustManager, null);
   }
 
   public static ProtocolNegotiator.ClientFactory tlsClientFactory(SslContext sslContext,

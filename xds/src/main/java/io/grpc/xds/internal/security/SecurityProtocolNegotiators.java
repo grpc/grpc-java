@@ -33,6 +33,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -150,7 +151,7 @@ public final class SecurityProtocolNegotiators {
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
-          grpcHandler.getEagAttributes().get(EquivalentAddressGroup.ATTR_ADDRESS_NAME));
+          grpcHandler.getEagAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME));
     }
 
     @Override
@@ -398,7 +399,7 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }, null);
+          });
     }
   }
 }

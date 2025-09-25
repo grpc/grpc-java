@@ -53,8 +53,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
         rootCertInstance,
         staticCertValidationContext,
         downstreamTlsContext,
-        certificateProviderStore,
-        null);
+        certificateProviderStore);
   }
 
   @Override
@@ -67,11 +66,11 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
     if (isMtls() && savedSpiffeTrustMap != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedSpiffeTrustMap,
-          certificateValidationContextdationContext, null);
+          certificateValidationContextdationContext, false);
     } else if (isMtls()) {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedTrustedRoots.toArray(new X509Certificate[0]),
-          certificateValidationContextdationContext, null);
+          certificateValidationContextdationContext, false);
     }
     setClientAuthValues(sslContextBuilder, trustManagerFactory);
     sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder);

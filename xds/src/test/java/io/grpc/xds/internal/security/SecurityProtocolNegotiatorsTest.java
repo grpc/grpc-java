@@ -49,6 +49,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
@@ -129,7 +130,7 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, false, false);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), "", false, false);
     ClientSecurityProtocolNegotiator pn =
         new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -153,7 +154,7 @@ public class SecurityProtocolNegotiatorsTest {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), null, true, false);
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), "", true, false);
       ClientSecurityProtocolNegotiator pn =
           new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
       GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -166,7 +167,7 @@ public class SecurityProtocolNegotiatorsTest {
               Attributes.newBuilder()
                   .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                       new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
-                  .set(EquivalentAddressGroup.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                  .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
                   .build());
       ChannelHandler newHandler = pn.newHandler(mockHandler);
       assertThat(newHandler).isNotNull();
@@ -213,7 +214,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        }, FAKE_AUTHORITY);
+        });
     assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -402,7 +403,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        }, null);
+        });
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertThat(executor.runDueTasks()).isEqualTo(1);
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -541,7 +542,7 @@ public class SecurityProtocolNegotiatorsTest {
             protected void onException(Throwable throwable) {
               future.set(throwable);
             }
-          }, "");
+          });
       executor.runDueTasks();
       channel.runPendingTasks(); // need this for tasks to execute on eventLoop
       Object fromFuture = future.get(5, TimeUnit.SECONDS);

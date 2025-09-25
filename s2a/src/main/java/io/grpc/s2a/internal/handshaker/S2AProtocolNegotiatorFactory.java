@@ -259,7 +259,7 @@ public final class S2AProtocolNegotiatorFactory {
                               s2aStub.close();
                             }
                           }),
-                          null, null, false)
+                          null, null)
                       .newHandler(grpcHandler);
 
               // Delegate the rest of the handshake to the TLS handler. and remove the 

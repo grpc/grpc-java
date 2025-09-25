@@ -102,6 +102,7 @@ import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -408,7 +409,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(EquivalentAddressGroup.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
@@ -897,7 +898,7 @@ public class ClusterResolverLoadBalancerTest {
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(EquivalentAddressGroup.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
+        .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test

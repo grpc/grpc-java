@@ -50,9 +50,7 @@ public class TlsContextManagerTest {
 
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  private static final String SNI = "sni";
-
-  @Mock ValueFactory<AbstractMap.SimpleImmutableEntry<UpstreamTlsContext, String>, SslContextProvider> mockClientFactory;
+  @Mock ValueFactory<UpstreamTlsContext, SslContextProvider> mockClientFactory;
 
   @Mock ValueFactory<DownstreamTlsContext, SslContextProvider> mockServerFactory;
 
@@ -169,14 +167,13 @@ public class TlsContextManagerTest {
     TlsContextManagerImpl tlsContextManagerImpl =
         new TlsContextManagerImpl(mockClientFactory, mockServerFactory);
     SslContextProvider mockProvider = mock(SslContextProvider.class);
-    when(mockClientFactory.create(new AbstractMap.SimpleImmutableEntry<>(upstreamTlsContext, SNI)))
-        .thenReturn(mockProvider);
+    when(mockClientFactory.create(upstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider clientSecretProvider =
         tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
     when(mockProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
-    tlsContextManagerImpl.releaseClientSslContextProvider(mockProvider, SNI);
+    tlsContextManagerImpl.releaseClientSslContextProvider(mockProvider);
     verify(mockProvider, times(1)).close();
   }
 }
