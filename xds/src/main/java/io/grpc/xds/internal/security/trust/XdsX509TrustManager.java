@@ -147,6 +147,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
+    if (sanToVerifyExact.contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact, ignoreCase);
+    }
     return ignoreCase
         ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
         : sanToVerifyExact.equals(altNameFromCert);
@@ -302,5 +305,50 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return result.toArray(new X509Certificate[0]);
     }
     return delegate.getAcceptedIssuers();
+  }
+
+  private static boolean verifyDnsNameWildcard(
+      String altNameFromCert, String sanToVerify, boolean ignoreCase) {
+    String[] splitPattern = splitAtFirstDelimiter(ignoreCase
+        ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
+    String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
+        ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert);
+    if (splitPattern == null || splitDnsName == null) {
+      return false;
+    }
+    if (splitDnsName[0].startsWith("xn--")) {
+      return false;
+    }
+    if (splitPattern[0].contains("*")
+        && !splitPattern[1].contains("*")
+        && !splitPattern[0].startsWith("xn--")) {
+      return splitDnsName[1].equals(splitPattern[1])
+          && labelWildcardMatch(splitDnsName[0], splitPattern[0]);
+    }
+    return false;
+  }
+
+  private static boolean labelWildcardMatch(String dnsLabel, String pattern) {
+    final char glob = '*';
+    // Check the special case of a single * pattern, as it's common.
+    if (pattern.equals("*")) {
+      return !dnsLabel.isEmpty();
+    }
+    int globIndex = pattern.indexOf(glob);
+    if (pattern.indexOf(glob, globIndex + 1) == -1) {
+      return dnsLabel.length() >= pattern.length() - 1
+          && dnsLabel.startsWith(pattern.substring(0, globIndex))
+          && dnsLabel.endsWith(pattern.substring(globIndex + 1));
+    }
+    return false;
+  }
+
+  @Nullable
+  private static String[] splitAtFirstDelimiter(String s) {
+    int index = s.indexOf('.');
+    if (index == -1) {
+      return null;
+    }
+    return new String[]{s.substring(0, index), s.substring(index + 1)};
   }
 }
