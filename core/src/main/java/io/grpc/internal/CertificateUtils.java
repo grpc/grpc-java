@@ -35,14 +35,17 @@ import javax.security.auth.x500.X500Principal;
  * Contains certificate/key PEM file utility method(s) for internal usage.
  */
 public final class CertificateUtils {
-  private static Class<?> x509ExtendedTrustManagerClass;
+  private static final Class<?> x509ExtendedTrustManagerClass;
 
   static {
+    Class<?> x509ExtendedTrustManagerClass1;
     try {
-      x509ExtendedTrustManagerClass = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+      x509ExtendedTrustManagerClass1 = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
     } catch (ClassNotFoundException e) {
+      x509ExtendedTrustManagerClass1 = null;
       // Will disallow per-rpc authority override via call option.
     }
+    x509ExtendedTrustManagerClass = x509ExtendedTrustManagerClass1;
   }
 
   /**
