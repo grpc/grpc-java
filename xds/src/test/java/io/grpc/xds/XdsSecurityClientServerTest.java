@@ -840,7 +840,7 @@ public class XdsSecurityClientServerTest {
                 upstreamTlsContext, tlsContextManagerForClient))
         : Attributes.newBuilder();
     if (addrNameAttribute != null) {
-      sslContextAttributesBuilder.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, addrNameAttribute);
+      sslContextAttributesBuilder.set(XdsAttributes.ATTR_ADDRESS_NAME, addrNameAttribute);
     }
     sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(

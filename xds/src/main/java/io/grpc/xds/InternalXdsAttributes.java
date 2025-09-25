@@ -32,5 +32,9 @@ public final class InternalXdsAttributes {
   public static final Attributes.Key<String> ATTR_CLUSTER_NAME =
       XdsAttributes.ATTR_CLUSTER_NAME;
 
+  /** Name associated with individual address, if available (e.g., DNS name). */
+  @EquivalentAddressGroup.Attr
+  public static final Attributes.Key<String> ATTR_ADDRESS_NAME = XdsAttributes.ATTR_ADDRESS_NAME;
+
   private InternalXdsAttributes() {}
 }

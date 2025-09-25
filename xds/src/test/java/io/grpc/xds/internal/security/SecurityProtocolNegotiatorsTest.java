@@ -48,7 +48,7 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.TlsContextManager;
+import io.grpc.xds.InternalXdsAttributes;import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.XdsInternalAttributes;
@@ -169,7 +169,7 @@ public class SecurityProtocolNegotiatorsTest {
               Attributes.newBuilder()
                   .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                       new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
-                  .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                  .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
                   .build());
       ChannelHandler newHandler = pn.newHandler(mockHandler);
       assertThat(newHandler).isNotNull();

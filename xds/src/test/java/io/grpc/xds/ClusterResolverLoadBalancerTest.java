@@ -409,7 +409,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
@@ -898,7 +898,7 @@ public class ClusterResolverLoadBalancerTest {
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
+        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test
