@@ -65,12 +65,12 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
       sslContextBuilder = sslContextBuilder.trustManager(
         new XdsTrustManagerFactory(
             savedSpiffeTrustMap,
-            certificateValidationContext, sniForSanMatching));
+            certificateValidationContext, ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else if (savedTrustedRoots != null) {
       sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
-              certificateValidationContext, sniForSanMatching));
+              certificateValidationContext, ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else {
       // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
       throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
@@ -79,12 +79,12 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
     if (savedSpiffeTrustMap != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedSpiffeTrustMap,
-          certificateValidationContext, sniForSanMatching);
+          certificateValidationContext, ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
       sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
     } else {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedTrustedRoots.toArray(new X509Certificate[0]),
-          certificateValidationContext, sniForSanMatching);
+          certificateValidationContext, ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
       sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
     }
     if (isMtls()) {

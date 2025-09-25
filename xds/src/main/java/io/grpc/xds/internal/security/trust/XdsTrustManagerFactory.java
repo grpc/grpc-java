@@ -59,26 +59,26 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
         getTrustedCaFromCertContext(certificateValidationContext),
         certificateValidationContext,
         false,
-        null);
+        false);
   }
 
   public XdsTrustManagerFactory(
       X509Certificate[] certs, CertificateValidationContext staticCertificateValidationContext,
-      String sniForSanMatching) throws CertStoreException {
-    this(certs, staticCertificateValidationContext, true, sniForSanMatching);
+      boolean autoSniSanValidation) throws CertStoreException {
+    this(certs, staticCertificateValidationContext, true, autoSniSanValidation);
   }
 
   public XdsTrustManagerFactory(Map<String, List<X509Certificate>> spiffeTrustMap,
-      CertificateValidationContext staticCertificateValidationContext, String sniForSanMatching)
+      CertificateValidationContext staticCertificateValidationContext, boolean autoSniSanValidation)
       throws CertStoreException {
-    this(spiffeTrustMap, staticCertificateValidationContext, true, sniForSanMatching);
+    this(spiffeTrustMap, staticCertificateValidationContext, true, autoSniSanValidation);
   }
 
   private XdsTrustManagerFactory(
       X509Certificate[] certs,
       CertificateValidationContext certificateValidationContext,
       boolean validationContextIsStatic,
-      String sniForSanMatching)
+      boolean autoSniSanValidation)
       throws CertStoreException {
     if (validationContextIsStatic) {
       checkArgument(
@@ -87,21 +87,21 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
           "only static certificateValidationContext expected");
     }
     xdsX509TrustManager = createX509TrustManager(
-        certs, certificateValidationContext, sniForSanMatching);
+        certs, certificateValidationContext, autoSniSanValidation);
   }
 
   private XdsTrustManagerFactory(
       Map<String, List<X509Certificate>> spiffeTrustMap,
       CertificateValidationContext certificateValidationContext,
       boolean validationContextIsStatic,
-      String sniForSanMatching)
+      boolean autoSniSanValidation)
       throws CertStoreException {
     if (validationContextIsStatic) {
       checkArgument(
           certificateValidationContext == null || !certificateValidationContext.hasTrustedCa(),
           "only static certificateValidationContext expected");
       xdsX509TrustManager = createX509TrustManager(
-          spiffeTrustMap, certificateValidationContext, sniForSanMatching);
+          spiffeTrustMap, certificateValidationContext, autoSniSanValidation);
     }
   }
 
@@ -128,15 +128,16 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   @VisibleForTesting
   static XdsX509TrustManager createX509TrustManager(
-      X509Certificate[] certs, CertificateValidationContext certContext, String sniForSanMatching)
+      X509Certificate[] certs, CertificateValidationContext certContext,
+      boolean autoSniSanValidation)
       throws CertStoreException {
-    return new XdsX509TrustManager(certContext, createTrustManager(certs), sniForSanMatching);
+    return new XdsX509TrustManager(certContext, createTrustManager(certs), autoSniSanValidation);
   }
 
   @VisibleForTesting
   static XdsX509TrustManager createX509TrustManager(
       Map<String, List<X509Certificate>> spiffeTrustMapFile,
-      CertificateValidationContext certContext, String sniForSanMatching)
+      CertificateValidationContext certContext, boolean autoSniSanValidation)
       throws CertStoreException {
     checkNotNull(spiffeTrustMapFile, "spiffeTrustMapFile");
     Map<String, X509ExtendedTrustManager> delegates = new HashMap<>();
@@ -144,7 +145,7 @@ public final class XdsTrustManagerFactory extends SimpleTrustManagerFactory {
       delegates.put(entry.getKey(), createTrustManager(
           entry.getValue().toArray(new X509Certificate[0])));
     }
-    return new XdsX509TrustManager(certContext, delegates, sniForSanMatching);
+    return new XdsX509TrustManager(certContext, delegates, autoSniSanValidation);
   }
 
   private static X509ExtendedTrustManager createTrustManager(X509Certificate[] certs)
