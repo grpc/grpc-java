@@ -184,8 +184,8 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     savedKey = null;
     if (!isUsingSystemRootCerts) {
       savedTrustedRoots = null;
+      savedSpiffeTrustMap = null;
     }
-    savedSpiffeTrustMap = null;
     savedCertChain = null;
   }
 
