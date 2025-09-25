@@ -197,6 +197,25 @@ subprojects {
         }
     }
 
+    plugins.withId("com.android.base") {
+        android {
+            lint {
+                abortOnError true
+                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                    warningsAsErrors true
+                }
+            }
+        }
+        tasks.withType(JavaCompile).configureEach {
+            it.options.compilerArgs += [
+                    "-Xlint:all"
+            ]
+            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                it.options.compilerArgs += ["-Werror"]
+            }
+        }
+    }
+
     plugins.withId("java") {
         dependencies {
             testImplementation libraries.junit,
