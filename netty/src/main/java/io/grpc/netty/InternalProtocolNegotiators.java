@@ -26,7 +26,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.util.concurrent.Executor;
-import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
@@ -45,10 +44,10 @@ public final class InternalProtocolNegotiators {
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(SslContext sslContext,
           ObjectPool<? extends Executor> executorPool,
           Optional<Runnable> handshakeCompleteRunnable,
-          TrustManager extendedX509TrustManager,
+          X509TrustManager extendedX509TrustManager,
           String sni) {
     final io.grpc.netty.ProtocolNegotiator negotiator = ProtocolNegotiators.tls(sslContext,
-        executorPool, handshakeCompleteRunnable, (X509TrustManager) extendedX509TrustManager, sni);
+        executorPool, handshakeCompleteRunnable, extendedX509TrustManager, sni);
     final class TlsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
       @Override
@@ -77,7 +76,7 @@ public final class InternalProtocolNegotiators {
    */
   public static InternalProtocolNegotiator.ProtocolNegotiator tls(
       SslContext sslContext, String sni,
-      TrustManager extendedX509TrustManager) {
+      X509TrustManager extendedX509TrustManager) {
     return tls(sslContext, null, Optional.absent(), extendedX509TrustManager, sni);
   }
 

@@ -82,7 +82,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import javax.net.ssl.TrustManager;
-import org.junit.Test;
+import javax.net.ssl.X509TrustManager;import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -207,7 +207,7 @@ public class SecurityProtocolNegotiatorsTest {
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
           public void updateSslContextAndExtendedX509TrustManager(
-              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+              AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
             future.set(sslContextAndTm);
           }
 
@@ -393,7 +393,7 @@ public class SecurityProtocolNegotiatorsTest {
         .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
           @Override
           public void updateSslContextAndExtendedX509TrustManager(
-              AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+              AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
             future.set(sslContextAndTm);
           }
 
@@ -532,7 +532,7 @@ public class SecurityProtocolNegotiatorsTest {
           .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
             @Override
             public void updateSslContextAndExtendedX509TrustManager(
-                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
               future.set(sslContextAndTm);
             }
 

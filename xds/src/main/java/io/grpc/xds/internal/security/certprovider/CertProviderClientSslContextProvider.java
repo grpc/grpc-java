@@ -30,7 +30,7 @@ import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.Map;
 import javax.annotation.Nullable;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
@@ -54,7 +54,7 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, X509TrustManager>
       getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
               throws CertStoreException {

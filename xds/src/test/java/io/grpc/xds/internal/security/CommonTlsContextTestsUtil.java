@@ -41,7 +41,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
@@ -405,7 +405,7 @@ public class CommonTlsContextTestsUtil {
 
   /** Perform some simple checks on sslContext. */
   public static void doChecksOnSslContext(boolean server,
-      AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm,
+      AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm,
       List<String> expectedApnProtos) {
     if (server) {
       assertThat(sslContextAndTm.getKey().isServer()).isTrue();
@@ -438,7 +438,7 @@ public class CommonTlsContextTestsUtil {
 
   public static class TestCallback extends SslContextProvider.Callback {
 
-    public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> updatedSslContext;
+    public AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> updatedSslContext;
     public Throwable updatedThrowable;
 
     public TestCallback(Executor executor) {
@@ -447,7 +447,7 @@ public class CommonTlsContextTestsUtil {
 
     @Override
     public void updateSslContextAndExtendedX509TrustManager(
-        AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
+        AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContext) {
       updatedSslContext = sslContext;
     }
 

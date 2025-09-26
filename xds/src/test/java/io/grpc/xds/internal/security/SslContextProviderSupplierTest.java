@@ -33,7 +33,7 @@ import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.AbstractMap;
 import java.util.concurrent.Executor;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -86,7 +86,7 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     @SuppressWarnings("unchecked")
-    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+    AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1))
@@ -113,7 +113,7 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     @SuppressWarnings("unchecked")
-    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+    AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1))
@@ -170,7 +170,7 @@ public class SslContextProviderSupplierTest {
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
     @SuppressWarnings("unchecked")
-    AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
+    AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
     verify(mockCallback, times(1))

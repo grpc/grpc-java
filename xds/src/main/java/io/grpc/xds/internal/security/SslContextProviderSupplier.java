@@ -27,7 +27,7 @@ import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.AbstractMap;
 import java.util.Objects;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -70,7 +70,7 @@ public final class SslContextProviderSupplier implements Closeable {
 
             @Override
             public void updateSslContextAndExtendedX509TrustManager(
-                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
               callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
               releaseSslContextProvider(toRelease);
             }

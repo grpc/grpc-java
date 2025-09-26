@@ -48,7 +48,7 @@ import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s to provide the SSL
@@ -237,7 +237,7 @@ public final class SecurityProtocolNegotiators {
 
             @Override
             public void updateSslContextAndExtendedX509TrustManager(
-                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
               if (ctx.isRemoved()) {
                 return;
               }
@@ -383,7 +383,7 @@ public final class SecurityProtocolNegotiators {
 
             @Override
             public void updateSslContextAndExtendedX509TrustManager(
-                AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContextAndTm) {
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
               ChannelHandler handler = InternalProtocolNegotiators.serverTls(
                   sslContextAndTm.getKey()).newHandler(grpcHandler);
 

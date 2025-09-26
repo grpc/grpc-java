@@ -29,6 +29,7 @@ import java.util.Collection;
 import java.util.List;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
 /**
@@ -85,11 +86,11 @@ public final class CertificateUtils {
     return trustManagerFactory.getTrustManagers();
   }
 
-  public static TrustManager getX509ExtendedTrustManager(List<TrustManager> trustManagers) {
+  public static X509TrustManager getX509ExtendedTrustManager(List<TrustManager> trustManagers) {
     if (x509ExtendedTrustManagerClass != null) {
       for (TrustManager trustManager : trustManagers) {
         if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
-          return trustManager;
+          return (X509TrustManager) trustManager;
         }
       }
     }

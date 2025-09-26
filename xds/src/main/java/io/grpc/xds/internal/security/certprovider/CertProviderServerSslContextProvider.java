@@ -33,7 +33,7 @@ import java.security.cert.X509Certificate;
 import java.util.AbstractMap;
 import java.util.Map;
 import javax.annotation.Nullable;
-import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /** A server SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderServerSslContextProvider extends CertProviderSslContextProvider {
@@ -57,7 +57,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, X509TrustManager>
       getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContextdationContext)
           throws CertStoreException, CertificateException, IOException {
