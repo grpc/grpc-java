@@ -257,7 +257,6 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
-  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     List<StringMatcher> sniMatchers = null;
@@ -271,14 +270,15 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
     if (sniMatchers.isEmpty() && certContext != null) {
-      sniMatchers = certContext.getMatchSubjectAltNamesList();
+      @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+      List<StringMatcher> sniMatchersTmp = certContext.getMatchSubjectAltNamesList();
+      sniMatchers = sniMatchersTmp;
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, socket);
     verifySubjectAltNameInChain(chain, sniMatchers);
   }
 
   @Override
-  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
     List<StringMatcher> sniMatchers = null;
@@ -289,7 +289,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
     if (sniMatchers.isEmpty() && certContext != null) {
-      sniMatchers = certContext.getMatchSubjectAltNamesList();
+      @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+      List<StringMatcher> sniMatchersTmp = certContext.getMatchSubjectAltNamesList();
+      sniMatchers = sniMatchersTmp;
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, sslEngine);
     verifySubjectAltNameInChain(chain, sniMatchers);

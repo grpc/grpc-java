@@ -39,7 +39,7 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.TestUtils.NoopChannelLogger;
+import io.grpc.internal.InternalAttributes;import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
@@ -129,9 +129,8 @@ public class SecurityProtocolNegotiatorsTest {
 
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
-    UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-            CommonTlsContext.newBuilder().build(), "", false, false);
+    UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        CommonTlsContext.newBuilder().build());
     ClientSecurityProtocolNegotiator pn =
         new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -169,7 +168,7 @@ public class SecurityProtocolNegotiatorsTest {
               Attributes.newBuilder()
                   .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
                       new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
-                  .set(InternalXdsAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                  .set(InternalAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
                   .build());
       ChannelHandler newHandler = pn.newHandler(mockHandler);
       assertThat(newHandler).isNotNull();
@@ -190,7 +189,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
@@ -243,7 +242,7 @@ public class SecurityProtocolNegotiatorsTest {
               CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
+              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -331,7 +330,7 @@ public class SecurityProtocolNegotiatorsTest {
                     CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
             CommonTlsContextTestsUtil
-                .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
+                .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
     SslContextProviderSupplier sslContextProviderSupplier =
             new SslContextProviderSupplier(upstreamTlsContext,
                     new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -514,7 +513,7 @@ public class SecurityProtocolNegotiatorsTest {
               CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
+              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
@@ -569,7 +568,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,

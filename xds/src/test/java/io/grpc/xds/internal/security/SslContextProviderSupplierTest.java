@@ -54,14 +54,11 @@ public class SslContextProviderSupplierTest {
   @Mock private Executor mockExecutor;
   private SslContextProviderSupplier supplier;
   private SslContextProvider mockSslContextProvider;
-  private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext;
+  private EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+      buildUpstreamTlsContext("google_cloud_private_spiffe", true);
   private SslContextProvider.Callback mockCallback;
 
-  private void prepareSupplier(boolean createUpstreamTlsContext) {
-    if (createUpstreamTlsContext) {
-      upstreamTlsContext =
-          buildUpstreamTlsContext("google_cloud_private_spiffe", true, "", false);
-    }
+  private void prepareSupplier() {
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
             .when(mockTlsContextManager)
@@ -77,7 +74,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void get_updateSecret() {
-    prepareSupplier(true);
+    prepareSupplier();
     callUpdateSslContext();
     verify(mockTlsContextManager, times(2))
         .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
@@ -104,7 +101,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void autoHostSniFalse_usesSniFromUpstreamTlsContext() {
-    prepareSupplier(true);
+    prepareSupplier();
     callUpdateSslContext();
     verify(mockTlsContextManager, times(2))
             .findOrCreateClientSslContextProvider(eq(upstreamTlsContext));
@@ -131,7 +128,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void get_onException() {
-    prepareSupplier(true);
+    prepareSupplier();
     callUpdateSslContext();
     ArgumentCaptor<SslContextProvider.Callback> callbackCaptor =
         ArgumentCaptor.forClass(SslContextProvider.Callback.class);
@@ -159,7 +156,7 @@ public class SslContextProviderSupplierTest {
                 .setSystemRootCerts(
                     CertificateValidationContext.SystemRootCerts.getDefaultInstance())
                 .build());
-    prepareSupplier(false);
+    prepareSupplier();
 
     callUpdateSslContext();
 
@@ -188,7 +185,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void testClose() {
-    prepareSupplier(true);
+    prepareSupplier();
     callUpdateSslContext();
     supplier.close();
     verify(mockTlsContextManager, times(1))
@@ -202,7 +199,7 @@ public class SslContextProviderSupplierTest {
 
   @Test
   public void testClose_nullSslContextProvider() {
-    prepareSupplier(true);
+    prepareSupplier();
     doThrow(new NullPointerException()).when(mockTlsContextManager)
         .releaseClientSslContextProvider(null);
     supplier.close();

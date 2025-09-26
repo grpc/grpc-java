@@ -153,6 +153,14 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
+        CommonTlsContext commonTlsContext) {
+    return buildUpstreamTlsContext(commonTlsContext, "", false, false);
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext with SNI info.
+   */
+  static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
         CommonTlsContext commonTlsContext, String sni, boolean autoHostSni,
         boolean autoSniSanValidation) {
     UpstreamTlsContext.Builder upstreamTlsContext =
@@ -166,6 +174,18 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Helper method to build UpstreamTlsContext for multiple test classes. */
+  public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
+      String commonInstanceName, boolean hasIdentityCert) {
+    return buildUpstreamTlsContextForCertProviderInstance(
+        hasIdentityCert ? commonInstanceName : null,
+        hasIdentityCert ? "default" : null,
+        commonInstanceName,
+        "ROOT",
+        null,
+        null);
+  }
+
+  /** Helper method to build UpstreamTlsContext with SNI info. */
   public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
       String commonInstanceName, boolean hasIdentityCert, String sni, boolean autoHostSni) {
     return buildUpstreamTlsContextForCertProviderInstance(
@@ -281,6 +301,26 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Helper method to build UpstreamTlsContext for CertProvider tests. */
+  public static EnvoyServerProtoData.UpstreamTlsContext
+      buildUpstreamTlsContextForCertProviderInstance(
+          @Nullable String certInstanceName,
+          @Nullable String certName,
+          @Nullable String rootInstanceName,
+          @Nullable String rootCertName,
+          Iterable<String> alpnProtocols,
+          CertificateValidationContext staticCertValidationContext) {
+    return buildUpstreamTlsContext(
+        buildCommonTlsContextForCertProviderInstance(
+            certInstanceName,
+            certName,
+            rootInstanceName,
+            rootCertName,
+            alpnProtocols,
+            staticCertValidationContext),
+        "", false, false);
+  }
+
+  /** Helper method to build UpstreamTlsContext with SNI info for CertProvider tests. */
   public static EnvoyServerProtoData.UpstreamTlsContext
       buildUpstreamTlsContextForCertProviderInstance(
           @Nullable String certInstanceName,

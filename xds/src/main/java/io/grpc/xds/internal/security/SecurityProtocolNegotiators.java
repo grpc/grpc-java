@@ -23,6 +23,7 @@ import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.InternalAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
@@ -32,7 +33,6 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.InternalXdsAttributes;
 import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -150,7 +150,7 @@ public final class SecurityProtocolNegotiators {
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
-          grpcHandler.getEagAttributes().get(InternalXdsAttributes.ATTR_ADDRESS_NAME));
+          grpcHandler.getEagAttributes().get(InternalAttributes.ATTR_ADDRESS_NAME));
     }
 
     @Override

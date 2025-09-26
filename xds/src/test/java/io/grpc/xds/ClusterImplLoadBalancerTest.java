@@ -55,7 +55,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.ObjectPool;
+import io.grpc.internal.InternalAttributes;import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.protobuf.ProtoUtils;
@@ -811,10 +811,10 @@ public class ClusterImplLoadBalancerTest {
               new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
       });
-      assertThat(subchannel.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
+      assertThat(subchannel.getAttributes().get(InternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
           "authority-host-name");
       for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME))
+        assertThat(eag.getAttributes().get(InternalAttributes.ATTR_ADDRESS_NAME))
             .isEqualTo("authority-host-name");
       }
 
@@ -863,9 +863,9 @@ public class ClusterImplLoadBalancerTest {
       }
     });
     // Sub Channel wrapper args won't have the address name although addresses will.
-    assertThat(subchannel.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)).isNull();
+    assertThat(subchannel.getAttributes().get(InternalAttributes.ATTR_ADDRESS_NAME)).isNull();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME))
+      assertThat(eag.getAttributes().get(InternalAttributes.ATTR_ADDRESS_NAME))
           .isEqualTo("authority-host-name");
     }
 
@@ -882,7 +882,7 @@ public class ClusterImplLoadBalancerTest {
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-            "google_cloud_private_spiffe", true, "", false);
+            "google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -927,7 +927,7 @@ public class ClusterImplLoadBalancerTest {
 
     // Config with a new UpstreamTlsContext.
     upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-        "google_cloud_private_spiffe1", true, "", false);
+        "google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
@@ -1020,7 +1020,7 @@ public class ClusterImplLoadBalancerTest {
         // Unique but arbitrary string
         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, locality.toString());
     if (authorityHostname != null) {
-      attributes.set(XdsAttributes.ATTR_ADDRESS_NAME, authorityHostname);
+      attributes.set(InternalAttributes.ATTR_ADDRESS_NAME, authorityHostname);
     }
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
         attributes.build());

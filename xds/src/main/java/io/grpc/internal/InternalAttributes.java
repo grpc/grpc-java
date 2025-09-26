@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The gRPC Authors
+ * Copyright 2025 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
 
-/**
- * Internal attributes used for xDS implementation. Do not use.
- */
-@Internal
-public final class InternalXdsAttributes {
-  /**
-   * Name of the cluster that provides this EquivalentAddressGroup.
-   */
+public final class InternalAttributes {
+  /** Name associated with individual address, if available (e.g., DNS name). */
   @EquivalentAddressGroup.Attr
-  public static final Attributes.Key<String> ATTR_CLUSTER_NAME =
-      XdsAttributes.ATTR_CLUSTER_NAME;
-
-  private InternalXdsAttributes() {}
+  public static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
 }

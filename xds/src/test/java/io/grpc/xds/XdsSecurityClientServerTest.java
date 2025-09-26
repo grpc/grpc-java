@@ -52,7 +52,7 @@ import io.grpc.ServerCredentials;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
+import io.grpc.internal.InternalAttributes;import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
@@ -698,7 +698,7 @@ public class XdsSecurityClientServerTest {
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, spiffeFile);
     return CommonTlsContextTestsUtil
-        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert, "", false);
+        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert);
   }
 
   @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
@@ -841,7 +841,7 @@ public class XdsSecurityClientServerTest {
                 upstreamTlsContext, tlsContextManagerForClient))
         : Attributes.newBuilder();
     if (addrNameAttribute != null) {
-      sslContextAttributesBuilder.set(XdsAttributes.ATTR_ADDRESS_NAME, addrNameAttribute);
+      sslContextAttributesBuilder.set(InternalAttributes.ATTR_ADDRESS_NAME, addrNameAttribute);
     }
     sslContextAttributes = sslContextAttributesBuilder.build();
     fakeNameResolverFactory.setServers(
