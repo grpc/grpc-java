@@ -37,6 +37,7 @@ dependencies {
     compileOnly sourceSets.context.output
     api libraries.jsr305,
             libraries.errorprone.annotations
+            libraries.jspecify
     implementation libraries.guava
 
     testFixturesApi libraries.truth

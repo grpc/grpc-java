@@ -11,6 +11,7 @@ java_library(
     deps = [
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("org.jspecify:jspecify"),
         artifact("com.google.guava:failureaccess"),  # future transitive dep of Guava. See #5214
         artifact("com.google.guava:guava"),
     ],
