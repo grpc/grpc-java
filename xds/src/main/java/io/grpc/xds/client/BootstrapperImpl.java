@@ -19,6 +19,9 @@ package io.grpc.xds.client;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
+import io.grpc.ChannelCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.internal.GrpcUtil;
@@ -76,9 +79,13 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
   protected abstract String getJsonContent() throws IOException, XdsInitializationException;
 
-  protected abstract Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
+  protected abstract Object getImplSpecificChannelCredConfig(
+      Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException;
 
+  protected abstract Object getImplSpecificCallCredConfig(
+      Map<String, ?> serverConfig, String serverUri)
+      throws XdsInitializationException;
 
   /**
    * Reads and parses bootstrap config. The config is expected to be in JSON format.
@@ -253,7 +260,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       }
       logger.log(XdsLogLevel.INFO, "xDS server URI: {0}", serverUri);
 
-      Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
+      Object implSpecificChannelCredConfig =
+          getImplSpecificChannelCredConfig(serverConfig, serverUri);
+      Object implSpecificCallCredConfig = getImplSpecificCallCredConfig(serverConfig, serverUri);
 
       boolean resourceTimerIsTransientError = false;
       boolean ignoreResourceDeletion = false;
@@ -267,10 +276,17 @@ public abstract class BootstrapperImpl extends Bootstrapper {
             && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
       }
       servers.add(
-          ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
-              serverFeatures != null
-                  && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),
-              resourceTimerIsTransientError));
+          ServerInfo.create(
+            serverUri,
+            (implSpecificCallCredConfig != null)
+                ? CompositeChannelCredentials.create(
+                    (ChannelCredentials) implSpecificChannelCredConfig,
+                    (CallCredentials) implSpecificCallCredConfig)
+                : implSpecificChannelCredConfig,
+            ignoreResourceDeletion,
+            serverFeatures != null
+                && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),
+            resourceTimerIsTransientError));
     }
     return servers.build();
   }
