@@ -88,10 +88,10 @@ final class XdsAttributes {
   static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.serverWeight");
 
-   /** Name associated with individual address, if available (e.g., DNS name). */
-    @EquivalentAddressGroup.Attr
-    static final Attributes.Key<String> ATTR_ADDRESS_NAME =
-        Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
+  /** Name associated with individual address, if available (e.g., DNS name). */
+  @EquivalentAddressGroup.Attr
+  static final Attributes.Key<String> ATTR_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
 
   /**
    * Filter chain match for network filters.

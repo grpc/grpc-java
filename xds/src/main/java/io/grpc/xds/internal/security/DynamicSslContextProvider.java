@@ -53,7 +53,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   @Nullable
   public AbstractMap.SimpleImmutableEntry<SslContext, TrustManager>
-  getSslContextAndTrustManager() {
+      getSslContextAndTrustManager() {
     return sslContextAndTrustManager;
   }
 
@@ -61,7 +61,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   /** Gets a server or client side SslContextBuilder. */
   protected abstract AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
-  getSslContextBuilderAndTrustManager(
+      getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException;
 

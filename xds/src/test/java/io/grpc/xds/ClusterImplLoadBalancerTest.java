@@ -881,7 +881,8 @@ public class ClusterImplLoadBalancerTest {
   @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, false);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true, "", false);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -925,8 +926,8 @@ public class ClusterImplLoadBalancerTest {
     }
 
     // Config with a new UpstreamTlsContext.
-    upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true, null, false);
+    upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        "google_cloud_private_spiffe1", true, "", false);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(

@@ -117,7 +117,7 @@ public class CdsLoadBalancer2Test {
   private static final String EDS_SERVICE_NAME = "backend-service-1.googleapis.com";
   private static final String NODE_ID = "node-id";
   private final io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-name", true, null, false);
+      CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-name", true, "", false);
   private static final Cluster EDS_CLUSTER = Cluster.newBuilder()
       .setName(CLUSTER)
       .setType(Cluster.DiscoveryType.EDS)

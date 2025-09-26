@@ -71,8 +71,6 @@ public final class TlsContextManagerImpl implements TlsContextManager {
   public SslContextProvider findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
-    CommonTlsContext.Builder builder = upstreamTlsContext.getCommonTlsContext().toBuilder();
-    upstreamTlsContext = new UpstreamTlsContext(builder.build());
     return mapForClients.get(upstreamTlsContext);
   }
 

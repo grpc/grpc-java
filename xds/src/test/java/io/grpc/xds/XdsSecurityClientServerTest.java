@@ -221,7 +221,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, null, false, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, "", false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -271,7 +271,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SNI_IN_UTC, true, null, false, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, true, "", false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -295,7 +295,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, "server1.test.google.in", false, null, false, false);
+              CLIENT_PEM_FILE, true, "server1.test.google.in", false, "", false, false);
 
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
@@ -379,7 +379,7 @@ public class XdsSecurityClientServerTest {
   }
 
   @Test
-  public void tlsClientServer_autoSniValidation_noSNIApplicable_usesMatcherFromCmnVdnCtx()
+  public void tlsClientServer_autoSniValidation_noSniApplicable_usesMatcherFromCmnVdnCtx()
       throws Exception {
     CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
@@ -424,7 +424,7 @@ public class XdsSecurityClientServerTest {
 
       UpstreamTlsContext upstreamTlsContext =
           setBootstrapInfoAndBuildUpstreamTlsContextForUsingSystemRootCerts(CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, null, false, false);
+              CLIENT_PEM_FILE, true, SNI_IN_UTC, false, "", false, false);
       SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       assertThat(unaryRpc(/* requestMessage= */ "buddy", blockingStub)).isEqualTo("Hello buddy");
@@ -698,7 +698,7 @@ public class XdsSecurityClientServerTest {
         .buildBootstrapInfo("google_cloud_private_spiffe-client", clientKeyFile, clientPemFile,
             CA_PEM_FILE, null, null, null, null, spiffeFile);
     return CommonTlsContextTestsUtil
-        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert, null, false);
+        .buildUpstreamTlsContext("google_cloud_private_spiffe-client", hasIdentityCert, "", false);
   }
 
   @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
@@ -813,14 +813,16 @@ public class XdsSecurityClientServerTest {
     return getBlockingStub(upstreamTlsContext, overrideAuthority, overrideAuthority);
   }
 
-  // Two separate parameters for overrideAuthority and addrAttribute is for the SAN SNI validation test
-  // tlsClientServer_useSystemRootCerts_sni_san_validation_from_hostname that uses hostname passed for SNI.
-  // foo.test.google.fr is used for virtual host matching via authority but it can't be used
-  // for SNI in this testcase because foo.test.google.fr needs wildcard matching to match against *.test.google.fr
-  // in the certificate SNI, which isn't implemented yet (https://github.com/grpc/grpc-java/pull/12345 implements it)
+  // Two separate parameters for overrideAuthority and addrAttribute is for the SAN SNI validation
+  // test tlsClientServer_useSystemRootCerts_sni_san_validation_from_hostname that uses hostname
+  // passed for SNI. foo.test.google.fr is used for virtual host matching via authority but it
+  // can't be used for SNI in this testcase because foo.test.google.fr needs wildcard matching to
+  // match against *.test.google.fr in the certificate SNI, which isn't implemented yet
+  // (https://github.com/grpc/grpc-java/pull/12345 implements it)
   // so use an exact match SAN such as waterzooi.test.google.be for SNI for this testcase.
   private SimpleServiceGrpc.SimpleServiceBlockingStub getBlockingStub(
-      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String addrNameAttribute) {
+      final UpstreamTlsContext upstreamTlsContext, String overrideAuthority,
+      String addrNameAttribute) {
     ManagedChannelBuilder<?> channelBuilder =
         Grpc.newChannelBuilder(
             "sectest://localhost:" + port,

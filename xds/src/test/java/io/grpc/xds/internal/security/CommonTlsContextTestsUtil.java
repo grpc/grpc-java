@@ -36,10 +36,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.AbstractMap;import java.util.Arrays;
+import java.util.AbstractMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executor;
-import javax.annotation.Nullable;import javax.net.ssl.TrustManager;
+import javax.annotation.Nullable;
+import javax.net.ssl.TrustManager;
 
 /** Utility class for client and server ssl provider tests. */
 public class CommonTlsContextTestsUtil {
@@ -151,16 +153,17 @@ public class CommonTlsContextTestsUtil {
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
   static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
-        CommonTlsContext commonTlsContext, String sni, boolean autoHostSni, boolean autoSniSanValidation) {
-      UpstreamTlsContext.Builder upstreamTlsContext =
-          UpstreamTlsContext.newBuilder()
-              .setCommonTlsContext(commonTlsContext)
-              .setAutoHostSni(autoHostSni)
-              .setAutoSniSanValidation(autoSniSanValidation)
-              .setSni(sni);
-      return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
-          upstreamTlsContext.build());
-    }
+        CommonTlsContext commonTlsContext, String sni, boolean autoHostSni,
+        boolean autoSniSanValidation) {
+    UpstreamTlsContext.Builder upstreamTlsContext =
+        UpstreamTlsContext.newBuilder()
+            .setCommonTlsContext(commonTlsContext)
+            .setAutoHostSni(autoHostSni)
+            .setAutoSniSanValidation(autoSniSanValidation)
+            .setSni(sni);
+    return EnvoyServerProtoData.UpstreamTlsContext.fromEnvoyProtoUpstreamTlsContext(
+        upstreamTlsContext.build());
+  }
 
   /** Helper method to build UpstreamTlsContext for multiple test classes. */
   public static EnvoyServerProtoData.UpstreamTlsContext buildUpstreamTlsContext(
@@ -403,7 +406,8 @@ public class CommonTlsContextTestsUtil {
     }
 
     @Override
-    public void updateSslContextAndExtendedX509TrustManager(AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
+    public void updateSslContextAndExtendedX509TrustManager(
+        AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> sslContext) {
       updatedSslContext = sslContext;
     }
 

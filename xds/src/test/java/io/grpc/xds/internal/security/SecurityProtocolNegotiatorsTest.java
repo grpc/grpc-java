@@ -38,7 +38,6 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -48,7 +47,8 @@ import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
 import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.InternalXdsAttributes;import io.grpc.xds.TlsContextManager;
+import io.grpc.xds.InternalXdsAttributes;
+import io.grpc.xds.TlsContextManager;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
@@ -81,11 +81,10 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.net.ssl.TrustManager;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
-import javax.net.ssl.TrustManager;
 
 /** Unit tests for {@link SecurityProtocolNegotiators}. */
 @RunWith(JUnit4.class)
@@ -131,7 +130,8 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_withTlsContextAttribute() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), "", false, false);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            CommonTlsContext.newBuilder().build(), "", false, false);
     ClientSecurityProtocolNegotiator pn =
         new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
     GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -151,11 +151,12 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void clientSecurityProtocolNegotiatorNewHandler_autoHostSni_hostnameIsPassedToClientSecurityHandler() {
+  public void clientSecurityProtocolNegotiator_autoHostSni_hostnamePassedToClientSecurityHandlr() {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil.buildUpstreamTlsContext(CommonTlsContext.newBuilder().build(), "", true, false);
+          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+              CommonTlsContext.newBuilder().build(), "", true, false);
       ClientSecurityProtocolNegotiator pn =
           new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
       GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
@@ -189,7 +190,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,
@@ -238,11 +239,11 @@ public class SecurityProtocolNegotiatorsTest {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-              CA_PEM_FILE, null, null, null, null, null);
+          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, true);
+              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -257,15 +258,14 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsEmpty_usesSniFromUpstreamTlsContext() {
+  public void sniInClientSecurityHandler_autoHostSni_endpointHostnameIsEmpty_usesSniFromUtc() {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-              CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -280,15 +280,14 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void sniInClientSecurityHandler_autoHostSniIsTrue_endpointHostnameIsNull_usesSniFromUpstreamTlsContext() {
+  public void sniInClientSecurityHandler_autoHostSni_endpointHostnameIsNull_usesSniFromUtc() {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-              CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -307,11 +306,10 @@ public class SecurityProtocolNegotiatorsTest {
     CertificateUtils.isXdsSniEnabled = true;
     try {
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-              CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, SNI_IN_UTC, false);
+          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, false);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -329,11 +327,11 @@ public class SecurityProtocolNegotiatorsTest {
   public void sniFeatureNotEnabled_usesChannelAuthorityForSni() {
     CertificateUtils.isXdsSniEnabled = false;
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-                    CA_PEM_FILE, null, null, null, null, null);
+            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+                    CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
             CommonTlsContextTestsUtil
-                    .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
+                .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
     SslContextProviderSupplier sslContextProviderSupplier =
             new SslContextProviderSupplier(upstreamTlsContext,
                     new TlsContextManagerImpl(bootstrapInfoForClient));
@@ -512,11 +510,11 @@ public class SecurityProtocolNegotiatorsTest {
       FakeClock executor = new FakeClock();
       CommonCertProviderTestUtils.register(executor);
       Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE, CLIENT_PEM_FILE,
-              CA_PEM_FILE, null, null, null, null, null);
+          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, false);
+              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", false);
 
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
@@ -571,7 +569,7 @@ public class SecurityProtocolNegotiatorsTest {
             CA_PEM_FILE, null, null, null, null, null);
     UpstreamTlsContext upstreamTlsContext =
         CommonTlsContextTestsUtil
-            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, null, true);
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
 
     SslContextProviderSupplier sslContextProviderSupplier =
         new SslContextProviderSupplier(upstreamTlsContext,

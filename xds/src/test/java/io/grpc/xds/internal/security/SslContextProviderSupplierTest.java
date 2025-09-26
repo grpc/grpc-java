@@ -60,7 +60,7 @@ public class SslContextProviderSupplierTest {
   private void prepareSupplier(boolean createUpstreamTlsContext) {
     if (createUpstreamTlsContext) {
       upstreamTlsContext =
-          buildUpstreamTlsContext("google_cloud_private_spiffe", true, null, false);
+          buildUpstreamTlsContext("google_cloud_private_spiffe", true, "", false);
     }
     mockSslContextProvider = mock(SslContextProvider.class);
     doReturn(mockSslContextProvider)
@@ -88,10 +88,12 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
+    @SuppressWarnings("unchecked")
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
-    verify(mockCallback, times(1)).updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
+    verify(mockCallback, times(1))
+        .updateSslContextAndExtendedX509TrustManager(eq(mockSslContextAndTm));
     verify(mockTlsContextManager, times(1))
         .releaseClientSslContextProvider(eq(mockSslContextProvider));
     SslContextProvider.Callback mockCallback = mock(SslContextProvider.Callback.class);
@@ -113,6 +115,7 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
+    @SuppressWarnings("unchecked")
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);
@@ -169,6 +172,7 @@ public class SslContextProviderSupplierTest {
     verify(mockSslContextProvider, times(1)).addCallback(callbackCaptor.capture());
     SslContextProvider.Callback capturedCallback = callbackCaptor.getValue();
     assertThat(capturedCallback).isNotNull();
+    @SuppressWarnings("unchecked")
     AbstractMap.SimpleImmutableEntry<SslContext, TrustManager> mockSslContextAndTm =
         mock(AbstractMap.SimpleImmutableEntry.class);
     capturedCallback.updateSslContextAndExtendedX509TrustManager(mockSslContextAndTm);

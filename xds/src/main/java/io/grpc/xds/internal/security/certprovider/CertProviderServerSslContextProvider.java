@@ -58,7 +58,7 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
 
   @Override
   protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, TrustManager>
-  getSslContextBuilderAndTrustManager(
+      getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContextdationContext)
           throws CertStoreException, CertificateException, IOException {
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);

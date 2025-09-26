@@ -26,9 +26,7 @@ import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
 import java.util.AbstractMap;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 import javax.net.ssl.TrustManager;
 
 /**
@@ -104,8 +102,8 @@ public final class SslContextProviderSupplier implements Closeable {
   private SslContextProvider getSslContextProvider() {
     return tlsContext instanceof UpstreamTlsContext
         ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
-        : tlsContextManager.findOrCreateServerSslContextProvider
-            ((DownstreamTlsContext) tlsContext);
+        : tlsContextManager.findOrCreateServerSslContextProvider(
+            (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

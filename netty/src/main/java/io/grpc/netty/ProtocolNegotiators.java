@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
@@ -592,7 +591,7 @@ final class ProtocolNegotiators {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          sni != null? sni : grpcHandler.getAuthority(),
+          sni != null ? sni : grpcHandler.getAuthority(),
           this.executor, negotiationLogger, handshakeCompleteRunnable, null,
           x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);

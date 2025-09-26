@@ -233,21 +233,25 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, socket);
-    verifySubjectAltNameInChain(chain, new ArrayList<>());
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, sslEngine);
-    verifySubjectAltNameInChain(chain, new ArrayList<>());
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain, new ArrayList<>());
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
@@ -264,7 +268,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       }
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
-    if (sniMatchers.isEmpty()) {
+    if (sniMatchers.isEmpty() && certContext != null) {
       sniMatchers = certContext.getMatchSubjectAltNamesList();
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, socket);
@@ -282,7 +286,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       sslEngine.setSSLParameters(sslParams);
       sniMatchers = getAutoSniSanMatchers(sslParams);
     }
-    if (sniMatchers.isEmpty()) {
+    if (sniMatchers.isEmpty() && certContext != null) {
       sniMatchers = certContext.getMatchSubjectAltNamesList();
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, sslEngine);
@@ -290,10 +294,12 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     chooseDelegate(chain).checkServerTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain, new ArrayList<>());
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   private List<StringMatcher> getAutoSniSanMatchers(SSLParameters sslParams) {
@@ -312,6 +318,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     }
     return sniNamesToMatch;
   }
+
   private X509ExtendedTrustManager chooseDelegate(X509Certificate[] chain)
       throws CertificateException {
     if (spiffeTrustMapDelegates != null) {

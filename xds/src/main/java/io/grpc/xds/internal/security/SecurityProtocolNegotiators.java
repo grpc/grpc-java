@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;

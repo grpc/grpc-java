@@ -93,7 +93,7 @@ public class CertProviderClientSslContextProviderTest {
                       "root-default",
                       alpnProtocols,
                       staticCertValidationContext,
-                  null, false, false);
+                  "", false, false);
     }
     return (CertProviderClientSslContextProvider)
         certProviderClientSslContextProviderFactory.getProvider(
@@ -188,35 +188,6 @@ public class CertProviderClientSslContextProviderTest {
   }
 
   @Test
-  public void testProviderForClient_systemRootCerts_regularTls() {
-    final CertificateProvider.DistributorWatcher[] watcherCaptor =
-            new CertificateProvider.DistributorWatcher[1];
-    TestCertificateProvider.createAndRegisterProviderProvider(
-            certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderClientSslContextProvider provider =
-        getSslContextProvider(
-                null,
-                null,
-            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
-            /* alpnProtocols= */ null,
-            CertificateValidationContext.newBuilder()
-                .setSystemRootCerts(
-                        CertificateValidationContext.SystemRootCerts.getDefaultInstance())
-                .build(),
-            true);
-
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNotNull();
-    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
-    TestCallback testCallback =
-        CommonTlsContextTestsUtil.getValueThruCallback(provider);
-    assertThat(testCallback.updatedSslContext).isEqualTo(provider.getSslContextAndTrustManager());
-
-    assertThat(watcherCaptor[0]).isNull();
-  }
-
-  @Test
   public void testProviderForClient_systemRootCerts_mtls() throws Exception {
     final CertificateProvider.DistributorWatcher[] watcherCaptor =
         new CertificateProvider.DistributorWatcher[1];
@@ -289,64 +260,12 @@ public class CertProviderClientSslContextProviderTest {
     assertThat(provider.savedKey).isNull();
     assertThat(provider.savedCertChain).isNull();
     assertThat(provider.savedTrustedRoots).isNotNull();
-    assertThat(provider.getSslContext()).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
     TestCallback testCallback =
         CommonTlsContextTestsUtil.getValueThruCallback(provider);
-    assertThat(testCallback.updatedSslContext).isEqualTo(provider.getSslContext());
+    assertThat(testCallback.updatedSslContext).isEqualTo(provider.getSslContextAndTrustManager());
 
     assertThat(watcherCaptor[0]).isNull();
-  }
-
-  @Test
-  public void testProviderForClient_systemRootCerts_mtls() throws Exception {
-    final CertificateProvider.DistributorWatcher[] watcherCaptor =
-        new CertificateProvider.DistributorWatcher[1];
-    TestCertificateProvider.createAndRegisterProviderProvider(
-        certificateProviderRegistry, watcherCaptor, "testca", 0);
-    CertProviderClientSslContextProvider provider =
-        getSslContextProvider(
-            "gcp_id",
-            null,
-            CommonBootstrapperTestUtils.getTestBootstrapInfo(),
-            /* alpnProtocols= */ null,
-            CertificateValidationContext.newBuilder()
-                .setSystemRootCerts(
-                    CertificateValidationContext.SystemRootCerts.getDefaultInstance())
-                .build(),
-        true);
-
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNotNull();
-    assertThat(provider.getSslContext()).isNull();
-
-    // now generate cert update
-    watcherCaptor[0].updateCertificate(
-        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
-        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNotNull();
-    assertThat(provider.getSslContext()).isNotNull();
-
-    TestCallback testCallback =
-        CommonTlsContextTestsUtil.getValueThruCallback(provider);
-
-    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
-    TestCallback testCallback1 =
-        CommonTlsContextTestsUtil.getValueThruCallback(provider);
-    assertThat(testCallback1.updatedSslContext).isSameInstanceAs(testCallback.updatedSslContext);
-
-    // now update id cert: sslContext should be updated i.e. different from the previous one
-    watcherCaptor[0].updateCertificate(
-        CommonCertProviderTestUtils.getPrivateKey(SERVER_1_KEY_FILE),
-        ImmutableList.of(getCertFromResourceName(SERVER_1_PEM_FILE)));
-    assertThat(provider.savedKey).isNull();
-    assertThat(provider.savedCertChain).isNull();
-    assertThat(provider.savedTrustedRoots).isNotNull();
-    assertThat(provider.getSslContext()).isNotNull();
-    testCallback1 = CommonTlsContextTestsUtil.getValueThruCallback(provider);
-    assertThat(testCallback1.updatedSslContext).isNotSameInstanceAs(testCallback.updatedSslContext);
   }
 
   @Test
