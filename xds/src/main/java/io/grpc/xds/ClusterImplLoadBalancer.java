@@ -378,8 +378,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       private final Map<String, Struct> filterMetadata;
 
       private RequestLimitingSubchannelPicker(SubchannelPicker delegate,
-          List<DropOverload> dropPolicies,
-          long maxConcurrentRequests,
+          List<DropOverload> dropPolicies, long maxConcurrentRequests,
           Map<String, Struct> filterMetadata) {
         this.delegate = delegate;
         this.dropPolicies = dropPolicies;

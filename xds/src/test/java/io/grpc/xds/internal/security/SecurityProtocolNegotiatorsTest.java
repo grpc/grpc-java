@@ -81,8 +81,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;import org.junit.Test;
+import javax.net.ssl.X509TrustManager;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
