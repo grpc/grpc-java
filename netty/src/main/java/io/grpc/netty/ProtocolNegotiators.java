@@ -592,7 +592,7 @@ final class ProtocolNegotiators {
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
           sni != null ? sni : grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, null,
+          this.executor, negotiationLogger, handshakeCompleteRunnable, this,
           x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
