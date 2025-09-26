@@ -230,6 +230,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, socket);
@@ -238,6 +239,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, sslEngine);
