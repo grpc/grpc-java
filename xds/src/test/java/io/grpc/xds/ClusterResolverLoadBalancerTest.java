@@ -82,6 +82,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.XdsCommonAttributes;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
@@ -408,7 +409,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
@@ -897,7 +898,7 @@ public class ClusterResolverLoadBalancerTest {
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
+        .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test
@@ -995,7 +996,8 @@ public class ClusterResolverLoadBalancerTest {
     ServerInfo lrsServerInfo =
         ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
     UpstreamTlsContext tlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true);
     DiscoveryMechanism edsDiscoveryMechanism1 =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
             Collections.emptyMap(), null);

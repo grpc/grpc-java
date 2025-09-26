@@ -25,7 +25,9 @@ import io.grpc.xds.EnvoyServerProtoData.DownstreamTlsContext;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.TlsContextManager;
 import io.netty.handler.ssl.SslContext;
+import java.util.AbstractMap;
 import java.util.Objects;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Enables Client or server side to initialize this object with the received {@link BaseTlsContext}
@@ -52,7 +54,8 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   /** Updates SslContext via the passed callback. */
-  public synchronized void updateSslContext(final SslContextProvider.Callback callback) {
+  public synchronized void updateSslContext(
+      final SslContextProvider.Callback callback) {
     checkNotNull(callback, "callback");
     try {
       if (!shutdown) {
@@ -66,8 +69,9 @@ public final class SslContextProviderSupplier implements Closeable {
           new SslContextProvider.Callback(callback.getExecutor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
-              callback.updateSslContext(sslContext);
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
+              callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
               releaseSslContextProvider(toRelease);
             }
 
@@ -98,7 +102,8 @@ public final class SslContextProviderSupplier implements Closeable {
   private SslContextProvider getSslContextProvider() {
     return tlsContext instanceof UpstreamTlsContext
         ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
-        : tlsContextManager.findOrCreateServerSslContextProvider((DownstreamTlsContext) tlsContext);
+        : tlsContextManager.findOrCreateServerSslContextProvider(
+            (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

@@ -26,8 +26,11 @@ import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
 import io.netty.handler.ssl.SslContextBuilder;
 import java.security.cert.CertStoreException;
 import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
+import java.util.Arrays;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.net.ssl.X509TrustManager;
 
 /** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
@@ -51,27 +54,46 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  protected final SslContextBuilder getSslContextBuilder(
-          CertificateValidationContext certificateValidationContextdationContext)
-      throws CertStoreException {
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, X509TrustManager>
+      getSslContextBuilderAndTrustManager(
+          CertificateValidationContext certificateValidationContext)
+              throws CertStoreException {
     SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
     if (savedSpiffeTrustMap != null) {
       sslContextBuilder = sslContextBuilder.trustManager(
         new XdsTrustManagerFactory(
             savedSpiffeTrustMap,
-            certificateValidationContextdationContext));
+            certificateValidationContext,
+            ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else if (savedTrustedRoots != null) {
       sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
-              certificateValidationContextdationContext));
+              certificateValidationContext,
+              ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else {
       // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
       throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
     }
+    XdsTrustManagerFactory trustManagerFactory;
+    if (savedSpiffeTrustMap != null) {
+      trustManagerFactory = new XdsTrustManagerFactory(
+          savedSpiffeTrustMap,
+          certificateValidationContext,
+          ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
+      sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
+    } else {
+      trustManagerFactory = new XdsTrustManagerFactory(
+          savedTrustedRoots.toArray(new X509Certificate[0]),
+          certificateValidationContext,
+          ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
+      sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
+    }
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
-    return sslContextBuilder;
+    return new AbstractMap.SimpleImmutableEntry<>(sslContextBuilder,
+        io.grpc.internal.CertificateUtils.getX509ExtendedTrustManager(
+            Arrays.asList(trustManagerFactory.getTrustManagers())));
   }
 }

@@ -73,20 +73,54 @@ public final class EnvoyServerProtoData {
 
   public static final class UpstreamTlsContext extends BaseTlsContext {
 
+    private final String sni;
+    private final boolean autoHostSni;
+    private final boolean autoSniSanValidation;
+
     @VisibleForTesting
     public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
       super(commonTlsContext);
+      this.sni = null;
+      this.autoHostSni = false;
+      this.autoSniSanValidation = false;
+    }
+
+    @VisibleForTesting
+    public UpstreamTlsContext(
+        io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+            upstreamTlsContext) {
+      super(upstreamTlsContext.getCommonTlsContext());
+      this.sni = upstreamTlsContext.getSni();
+      this.autoHostSni = upstreamTlsContext.getAutoHostSni();
+      this.autoSniSanValidation = upstreamTlsContext.getAutoSniSanValidation();
     }
 
     public static UpstreamTlsContext fromEnvoyProtoUpstreamTlsContext(
         io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
             upstreamTlsContext) {
-      return new UpstreamTlsContext(upstreamTlsContext.getCommonTlsContext());
+      return new UpstreamTlsContext(upstreamTlsContext);
+    }
+
+    public String getSni() {
+      return sni;
+    }
+
+    public boolean getAutoHostSni() {
+      return autoHostSni;
+    }
+
+    public boolean getAutoSniSanValidation() {
+      return autoSniSanValidation;
     }
 
     @Override
     public String toString() {
-      return "UpstreamTlsContext{" + "commonTlsContext=" + commonTlsContext + '}';
+      return "UpstreamTlsContext{"
+          + "commonTlsContext=" + commonTlsContext
+          + "\nsni=" + sni
+          + "\nauto_host_sni=" + autoHostSni
+          + "\nauto_sni_san_validation=" + autoSniSanValidation
+          + "}";
     }
   }
 

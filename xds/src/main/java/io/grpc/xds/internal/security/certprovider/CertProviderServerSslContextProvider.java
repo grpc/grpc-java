@@ -30,8 +30,10 @@ import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
 import java.util.Map;
 import javax.annotation.Nullable;
+import javax.net.ssl.X509TrustManager;
 
 /** A server SslContext provider using CertificateProviderInstance to fetch secrets. */
 final class CertProviderServerSslContextProvider extends CertProviderSslContextProvider {
@@ -55,23 +57,25 @@ final class CertProviderServerSslContextProvider extends CertProviderSslContextP
   }
 
   @Override
-  protected final SslContextBuilder getSslContextBuilder(
-      CertificateValidationContext certificateValidationContextdationContext)
-      throws CertStoreException, CertificateException, IOException {
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, X509TrustManager>
+      getSslContextBuilderAndTrustManager(
+          CertificateValidationContext certificateValidationContextdationContext)
+          throws CertStoreException, CertificateException, IOException {
     SslContextBuilder sslContextBuilder = SslContextBuilder.forServer(savedKey, savedCertChain);
     XdsTrustManagerFactory trustManagerFactory = null;
     if (isMtls() && savedSpiffeTrustMap != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedSpiffeTrustMap,
-          certificateValidationContextdationContext);
+          certificateValidationContextdationContext, false);
     } else if (isMtls()) {
       trustManagerFactory = new XdsTrustManagerFactory(
           savedTrustedRoots.toArray(new X509Certificate[0]),
-          certificateValidationContextdationContext);
+          certificateValidationContextdationContext, false);
     }
     setClientAuthValues(sslContextBuilder, trustManagerFactory);
     sslContextBuilder = GrpcSslContexts.configure(sslContextBuilder);
-    return sslContextBuilder;
+    // TrustManager in the below return value is not used on the server side, so setting it to null
+    return new AbstractMap.SimpleImmutableEntry<>(sslContextBuilder, null);
   }
 
 }
