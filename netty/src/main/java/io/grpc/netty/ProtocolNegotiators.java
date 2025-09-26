@@ -590,9 +590,16 @@ final class ProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelLogger negotiationLogger = grpcHandler.getNegotiationLogger();
+      String authority;
+      if ("".equals(sni)) {
+        authority = null;
+      } else if (sni != null) {
+        authority = sni;
+      } else {
+        authority = grpcHandler.getAuthority();
+      }
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext,
-          sni != null ? sni : grpcHandler.getAuthority(),
-          this.executor, negotiationLogger, handshakeCompleteRunnable, this,
+          authority, this.executor, negotiationLogger, handshakeCompleteRunnable, this,
           x509ExtendedTrustManager);
       return new WaitUntilActiveHandler(cth, negotiationLogger);
     }
@@ -630,7 +637,7 @@ final class ProtocolNegotiators {
       // TODO: For empty authority and fallback flag
       // GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE present, we should parse authority
       // but prevent it from being used for SAN validation in the TrustManager.
-      if (authority != null && !authority.isEmpty()) {
+      if (authority != null) {
         HostPort hostPort = parseAuthority(authority);
         this.host = hostPort.host;
         this.port = hostPort.port;
