@@ -56,6 +56,7 @@ import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -336,7 +337,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     sendShutdownTransportTransactionAsUid(client, serverUid);
 
     verify(mockClientTransportListener, timeout(TIMEOUT_MS))
-        .transportShutdown(statusCaptor.capture());
+        .transportShutdown(statusCaptor.capture(), any(DisconnectError.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(statusCaptor.getValue().getDescription()).contains("shutdown");
   }
