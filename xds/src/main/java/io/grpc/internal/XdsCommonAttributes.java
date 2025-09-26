@@ -19,7 +19,7 @@ package io.grpc.internal;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 
-public final class InternalAttributes {
+public final class XdsCommonAttributes {
   /** Name associated with individual address, if available (e.g., DNS name). */
   @EquivalentAddressGroup.Attr
   public static final Attributes.Key<String> ATTR_ADDRESS_NAME =

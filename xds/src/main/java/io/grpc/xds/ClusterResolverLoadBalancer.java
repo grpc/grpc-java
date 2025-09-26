@@ -29,7 +29,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.internal.InternalAttributes;
+import io.grpc.internal.XdsCommonAttributes;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -195,7 +195,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
                     .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
                     .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                    .set(InternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(XdsCommonAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                     .build();
             EquivalentAddressGroup eag;
             if (config.isHttp11ProxyAvailable()) {

@@ -82,7 +82,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.InternalAttributes;
+import io.grpc.internal.XdsCommonAttributes;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
@@ -409,7 +409,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(InternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
@@ -898,7 +898,7 @@ public class ClusterResolverLoadBalancerTest {
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(InternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
+        .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test
