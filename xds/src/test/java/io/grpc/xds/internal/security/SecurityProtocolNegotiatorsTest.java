@@ -242,7 +242,7 @@ public class SecurityProtocolNegotiatorsTest {
               CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
       UpstreamTlsContext upstreamTlsContext =
           CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
       SslContextProviderSupplier sslContextProviderSupplier =
           new SslContextProviderSupplier(upstreamTlsContext,
               new TlsContextManagerImpl(bootstrapInfoForClient));
