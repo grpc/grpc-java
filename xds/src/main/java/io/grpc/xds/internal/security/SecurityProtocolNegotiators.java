@@ -24,7 +24,7 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.XdsCommonAttributes;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator;
@@ -150,7 +150,7 @@ public final class SecurityProtocolNegotiators {
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
       return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
-          grpcHandler.getEagAttributes().get(XdsCommonAttributes.ATTR_ADDRESS_NAME));
+          grpcHandler.getEagAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME));
     }
 
     @Override

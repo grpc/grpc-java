@@ -29,7 +29,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.internal.XdsCommonAttributes;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -98,7 +98,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterResolverConfig config =
         (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CONFIG);
+    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(io.grpc.xds.XdsAttributes.XDS_CONFIG);
 
     DiscoveryMechanism instance = config.discoveryMechanism;
     String cluster = instance.cluster;
@@ -190,12 +190,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             String localityName = localityName(locality);
             Attributes attr =
                 endpoint.eag().getAttributes().toBuilder()
-                    .set(XdsAttributes.ATTR_LOCALITY, locality)
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
                     .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
-                    .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
-                    .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                    .set(XdsCommonAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                    .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                     .build();
             EquivalentAddressGroup eag;
             if (config.isHttp11ProxyAvailable()) {

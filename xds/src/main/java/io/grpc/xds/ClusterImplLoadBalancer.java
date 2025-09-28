@@ -37,7 +37,7 @@ import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.XdsCommonAttributes;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
@@ -118,12 +118,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientPool == null) {
-      xdsClientPool = attributes.get(XdsAttributes.XDS_CLIENT_POOL);
+      xdsClientPool = attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL);
       assert xdsClientPool != null;
       xdsClient = xdsClientPool.getObject();
     }
     if (callCounterProvider == null) {
-      callCounterProvider = attributes.get(XdsAttributes.CALL_COUNTER_PROVIDER);
+      callCounterProvider = attributes.get(io.grpc.xds.XdsAttributes.CALL_COUNTER_PROVIDER);
     }
 
     ClusterImplConfig config =
@@ -242,9 +242,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           .set(ATTR_CLUSTER_LOCALITY, localityAtomicReference);
       if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", false)) {
         String hostname = args.getAddresses().get(0).getAttributes()
-            .get(XdsCommonAttributes.ATTR_ADDRESS_NAME);
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(XdsCommonAttributes.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
@@ -293,7 +293,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> newAddresses = new ArrayList<>();
       for (EquivalentAddressGroup eag : addresses) {
         Attributes.Builder attrBuilder = eag.getAttributes().toBuilder().set(
-            XdsAttributes.ATTR_CLUSTER_NAME, cluster);
+            io.grpc.xds.XdsAttributes.ATTR_CLUSTER_NAME, cluster);
         if (sslContextProviderSupplier != null) {
           attrBuilder.set(
               SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
@@ -305,7 +305,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     }
 
     private ClusterLocality createClusterLocalityFromAttributes(Attributes addressAttributes) {
-      Locality locality = addressAttributes.get(XdsAttributes.ATTR_LOCALITY);
+      Locality locality = addressAttributes.get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
       String localityName = addressAttributes.get(EquivalentAddressGroup.ATTR_LOCALITY_NAME);
 
       // Endpoint addresses resolved by ClusterResolverLoadBalancer should always contain
@@ -439,7 +439,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
                 result.getSubchannel().getAttributes().get(
-                    XdsCommonAttributes.ATTR_ADDRESS_NAME));
+                    XdsInternalAttributes.ATTR_ADDRESS_NAME));
           }
         }
         return result;

@@ -82,7 +82,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.XdsCommonAttributes;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
@@ -308,15 +308,15 @@ public class ClusterResolverLoadBalancerTest {
     // LOCALITY1 are equally weighted.
     assertThat(addr1.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
-    assertThat(addr1.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
     assertThat(addr2.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
-    assertThat(addr2.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
     assertThat(addr3.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
-    assertThat(addr3.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
@@ -383,7 +383,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
+            .get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
   @Test
@@ -409,7 +409,7 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
@@ -581,12 +581,12 @@ public class ClusterResolverLoadBalancerTest {
     io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
         LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      io.grpc.xds.client.Locality locality = eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY);
+      io.grpc.xds.client.Locality locality = eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
       if (locality.equals(locality1)) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
+        assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(70);
       } else if (locality.equals(locality2)) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
+        assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(30);
       } else {
         throw new AssertionError("Unexpected locality region: " + locality.region());
@@ -814,7 +814,7 @@ public class ClusterResolverLoadBalancerTest {
     io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
         LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
     }
   }
 
@@ -898,7 +898,7 @@ public class ClusterResolverLoadBalancerTest {
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(XdsCommonAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
+        .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test
@@ -1055,8 +1055,8 @@ public class ClusterResolverLoadBalancerTest {
           loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
               .setAddresses(Collections.emptyList())
               .setAttributes(Attributes.newBuilder()
-                .set(XdsAttributes.XDS_CONFIG, xdsConfig.getValue())
-                .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+                .set(io.grpc.xds.XdsAttributes.XDS_CONFIG, xdsConfig.getValue())
+                .set(io.grpc.xds.XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
                 .build())
               .setLoadBalancingPolicyConfig(cdsConfig)
               .build());
