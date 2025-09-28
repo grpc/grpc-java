@@ -29,7 +29,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
@@ -48,6 +47,7 @@ import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -98,7 +98,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterResolverConfig config =
         (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(io.grpc.xds.XdsAttributes.XDS_CONFIG);
+    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(
+        io.grpc.xds.XdsAttributes.XDS_CONFIG);
 
     DiscoveryMechanism instance = config.discoveryMechanism;
     String cluster = instance.cluster;

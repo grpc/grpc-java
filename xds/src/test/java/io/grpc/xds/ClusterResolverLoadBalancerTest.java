@@ -82,7 +82,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
@@ -103,6 +102,7 @@ import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -581,7 +581,8 @@ public class ClusterResolverLoadBalancerTest {
     io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
         LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      io.grpc.xds.client.Locality locality = eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
+      io.grpc.xds.client.Locality locality =
+          eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
       if (locality.equals(locality1)) {
         assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(70);
@@ -814,7 +815,8 @@ public class ClusterResolverLoadBalancerTest {
     io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
         LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY))
+          .isEqualTo(locality2);
     }
   }
 
