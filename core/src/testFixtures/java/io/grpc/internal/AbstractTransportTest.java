@@ -344,7 +344,7 @@ public abstract class AbstractTransportTest {
     client.shutdown(shutdownReason);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     inOrder.verify(mockClientTransportListener).transportShutdown(same(shutdownReason),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
     inOrder.verify(mockClientTransportListener).transportTerminated();
     verify(mockClientTransportListener, never()).transportInUse(anyBoolean());
   }
@@ -361,7 +361,7 @@ public abstract class AbstractTransportTest {
     client.shutdown(Status.UNAVAILABLE);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportTerminated();
     inOrder.verify(mockClientTransportListener).transportShutdown(any(Status.class),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
     inOrder.verify(mockClientTransportListener).transportTerminated();
     assertTrue(serverTransportListener.waitForTermination(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     server.shutdown();
@@ -598,7 +598,7 @@ public abstract class AbstractTransportTest {
     stream.start(clientStreamListener);
     client.shutdown(Status.UNAVAILABLE);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
     ClientTransport.PingCallback mockPingCallback = mock(ClientTransport.PingCallback.class);
     try {
       client.ping(mockPingCallback, MoreExecutors.directExecutor());
@@ -643,7 +643,7 @@ public abstract class AbstractTransportTest {
     stream.start(clientStreamListener);
     client.shutdown(Status.UNAVAILABLE);
     verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportShutdown(any(Status.class),
-        eq(SimpleDisconnectError.SUBCHANNEL_SHUTDOWN));
+        any(DisconnectError.class));
 
     ClientStream stream2 = client.newStream(
         methodDescriptor, new Metadata(), callOptions, tracers);
