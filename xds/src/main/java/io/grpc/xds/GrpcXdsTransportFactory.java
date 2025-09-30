@@ -23,8 +23,6 @@ import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
-import io.grpc.CompositeCallCredentials;
-import io.grpc.CompositeChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
@@ -70,23 +68,11 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
       String target = serverInfo.target();
-      Object implSpecificConfig = serverInfo.implSpecificConfig();
-
-      this.channel = Grpc.newChannelBuilder(target, (ChannelCredentials) implSpecificConfig)
+      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
-
-      if (callCredentials != null && implSpecificConfig instanceof CompositeChannelCredentials) {
-        this.callCredentials =
-            new CompositeCallCredentials(
-                callCredentials,
-                ((CompositeChannelCredentials) implSpecificConfig).getCallCredentials());
-      } else if (implSpecificConfig instanceof CompositeChannelCredentials) {
-        this.callCredentials =
-            ((CompositeChannelCredentials) implSpecificConfig).getCallCredentials();
-      } else {
-        this.callCredentials = callCredentials;
-      }
+      this.callCredentials = callCredentials;
     }
 
     @VisibleForTesting
