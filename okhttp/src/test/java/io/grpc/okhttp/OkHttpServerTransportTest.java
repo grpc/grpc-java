@@ -34,6 +34,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
@@ -62,6 +63,7 @@ import java.net.Socket;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -919,8 +921,9 @@ public class OkHttpServerTransportTest {
         CONTENT_TYPE_HEADER,
         TE_HEADER));
     clientFrameWriter.flush();
-
-    verifyHttpError(1, 405, Status.Code.INTERNAL, "HTTP Method is not supported: GET");
+    List<Header> extraHeaders = Lists.newArrayList(new Header("allow", "POST"));
+    verifyHttpError(1, 405, Status.Code.INTERNAL, "HTTP Method is not supported: GET",
+        extraHeaders);
 
     shutdownAndTerminate(/*lastStreamId=*/ 1);
   }
@@ -976,7 +979,8 @@ public class OkHttpServerTransportTest {
         new Header(":status", "405"),
         new Header("content-type", "text/plain; charset=utf-8"),
         new Header("grpc-status", "" + Status.Code.INTERNAL.value()),
-        new Header("grpc-message", errorDescription));
+        new Header("grpc-message", errorDescription),
+        new Header("allow", "POST"));
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
         .headers(false, false, 1, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);
@@ -1398,11 +1402,18 @@ public class OkHttpServerTransportTest {
 
   private void verifyHttpError(
       int streamId, int httpCode, Status.Code grpcCode, String errorDescription) throws Exception {
-    List<Header> responseHeaders = Arrays.asList(
+    verifyHttpError(streamId, httpCode, grpcCode, errorDescription, Collections.emptyList());
+  }
+
+  private void verifyHttpError(
+      int streamId, int httpCode, Status.Code grpcCode, String errorDescription,
+      List<Header> extraHeaders) throws Exception {
+    List<Header> responseHeaders = Lists.newArrayList(
         new Header(":status", "" + httpCode),
         new Header("content-type", "text/plain; charset=utf-8"),
         new Header("grpc-status", "" + grpcCode.value()),
         new Header("grpc-message", errorDescription));
+    responseHeaders.addAll(extraHeaders);
     assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
     verify(clientFramesRead)
         .headers(false, false, streamId, -1, responseHeaders, HeadersMode.HTTP_20_HEADERS);

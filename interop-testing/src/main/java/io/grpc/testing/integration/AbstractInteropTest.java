@@ -483,7 +483,7 @@ public abstract class AbstractInteropTest {
         blockingStub.unaryCall(expectCompressedRequest);
         fail("expected INVALID_ARGUMENT");
       } catch (StatusRuntimeException e) {
-        assertEquals(Status.INVALID_ARGUMENT.getCode(), e.getStatus().getCode());
+        assertCodeEquals(Status.Code.INVALID_ARGUMENT, e.getStatus());
       }
       assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
     }
@@ -652,7 +652,7 @@ public abstract class AbstractInteropTest {
       responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
       Throwable e = responseObserver.getError();
       assertNotNull("expected INVALID_ARGUMENT", e);
-      assertEquals(Status.INVALID_ARGUMENT.getCode(), Status.fromThrowable(e).getCode());
+      assertCodeEquals(Status.Code.INVALID_ARGUMENT, Status.fromThrowable(e));
     }
 
     // Start a new stream
@@ -801,8 +801,7 @@ public abstract class AbstractInteropTest {
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion();
     assertEquals(Arrays.<StreamingInputCallResponse>asList(), responseObserver.getValues());
-    assertEquals(Status.Code.CANCELLED,
-        Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(Status.Code.CANCELLED, Status.fromThrowable(responseObserver.getError()));
 
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
@@ -839,8 +838,7 @@ public abstract class AbstractInteropTest {
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
     assertEquals(1, responseObserver.getValues().size());
-    assertEquals(Status.Code.CANCELLED,
-                 Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(Status.Code.CANCELLED, Status.fromThrowable(responseObserver.getError()));
 
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.CANCELLED);
   }
@@ -1107,7 +1105,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.DEADLINE_EXCEEDED.getCode(), ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       String desc = ex.getStatus().getDescription();
       assertTrue(desc,
           // There is a race between client and server-side deadline expiration.
@@ -1153,8 +1151,7 @@ public abstract class AbstractInteropTest {
         .withDeadlineAfter(30, TimeUnit.MILLISECONDS)
         .streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
-    assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
-        Status.fromThrowable(recorder.getError()).getCode());
+    assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, Status.fromThrowable(recorder.getError()));
     if (metricsExpected()) {
       // Stream may not have been created when deadline is exceeded, thus we don't check tracer
       // stats.
@@ -1179,7 +1176,7 @@ public abstract class AbstractInteropTest {
           .emptyCall(Empty.getDefaultInstance());
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       assertThat(ex.getStatus().getDescription())
           .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
@@ -1212,7 +1209,7 @@ public abstract class AbstractInteropTest {
           .emptyCall(Empty.getDefaultInstance());
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
-      assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertCodeEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus());
       assertThat(ex.getStatus().getDescription())
           .startsWith("ClientCall started after CallOptions deadline was exceeded");
     }
@@ -1278,8 +1275,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail();
     } catch (StatusRuntimeException ex) {
-      Status s = ex.getStatus();
-      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
+      assertCodeEquals(Status.Code.RESOURCE_EXHAUSTED, ex.getStatus());
       assertThat(Throwables.getStackTraceAsString(ex)).contains("exceeds maximum");
     }
   }
@@ -1334,8 +1330,7 @@ public abstract class AbstractInteropTest {
       stub.streamingOutputCall(request).next();
       fail();
     } catch (StatusRuntimeException ex) {
-      Status s = ex.getStatus();
-      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.CANCELLED);
+      assertCodeEquals(Status.Code.CANCELLED, ex.getStatus());
       assertThat(Throwables.getStackTraceAsString(ex)).contains("message too large");
     }
   }
@@ -1557,7 +1552,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unaryCall(simpleRequest);
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNKNOWN, e.getStatus());
       assertEquals(errorMessage, e.getStatus().getDescription());
     }
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
@@ -1573,7 +1568,7 @@ public abstract class AbstractInteropTest {
         .isTrue();
     assertThat(responseObserver.getError()).isNotNull();
     Status status = Status.fromThrowable(responseObserver.getError());
-    assertEquals(Status.UNKNOWN.getCode(), status.getCode());
+    assertCodeEquals(Status.Code.UNKNOWN, status);
     assertEquals(errorMessage, status.getDescription());
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
@@ -1593,7 +1588,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unaryCall(simpleRequest);
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNKNOWN, e.getStatus());
       assertEquals(errorMessage, e.getStatus().getDescription());
     }
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
@@ -1606,7 +1601,7 @@ public abstract class AbstractInteropTest {
       blockingStub.unimplementedCall(Empty.getDefaultInstance());
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNIMPLEMENTED, e.getStatus());
     }
 
     assertClientStatsTrace("grpc.testing.TestService/UnimplementedCall",
@@ -1622,7 +1617,7 @@ public abstract class AbstractInteropTest {
       stub.unimplementedCall(Empty.getDefaultInstance());
       fail();
     } catch (StatusRuntimeException e) {
-      assertEquals(Status.UNIMPLEMENTED.getCode(), e.getStatus().getCode());
+      assertCodeEquals(Status.Code.UNIMPLEMENTED, e.getStatus());
     }
 
     assertStatsTrace("grpc.testing.UnimplementedService/UnimplementedCall",
@@ -1652,8 +1647,8 @@ public abstract class AbstractInteropTest {
 
     assertTrue(responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     assertEquals(0, responseObserver.getValues().size());
-    assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
-                 Status.fromThrowable(responseObserver.getError()).getCode());
+    assertCodeEquals(
+        Status.Code.DEADLINE_EXCEEDED, Status.fromThrowable(responseObserver.getError()));
 
     if (metricsExpected()) {
       // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -2033,6 +2028,10 @@ public abstract class AbstractInteropTest {
     } else {
       assertEquals(expected.getBody(), actual.getBody());
     }
+  }
+
+  private static void assertCodeEquals(Status.Code expected, Status actual) {
+    assertWithMessage("Unexpected status: %s", actual).that(actual.getCode()).isEqualTo(expected);
   }
 
   /**

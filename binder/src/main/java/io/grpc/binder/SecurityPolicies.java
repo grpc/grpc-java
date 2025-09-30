@@ -184,7 +184,6 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a device owner app. See {@link
    * DevicePolicyManager}.
    */
-  @RequiresApi(18)
   public static io.grpc.binder.SecurityPolicy isDeviceOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -199,7 +198,6 @@ public final class SecurityPolicies {
    * Creates {@link SecurityPolicy} which checks if the app is a profile owner app. See {@link
    * DevicePolicyManager}.
    */
-  @RequiresApi(21)
   public static SecurityPolicy isProfileOwner(Context applicationContext) {
     DevicePolicyManager devicePolicyManager =
         (DevicePolicyManager) applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE);

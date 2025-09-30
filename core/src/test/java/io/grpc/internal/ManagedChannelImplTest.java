@@ -1768,6 +1768,19 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void subchannelsRequestConnectionNoopAfterShutdown() {
+    createChannel();
+    Subchannel sub1 =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+
+    shutdownSafely(helper, sub1);
+    requestConnectionSafely(helper, sub1);
+    verify(mockTransportFactory, never())
+        .newClientTransport(
+            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
+  }
+
+  @Test
   public void subchannelsNoConnectionShutdownNow() {
     createChannel();
     createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);

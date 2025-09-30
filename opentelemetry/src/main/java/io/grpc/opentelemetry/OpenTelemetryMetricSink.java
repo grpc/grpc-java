@@ -27,6 +27,7 @@ import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongGaugeMetricInstrument;
 import io.grpc.LongHistogramMetricInstrument;
+import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricSink;
 import io.opentelemetry.api.common.Attributes;
@@ -36,6 +37,7 @@ import io.opentelemetry.api.metrics.DoubleCounter;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.LongCounter;
 import io.opentelemetry.api.metrics.LongHistogram;
+import io.opentelemetry.api.metrics.LongUpDownCounter;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import io.opentelemetry.api.metrics.ObservableMeasurement;
@@ -114,6 +116,22 @@ final class OpenTelemetryMetricSink implements MetricSink {
         metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
         instrumentData.getOptionalLabelsBitSet());
     LongCounter counter = (LongCounter) instrumentData.getMeasure();
+    counter.add(value, attributes);
+  }
+
+  @Override
+  public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
+                                   List<String> requiredLabelValues,
+                                   List<String> optionalLabelValues) {
+    MeasuresData instrumentData = measures.get(metricInstrument.getIndex());
+    if (instrumentData == null) {
+      // Disabled metric
+      return;
+    }
+    Attributes attributes = createAttributes(metricInstrument.getRequiredLabelKeys(),
+        metricInstrument.getOptionalLabelKeys(), requiredLabelValues, optionalLabelValues,
+        instrumentData.getOptionalLabelsBitSet());
+    LongUpDownCounter counter = (LongUpDownCounter) instrumentData.getMeasure();
     counter.add(value, attributes);
   }
 
@@ -256,6 +274,11 @@ final class OpenTelemetryMetricSink implements MetricSink {
               .setDescription(description)
               .ofLongs()
               .buildObserver();
+        } else if (instrument instanceof LongUpDownCounterMetricInstrument) {
+          openTelemetryMeasure = openTelemetryMeter.upDownCounterBuilder(name)
+              .setUnit(unit)
+              .setDescription(description)
+              .build();
         } else {
           logger.log(Level.FINE, "Unsupported metric instrument type : {0}", instrument);
           openTelemetryMeasure = null;

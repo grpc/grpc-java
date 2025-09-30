@@ -1,5 +1,5 @@
 """Build rule for java_grpc_library."""
-
+load("@rules_proto//proto:defs.bzl", "ProtoInfo")
 load("@rules_java//java:defs.bzl", "JavaInfo", "JavaPluginInfo", "java_common")
 
 _JavaRpcToolchainInfo = provider(
@@ -135,6 +135,33 @@ _java_grpc_library = rule(
         ),
         "_toolchain": attr.label(
             default = Label("//compiler:java_grpc_library_toolchain"),
+        ),
+    },
+    toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],
+    fragments = ["java"],
+    outputs = {
+        "jar": "lib%{name}.jar",
+        "srcjar": "lib%{name}-src.jar",
+    },
+    provides = [JavaInfo],
+    implementation = _java_rpc_library_impl,
+)
+
+# A copy of _java_grpc_library, except with a neverlink=1 _toolchain
+INTERNAL_java_grpc_library_for_xds = rule(
+    attrs = {
+        "srcs": attr.label_list(
+            mandatory = True,
+            allow_empty = False,
+            providers = [ProtoInfo],
+        ),
+        "deps": attr.label_list(
+            mandatory = True,
+            allow_empty = False,
+            providers = [JavaInfo],
+        ),
+        "_toolchain": attr.label(
+            default = Label("//xds:java_grpc_library_toolchain"),
         ),
     },
     toolchains = ["@bazel_tools//tools/jdk:toolchain_type"],

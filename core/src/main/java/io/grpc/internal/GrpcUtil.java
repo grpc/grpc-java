@@ -219,7 +219,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.75.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.77.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -759,13 +759,15 @@ public final class GrpcUtil {
 
   /** Gets stream tracers based on CallOptions. */
   public static ClientStreamTracer[] getClientStreamTracers(
-      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry) {
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry,
+      boolean isHedging) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
     ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
     StreamInfo streamInfo = StreamInfo.newBuilder()
         .setCallOptions(callOptions)
         .setPreviousAttempts(previousAttempts)
         .setIsTransparentRetry(isTransparentRetry)
+        .setIsHedging(isHedging)
         .build();
     for (int i = 0; i < factories.size(); i++) {
       tracers[i] = factories.get(i).newClientStreamTracer(streamInfo, headers);

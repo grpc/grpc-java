@@ -1,19 +1,23 @@
-bazel_dep(name = "googleapis", repo_name = "com_google_googleapis", version = "0.0.0-20240326-1c8d509c5")
-bazel_dep(name = "grpc-java", repo_name = "io_grpc_grpc_java", version = "1.75.0-SNAPSHOT")  # CURRENT_GRPC_VERSION
+bazel_dep(name = "grpc-java", repo_name = "io_grpc_grpc_java", version = "1.77.0-SNAPSHOT")  # CURRENT_GRPC_VERSION
 bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
 bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
 bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 
-# Do not use this override in your own MODULE.bazel. Use a version from BCR
+# Do not use this override in your own MODULE.bazel. It is unnecessary when
+# using a version from BCR. Be aware the gRPC Java team does not update the
+# BCR for new releases, so you may need to create a PR for the BCR to add the
+# version. To not use the BCR, you could use:
+#
+# git_override(
+#    module_name = "grpc-java",
+#    remote = "https://github.com/grpc/grpc-java.git",
+#    tag = "v<VERSION>",
+# )
 local_path_override(
     module_name = "grpc-java",
     path = "..",
 )
-
-switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
-
-switched_rules.use_languages(java = True)
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 

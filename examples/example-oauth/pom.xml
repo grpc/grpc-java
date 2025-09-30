@@ -7,15 +7,15 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.75.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.77.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>example-oauth</name>
   <url>https://github.com/grpc/grpc-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.75.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.25.5</protobuf.version>
-    <protoc.version>3.25.5</protoc.version>
+    <grpc.version>1.77.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <protobuf.version>3.25.8</protobuf.version>
+    <protoc.version>3.25.8</protoc.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
@@ -61,12 +61,6 @@
       <groupId>com.google.auth</groupId>
       <artifactId>google-auth-library-oauth2-http</artifactId>
       <version>1.23.0</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.tomcat</groupId>
-      <artifactId>annotations-api</artifactId>
-      <version>6.0.53</version>
-      <scope>provided</scope> <!-- not needed at runtime -->
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>

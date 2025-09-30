@@ -10,7 +10,7 @@ repositories {
 }
 
 android {
-    namespace 'io.grpc.android.integrationtest'
+    namespace = 'io.grpc.android.integrationtest'
     sourceSets {
         main {
             java {
@@ -41,7 +41,7 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        multiDexEnabled true
+        multiDexEnabled = true
     }
     buildTypes {
         debug { minifyEnabled false }
@@ -82,8 +82,6 @@ dependencies {
         exclude group: 'com.google.protobuf'
         exclude group: 'com.google.guava'
     }
-
-    compileOnly libraries.javax.annotation
 
     androidTestImplementation 'androidx.test.ext:junit:1.1.3',
             'androidx.test:runner:1.4.0'

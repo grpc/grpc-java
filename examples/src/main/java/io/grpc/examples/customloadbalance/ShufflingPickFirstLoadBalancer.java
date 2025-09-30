@@ -122,7 +122,7 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
     SubchannelPicker picker;
     switch (currentState) {
       case IDLE:
-        picker = new RequestConnectionPicker(subchannel);
+        picker = new RequestConnectionPicker();
         break;
       case CONNECTING:
         picker = new Picker(PickResult.withNoResult());
@@ -182,22 +182,13 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
    */
   private final class RequestConnectionPicker extends SubchannelPicker {
 
-    private final Subchannel subchannel;
     private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
-
-    RequestConnectionPicker(Subchannel subchannel) {
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-    }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       if (connectionRequested.compareAndSet(false, true)) {
-        helper.getSynchronizationContext().execute(new Runnable() {
-          @Override
-          public void run() {
-            subchannel.requestConnection();
-          }
-        });
+        helper.getSynchronizationContext().execute(
+            ShufflingPickFirstLoadBalancer.this::requestConnection);
       }
       return PickResult.withNoResult();
     }

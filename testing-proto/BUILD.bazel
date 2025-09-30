@@ -1,0 +1,22 @@
+load("@rules_java//java:defs.bzl", "java_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+proto_library(
+    name = "simpleservice_proto",
+    srcs = ["src/main/proto/io/grpc/testing/protobuf/simpleservice.proto"],
+    strip_import_prefix = "src/main/proto/",
+)
+
+java_proto_library(
+    name = "simpleservice_java_proto",
+    visibility = ["//xds:__pkg__"],
+    deps = [":simpleservice_proto"],
+)
+
+java_grpc_library(
+    name = "simpleservice_java_grpc",
+    srcs = [":simpleservice_proto"],
+    visibility = ["//xds:__pkg__"],
+    deps = [":simpleservice_java_proto"],
+)

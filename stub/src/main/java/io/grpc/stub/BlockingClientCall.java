@@ -29,6 +29,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -69,7 +70,7 @@ public final class BlockingClientCall<ReqT, RespT> {
   private final ThreadSafeThreadlessExecutor executor;
 
   private boolean writeClosed;
-  private volatile Status closedStatus; // null if not closed
+  private AtomicReference<CloseState> closeState = new AtomicReference<>();
 
   BlockingClientCall(ClientCall<ReqT, RespT> call, ThreadSafeThreadlessExecutor executor) {
     this.call = call;
@@ -87,7 +88,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read() throws InterruptedException, StatusException {
     try {
-      return read(true, 0, TimeUnit.NANOSECONDS);
+      return read(true, 0);
     } catch (TimeoutException e) {
       throw new AssertionError("should never happen", e);
     }
@@ -106,38 +107,36 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public RespT read(long timeout, TimeUnit unit) throws InterruptedException, TimeoutException,
       StatusException {
-    return read(false, timeout, unit);
+    long endNanoTime = System.nanoTime() + unit.toNanos(timeout);
+    return read(false, endNanoTime);
   }
 
-  private RespT read(boolean waitForever, long timeout, TimeUnit unit)
+  private RespT read(boolean waitForever, long endNanoTime)
       throws InterruptedException, TimeoutException, StatusException {
-    long start = System.nanoTime();
-    long end = start + unit.toNanos(timeout);
-
     Predicate<BlockingClientCall<ReqT, RespT>> predicate = BlockingClientCall::skipWaitingForRead;
-    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
+    executor.waitAndDrainWithTimeout(waitForever, endNanoTime, predicate, this);
     RespT bufferedValue = buffer.poll();
 
     if (logger.isLoggable(Level.FINER)) {
       logger.finer("Client Blocking read had value:  " + bufferedValue);
     }
 
-    Status currentClosedStatus;
+    CloseState currentCloseState;
     if (bufferedValue != null) {
       call.request(1);
       return bufferedValue;
-    } else if ((currentClosedStatus = closedStatus) == null) {
+    } else if ((currentCloseState = closeState.get()) == null) {
       throw new IllegalStateException(
           "The message disappeared... are you reading from multiple threads?");
-    } else if (!currentClosedStatus.isOk()) {
-      throw currentClosedStatus.asException();
+    } else if (!currentCloseState.status.isOk()) {
+      throw currentCloseState.status.asException(currentCloseState.trailers);
     } else {
       return null;
     }
   }
 
   boolean skipWaitingForRead() {
-    return closedStatus != null || !buffer.isEmpty();
+    return closeState.get() != null || !buffer.isEmpty();
   }
 
   /**
@@ -150,11 +149,11 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @throws StatusException If the stream was closed in an error state
    */
   public boolean hasNext() throws InterruptedException, StatusException {
-    executor.waitAndDrain((x) -> !x.buffer.isEmpty() || x.closedStatus != null, this);
+    executor.waitAndDrain((x) -> !x.buffer.isEmpty() || x.closeState.get() != null, this);
 
-    Status currentClosedStatus = closedStatus;
-    if (currentClosedStatus != null && !currentClosedStatus.isOk()) {
-      throw currentClosedStatus.asException();
+    CloseState currentCloseState = closeState.get();
+    if (currentCloseState != null && !currentCloseState.status.isOk()) {
+      throw currentCloseState.status.asException(currentCloseState.trailers);
     }
 
     return !buffer.isEmpty();
@@ -182,7 +181,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request) throws InterruptedException, StatusException {
     try {
-      return write(true, request, Integer.MAX_VALUE, TimeUnit.DAYS);
+      return write(true, request, 0);
     } catch (TimeoutException e) {
       throw new RuntimeException(e); // should never happen
     }
@@ -211,30 +210,28 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   public boolean write(ReqT request, long timeout, TimeUnit unit)
       throws InterruptedException, TimeoutException, StatusException {
-    return write(false, request, timeout, unit);
+    long endNanoTime = System.nanoTime() + unit.toNanos(timeout);
+    return write(false, request, endNanoTime);
   }
 
-  private boolean write(boolean waitForever, ReqT request, long timeout, TimeUnit unit)
+  private boolean write(boolean waitForever, ReqT request, long endNanoTime)
       throws InterruptedException, TimeoutException, StatusException {
 
     if (writeClosed) {
       throw new IllegalStateException("Writes cannot be done after calling halfClose or cancel");
     }
 
-    long end = System.nanoTime() + unit.toNanos(timeout);
-
     Predicate<BlockingClientCall<ReqT, RespT>> predicate =
-        (x) -> x.call.isReady() || x.closedStatus != null;
-    executor.waitAndDrainWithTimeout(waitForever, end, predicate, this);
-    Status savedClosedStatus = closedStatus;
-    if (savedClosedStatus == null) {
+        (x) -> x.call.isReady() || x.closeState.get() != null;
+    executor.waitAndDrainWithTimeout(waitForever, endNanoTime, predicate, this);
+    CloseState savedCloseState = closeState.get();
+    if (savedCloseState == null || savedCloseState.status == null) {
       call.sendMessage(request);
       return true;
-    } else if (savedClosedStatus.isOk()) {
+    } else if (savedCloseState.status.isOk()) {
       return false;
     } else {
-      // Propagate any errors returned from the server
-      throw savedClosedStatus.asException();
+      throw savedCloseState.status.asException(savedCloseState.trailers);
     }
   }
 
@@ -276,8 +273,9 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   Status getClosedStatus() {
-    drainQuietly();
-    return closedStatus;
+    executor.drain();
+    CloseState state = closeState.get();
+    return (state == null) ? null : state.status;
   }
 
   /**
@@ -297,7 +295,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   boolean isReadReady() {
-    drainQuietly();
+    executor.drain();
 
     return !buffer.isEmpty();
   }
@@ -310,7 +308,7 @@ public final class BlockingClientCall<ReqT, RespT> {
    */
   @VisibleForTesting
   boolean isWriteReady() {
-    drainQuietly();
+    executor.drain();
 
     return isWriteLegal() && call.isReady();
   }
@@ -320,33 +318,35 @@ public final class BlockingClientCall<ReqT, RespT> {
    * @return True if writes haven't been closed and the server hasn't closed the stream
    */
   private boolean isWriteLegal() {
-    return !writeClosed && closedStatus == null;
+    return !writeClosed && closeState.get() == null;
   }
 
   ClientCall.Listener<RespT> getListener() {
     return new QueuingListener();
   }
 
-  private void drainQuietly() {
-    try {
-      executor.drain();
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
-  }
-
   private final class QueuingListener extends ClientCall.Listener<RespT> {
     @Override
     public void onMessage(RespT value) {
-      Preconditions.checkState(closedStatus == null, "ClientCall already closed");
+      Preconditions.checkState(closeState.get() == null, "ClientCall already closed");
       buffer.add(value);
     }
 
     @Override
     public void onClose(Status status, Metadata trailers) {
-      Preconditions.checkState(closedStatus == null, "ClientCall already closed");
-      closedStatus = status;
+      CloseState newCloseState = new CloseState(status, trailers);
+      boolean wasSet = closeState.compareAndSet(null, newCloseState);
+      Preconditions.checkState(wasSet, "ClientCall already closed");
     }
   }
 
+  private static final class CloseState {
+    final Status status;
+    final Metadata trailers;
+
+    CloseState(Status status, Metadata trailers) {
+      this.status = Preconditions.checkNotNull(status, "status");
+      this.trailers = trailers;
+    }
+  }
 }

@@ -21,11 +21,11 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.75.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.77.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/maven2/"
+            url = "https://maven-central.storage-download.googleapis.com/maven2/"
             metadataSources {
                 mavenPom()
                 ignoreGradleMetadataRedirection()
@@ -197,6 +197,25 @@ subprojects {
         }
     }
 
+    plugins.withId("com.android.base") {
+        android {
+            lint {
+                abortOnError true
+                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                    warningsAsErrors true
+                }
+            }
+        }
+        tasks.withType(JavaCompile).configureEach {
+            it.options.compilerArgs += [
+                    "-Xlint:all"
+            ]
+            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                it.options.compilerArgs += ["-Werror"]
+            }
+        }
+    }
+
     plugins.withId("java") {
         dependencies {
             testImplementation libraries.junit,
@@ -238,12 +257,12 @@ subprojects {
 
         // At a test failure, log the stack trace to the console so that we don't
         // have to open the HTML in a browser.
-        tasks.named("test").configure {
+        tasks.withType(Test).configureEach {
             testLogging {
                 exceptionFormat = 'full'
-                showExceptions true
-                showCauses true
-                showStackTraces true
+                showExceptions = true
+                showCauses = true
+                showStackTraces = true
             }
             maxHeapSize = '1500m'
         }
@@ -410,7 +429,7 @@ subprojects {
         }
 
         signing {
-            required false
+            required = false
             sign publishing.publications.maven
         }
 
