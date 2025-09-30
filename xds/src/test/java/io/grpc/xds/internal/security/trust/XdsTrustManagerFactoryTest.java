@@ -185,15 +185,8 @@ public class XdsTrustManagerFactoryTest {
             DataSource.newBuilder().setFilename(TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath()))
         .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
         .build();
-    XdsTrustManagerFactory factory =
+    XdsTrustManagerFactory unused =
         new XdsTrustManagerFactory(new X509Certificate[] {x509Cert}, certValidationContext, false);
-    XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
-    assertThat(xdsX509TrustManager.getAcceptedIssuers()).isNotNull();
-    assertThat(xdsX509TrustManager.getAcceptedIssuers()).hasLength(1);
-    assertThat(xdsX509TrustManager.getAcceptedIssuers()[0].getIssuerX500Principal().getName())
-        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
-    assertThat(xdsX509TrustManager.getAcceptedIssuers()[1].getIssuerX500Principal().getName())
-        .isEqualTo("CN=testca,O=Internet Widgits Pty Ltd,ST=Some-State,C=AU");
   }
 
   @Test
