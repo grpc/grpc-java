@@ -19,8 +19,8 @@ package io.grpc.xds.internal;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.JwtTokenFileCallCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
+import io.grpc.xds.internal.JwtTokenFileCallCredentials;
 import java.io.File;
 import java.util.Map;
 
