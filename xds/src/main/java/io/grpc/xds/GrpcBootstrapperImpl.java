@@ -21,6 +21,7 @@ import com.google.common.collect.ImmutableMap;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
@@ -98,9 +99,14 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @Override
-  protected Object getImplSpecificChannelCredConfig(Map<String, ?> serverConfig, String serverUri)
+  protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
-    return getChannelCredentials(serverConfig, serverUri);
+    ChannelCredentials channelCreds = getChannelCredentials(serverConfig, serverUri);
+    CallCredentials callCreds = getCallCredentials(serverConfig, serverUri);
+    if (callCreds != null) {
+      channelCreds = CompositeChannelCredentials.create(channelCreds, callCreds);
+    }
+    return channelCreds;
   }
 
   private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
@@ -142,12 +148,6 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
       }
     }
     return null;
-  }
-
-  @Override
-  protected Object getImplSpecificCallCredConfig(Map<String, ?> serverConfig, String serverUri)
-      throws XdsInitializationException {
-    return getCallCredentials(serverConfig, serverUri);
   }
 
   private static CallCredentials getCallCredentials(Map<String, ?> serverConfig,
