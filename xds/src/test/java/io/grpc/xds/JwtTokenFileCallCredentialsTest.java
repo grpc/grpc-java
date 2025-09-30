@@ -30,8 +30,10 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.runners.Enclosed;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -40,12 +42,15 @@ import org.junit.runners.JUnit4;
 public class JwtTokenFileCallCredentialsTest {
   @RunWith(JUnit4.class)
   public static class WithEmptyJwtTokenTest {
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
+
     private File jwtTokenFile;
     private JwtTokenFileCallCredentials unit;
 
     @Before
     public void setUp() throws Exception {
-      this.jwtTokenFile = JwtTokenFileTestUtils.createEmptyJwtToken();
+      this.jwtTokenFile = tempFolder.newFile("empty_jwt.token");
 
       Constructor<JwtTokenFileCallCredentials> ctor =
           JwtTokenFileCallCredentials.class.getDeclaredConstructor(String.class);
@@ -63,12 +68,16 @@ public class JwtTokenFileCallCredentialsTest {
 
   @RunWith(JUnit4.class)
   public static class WithInvalidJwtTokenTest {
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
+
     private File jwtTokenFile;
     private JwtTokenFileCallCredentials unit;
 
     @Before
     public void setUp() throws Exception {
-      this.jwtTokenFile = JwtTokenFileTestUtils.createJwtTokenWithoutExpiration();
+      this.jwtTokenFile = tempFolder.newFile("invalid_jwt.token");
+      JwtTokenFileTestUtils.writeJwtTokenContentWithoutExpiration(jwtTokenFile);
 
       Constructor<JwtTokenFileCallCredentials> ctor =
           JwtTokenFileCallCredentials.class.getDeclaredConstructor(String.class);
@@ -92,15 +101,19 @@ public class JwtTokenFileCallCredentialsTest {
 
   @RunWith(JUnit4.class)
   public static class WithValidJwtTokenTest {
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
+
     private File jwtTokenFile;
     private JwtTokenFileCallCredentials unit;
     private Long givenExpTimeInSeconds;
 
     @Before
     public void setUp() throws Exception {
+      this.jwtTokenFile = tempFolder.newFile("jwt.token");
       this.givenExpTimeInSeconds = Instant.now().getEpochSecond() + TimeUnit.HOURS.toSeconds(1);
-  
-      this.jwtTokenFile = JwtTokenFileTestUtils.createValidJwtToken(givenExpTimeInSeconds);
+
+      JwtTokenFileTestUtils.writeValidJwtTokenContent(jwtTokenFile, givenExpTimeInSeconds);
 
       Constructor<JwtTokenFileCallCredentials> ctor =
           JwtTokenFileCallCredentials.class.getDeclaredConstructor(String.class);

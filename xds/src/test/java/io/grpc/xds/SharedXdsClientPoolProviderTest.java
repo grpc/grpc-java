@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.Mock;
@@ -69,6 +70,8 @@ import org.mockito.junit.MockitoRule;
 public class SharedXdsClientPoolProviderTest {
 
   private static final String SERVER_URI = "trafficdirector.googleapis.com";
+  @Rule
+  public TemporaryFolder tempFolder = new TemporaryFolder();
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final Node node = Node.newBuilder().setId("SharedXdsClientPoolProviderTest").build();
@@ -225,7 +228,8 @@ public class SharedXdsClientPoolProviderTest {
     GrpcBootstrapperImpl.xdsBootstrapCallCredsEnabled = true;
 
     Long givenExpTimeInSeconds = Instant.now().getEpochSecond() + TimeUnit.HOURS.toSeconds(1);
-    File jwtToken = JwtTokenFileTestUtils.createValidJwtToken(givenExpTimeInSeconds);
+    File jwtToken = tempFolder.newFile("jwt.token");
+    JwtTokenFileTestUtils.writeValidJwtTokenContent(jwtToken, givenExpTimeInSeconds);
     String jwtTokenContent = new String(
         Files.readAllBytes(jwtToken.toPath()),
         StandardCharsets.UTF_8);

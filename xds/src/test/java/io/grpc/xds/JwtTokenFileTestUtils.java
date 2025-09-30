@@ -23,15 +23,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 public class JwtTokenFileTestUtils {
-  public static File createEmptyJwtToken() throws IOException {
-    File jwtToken = File.createTempFile(new String("jwt.token"), "");
-    jwtToken.deleteOnExit();
-    return jwtToken;
-  }
-
-  public static File createJwtTokenWithoutExpiration() throws IOException {
-    File jwtToken = File.createTempFile(new String("jwt.token"), "");
-    jwtToken.deleteOnExit();
+  public static void writeJwtTokenContentWithoutExpiration(File jwtToken) throws IOException {
     FileOutputStream outputStream = new FileOutputStream(jwtToken);
     String content =
         BaseEncoding.base64().encode(
@@ -43,13 +35,10 @@ public class JwtTokenFileTestUtils {
         + BaseEncoding.base64().encode(new String("signature").getBytes(StandardCharsets.UTF_8));
     outputStream.write(content.getBytes(StandardCharsets.UTF_8));
     outputStream.close();
-    return jwtToken;
   }
 
-  public static File createValidJwtToken(long expTime)
+  public static void writeValidJwtTokenContent(File jwtToken, long expTime)
         throws Exception {
-    File jwtToken = File.createTempFile(new String("jwt.token"), "");
-    jwtToken.deleteOnExit();
     FileOutputStream outputStream = new FileOutputStream(jwtToken);
     String content =
         BaseEncoding.base64().encode(
@@ -61,6 +50,5 @@ public class JwtTokenFileTestUtils {
         + BaseEncoding.base64().encode(new String("signature").getBytes(StandardCharsets.UTF_8));
     outputStream.write(content.getBytes(StandardCharsets.UTF_8));
     outputStream.close();
-    return jwtToken;
   }
 }
