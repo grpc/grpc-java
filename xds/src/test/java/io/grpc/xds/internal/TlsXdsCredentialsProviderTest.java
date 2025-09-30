@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal;
 
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -54,10 +53,5 @@ public class TlsXdsCredentialsProviderTest {
   public void channelCredentials() {
     assertSame(TlsChannelCredentials.class,
         provider.newChannelCredentials(null).getClass());
-  }
-
-  @Test
-  public void callCredentials() {
-    assertNull(provider.newCallCredentials(null));
   }
 }

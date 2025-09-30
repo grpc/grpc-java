@@ -51,15 +51,18 @@ public abstract class XdsCredentialsProvider {
   protected abstract ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig);
 
   /**
-  * Creates a {@link CallCredentials} from the given jsonConfig, or
-  * {@code null} if the given config is invalid. The provider is free to ignore
-  * the config if it's not needed for producing the call credentials.
+  * Creates a {@link CallCredentials} from the given jsonConfig, or {@code null} if the given
+  * config is invalid or credential data is not part of a RPC call. The provider may override
+  * this method. Moreover the provider is free to ignore the config if it's not needed for
+  * producing the call credentials.
   *
   * @param jsonConfig json config that can be consumed by the provider to create
   *                   the call credentials
   *
   */
-  protected abstract CallCredentials newCallCredentials(Map<String, ?> jsonConfig);
+  protected CallCredentials newCallCredentials(Map<String, ?> jsonConfig) {
+    return null;
+  }
 
   /**
    * Returns the xDS credential name associated with this provider which makes it selectable

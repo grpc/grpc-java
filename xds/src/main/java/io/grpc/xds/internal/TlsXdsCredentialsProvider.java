@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal;
 
-import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
@@ -32,11 +31,6 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
   @Override
   protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
     return TlsChannelCredentials.create();
-  }
-
-  @Override
-  protected CallCredentials newCallCredentials(Map<String, ?> jsonConfig) {
-    return null;
   }
 
   @Override
