@@ -20,16 +20,14 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.InternalServiceProviders;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -109,7 +107,7 @@ final class XdsCredentialsRegistry {
     if (instance == null) {
       List<XdsCredentialsProvider> providerList = InternalServiceProviders.loadAll(
               XdsCredentialsProvider.class,
-              getHardCodedClasses(),
+              ImmutableList.of(),
               XdsCredentialsProvider.class.getClassLoader(),
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
@@ -145,39 +143,6 @@ final class XdsCredentialsRegistry {
   @Nullable
   public synchronized XdsCredentialsProvider getProvider(String name) {
     return effectiveProviders.get(checkNotNull(name, "name"));
-  }
-
-  @VisibleForTesting
-  static List<Class<?>> getHardCodedClasses() {
-    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
-    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
-    // https://sourceforge.net/p/proguard/bugs/418/
-    ArrayList<Class<?>> list = new ArrayList<>();
-    try {
-      list.add(Class.forName("io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider")); 
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.WARNING, "Unable to find GoogleDefaultXdsCredentialsProvider", e);
-    }
-
-    try {
-      list.add(Class.forName("io.grpc.xds.internal.InsecureXdsCredentialsProvider"));
-    }  catch (ClassNotFoundException e) {
-      logger.log(Level.WARNING, "Unable to find InsecureXdsCredentialsProvider", e);
-    }
-
-    try {
-      list.add(Class.forName("io.grpc.xds.internal.TlsXdsCredentialsProvider"));
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.WARNING, "Unable to find TlsXdsCredentialsProvider", e);
-    }
-
-    try {
-      list.add(Class.forName("io.grpc.xds.internal.JwtTokenFileXdsCredentialsProvider"));
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.WARNING, "Unable to find JwtTokenFileXdsCredentialsProvider", e);
-    }
-
-    return Collections.unmodifiableList(list);
   }
 
   private static final class XdsCredentialsProviderPriorityAccessor
