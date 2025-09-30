@@ -59,6 +59,7 @@ import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.SpanId;
@@ -748,6 +749,48 @@ public class OpenTelemetryTracingModuleTest {
     } finally {
       context.detach(previous);
     }
+  }
+
+  @Test
+  public void serverSpanPropagationInterceptor_propagatesBaggage() {
+    // 1. Arrange: Setup the module, interceptor, and mocks.
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
+
+    @SuppressWarnings("unchecked")
+    ServerCallHandler<String, String> handler = mock(ServerCallHandler.class);
+    ServerCall<String, String> call = new NoopServerCall<>();
+    Metadata metadata = new Metadata();
+    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
+
+    // Mock the handler to capture the Baggage from the current context when it's called.
+    when(handler.startCall(any(), any())).thenAnswer(invocation -> {
+      capturedBaggage.set(io.opentelemetry.api.baggage.Baggage.current());
+      return mockServerCallListener;
+    });
+
+    // Create a test Span and Baggage to be propagated.
+    Span parentSpan = tracerRule.spanBuilder("parent-span").startSpan();
+    io.opentelemetry.api.baggage.Baggage testBaggage =
+        io.opentelemetry.api.baggage.Baggage.builder().put("testKey", "testValue").build();
+
+    // Attach the Span and Baggage to the gRPC context.
+    io.grpc.Context grpcContext = io.grpc.Context.current()
+        .withValue(tracingModule.otelSpan, parentSpan)
+        .withValue(tracingModule.baggageKey, testBaggage);
+
+    io.grpc.Context previous = grpcContext.attach();
+    try {
+      // 2. Act: Call the interceptor.
+      interceptor.interceptCall(call, metadata, handler);
+    } finally {
+      grpcContext.detach(previous);
+    }
+
+    // 3. Assert: Verify the handler was called and the correct Baggage was propagated.
+    verify(handler).startCall(same(call), same(metadata));
+    assertEquals(testBaggage, capturedBaggage.get());
   }
 
   @Test
