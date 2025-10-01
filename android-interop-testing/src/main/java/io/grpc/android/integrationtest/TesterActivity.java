@@ -121,7 +121,7 @@ public class TesterActivity extends AppCompatActivity
     ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(
         hostEdit.getWindowToken(), 0);
     enableButtons(false);
-    resultText.setText("Testing...");
+    resultText.setText(R.string.testing_message);
 
     String host = hostEdit.getText().toString();
     String portStr = portEdit.getText().toString();

@@ -38,7 +38,6 @@ dependencies {
             classifier = "linux-x86_64"
         }
     }
-    compileOnly libraries.javax.annotation
 
     testImplementation libraries.junit,
             libraries.mockito.core

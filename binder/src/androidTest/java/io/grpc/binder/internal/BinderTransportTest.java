@@ -106,8 +106,7 @@ public final class BinderTransportTest extends AbstractTransportTest {
     options.setEagAttributes(eagAttrs());
     options.setChannelLogger(transportLogger());
 
-    return new BinderTransport.BinderClientTransport(
-        builder.buildClientTransportFactory(), addr, options);
+    return new BinderClientTransport(builder.buildClientTransportFactory(), addr, options);
   }
 
   @Test

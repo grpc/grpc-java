@@ -339,6 +339,10 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
   private long readAndUpdate(File trustCertFile, long oldTime)
       throws IOException, GeneralSecurityException {
     long newTime = checkNotNull(trustCertFile, "trustCertFile").lastModified();
+    if (newTime == 0) {
+      throw new IOException(
+          "Certificate file not found or not readable: " + trustCertFile.getAbsolutePath());
+    }
     if (newTime == oldTime) {
       return oldTime;
     }

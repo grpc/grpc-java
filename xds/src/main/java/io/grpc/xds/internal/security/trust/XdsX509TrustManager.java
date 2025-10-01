@@ -31,6 +31,7 @@ import java.net.Socket;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
@@ -39,6 +40,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SNIServerName;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
@@ -60,21 +63,26 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private final X509ExtendedTrustManager delegate;
   private final Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates;
   private final CertificateValidationContext certContext;
+  private final boolean autoSniSanValidation;
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-                      X509ExtendedTrustManager delegate) {
+                      X509ExtendedTrustManager delegate,
+                      boolean autoSniSanValidation) {
     checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
     this.spiffeTrustMapDelegates = null;
+    this.autoSniSanValidation = autoSniSanValidation;
   }
 
   XdsX509TrustManager(@Nullable CertificateValidationContext certContext,
-      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates) {
+      Map<String, X509ExtendedTrustManager> spiffeTrustMapDelegates,
+      boolean autoSniSanValidation) {
     checkNotNull(spiffeTrustMapDelegates, "spiffeTrustMapDelegates");
     this.spiffeTrustMapDelegates = ImmutableMap.copyOf(spiffeTrustMapDelegates);
     this.certContext = certContext;
     this.delegate = null;
+    this.autoSniSanValidation = autoSniSanValidation;
   }
 
   private static boolean verifyDnsNameInPattern(
@@ -147,6 +155,9 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
     if (Strings.isNullOrEmpty(sanToVerifyExact)) {
       return false;
     }
+    if (sanToVerifyExact.contains("*")) {
+      return verifyDnsNameWildcard(altNameFromCert, sanToVerifyExact, ignoreCase);
+    }
     return ignoreCase
         ? sanToVerifyExact.equalsIgnoreCase(altNameFromCert)
         : sanToVerifyExact.equals(altNameFromCert);
@@ -203,12 +214,11 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
    * This is called from various check*Trusted methods.
    */
   @VisibleForTesting
-  void verifySubjectAltNameInChain(X509Certificate[] peerCertChain) throws CertificateException {
+  void verifySubjectAltNameInChain(X509Certificate[] peerCertChain,
+      List<StringMatcher> verifyList) throws CertificateException {
     if (certContext == null) {
       return;
     }
-    @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
-    List<StringMatcher> verifyList = certContext.getMatchSubjectAltNamesList();
     if (verifyList.isEmpty()) {
       return;
     }
@@ -220,29 +230,36 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, socket);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType, sslEngine);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     chooseDelegate(chain).checkClientTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
   }
 
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
+    List<StringMatcher> sniMatchers = null;
     if (socket instanceof SSLSocket) {
       SSLSocket sslSocket = (SSLSocket) socket;
       SSLParameters sslParams = sslSocket.getSSLParameters();
@@ -250,28 +267,60 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
         sslParams.setEndpointIdentificationAlgorithm("");
         sslSocket.setSSLParameters(sslParams);
       }
+      sniMatchers = getAutoSniSanMatchers(sslParams);
+    }
+    if (sniMatchers.isEmpty() && certContext != null) {
+      @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+      List<StringMatcher> sniMatchersTmp = certContext.getMatchSubjectAltNamesList();
+      sniMatchers = sniMatchersTmp;
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, socket);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, sniMatchers);
   }
 
   @Override
   public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
+    List<StringMatcher> sniMatchers = null;
     SSLParameters sslParams = sslEngine.getSSLParameters();
     if (sslParams != null) {
       sslParams.setEndpointIdentificationAlgorithm("");
       sslEngine.setSSLParameters(sslParams);
+      sniMatchers = getAutoSniSanMatchers(sslParams);
+    }
+    if (sniMatchers.isEmpty() && certContext != null) {
+      @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
+      List<StringMatcher> sniMatchersTmp = certContext.getMatchSubjectAltNamesList();
+      sniMatchers = sniMatchersTmp;
     }
     chooseDelegate(chain).checkServerTrusted(chain, authType, sslEngine);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, sniMatchers);
   }
 
   @Override
+  @SuppressWarnings("deprecation") // gRFC A29 predates match_typed_subject_alt_names
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     chooseDelegate(chain).checkServerTrusted(chain, authType);
-    verifySubjectAltNameInChain(chain);
+    verifySubjectAltNameInChain(chain, certContext != null
+        ? certContext.getMatchSubjectAltNamesList() : new ArrayList<>());
+  }
+
+  private List<StringMatcher> getAutoSniSanMatchers(SSLParameters sslParams) {
+    List<StringMatcher> sniNamesToMatch = new ArrayList<>();
+    if (CertificateUtils.isXdsSniEnabled && autoSniSanValidation) {
+      List<SNIServerName> serverNames = sslParams.getServerNames();
+      if (serverNames != null) {
+        for (SNIServerName serverName : serverNames) {
+          if (serverName instanceof SNIHostName) {
+            SNIHostName sniHostName = (SNIHostName) serverName;
+            String hostName = sniHostName.getAsciiName();
+            sniNamesToMatch.add(StringMatcher.newBuilder().setExact(hostName).build());
+          }
+        }
+      }
+    }
+    return sniNamesToMatch;
   }
 
   private X509ExtendedTrustManager chooseDelegate(X509Certificate[] chain)
@@ -302,5 +351,50 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return result.toArray(new X509Certificate[0]);
     }
     return delegate.getAcceptedIssuers();
+  }
+
+  private static boolean verifyDnsNameWildcard(
+      String altNameFromCert, String sanToVerify, boolean ignoreCase) {
+    String[] splitPattern = splitAtFirstDelimiter(ignoreCase
+        ? sanToVerify.toLowerCase(Locale.ROOT) : sanToVerify);
+    String[] splitDnsName = splitAtFirstDelimiter(ignoreCase
+        ? altNameFromCert.toLowerCase(Locale.ROOT) : altNameFromCert);
+    if (splitPattern == null || splitDnsName == null) {
+      return false;
+    }
+    if (splitDnsName[0].startsWith("xn--")) {
+      return false;
+    }
+    if (splitPattern[0].contains("*")
+        && !splitPattern[1].contains("*")
+        && !splitPattern[0].startsWith("xn--")) {
+      return splitDnsName[1].equals(splitPattern[1])
+          && labelWildcardMatch(splitDnsName[0], splitPattern[0]);
+    }
+    return false;
+  }
+
+  private static boolean labelWildcardMatch(String dnsLabel, String pattern) {
+    final char glob = '*';
+    // Check the special case of a single * pattern, as it's common.
+    if (pattern.equals("*")) {
+      return !dnsLabel.isEmpty();
+    }
+    int globIndex = pattern.indexOf(glob);
+    if (pattern.indexOf(glob, globIndex + 1) == -1) {
+      return dnsLabel.length() >= pattern.length() - 1
+          && dnsLabel.startsWith(pattern.substring(0, globIndex))
+          && dnsLabel.endsWith(pattern.substring(globIndex + 1));
+    }
+    return false;
+  }
+
+  @Nullable
+  private static String[] splitAtFirstDelimiter(String s) {
+    int index = s.indexOf('.');
+    if (index == -1) {
+      return null;
+    }
+    return new String[]{s.substring(0, index), s.substring(index + 1)};
   }
 }

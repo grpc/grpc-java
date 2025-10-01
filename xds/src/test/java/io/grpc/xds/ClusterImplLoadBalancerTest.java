@@ -78,6 +78,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.UpstreamLocalityStats;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProvider;
@@ -198,7 +199,7 @@ public class ClusterImplLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(Iterables.getOnlyElement(childBalancer.addresses)).isEqualTo(endpoint);
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
-    assertThat(childBalancer.attributes.get(XdsAttributes.XDS_CLIENT_POOL))
+    assertThat(childBalancer.attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL))
         .isSameInstanceAs(xdsClientPool);
     assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
   }
@@ -672,7 +673,7 @@ public class ClusterImplLoadBalancerTest {
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
@@ -877,14 +878,14 @@ public class ClusterImplLoadBalancerTest {
             .build();
     Subchannel subchannel = leafBalancer.helper.createSubchannel(args);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_CLUSTER_NAME))
+      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
     }
 
     // An address update should also retain the cluster attribute.
     subchannel.updateAddresses(leafBalancer.addresses);
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_CLUSTER_NAME))
+      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_CLUSTER_NAME))
           .isEqualTo(CLUSTER);
     }
   }
@@ -922,10 +923,10 @@ public class ClusterImplLoadBalancerTest {
               new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
       });
-      assertThat(subchannel.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
+      assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
           "authority-host-name");
       for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME))
+        assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
             .isEqualTo("authority-host-name");
       }
 
@@ -974,9 +975,9 @@ public class ClusterImplLoadBalancerTest {
       }
     });
     // Sub Channel wrapper args won't have the address name although addresses will.
-    assertThat(subchannel.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME)).isNull();
+    assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isNull();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_ADDRESS_NAME))
+      assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
           .isEqualTo("authority-host-name");
     }
 
@@ -992,7 +993,8 @@ public class ClusterImplLoadBalancerTest {
   @Test
   public void endpointAddressesAttachedWithTlsConfig_securityEnabledByDefault() {
     UpstreamTlsContext upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true);
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -1036,8 +1038,8 @@ public class ClusterImplLoadBalancerTest {
     }
 
     // Config with a new UpstreamTlsContext.
-    upstreamTlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe1", true);
+    upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        "google_cloud_private_spiffe1", true);
     config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
         null, Collections.<DropOverload>emptyList(),
         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
@@ -1068,8 +1070,8 @@ public class ClusterImplLoadBalancerTest {
             .setAddresses(addresses)
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-                    .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
+                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(io.grpc.xds.XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
@@ -1126,11 +1128,11 @@ public class ClusterImplLoadBalancerTest {
     }
 
     Attributes.Builder attributes = Attributes.newBuilder()
-        .set(XdsAttributes.ATTR_LOCALITY, locality)
+        .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
         // Unique but arbitrary string
-        .set(XdsAttributes.ATTR_LOCALITY_NAME, locality.toString());
+        .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, locality.toString());
     if (authorityHostname != null) {
-      attributes.set(XdsAttributes.ATTR_ADDRESS_NAME, authorityHostname);
+      attributes.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, authorityHostname);
     }
     EquivalentAddressGroup eag = new EquivalentAddressGroup(new FakeSocketAddress(name),
         attributes.build());
