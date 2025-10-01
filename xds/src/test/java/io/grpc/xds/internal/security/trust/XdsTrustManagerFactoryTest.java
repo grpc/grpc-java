@@ -185,8 +185,8 @@ public class XdsTrustManagerFactoryTest {
             DataSource.newBuilder().setFilename(TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath()))
         .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
         .build();
-    new XdsTrustManagerFactory(
-        new X509Certificate[] {x509Cert}, certValidationContext, false);
+    XdsTrustManagerFactory unused =
+        new XdsTrustManagerFactory(new X509Certificate[] {x509Cert}, certValidationContext, false);
   }
 
   @Test
