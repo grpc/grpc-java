@@ -139,7 +139,6 @@ public class ClusterResolverLoadBalancerTest {
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
   private final BackendMetricPropagation backendMetricPropagation =
       BackendMetricPropagation.fromMetricSpecs(Arrays.asList("cpu_utilization"));
-
   private static final Cluster EDS_CLUSTER = Cluster.newBuilder()
       .setName(CLUSTER)
       .setType(Cluster.DiscoveryType.EDS)
