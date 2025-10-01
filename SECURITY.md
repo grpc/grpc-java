@@ -330,14 +330,10 @@ is an option](#tls-with-conscrypt). Otherwise you need to [build your own 32-bit
 version of
 `netty-tcnative`](https://netty.io/wiki/forked-tomcat-native.html#wiki-h2-6).
 
-If on Alpine Linux and you see "Error loading shared library libcrypt.so.1: No
-such file or directory". Run `apk update && apk add libc6-compat` to install the
-necessary dependency.
-
-If on Alpine Linux, try to use `grpc-netty-shaded` instead of `grpc-netty` or
-(if you need `grpc-netty`) `netty-tcnative-boringssl-static` instead of
-`netty-tcnative`. If those are not an option, you may consider using
-[netty-tcnative-alpine](https://github.com/pires/netty-tcnative-alpine).
+If on Alpine Linux, depending on your specific JDK you may see a crash in
+netty_tcnative. This is generally caused by a missing symbol. Run `apk install
+gcompat` and use the environment variable `LD_PRELOAD=/lib/libgcompat.so.0` when
+executing Java.
 
 If on Fedora 30 or later and you see "libcrypt.so.1: cannot open shared object
 file: No such file or directory". Run `dnf -y install libxcrypt-compat` to
@@ -400,7 +396,8 @@ grpc-netty version | netty-handler version | netty-tcnative-boringssl-static ver
 1.59.x             | 4.1.97.Final          | 2.0.61.Final
 1.60.x-1.66.x      | 4.1.100.Final         | 2.0.61.Final
 1.67.x-1.70.x      | 4.1.110.Final         | 2.0.65.Final
-1.71.x-            | 4.1.110.Final         | 2.0.70.Final
+1.71.x-1.74.x      | 4.1.110.Final         | 2.0.70.Final
+1.75.x-            | 4.1.124.Final         | 2.0.72.Final
 
 _(grpc-netty-shaded avoids issues with keeping these versions in sync.)_
 

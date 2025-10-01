@@ -1,3 +1,5 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_proto_library", "java_test")
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@bazel_jar_jar//:jar_jar.bzl", "jar_jar")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 load("//:java_grpc_library.bzl", "INTERNAL_java_grpc_library_for_xds", "java_grpc_library", "java_rpc_toolchain")
@@ -342,7 +344,6 @@ java_library(
         "//api",
         "//core:internal",
         "//stub",
-        "//testing",
         "//testing-proto:simpleservice_java_grpc",
         "//testing-proto:simpleservice_java_proto",
         "//util",

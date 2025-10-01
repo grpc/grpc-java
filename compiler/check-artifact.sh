@@ -86,17 +86,17 @@ checkArch ()
       fi
     fi
   elif [[ "$OS" == osx ]]; then
-    format="$(file -b "$1" | grep -o "[^ ]*$")"
-    echo Format=$format
-    if [[ "$ARCH" == x86_32 ]]; then
-      assertEq "$format" "i386" $LINENO
-    elif [[ "$ARCH" == x86_64 ]]; then
-      assertEq "$format" "x86_64" $LINENO
-    elif [[ "$ARCH" == aarch_64 ]]; then
-	    assertEq "$format" "arm64" $LINENO
-    else
-      fail "Unsupported arch: $ARCH"
+    # For macOS, we now build a universal binary. We check that both
+    # required architectures are present.
+    format="$(lipo -archs "$1")"
+    echo "Architectures found: $format"
+    if ! echo "$format" | grep -q "x86_64"; then
+      fail "Universal binary is missing x86_64 architecture."
     fi
+    if ! echo "$format" | grep -q "arm64"; then
+      fail "Universal binary is missing arm64 architecture."
+    fi
+    echo "Universal binary check successful."
   else
     fail "Unsupported system: $OS"
   fi

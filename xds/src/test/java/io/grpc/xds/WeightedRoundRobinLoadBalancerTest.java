@@ -35,6 +35,7 @@ import com.github.xds.service.orca.v3.OrcaLoadReportRequest;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.testing.EqualsTester;
 import com.google.protobuf.Duration;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -213,6 +214,40 @@ public class WeightedRoundRobinLoadBalancerTest {
     final WeightedRoundRobinPicker weightedPicker =
         (WeightedRoundRobinPicker) pickerCaptor.getValue();
     weightedPicker.pickSubchannel(mockArgs);
+  }
+
+  @Test
+  public void config_equalsTester() {
+    WeightedRoundRobinLoadBalancerConfig defaults =
+        WeightedRoundRobinLoadBalancerConfig.newBuilder().build();
+    new EqualsTester()
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder().build(),
+            WeightedRoundRobinLoadBalancerConfig.newBuilder().build(),
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setBlackoutPeriodNanos(defaults.blackoutPeriodNanos).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setBlackoutPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setWeightExpirationPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setEnableOobLoadReport(true).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setOobReportingPeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setWeightUpdatePeriodNanos(5).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setErrorUtilizationPenalty(0.5F).build())
+        .addEqualityGroup(
+            WeightedRoundRobinLoadBalancerConfig.newBuilder()
+              .setErrorUtilizationPenalty(Float.NaN).build())
+        .testEquals();
   }
 
   @Test

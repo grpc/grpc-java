@@ -5,7 +5,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- For UDS -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <uses-sdk tools:overrideLibrary="io.grpc.android"/>
 
     <application
@@ -16,8 +18,7 @@
         android:name="androidx.multidex.MultiDexApplication">
         <activity
             android:name=".TesterActivity"
-            android:exported="true"
-            android:label="@string/app_name" >
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

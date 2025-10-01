@@ -14,7 +14,7 @@ android {
     namespace = 'io.grpc.cronet'
     compileSdkVersion 33
     defaultConfig {
-        minSdkVersion 21
+        minSdkVersion 22
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
@@ -46,6 +46,7 @@ dependencies {
             libraries.cronet.api
     implementation project(':grpc-core')
     implementation libraries.guava
+    implementation 'org.checkerframework:checker-qual:3.49.5'
     testImplementation project(':grpc-testing')
 
     testImplementation libraries.cronet.embedded

@@ -34,8 +34,7 @@ tasks.named("jar").configure {
 
 dependencies {
     api project(':grpc-api')
-    compileOnly libraries.javax.servlet.api,
-            libraries.javax.annotation // java 9, 10 needs it
+    compileOnly libraries.javax.servlet.api
 
     implementation project(':grpc-core'),
             libraries.guava
@@ -43,7 +42,7 @@ dependencies {
     testImplementation libraries.javax.servlet.api
 
     threadingTestImplementation project(':grpc-servlet'),
-        libraries.truth,
+        libraries.junit,
         libraries.javax.servlet.api,
         libraries.lincheck
 
@@ -69,19 +68,12 @@ dependencies {
             libraries.protobuf.java
 }
 
-tasks.named("test").configure {
-    if (JavaVersion.current().isJava9Compatible()) {
-        jvmArgs += [
-                // required for Lincheck
-                '--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED',
-                '--add-exports=java.base/jdk.internal.util=ALL-UNNAMED',
-        ]
-    }
-}
-
 tasks.register('threadingTest', Test) {
     classpath = sourceSets.threadingTest.runtimeClasspath
     testClassesDirs = sourceSets.threadingTest.output.classesDirs
+    jacoco {
+        enabled = false
+    }
 }
 
 tasks.named("assemble").configure {

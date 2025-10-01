@@ -91,7 +91,7 @@ public class XdsTrustManagerFactoryTest {
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "san2");
     XdsTrustManagerFactory factory =
-        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
+        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext, false);
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -115,7 +115,7 @@ public class XdsTrustManagerFactoryTest {
         "san2");
     // Single domain and single cert
     XdsTrustManagerFactory factory = new XdsTrustManagerFactory(ImmutableMap
-        .of("example.com", ImmutableList.of(x509Cert)), staticValidationContext);
+        .of("example.com", ImmutableList.of(x509Cert)), staticValidationContext, false);
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -131,7 +131,7 @@ public class XdsTrustManagerFactoryTest {
     X509Certificate anotherCert = TestUtils.loadX509Cert(CLIENT_PEM_FILE);
     factory = new XdsTrustManagerFactory(ImmutableMap
         .of("example.com", ImmutableList.of(x509Cert),
-            "google.com", ImmutableList.of(x509Cert, anotherCert)), staticValidationContext);
+            "google.com", ImmutableList.of(x509Cert, anotherCert)), staticValidationContext, false);
     assertThat(factory).isNotNull();
     tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -154,7 +154,7 @@ public class XdsTrustManagerFactoryTest {
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "waterzooi.test.google.be");
     XdsTrustManagerFactory factory =
-        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
+        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext, false);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
@@ -167,7 +167,7 @@ public class XdsTrustManagerFactoryTest {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
     try {
       new XdsTrustManagerFactory(
-              new X509Certificate[] {x509Cert}, getCertContextFromPath(CA_PEM_FILE));
+              new X509Certificate[] {x509Cert}, getCertContextFromPath(CA_PEM_FILE), false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected)
@@ -177,13 +177,26 @@ public class XdsTrustManagerFactoryTest {
   }
 
   @Test
+  public void constructorRootCert_nonStaticContext_systemRootCerts_valid()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
+    CertificateValidationContext certValidationContext = CertificateValidationContext.newBuilder()
+        .setTrustedCa(
+            DataSource.newBuilder().setFilename(TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath()))
+        .setSystemRootCerts(CertificateValidationContext.SystemRootCerts.getDefaultInstance())
+        .build();
+    new XdsTrustManagerFactory(
+        new X509Certificate[] {x509Cert}, certValidationContext, false);
+  }
+
+  @Test
   public void constructorRootCert_checkServerTrusted_throwsException()
       throws CertificateException, IOException, CertStoreException {
     X509Certificate x509Cert = TestUtils.loadX509Cert(CA_PEM_FILE);
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "san2");
     XdsTrustManagerFactory factory =
-        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
+        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext, false);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
@@ -204,7 +217,7 @@ public class XdsTrustManagerFactoryTest {
     CertificateValidationContext staticValidationContext = buildStaticValidationContext("san1",
         "san2");
     XdsTrustManagerFactory factory =
-        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext);
+        new XdsTrustManagerFactory(new X509Certificate[]{x509Cert}, staticValidationContext, false);
     XdsX509TrustManager xdsX509TrustManager = (XdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));

@@ -3,8 +3,8 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=22.5
-ABSL_VERSION=20230125.4
+PROTOBUF_VERSION=26.1
+ABSL_VERSION=20250127.1
 CMAKE_VERSION=3.26.3
 
 # ARCH is x86_64 bit unless otherwise specified.
@@ -41,7 +41,13 @@ else
   mkdir "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}/build"
   pushd "$DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}/build"
   # install here so we don't need sudo
-  if [[ "$ARCH" == x86* ]]; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    cmake .. \
+      -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
+      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+      -B. || exit 1
+  elif [[ "$ARCH" == x86* ]]; then
     CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} cmake .. \
       -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \

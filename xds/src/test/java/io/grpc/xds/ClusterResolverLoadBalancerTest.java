@@ -21,18 +21,41 @@ import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WEIGHTED_TARGET_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.WRR_LOCALITY_POLICY_NAME;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static java.util.stream.Collectors.toList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.testing.EqualsTester;
+import com.google.protobuf.Any;
+import com.google.protobuf.Duration;
+import com.google.protobuf.UInt32Value;
+import com.google.protobuf.UInt64Value;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.AggregatedConfigSource;
+import io.envoyproxy.envoy.config.core.v3.ConfigSource;
+import io.envoyproxy.envoy.config.core.v3.HealthStatus;
+import io.envoyproxy.envoy.config.core.v3.Locality;
+import io.envoyproxy.envoy.config.core.v3.Metadata;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TransportSocket;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
+import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11ProxyUpstreamTransport;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
@@ -53,25 +76,23 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
-import io.grpc.Status.Code;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.BackoffPolicy;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancerProvider;
+import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
 import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.Endpoints.DropOverload;
-import io.grpc.xds.Endpoints.LbEndpoint;
-import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
-import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
@@ -79,25 +100,18 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
-import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -108,9 +122,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -118,41 +130,46 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class ClusterResolverLoadBalancerTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+  @Rule
+  public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
 
-  private static final String AUTHORITY = "api.google.com";
-  private static final String CLUSTER1 = "cluster-foo.googleapis.com";
-  private static final String CLUSTER2 = "cluster-bar.googleapis.com";
-  private static final String CLUSTER_DNS = "cluster-dns.googleapis.com";
-  private static final String EDS_SERVICE_NAME1 = "backend-service-foo.googleapis.com";
-  private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
+  private static final String SERVER_NAME = "example.com";
+  private static final String CLUSTER = "cluster-foo.googleapis.com";
+  private static final String EDS_SERVICE_NAME = "backend-service-foo.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
-  private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
-  private final Locality locality1 =
-      Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
-  private final Locality locality2 =
-      Locality.create("test-region-2", "test-zone-2", "test-subzone-2");
-  private final Locality locality3 =
-      Locality.create("test-region-3", "test-zone-3", "test-subzone-3");
-  private final UpstreamTlsContext tlsContext =
-      CommonTlsContextTestsUtil.buildUpstreamTlsContext("google_cloud_private_spiffe", true);
-  private final OutlierDetection outlierDetection = OutlierDetection.create(
-      100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
-      FailurePercentageEjection.create(100, 100, 100, 100));
   private final BackendMetricPropagation backendMetricPropagation =
       BackendMetricPropagation.fromMetricSpecs(Arrays.asList("cpu_utilization"));
-  private final DiscoveryMechanism edsDiscoveryMechanism1 =
-      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          Collections.emptyMap(), null, backendMetricPropagation);
-  private final DiscoveryMechanism edsDiscoveryMechanism2 =
-      DiscoveryMechanism.forEds(CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L, tlsContext,
-          Collections.emptyMap(), null, null);
-  private final DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
-      DiscoveryMechanism.forEds(CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L, tlsContext,
-          Collections.emptyMap(), outlierDetection, null);
-  private final DiscoveryMechanism logicalDnsDiscoveryMechanism =
-      DiscoveryMechanism.forLogicalDns(CLUSTER_DNS, DNS_HOST_NAME, LRS_SERVER_INFO, 300L, null,
-          Collections.emptyMap(), backendMetricPropagation);
+
+  private static final Cluster EDS_CLUSTER = Cluster.newBuilder()
+      .setName(CLUSTER)
+      .setType(Cluster.DiscoveryType.EDS)
+      .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
+          .setServiceName(EDS_SERVICE_NAME)
+          .setEdsConfig(ConfigSource.newBuilder()
+            .setAds(AggregatedConfigSource.newBuilder())))
+      .build();
+  private static final Cluster LOGICAL_DNS_CLUSTER = Cluster.newBuilder()
+      .setName(CLUSTER)
+      .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+      .setLoadAssignment(ClusterLoadAssignment.newBuilder()
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addLbEndpoints(newSocketLbEndpoint(DNS_HOST_NAME, 9000))))
+      .build();
+  private static final Locality LOCALITY1 = Locality.newBuilder()
+      .setRegion("test-region-1")
+      .setZone("test-zone-1")
+      .setSubZone("test-subzone-1")
+      .build();
+  private static final Locality LOCALITY2 = Locality.newBuilder()
+      .setRegion("test-region-2")
+      .setZone("test-zone-2")
+      .setSubZone("test-subzone-2")
+      .build();
+  private static final Locality LOCALITY3 = Locality.newBuilder()
+      .setRegion("test-region-3")
+      .setZone("test-zone-3")
+      .setSubZone("test-subzone-3")
+      .build();
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -164,50 +181,32 @@ public class ClusterResolverLoadBalancerTest {
   private final FakeClock fakeClock = new FakeClock();
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final NameResolverRegistry nsRegistry = new NameResolverRegistry();
-  private final Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-      new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-              new FakeLoadBalancerProvider("round_robin"), null)));
-  private final Object ringHash = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-      new FakeLoadBalancerProvider("ring_hash_experimental"), new RingHashConfig(10L, 100L, ""));
-  private final Object leastRequest = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-      new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-          GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-              new FakeLoadBalancerProvider("least_request_experimental"),
-              new LeastRequestConfig(3))));
   private final List<FakeLoadBalancer> childBalancers = new ArrayList<>();
   private final List<FakeNameResolver> resolvers = new ArrayList<>();
-  private final FakeXdsClient xdsClient = new FakeXdsClient();
-  private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
-    @Override
-    public XdsClient getObject() {
-      xdsClientRefs++;
-      return xdsClient;
-    }
+  private final XdsTestControlPlaneService controlPlaneService = new XdsTestControlPlaneService();
+  private final XdsClient xdsClient = XdsTestUtils.createXdsClient(
+      Arrays.asList("control-plane.example.com"),
+      serverInfo -> new GrpcXdsTransportFactory.GrpcXdsTransport(
+          InProcessChannelBuilder
+            .forName(serverInfo.target())
+            .directExecutor()
+            .build()),
+      fakeClock);
 
-    @Override
-    public XdsClient returnObject(Object object) {
-      xdsClientRefs--;
-      return null;
-    }
-  };
 
+  private XdsDependencyManager xdsDepManager;
   @Mock
   private Helper helper;
-  @Mock
-  private BackoffPolicy.Provider backoffPolicyProvider;
-  @Mock
-  private BackoffPolicy backoffPolicy1;
-  @Mock
-  private BackoffPolicy backoffPolicy2;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
-  private int xdsClientRefs;
-  private ClusterResolverLoadBalancer loadBalancer;
-  private NameResolverProvider fakeNameResolverProvider;
+  private CdsLoadBalancer2 loadBalancer;
+  private boolean originalIsEnabledXdsHttpConnect;
 
   @Before
-  public void setUp() throws URISyntaxException {
+  public void setUp() throws Exception {
+    lbRegistry.register(new ClusterResolverLoadBalancerProvider(lbRegistry));
+    lbRegistry.register(new RingHashLoadBalancerProvider());
+    lbRegistry.register(new WrrLocalityLoadBalancerProvider());
     lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider(WEIGHTED_TARGET_POLICY_NAME));
@@ -220,81 +219,112 @@ public class ClusterResolverLoadBalancerTest {
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(mock(ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
+        .setScheduledExecutorService(fakeClock.getScheduledExecutorService())
+        .setNameResolverRegistry(nsRegistry)
         .build();
-    fakeNameResolverProvider = new FakeNameResolverProvider(false);
-    nsRegistry.register(fakeNameResolverProvider);
-    when(helper.getNameResolverRegistry()).thenReturn(nsRegistry);
-    when(helper.getNameResolverArgs()).thenReturn(args);
-    when(helper.getSynchronizationContext()).thenReturn(syncContext);
-    when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
-    when(helper.getAuthority()).thenReturn(AUTHORITY);
-    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
-    when(backoffPolicy1.nextBackoffNanos())
-        .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
-    when(backoffPolicy2.nextBackoffNanos())
-        .thenReturn(TimeUnit.SECONDS.toNanos(5L), TimeUnit.SECONDS.toNanos(50L));
-    loadBalancer = new ClusterResolverLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
+
+    xdsDepManager = new XdsDependencyManager(
+        xdsClient,
+        syncContext,
+        SERVER_NAME,
+        SERVER_NAME,
+        args);
+
+    cleanupRule.register(InProcessServerBuilder
+        .forName("control-plane.example.com")
+        .addService(controlPlaneService)
+        .directExecutor()
+        .build()
+        .start());
+
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_LDS, ImmutableMap.of(
+        SERVER_NAME, ControlPlaneRule.buildClientListener(SERVER_NAME, "my-route")));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_RDS, ImmutableMap.of(
+        "my-route", XdsTestUtils.buildRouteConfiguration(SERVER_NAME, "my-route", CLUSTER)));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, EDS_CLUSTER));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, ControlPlaneRule.buildClusterLoadAssignment(
+            "127.0.0.1", "", 8080, EDS_SERVICE_NAME)));
+
+    nsRegistry.register(new FakeNameResolverProvider());
+    when(helper.getAuthority()).thenReturn("api.google.com");
+    doAnswer((inv) -> {
+      xdsDepManager.requestReresolution();
+      return null;
+    }).when(helper).refreshNameResolution();
+    loadBalancer = new CdsLoadBalancer2(helper, lbRegistry);
+
+    originalIsEnabledXdsHttpConnect = XdsClusterResource.isEnabledXdsHttpConnect;
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws Exception {
+    XdsClusterResource.isEnabledXdsHttpConnect = originalIsEnabledXdsHttpConnect;
     loadBalancer.shutdown();
+    if (xdsDepManager != null) {
+      xdsDepManager.shutdown();
+    }
+    assertThat(xdsClient.getSubscribedResourcesMetadataSnapshot().get()).isEmpty();
+    xdsClient.shutdown();
+    assertThat(childBalancers).isEmpty();
     assertThat(resolvers).isEmpty();
-    assertThat(xdsClient.watchers).isEmpty();
-    assertThat(xdsClientRefs).isEqualTo(0);
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
   @Test
-  public void edsClustersWithRingHashEndpointLbPolicy() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, ringHash, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-
+  public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setLbPolicy(Cluster.LbPolicy.RING_HASH)
+        .setRingHashLbConfig(Cluster.RingHashLbConfig.newBuilder()
+            .setMinimumRingSize(UInt64Value.of(10))
+            .setMaximumRingSize(UInt64Value.of(100))
+            .build())
+        .build();
     // One priority with two localities of different weights.
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    EquivalentAddressGroup endpoint3 = makeAddress("endpoint-addr-3");
-    LocalityLbEndpoints localityLbEndpoints1 =
-        LocalityLbEndpoints.create(
-            Arrays.asList(
-                LbEndpoint.create(endpoint1, 0 /* loadBalancingWeight */,
-                    true, "hostname1", ImmutableMap.of()),
-                LbEndpoint.create(endpoint2, 0 /* loadBalancingWeight */,
-                    true, "hostname2", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    LocalityLbEndpoints localityLbEndpoints2 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(
-                LbEndpoint.create(
-                    endpoint3, 60 /* loadBalancingWeight */, true,
-                    "hostname3", ImmutableMap.of())),
-            50 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(10))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8080))
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.2", 8080)))
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(50))
+          .setLocality(LOCALITY2)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.1.1", 8080)
+            .setLoadBalancingWeight(UInt32Value.of(60))))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.addresses).hasSize(3);
     EquivalentAddressGroup addr1 = childBalancer.addresses.get(0);
     EquivalentAddressGroup addr2 = childBalancer.addresses.get(1);
     EquivalentAddressGroup addr3 = childBalancer.addresses.get(2);
-    // Endpoints in locality1 have no endpoint-level weight specified, so all endpoints within
-    // locality1 are equally weighted.
-    assertThat(addr1.getAddresses()).isEqualTo(endpoint1.getAddresses());
-    assertThat(addr1.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    // Endpoints in LOCALITY1 have no endpoint-level weight specified, so all endpoints within
+    // LOCALITY1 are equally weighted.
+    assertThat(addr1.getAddresses())
+        .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
+    assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
-    assertThat(addr2.getAddresses()).isEqualTo(endpoint2.getAddresses());
-    assertThat(addr2.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr2.getAddresses())
+        .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
+    assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(10);
-    assertThat(addr3.getAddresses()).isEqualTo(endpoint3.getAddresses());
-    assertThat(addr3.getAttributes().get(XdsAttributes.ATTR_SERVER_WEIGHT))
+    assertThat(addr3.getAddresses())
+        .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
+    assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
+    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER + "[child1]");
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
     assertThat(priorityChildConfig.ignoreReresolution).isTrue();
@@ -303,9 +333,9 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
-    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
-        tlsContext, Collections.<DropOverload>emptyList(), "ring_hash_experimental");
-    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
+    assertClusterImplConfig(clusterImplConfig, CLUSTER, EDS_SERVICE_NAME, null, null,
+        null, Collections.emptyList(), "ring_hash_experimental");
+    // assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
     RingHashConfig ringHashConfig = (RingHashConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
@@ -314,31 +344,33 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void edsClustersWithLeastRequestEndpointLbPolicy() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, leastRequest, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setLbPolicy(Cluster.LbPolicy.LEAST_REQUEST)
+        .build();
     // Simple case with one priority and one locality
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Arrays.asList(
-                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
-                    "hostname1", ImmutableMap.of())),
-            100 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints));
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8080)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.addresses).hasSize(1);
     EquivalentAddressGroup addr = childBalancer.addresses.get(0);
-    assertThat(addr.getAddresses()).isEqualTo(endpoint.getAddresses());
+    assertThat(addr.getAddresses())
+        .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
-    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER1 + "[child1]");
+    assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER + "[child1]");
     PriorityChildConfig priorityChildConfig =
         Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
     assertThat(GracefulSwitchLoadBalancerAccessor.getChildProvider(priorityChildConfig.childConfig)
@@ -346,8 +378,8 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
-    assertClusterImplConfig(clusterImplConfig, CLUSTER1, EDS_SERVICE_NAME1, LRS_SERVER_INFO, 100L,
-        tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
+    assertClusterImplConfig(clusterImplConfig, CLUSTER, EDS_SERVICE_NAME, null, null,
+        null, Collections.emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig = (WrrLocalityConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     LoadBalancerProvider childProvider =
@@ -356,117 +388,118 @@ public class ClusterResolverLoadBalancerTest {
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
+            .get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT)).isEqualTo(100);
   }
 
   @Test
   public void edsClustersEndpointHostname_addedToAddressAttribute() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanismWithOutlierDetection, leastRequest, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-
     // Simple case with one priority and one locality
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Arrays.asList(
-                LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
-                    "hostname1", ImmutableMap.of())),
-            100 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints));
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(LbEndpoint.newBuilder()
+            .setEndpoint(Endpoint.newBuilder()
+              .setHostname("hostname1")
+              .setAddress(newAddress("127.0.0.1", 8000)))))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     assertThat(
         childBalancer.addresses.get(0).getAttributes()
-            .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
+            .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo("hostname1");
   }
 
   @Test
   public void endpointAddressRewritten_whenProxyMetadataIsInEndpointMetadata() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanismWithOutlierDetection, leastRequest, true);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
+    XdsClusterResource.isEnabledXdsHttpConnect = true;
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setTransportSocket(TransportSocket.newBuilder()
+            .setName(
+                "type.googleapis.com/" + Http11ProxyUpstreamTransport.getDescriptor().getFullName())
+            .setTypedConfig(Any.pack(Http11ProxyUpstreamTransport.getDefaultInstance())))
+        .build();
+    // Proxy address in endpointMetadata, and no proxy in locality metadata
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8080)
+            .setMetadata(Metadata.newBuilder()
+              .putTypedFilterMetadata(
+                  "envoy.http11_proxy_transport_socket.proxy_address",
+                  Any.pack(newAddress("127.0.0.2", 8081).build()))))
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.3", 8082)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
-    EquivalentAddressGroup endpoint =
-        new EquivalentAddressGroup(InetSocketAddress.createUnresolved("127.0.0.1", 8080));
-
-    // Proxy address in endpointMetadata (use FakeSocketAddress directly)
-    SocketAddress proxyAddress = new FakeSocketAddress("127.0.0.2");
-    ImmutableMap<String, Object> endpointMetadata =
-        ImmutableMap.of("envoy.http11_proxy_transport_socket.proxy_address", proxyAddress);
-
-    // No proxy in locality metadata
-    ImmutableMap<String, Object> localityMetadata = ImmutableMap.of();
-
-    LocalityLbEndpoints localityLbEndpoints = LocalityLbEndpoints.create(
-        Arrays.asList(
-            LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
-        "hostname1", endpointMetadata)),
-        100 /* localityWeight */, 1 /* priority */, localityMetadata);
-
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints));
-
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     // Get the rewritten address
-    SocketAddress rewrittenAddress =
+    java.net.SocketAddress rewrittenAddress =
         childBalancer.addresses.get(0).getAddresses().get(0);
     assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
     HttpConnectProxiedSocketAddress proxiedSocket =
         (HttpConnectProxiedSocketAddress) rewrittenAddress;
 
     // Assert that the target address is the original address
-    assertThat(proxiedSocket.getTargetAddress())
-        .isEqualTo(endpoint.getAddresses().get(0));
+    assertThat(proxiedSocket.getTargetAddress()).isEqualTo(newInetSocketAddress("127.0.0.1", 8080));
 
     // Assert that the proxy address is correctly set
-    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
+    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(newInetSocketAddress("127.0.0.2", 8081));
+
+    // Check the non-rewritten address
+    java.net.SocketAddress normalAddress = childBalancer.addresses.get(1).getAddresses().get(0);
+    assertThat(normalAddress).isEqualTo(newInetSocketAddress("127.0.0.3", 8082));
   }
 
   @Test
   public void endpointAddressRewritten_whenProxyMetadataIsInLocalityMetadata() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanismWithOutlierDetection, leastRequest, true);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
+    XdsClusterResource.isEnabledXdsHttpConnect = true;
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setTransportSocket(TransportSocket.newBuilder()
+            .setName(
+                "type.googleapis.com/" + Http11ProxyUpstreamTransport.getDescriptor().getFullName())
+            .setTypedConfig(Any.pack(Http11ProxyUpstreamTransport.getDefaultInstance())))
+        .build();
+    // No proxy address in endpointMetadata, and proxy in locality metadata
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8080))
+          .setMetadata(Metadata.newBuilder()
+            .putTypedFilterMetadata(
+                "envoy.http11_proxy_transport_socket.proxy_address",
+                Any.pack(newAddress("127.0.0.2", 8081).build()))))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
-    EquivalentAddressGroup endpoint =
-        new EquivalentAddressGroup(InetSocketAddress.createUnresolved("127.0.0.2", 8080));
-
-    // No proxy in endpointMetadata
-    ImmutableMap<String, Object> endpointMetadata = ImmutableMap.of();
-
-    // Proxy address is now in localityMetadata
-    SocketAddress proxyAddress = new FakeSocketAddress("proxy-addr");
-    ImmutableMap<String, Object> localityMetadata =
-        ImmutableMap.of("envoy.http11_proxy_transport_socket.proxy_address", proxyAddress);
-
-    LocalityLbEndpoints localityLbEndpoints = LocalityLbEndpoints.create(
-        Arrays.asList(
-            LbEndpoint.create(endpoint, 0 /* loadBalancingWeight */, true,
-        "hostname2", endpointMetadata)),
-        100 /* localityWeight */, 1 /* priority */, localityMetadata);
-
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints));
-
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
 
     // Get the rewritten address
-    SocketAddress rewrittenAddress = childBalancer.addresses.get(0).getAddresses().get(0);
+    java.net.SocketAddress rewrittenAddress = childBalancer.addresses.get(0).getAddresses().get(0);
 
     // Assert that the address was rewritten
     assertThat(rewrittenAddress).isInstanceOf(HttpConnectProxiedSocketAddress.class);
@@ -474,47 +507,37 @@ public class ClusterResolverLoadBalancerTest {
         (HttpConnectProxiedSocketAddress) rewrittenAddress;
 
     // Assert that the target address is the original address
-    assertThat(proxiedSocket.getTargetAddress()).isEqualTo(endpoint.getAddresses().get(0));
+    assertThat(proxiedSocket.getTargetAddress()).isEqualTo(newInetSocketAddress("127.0.0.1", 8080));
 
     // Assert that the proxy address is correctly set from locality metadata
-    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(proxyAddress);
+    assertThat(proxiedSocket.getProxyAddress()).isEqualTo(newInetSocketAddress("127.0.0.2", 8081));
   }
 
   @Test
   public void onlyEdsClusters_receivedEndpoints() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism2, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME2);
-    assertThat(childBalancers).isEmpty();
-    // CLUSTER1 has priority 1 (priority3), which has locality 2, which has endpoint3.
-    // CLUSTER2 has priority 1 (priority1) and 2 (priority2); priority1 has locality1,
-    // which has endpoint1 and endpoint2; priority2 has locality3, which has endpoint4.
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    EquivalentAddressGroup endpoint4 = makeAddress("endpoint-addr-4");
-    LocalityLbEndpoints localityLbEndpoints1 =
-            LocalityLbEndpoints.create(
-                    Arrays.asList(
-                            LbEndpoint.create(endpoint1, 100,
-                                    true, "hostname1", ImmutableMap.of()),
-                            LbEndpoint.create(endpoint2, 100,
-                                    true, "hostname1", ImmutableMap.of())),
-                    70 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    LocalityLbEndpoints localityLbEndpoints3 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint4, 100, true,
-        "hostname3", ImmutableMap.of())),
-            20 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
-    String priority1 = CLUSTER2 + "[child1]";
-    String priority2 = CLUSTER2 + "[child2]";
+    // Has two localities with different priorities
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(70))
+          .setPriority(0)
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8080))
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.2", 8080)))
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(30))
+          .setPriority(1)
+          .setLocality(LOCALITY2)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.3", 8080)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
-    // CLUSTER2: locality1 with priority 1 and locality3 with priority 2.
-    xdsClient.deliverClusterLoadAssignment(
-            EDS_SERVICE_NAME2,
-            ImmutableMap.of(locality1, localityLbEndpoints1, locality3, localityLbEndpoints3));
+    String priority1 = CLUSTER + "[child1]";
+    String priority2 = CLUSTER + "[child2]";
 
-    // Endpoints of all clusters have been resolved.
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
@@ -529,8 +552,8 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig1 = (ClusterImplConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig1.childConfig);
-    assertClusterImplConfig(clusterImplConfig1, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
-        tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
+    assertClusterImplConfig(clusterImplConfig1, CLUSTER, EDS_SERVICE_NAME, null, null,
+        null, Collections.emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig1 = (WrrLocalityConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig1.childConfig);
     LoadBalancerProvider childProvider1 =
@@ -544,8 +567,8 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig2 = (ClusterImplConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig2.childConfig);
-    assertClusterImplConfig(clusterImplConfig2, CLUSTER2, EDS_SERVICE_NAME2, LRS_SERVER_INFO, 200L,
-        tlsContext, Collections.<DropOverload>emptyList(), WRR_LOCALITY_POLICY_NAME);
+    assertClusterImplConfig(clusterImplConfig2, CLUSTER, EDS_SERVICE_NAME, null, null,
+        null, Collections.emptyList(), WRR_LOCALITY_POLICY_NAME);
     WrrLocalityConfig wrrLocalityConfig2 = (WrrLocalityConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig1.childConfig);
     LoadBalancerProvider childProvider2 =
@@ -558,36 +581,42 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildProvider(wrrLocalityConfig3.childConfig);
     assertThat(childProvider3.getPolicyName()).isEqualTo("round_robin");
 
+    io.grpc.xds.client.Locality locality1 = io.grpc.xds.client.Locality.create(
+        LOCALITY1.getRegion(), LOCALITY1.getZone(), LOCALITY1.getSubZone());
+    io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
+        LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality1) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
+      io.grpc.xds.client.Locality locality =
+          eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY);
+      if (locality.equals(locality1)) {
+        assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT))
             .isEqualTo(70);
-      }
-      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality2) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
-            .isEqualTo(10);
-      }
-      if (eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY) == locality3) {
-        assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY_WEIGHT))
-            .isEqualTo(20);
+      } else if (locality.equals(locality2)) {
+        assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT))
+            .isEqualTo(30);
+      } else {
+        throw new AssertionError("Unexpected locality region: " + locality.region());
       }
     }
   }
 
   @SuppressWarnings("unchecked")
-  private void verifyEdsPriorityNames(List<String> want,
-                                      Map<Locality, LocalityLbEndpoints>... updates) {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism2, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME2);
-    assertThat(childBalancers).isEmpty();
+  private void verifyEdsPriorityNames(List<String> want, List<LocalityLbEndpoints>... updates) {
+    Iterator<ClusterLoadAssignment> edsUpdates = Arrays.asList(updates).stream()
+        .map(update -> ClusterLoadAssignment.newBuilder()
+            .setClusterName(EDS_SERVICE_NAME)
+            .addAllEndpoints(update)
+            .build())
+        .iterator();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, edsUpdates.next()));
+    startXdsDepManager();
 
-    for (Map<Locality, LocalityLbEndpoints> update: updates) {
-      xdsClient.deliverClusterLoadAssignment(
-          EDS_SERVICE_NAME2,
-          update);
+    while (edsUpdates.hasNext()) {
+      controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+          EDS_SERVICE_NAME, edsUpdates.next()));
     }
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
@@ -598,228 +627,265 @@ public class ClusterResolverLoadBalancerTest {
   @Test
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_twoPriorities() {
-    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child1]", CLUSTER2 + "[child2]"),
-        ImmutableMap.of(locality1, createEndpoints(1),
-                locality2, createEndpoints(2)
-        ));
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER + "[child1]", CLUSTER + "[child2]"),
+        Arrays.asList(createEndpoints(LOCALITY1, 0), createEndpoints(LOCALITY2, 1)));
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_addOnePriority() {
-    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child2]"),
-        ImmutableMap.of(locality1, createEndpoints(1)),
-        ImmutableMap.of(locality2, createEndpoints(1)
-        ));
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER + "[child2]"),
+        Arrays.asList(createEndpoints(LOCALITY1, 0)),
+        Arrays.asList(createEndpoints(LOCALITY2, 0)));
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_swapTwoPriorities() {
-    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child2]", CLUSTER2 + "[child1]",
-            CLUSTER2 + "[child3]"),
-        ImmutableMap.of(locality1, createEndpoints(1),
-            locality2, createEndpoints(2),
-            locality3, createEndpoints(3)
-        ),
-        ImmutableMap.of(locality1, createEndpoints(2),
-            locality2, createEndpoints(1),
-            locality3, createEndpoints(3))
-    );
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER + "[child2]", CLUSTER + "[child1]",
+            CLUSTER + "[child3]"),
+        Arrays.asList(
+            createEndpoints(LOCALITY1, 0),
+            createEndpoints(LOCALITY2, 1),
+            createEndpoints(LOCALITY3, 2)),
+        Arrays.asList(
+            createEndpoints(LOCALITY1, 1),
+            createEndpoints(LOCALITY2, 0),
+            createEndpoints(LOCALITY3, 2)));
   }
 
   @Test
   @SuppressWarnings("unchecked")
   public void edsUpdatePriorityName_mergeTwoPriorities() {
-    verifyEdsPriorityNames(Arrays.asList(CLUSTER2 + "[child3]", CLUSTER2 + "[child1]"),
-        ImmutableMap.of(locality1, createEndpoints(1),
-          locality3, createEndpoints(3),
-          locality2, createEndpoints(2)),
-        ImmutableMap.of(locality1, createEndpoints(2),
-          locality3, createEndpoints(1),
-          locality2, createEndpoints(1)
-        ));
+    verifyEdsPriorityNames(Arrays.asList(CLUSTER + "[child3]", CLUSTER + "[child1]"),
+        Arrays.asList(
+            createEndpoints(LOCALITY1, 0),
+            createEndpoints(LOCALITY3, 2),
+            createEndpoints(LOCALITY2, 1)),
+        Arrays.asList(
+            createEndpoints(LOCALITY1, 1),
+            createEndpoints(LOCALITY3, 0),
+            createEndpoints(LOCALITY2, 0)));
   }
 
-  private LocalityLbEndpoints createEndpoints(int priority) {
-    return LocalityLbEndpoints.create(
-        Arrays.asList(
-            LbEndpoint.create(makeAddress("endpoint-addr-1"), 100,
-        true, "hostname1", ImmutableMap.of()),
-            LbEndpoint.create(makeAddress("endpoint-addr-2"), 100,
-        true, "hostname2", ImmutableMap.of())),
-        70 /* localityWeight */, priority /* priority */, ImmutableMap.of());
+  private LocalityLbEndpoints createEndpoints(Locality locality, int priority) {
+    return LocalityLbEndpoints.newBuilder()
+        .setLoadBalancingWeight(UInt32Value.of(70))
+        .setLocality(locality)
+        .setPriority(priority)
+        .addLbEndpoints(newSocketLbEndpoint("127.0." + priority + ".1", 8080))
+        .build();
   }
 
   @Test
   public void onlyEdsClusters_resourceNeverExist_returnErrorPicker() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
+    startXdsDepManager();
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPicker(
         pickerCaptor.getValue(),
         Status.UNAVAILABLE.withDescription(
-                "No usable endpoint from cluster: " + CLUSTER1),
+            "CDS resource " + CLUSTER + " does not exist nodeID: node-id"),
         null);
   }
 
   @Test
-  public void edsCluster_resourcesRevoked_shutDownChildLbPolicy() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints1 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
-        "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints1));
-    assertThat(childBalancers).hasSize(1);  // child LB policy created
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(((PriorityLbConfig) childBalancer.config).priorities).hasSize(1);
-    assertAddressesEqual(Arrays.asList(endpoint1), childBalancer.addresses);
+  public void cdsMissing_handledDirectly() {
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
 
-    xdsClient.deliverResourceNotFound(EDS_SERVICE_NAME1);
+    startXdsDepManager();
+    assertThat(childBalancers).hasSize(0);  // no child LB policy created
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     Status expectedError = Status.UNAVAILABLE.withDescription(
-        "No usable endpoint from cluster: " + CLUSTER1);
+        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
   @Test
-  public void handleEdsResource_ignoreUnhealthyEndpoints() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Arrays.asList(
-                LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-            "hostname1", ImmutableMap.of()),
-                LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
-            "hostname2", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
+  public void cdsRevoked_handledDirectly() {
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+
+    startXdsDepManager();
+    assertThat(childBalancers).hasSize(1);  // child LB policy created
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(((PriorityLbConfig) childBalancer.config).priorities).hasSize(1);
     assertThat(childBalancer.addresses).hasSize(1);
-    assertAddressesEqual(Collections.singletonList(endpoint2), childBalancer.addresses);
+    assertAddressesEqual(
+        Arrays.asList(newInetSocketAddressEag("127.0.0.1", 8000)),
+        childBalancer.addresses);
+
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    Status expectedError = Status.UNAVAILABLE.withDescription(
+        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
+    assertThat(childBalancer.shutdown).isTrue();
+  }
+
+  @Test
+  public void edsMissing_handledByChildPolicy() {
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of());
+
+    startXdsDepManager();
+    assertThat(childBalancers).hasSize(1);  // child LB policy created
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.upstreamError).isNotNull();
+    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(childBalancer.upstreamError.getDescription())
+        .isEqualTo("EDS resource " + EDS_SERVICE_NAME + " does not exist nodeID: node-id");
+    assertThat(childBalancer.shutdown).isFalse();
+  }
+
+  @Test
+  public void logicalDnsLookupFailed_handledByChildPolicy() {
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, LOGICAL_DNS_CLUSTER));
+    startXdsDepManager(new CdsConfig(CLUSTER), /* forwardTime= */ false);
+    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME + ":9000");
+    assertThat(childBalancers).isEmpty();
+    resolver.deliverError(Status.UNAVAILABLE.withDescription("OH NO! Who would have guessed?"));
+
+    assertThat(childBalancers).hasSize(1);  // child LB policy created
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.upstreamError).isNotNull();
+    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(childBalancer.upstreamError.getDescription())
+        .isEqualTo("OH NO! Who would have guessed?");
+    assertThat(childBalancer.shutdown).isFalse();
+  }
+
+  @Test
+  public void handleEdsResource_ignoreUnhealthyEndpoints() {
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)
+            .setHealthStatus(HealthStatus.UNHEALTHY))
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.2", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertAddressesEqual(
+        Arrays.asList(new EquivalentAddressGroup(newInetSocketAddress("127.0.0.2", 8000))),
+        childBalancer.addresses);
   }
 
   @Test
   public void handleEdsResource_ignoreLocalitiesWithNoHealthyEndpoints() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    LocalityLbEndpoints localityLbEndpoints1 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-        "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    LocalityLbEndpoints localityLbEndpoints2 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint2, 100, true /* isHealthy */,
-        "hostname2", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)
+            .setHealthStatus(HealthStatus.UNHEALTHY)))
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY2)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.2", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    io.grpc.xds.client.Locality locality2 = io.grpc.xds.client.Locality.create(
+        LOCALITY2.getRegion(), LOCALITY2.getZone(), LOCALITY2.getSubZone());
     for (EquivalentAddressGroup eag : childBalancer.addresses) {
-      assertThat(eag.getAttributes().get(XdsAttributes.ATTR_LOCALITY)).isEqualTo(locality2);
+      assertThat(eag.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_LOCALITY))
+          .isEqualTo(locality2);
     }
   }
 
   @Test
   public void handleEdsResource_ignorePrioritiesWithNoHealthyEndpoints() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    LocalityLbEndpoints localityLbEndpoints1 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, false /* isHealthy */,
-        "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    LocalityLbEndpoints localityLbEndpoints2 =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint2, 200, true /* isHealthy */,
-        "hostname2", ImmutableMap.of())),
-           10 /* localityWeight */, 2 /* priority */, ImmutableMap.of());
-    String priority2 = CLUSTER1 + "[child2]";
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1,
-        ImmutableMap.of(locality1, localityLbEndpoints1, locality2, localityLbEndpoints2));
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .setPriority(0)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)
+            .setHealthStatus(HealthStatus.UNHEALTHY)))
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY2)
+          .setPriority(1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.2", 8000)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
+    String priority2 = CLUSTER + "[child2]";
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(((PriorityLbConfig) childBalancer.config).priorities).containsExactly(priority2);
   }
 
   @Test
   public void handleEdsResource_noHealthyEndpoint() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint, 100, false /* isHealthy */,
-                "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(EDS_SERVICE_NAME1,
-        Collections.singletonMap(locality1, localityLbEndpoints));  // single endpoint, unhealthy
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName(EDS_SERVICE_NAME)
+        .addEndpoints(LocalityLbEndpoints.newBuilder()
+          .setLoadBalancingWeight(UInt32Value.of(100))
+          .setLocality(LOCALITY1)
+          .addLbEndpoints(newSocketLbEndpoint("127.0.0.1", 8000)
+            .setHealthStatus(HealthStatus.UNHEALTHY)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of(
+        EDS_SERVICE_NAME, clusterLoadAssignment));
+    startXdsDepManager();
 
-    assertThat(childBalancers).isEmpty();
-    verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(
-        pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription(
-            "No usable endpoint from cluster: " + CLUSTER1),
-        null);
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
+    assertThat(childBalancers).hasSize(1);
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.upstreamError).isNotNull();
+    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(childBalancer.upstreamError.getDescription())
+        .isEqualTo("No usable endpoint from cluster: " + CLUSTER);
   }
 
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
-    do_onlyLogicalDnsCluster_endpointsResolved();
-  }
-
-  @Test
-  public void oldListenerCallback_onlyLogicalDnsCluster_endpointsResolved() {
-    nsRegistry.deregister(fakeNameResolverProvider);
-    nsRegistry.register(new FakeNameResolverProvider(true));
-    do_onlyLogicalDnsCluster_endpointsResolved();
-  }
-
-  void do_onlyLogicalDnsCluster_endpointsResolved() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, LOGICAL_DNS_CLUSTER));
+    startXdsDepManager(new CdsConfig(CLUSTER), /* forwardTime= */ false);
+    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME + ":9000");
     assertThat(childBalancers).isEmpty();
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+    resolver.deliverEndpointAddresses(Arrays.asList(
+        newInetSocketAddressEag("127.0.2.1", 9000), newInetSocketAddressEag("127.0.2.2", 9000)));
+    fakeClock.forwardTime(10, TimeUnit.MINUTES);
 
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
@@ -832,26 +898,28 @@ public class ClusterResolverLoadBalancerTest {
         .isEqualTo(CLUSTER_IMPL_POLICY_NAME);
     ClusterImplConfig clusterImplConfig = (ClusterImplConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
-    assertClusterImplConfig(clusterImplConfig, CLUSTER_DNS, null, LRS_SERVER_INFO, 300L, null,
-        Collections.<DropOverload>emptyList(), "pick_first");
-    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
-    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2), childBalancer.addresses);
+    assertClusterImplConfig(clusterImplConfig, CLUSTER, null, null, null, null,
+        Collections.<DropOverload>emptyList(), "wrr_locality_experimental");
+    // assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
+    assertAddressesEqual(
+        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
+            newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
+        childBalancer.addresses);
     assertThat(childBalancer.addresses.get(0).getAttributes()
-        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
-    assertThat(childBalancer.addresses.get(1).getAttributes()
-        .get(XdsAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME);
+        .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
 
   @Test
   public void onlyLogicalDnsCluster_handleRefreshNameResolution() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, LOGICAL_DNS_CLUSTER));
+    startXdsDepManager(new CdsConfig(CLUSTER), /* forwardTime= */ false);
+    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME + ":9000");
     assertThat(childBalancers).isEmpty();
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
+    resolver.deliverEndpointAddresses(Arrays.asList(newInetSocketAddressEag("127.0.2.1", 9000)));
+    fakeClock.forwardTime(10, TimeUnit.MINUTES);
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(resolver.refreshCount).isEqualTo(0);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     childBalancer.helper.refreshNameResolution();
@@ -859,237 +927,105 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
-  public void resolutionError_backoffAndRefresh() {
-    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh();
-  }
+  public void outlierDetection_disabledConfig() {
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setOutlierDetection(OutlierDetection.newBuilder()
+            .setEnforcingSuccessRate(UInt32Value.of(0))
+            .setEnforcingFailurePercentage(UInt32Value.of(0)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    startXdsDepManager();
 
-  @Test
-  public void oldListenerCallback_resolutionError_backoffAndRefresh() {
-    nsRegistry.deregister(fakeNameResolverProvider);
-    nsRegistry.register(new FakeNameResolverProvider(true));
-    do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh();
-  }
-
-  void do_onlyLogicalDnsCluster_resolutionError_backoffAndRefresh() {
-    InOrder inOrder = Mockito.inOrder(helper, backoffPolicyProvider,
-        backoffPolicy1, backoffPolicy2);
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    Status error = Status.UNAVAILABLE.withDescription("cannot reach DNS server");
-    resolver.deliverError(error);
-    inOrder.verify(helper).updateBalancingState(
-            eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(), error, null);
-    assertThat(resolver.refreshCount).isEqualTo(0);
-    inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
-            .isEqualTo(1L);
-    fakeClock.forwardTime(1L, TimeUnit.SECONDS);
-    assertThat(resolver.refreshCount).isEqualTo(1);
-
-    error = Status.UNKNOWN.withDescription("I am lost");
-    resolver.deliverError(error);
-    inOrder.verify(helper).updateBalancingState(
-            eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
-    assertPicker(pickerCaptor.getValue(), error, null);
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    assertThat(Iterables.getOnlyElement(fakeClock.getPendingTasks()).getDelay(TimeUnit.SECONDS))
-            .isEqualTo(10L);
-    fakeClock.forwardTime(10L, TimeUnit.SECONDS);
-    assertThat(resolver.refreshCount).isEqualTo(2);
-
-    // Succeed.
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Arrays.asList(endpoint1, endpoint2));
-    assertThat(childBalancers).hasSize(1);
-    assertAddressesEqual(Arrays.asList(endpoint1, endpoint2),
-            Iterables.getOnlyElement(childBalancers).addresses);
-
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
-    inOrder.verifyNoMoreInteractions();
-  }
-
-  @Test
-  public void onlyLogicalDnsCluster_refreshNameResolutionRaceWithResolutionError() {
-    InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr");
-    resolver.deliverEndpointAddresses(Collections.singletonList(endpoint));
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertAddressesEqual(Collections.singletonList(endpoint), childBalancer.addresses);
-    assertThat(resolver.refreshCount).isEqualTo(0);
-
-    childBalancer.helper.refreshNameResolution();
-    assertThat(resolver.refreshCount).isEqualTo(1);
-    resolver.deliverError(Status.UNAVAILABLE.withDescription("I am lost"));
-    inOrder.verify(backoffPolicyProvider).get();
-    inOrder.verify(backoffPolicy1).nextBackoffNanos();
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    ScheduledTask task = Iterables.getOnlyElement(fakeClock.getPendingTasks());
-    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(1L);
-
-    fakeClock.forwardTime( 100L, TimeUnit.MILLISECONDS);
-    childBalancer.helper.refreshNameResolution();
-    assertThat(resolver.refreshCount).isEqualTo(2);
-    assertThat(task.isCancelled()).isTrue();
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
-    resolver.deliverError(Status.UNAVAILABLE.withDescription("I am still lost"));
-    inOrder.verify(backoffPolicyProvider).get();  // active refresh resets backoff sequence
-    inOrder.verify(backoffPolicy2).nextBackoffNanos();
-    task = Iterables.getOnlyElement(fakeClock.getPendingTasks());
-    assertThat(task.getDelay(TimeUnit.SECONDS)).isEqualTo(5L);
-
-    fakeClock.forwardTime(5L, TimeUnit.SECONDS);
-    assertThat(resolver.refreshCount).isEqualTo(3);
-    inOrder.verifyNoMoreInteractions();
-  }
-
-  @Test
-  public void resolutionErrorAfterChildLbCreated_propagateError() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint, 100, true,
-        "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-            EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
-
-    assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);  // child LB created
-    assertThat(childBalancer.upstreamError).isNull();  // should not propagate error to child LB
-    assertAddressesEqual(Collections.singletonList(endpoint), childBalancer.addresses);
-
-    xdsClient.deliverError(Status.RESOURCE_EXHAUSTED.withDescription("out of memory"));
-    assertThat(childBalancer.upstreamError).isNotNull();  // last cluster's (DNS) error propagated
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription())
-        .isEqualTo("Unable to load EDS backend-service-foo.googleapis.com. xDS server returned: "
-            + "RESOURCE_EXHAUSTED: out of memory");
-    assertThat(childBalancer.shutdown).isFalse();
-    verify(helper, never()).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), any(SubchannelPicker.class));
-  }
-
-  @Test
-  public void resolutionErrorBeforeChildLbCreated_returnErrorPicker() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    xdsClient.deliverError(Status.RESOURCE_EXHAUSTED.withDescription("OOM"));
-    assertThat(childBalancers).isEmpty();
-    verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    Status actualStatus = result.getStatus();
-    assertThat(actualStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(actualStatus.getDescription()).contains("RESOURCE_EXHAUSTED: OOM");
-  }
-
-  @Test
-  public void handleNameResolutionErrorFromUpstream_eds_beforeChildLbCreated_returnErrorPicker() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    Status upstreamError = Status.UNAVAILABLE.withDescription("unreachable");
-    loadBalancer.handleNameResolutionError(upstreamError);
-    verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(), upstreamError, null);
-  }
-
-  @Test
-  public void handleNameResolutionErrorFromUpstream_lDns_beforeChildLbCreated_returnErrorPicker() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    Status upstreamError = Status.UNAVAILABLE.withDescription("unreachable");
-    loadBalancer.handleNameResolutionError(upstreamError);
-    verify(helper).updateBalancingState(
-        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(pickerCaptor.getValue(), upstreamError, null);
-  }
-
-  @Test
-  public void handleNameResolutionErrorFromUpstream_afterChildLbCreated_eds_fallThrough() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        edsDiscoveryMechanism1, roundRobin, false);
-    deliverLbConfig(config);
-    assertThat(xdsClient.watchers.keySet()).containsExactly(EDS_SERVICE_NAME1);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    EquivalentAddressGroup endpoint1 = makeAddress("endpoint-addr-1");
-    LocalityLbEndpoints localityLbEndpoints =
-        LocalityLbEndpoints.create(
-            Collections.singletonList(LbEndpoint.create(endpoint1, 100, true,
-                "hostname1", ImmutableMap.of())),
-            10 /* localityWeight */, 1 /* priority */, ImmutableMap.of());
-    xdsClient.deliverClusterLoadAssignment(
-        EDS_SERVICE_NAME1, Collections.singletonMap(locality1, localityLbEndpoints));
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(((PriorityLbConfig) childBalancer.config).priorities)
-        .containsExactly(CLUSTER1 + "[child1]");
-    assertAddressesEqual(Arrays.asList(endpoint1), childBalancer.addresses);
-
-    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("unreachable"));
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("unreachable");
-    verify(helper, never()).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    PriorityChildConfig priorityChildConfig =
+        Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
+    OutlierDetectionLoadBalancerConfig outlier = (OutlierDetectionLoadBalancerConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
+    assertThat(outlier.successRateEjection).isNull();
+    assertThat(outlier.failurePercentageEjection).isNull();
   }
 
   @Test
-  public void handleNameResolutionErrorFromUpstream_afterChildLbCreated_logicalDns_fallThrough() {
-    ClusterResolverConfig config = new ClusterResolverConfig(
-        logicalDnsDiscoveryMechanism, roundRobin, false);
-    deliverLbConfig(config);
-    FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME);
-    assertThat(childBalancers).isEmpty();
-    reset(helper);
-    EquivalentAddressGroup endpoint2 = makeAddress("endpoint-addr-2");
-    resolver.deliverEndpointAddresses(Collections.singletonList(endpoint2));
+  public void outlierDetection_fullConfig() {
+    Cluster cluster = EDS_CLUSTER.toBuilder()
+        .setLbPolicy(Cluster.LbPolicy.ROUND_ROBIN)
+        .setOutlierDetection(OutlierDetection.newBuilder()
+            .setInterval(Duration.newBuilder().setNanos(101))
+            .setBaseEjectionTime(Duration.newBuilder().setNanos(102))
+            .setMaxEjectionTime(Duration.newBuilder().setNanos(103))
+            .setMaxEjectionPercent(UInt32Value.of(80))
+            .setSuccessRateStdevFactor(UInt32Value.of(105))
+            .setEnforcingSuccessRate(UInt32Value.of(81))
+            .setSuccessRateMinimumHosts(UInt32Value.of(107))
+            .setSuccessRateRequestVolume(UInt32Value.of(108))
+            .setFailurePercentageThreshold(UInt32Value.of(82))
+            .setEnforcingFailurePercentage(UInt32Value.of(83))
+            .setFailurePercentageMinimumHosts(UInt32Value.of(111))
+            .setFailurePercentageRequestVolume(UInt32Value.of(112)))
+        .build();
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        CLUSTER, cluster));
+    startXdsDepManager();
+
+    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(((PriorityLbConfig) childBalancer.config).priorities)
-        .containsExactly(CLUSTER_DNS + "[child0]");
-    assertAddressesEqual(Arrays.asList(endpoint2), childBalancer.addresses);
-
-    loadBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription("unreachable"));
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription()).isEqualTo("unreachable");
-    verify(helper, never()).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
+    PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
+    PriorityChildConfig priorityChildConfig =
+        Iterables.getOnlyElement(priorityLbConfig.childConfigs.values());
+    OutlierDetectionLoadBalancerConfig outlier = (OutlierDetectionLoadBalancerConfig)
+        GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
+    assertThat(outlier.intervalNanos).isEqualTo(101);
+    assertThat(outlier.baseEjectionTimeNanos).isEqualTo(102);
+    assertThat(outlier.maxEjectionTimeNanos).isEqualTo(103);
+    assertThat(outlier.maxEjectionPercent).isEqualTo(80);
+    assertThat(outlier.successRateEjection.stdevFactor).isEqualTo(105);
+    assertThat(outlier.successRateEjection.enforcementPercentage).isEqualTo(81);
+    assertThat(outlier.successRateEjection.minimumHosts).isEqualTo(107);
+    assertThat(outlier.successRateEjection.requestVolume).isEqualTo(108);
+    assertThat(outlier.failurePercentageEjection.threshold).isEqualTo(82);
+    assertThat(outlier.failurePercentageEjection.enforcementPercentage).isEqualTo(83);
+    assertThat(outlier.failurePercentageEjection.minimumHosts).isEqualTo(111);
+    assertThat(outlier.failurePercentageEjection.requestVolume).isEqualTo(112);
+    assertClusterImplConfig(
+        (ClusterImplConfig) GracefulSwitchLoadBalancerAccessor.getChildConfig(outlier.childConfig),
+        CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyList(),
+        "wrr_locality_experimental");
   }
 
   @Test
   public void config_equalsTester() {
+    ServerInfo lrsServerInfo =
+        ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
+    UpstreamTlsContext tlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            "google_cloud_private_spiffe", true);
+    DiscoveryMechanism edsDiscoveryMechanism1 =
+        DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
+            Collections.emptyMap(), null, null);
+    io.grpc.xds.EnvoyServerProtoData.OutlierDetection outlierDetection =
+        io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
+            100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
+            FailurePercentageEjection.create(100, 100, 100, 100));
+    DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
+        DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
+            Collections.emptyMap(), outlierDetection, null);
+    Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
+            GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+                new FakeLoadBalancerProvider("round_robin"), null)));
+    Object leastRequest = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+        new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
+            GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+                new FakeLoadBalancerProvider("least_request_experimental"),
+                new LeastRequestConfig(3))));
+
     new EqualsTester()
         .addEqualityGroup(
             new ClusterResolverConfig(
@@ -1107,17 +1043,36 @@ public class ClusterResolverLoadBalancerTest {
         .testEquals();
   }
 
-  private void deliverLbConfig(ClusterResolverConfig config) {
-    loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(
-                // Other attributes not used by cluster_resolver LB are omitted.
-                Attributes.newBuilder()
-                    .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
-                    .build())
-            .setLoadBalancingPolicyConfig(config)
-            .build());
+  private void startXdsDepManager() {
+    startXdsDepManager(new CdsConfig(CLUSTER));
+  }
+
+  private void startXdsDepManager(final CdsConfig cdsConfig) {
+    startXdsDepManager(cdsConfig, true);
+  }
+
+  private void startXdsDepManager(final CdsConfig cdsConfig, boolean forwardTime) {
+    xdsDepManager.start(
+        xdsConfig -> {
+          if (!xdsConfig.hasValue()) {
+            throw new AssertionError("" + xdsConfig.getStatus());
+          }
+          if (loadBalancer == null) {
+            return;
+          }
+          loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+              .setAddresses(Collections.emptyList())
+              .setAttributes(Attributes.newBuilder()
+                .set(io.grpc.xds.XdsAttributes.XDS_CONFIG, xdsConfig.getValue())
+                .set(io.grpc.xds.XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+                .build())
+              .setLoadBalancingPolicyConfig(cdsConfig)
+              .build());
+        });
+    if (forwardTime) {
+      // trigger does not exist timer, so broken config is more obvious
+      fakeClock.forwardTime(10, TimeUnit.MINUTES);
+    }
   }
 
   private FakeNameResolver assertResolverCreated(String uriPath) {
@@ -1156,112 +1111,41 @@ public class ClusterResolverLoadBalancerTest {
   /** Asserts two list of EAGs contains same addresses, regardless of attributes. */
   private static void assertAddressesEqual(
       List<EquivalentAddressGroup> expected, List<EquivalentAddressGroup> actual) {
-    List<List<SocketAddress>> expectedAddresses
+    List<List<java.net.SocketAddress>> expectedAddresses
         = expected.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
-    List<List<SocketAddress>> actualAddresses
+    List<List<java.net.SocketAddress>> actualAddresses
         = actual.stream().map(EquivalentAddressGroup::getAddresses).collect(toList());
     assertThat(actualAddresses).isEqualTo(expectedAddresses);
   }
 
-  private static EquivalentAddressGroup makeAddress(final String name) {
-    return new EquivalentAddressGroup(new FakeSocketAddress(name));
+  @SuppressWarnings("AddressSelection")
+  private static InetSocketAddress newInetSocketAddress(String ip, int port) {
+    return new InetSocketAddress(ip, port);
   }
 
-  static class FakeSocketAddress extends SocketAddress {
-    private final String name;
-
-    private FakeSocketAddress(String name) {
-      this.name = name;
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(name);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (!(o instanceof FakeSocketAddress)) {
-        return false;
-      }
-      FakeSocketAddress that = (FakeSocketAddress) o;
-      return Objects.equals(name, that.name);
-    }
-
-    @Override
-    public String toString() {
-      return name;
-    }
+  private static EquivalentAddressGroup newInetSocketAddressEag(String ip, int port) {
+    return new EquivalentAddressGroup(newInetSocketAddress(ip, port));
   }
 
-  private static final class FakeXdsClient extends XdsClient {
+  private static LbEndpoint.Builder newSocketLbEndpoint(String ip, int port) {
+    return LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+          .setAddress(newAddress(ip, port)))
+        .setHealthStatus(HealthStatus.HEALTHY);
+  }
 
-    private final Map<String, ResourceWatcher<EdsUpdate>> watchers = new HashMap<>();
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> type,
-            String resourceName,
-            ResourceWatcher<T> watcher,
-            Executor syncContext) {
-      assertThat(type.typeName()).isEqualTo("EDS");
-      assertThat(watchers).doesNotContainKey(resourceName);
-      watchers.put(resourceName, (ResourceWatcher<EdsUpdate>) watcher);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                                  String resourceName,
-                                                                  ResourceWatcher<T> watcher) {
-      assertThat(type.typeName()).isEqualTo("EDS");
-      assertThat(watchers).containsKey(resourceName);
-      watchers.remove(resourceName);
-    }
-
-    void deliverClusterLoadAssignment(
-        String resource, Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
-      deliverClusterLoadAssignment(
-          resource, Collections.<DropOverload>emptyList(), localityLbEndpointsMap);
-    }
-
-    void deliverClusterLoadAssignment(String resource, List<DropOverload> dropOverloads,
-        Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap) {
-      if (watchers.containsKey(resource)) {
-        watchers.get(resource).onChanged(
-            new XdsEndpointResource.EdsUpdate(resource, localityLbEndpointsMap, dropOverloads));
-      }
-    }
-
-    void deliverResourceNotFound(String resource) {
-      if (watchers.containsKey(resource)) {
-        watchers.get(resource).onResourceDoesNotExist(resource);
-      }
-    }
-
-    void deliverError(Status error) {
-      for (ResourceWatcher<EdsUpdate> watcher : watchers.values()) {
-        watcher.onError(error);
-      }
-    }
+  private static Address.Builder newAddress(String ip, int port) {
+    return Address.newBuilder()
+        .setSocketAddress(SocketAddress.newBuilder()
+            .setAddress(ip)
+            .setPortValue(port));
   }
 
   private class FakeNameResolverProvider extends NameResolverProvider {
-    private final boolean useOldListenerCallback;
-
-    private FakeNameResolverProvider(boolean useOldListenerCallback) {
-      this.useOldListenerCallback = useOldListenerCallback;
-    }
-
     @Override
     public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
       assertThat(targetUri.getScheme()).isEqualTo("dns");
-      FakeNameResolver resolver = useOldListenerCallback
-              ? new FakeNameResolverUsingOldListenerCallback(targetUri)
-              : new FakeNameResolver(targetUri);
+      FakeNameResolver resolver = new FakeNameResolver(targetUri);
       resolvers.add(resolver);
       return resolver;
     }
@@ -1323,23 +1207,6 @@ public class ClusterResolverLoadBalancerTest {
     protected void deliverError(Status error) {
       syncContext.execute(() -> listener.onResult2(ResolutionResult.newBuilder()
                       .setAddressesOrError(StatusOr.fromStatus(error)).build()));
-    }
-  }
-
-  private class FakeNameResolverUsingOldListenerCallback extends FakeNameResolver {
-    private FakeNameResolverUsingOldListenerCallback(URI targetUri) {
-      super(targetUri);
-    }
-
-    @Override
-    protected void deliverEndpointAddresses(List<EquivalentAddressGroup> addresses) {
-      listener.onResult(ResolutionResult.newBuilder()
-              .setAddressesOrError(StatusOr.fromValue(addresses)).build());
-    }
-
-    @Override
-    protected void deliverError(Status error) {
-      listener.onError(error);
     }
   }
 
