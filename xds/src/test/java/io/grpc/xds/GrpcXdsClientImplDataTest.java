@@ -24,6 +24,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
@@ -140,7 +141,9 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
@@ -2638,6 +2641,42 @@ public class GrpcXdsClientImplDataTest {
 
     assertThat(result).isNotNull();
     assertThat(result.isHttp11ProxyAvailable()).isTrue();
+  }
+
+  @Test
+  public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+
+    ImmutableList<String> metricSpecs = ImmutableList.of(
+        "cpu_utilization",
+        "named_metrics.foo",
+        "unknown_metric_spec"
+    );
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-orca.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-orca.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .addAllLrsReportEndpointMetrics(metricSpecs)
+        .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+        cluster, null, LRS_SERVER_INFO, LoadBalancerRegistry.getDefaultRegistry());
+
+    BackendMetricPropagation propagationConfig = update.backendMetricPropagation();
+    assertThat(propagationConfig).isNotNull();
+    assertThat(propagationConfig.propagateCpuUtilization).isTrue();
+    assertThat(propagationConfig.propagateMemUtilization).isFalse();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("foo")).isTrue();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("bar")).isFalse();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
+        .isFalse();
+
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
   }
 
   @Test

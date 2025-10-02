@@ -100,6 +100,7 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.XdsInternalAttributes;
@@ -136,6 +137,8 @@ public class ClusterResolverLoadBalancerTest {
   private static final String CLUSTER = "cluster-foo.googleapis.com";
   private static final String EDS_SERVICE_NAME = "backend-service-foo.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
+  private final BackendMetricPropagation backendMetricPropagation =
+      BackendMetricPropagation.fromMetricSpecs(Arrays.asList("cpu_utilization"));
   private static final Cluster EDS_CLUSTER = Cluster.newBuilder()
       .setName(CLUSTER)
       .setType(Cluster.DiscoveryType.EDS)
@@ -331,6 +334,7 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER, EDS_SERVICE_NAME, null, null,
         null, Collections.emptyList(), "ring_hash_experimental");
+    // assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
     RingHashConfig ringHashConfig = (RingHashConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
@@ -895,6 +899,7 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER, null, null, null, null,
         Collections.<DropOverload>emptyList(), "wrr_locality_experimental");
+    // assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
     assertAddressesEqual(
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
@@ -1002,14 +1007,14 @@ public class ClusterResolverLoadBalancerTest {
             "google_cloud_private_spiffe", true);
     DiscoveryMechanism edsDiscoveryMechanism1 =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), null);
+            Collections.emptyMap(), null, null);
     io.grpc.xds.EnvoyServerProtoData.OutlierDetection outlierDetection =
         io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
             100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
             FailurePercentageEjection.create(100, 100, 100, 100));
     DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), outlierDetection);
+            Collections.emptyMap(), outlierDetection, null);
     Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
         new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
             GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
