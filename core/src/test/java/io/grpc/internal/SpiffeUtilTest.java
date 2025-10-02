@@ -338,7 +338,8 @@ public class SpiffeUtilTest {
       // Check the exception if 'kty' value differs from 'RSA'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_KTY)));
-      assertEquals("'kty' parameter must be 'RSA' but 'null' found." + DOMAIN_ERROR_MESSAGE,
+      assertEquals(
+          "'kty' parameter must be one of [RSA, EC] but 'null' found." + DOMAIN_ERROR_MESSAGE,
           iae.getMessage());
       // Check the exception if 'kid' has a value
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
