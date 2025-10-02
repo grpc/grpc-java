@@ -147,6 +147,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
+  @Deprecated
   @Test
   public void acceptResolvedAddresses() {
     SocketAddress socketAddress = new InetSocketAddress(8080);
@@ -241,6 +242,7 @@ public class PriorityLoadBalancerTest {
     verify(barBalancer0, never()).shutdown();
   }
 
+  @Deprecated
   @Test
   public void acceptResolvedAddresses_propagatesChildFailures() {
     LoadBalancerProvider lbProvider = new CannedLoadBalancer.Provider();
@@ -334,6 +336,7 @@ public class PriorityLoadBalancerTest {
     verify(fooLb1).handleNameResolutionError(status);
   }
 
+  @Deprecated
   @Test
   public void typicalPriorityFailOverFlow() {
     PriorityChildConfig priorityChildConfig0 =
@@ -479,6 +482,7 @@ public class PriorityLoadBalancerTest {
     verify(balancer3).shutdown();
   }
 
+  @Deprecated
   @Test
   public void idleToConnectingDoesNotTriggerFailOver() {
     PriorityChildConfig priorityChildConfig0 =
@@ -515,6 +519,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooHelpers).hasSize(1);
   }
 
+  @Deprecated
   @Test
   public void connectingResetFailOverIfSeenReadyOrIdleSinceTransientFailure() {
     PriorityChildConfig priorityChildConfig0 =
@@ -556,6 +561,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooHelpers).hasSize(2);
   }
 
+  @Deprecated
   @Test
   public void failoverTimerNotRestartedOnDupConnecting() {
     InOrder inOrder = inOrder(helper);
@@ -662,6 +668,7 @@ public class PriorityLoadBalancerTest {
     assertThat(fooHelpers).hasSize(1);
   }
 
+  @Deprecated
   @Test
   public void typicalPriorityFailOverFlowWithIdleUpdate() {
     PriorityChildConfig priorityChildConfig0 =
@@ -777,6 +784,7 @@ public class PriorityLoadBalancerTest {
     verify(balancer3).shutdown();
   }
 
+  @Deprecated
   @Test
   public void failover_propagatesChildFailures() {
     LoadBalancerProvider lbProvider = new CannedLoadBalancer.Provider();
@@ -854,6 +862,7 @@ public class PriorityLoadBalancerTest {
     verify(helper).refreshNameResolution();
   }
 
+  @Deprecated
   @Test
   public void raceBetweenShutdownAndChildLbBalancingStateUpdate() {
     PriorityChildConfig priorityChildConfig0 =
@@ -879,6 +888,7 @@ public class PriorityLoadBalancerTest {
     verifyNoMoreInteractions(helper);
   }
 
+  @Deprecated
   @Test
   public void noDuplicateOverallBalancingStateUpdate() {
     FakeLoadBalancerProvider fakeLbProvider = new FakeLoadBalancerProvider();
@@ -981,6 +991,7 @@ public class PriorityLoadBalancerTest {
       this.helper = helper;
     }
 
+    @Deprecated
     @Override
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.updateBalancingState(
