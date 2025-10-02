@@ -64,6 +64,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   private Attributes attrs;
   private final boolean useGetForSafeMethods;
   private final boolean usePutForIdempotentMethods;
+  private final int readBufferSize;
   private final StreamBuilderFactory streamFactory;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
@@ -92,7 +93,8 @@ class CronetClientTransport implements ConnectionClientTransport {
       boolean alwaysUsePut,
       TransportTracer transportTracer,
       boolean useGetForSafeMethods,
-      boolean usePutForIdempotentMethods) {
+      boolean usePutForIdempotentMethods,
+      int readBufferSize) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.authority = authority;
@@ -108,6 +110,7 @@ class CronetClientTransport implements ConnectionClientTransport {
         .build();
     this.useGetForSafeMethods = useGetForSafeMethods;
     this.usePutForIdempotentMethods = usePutForIdempotentMethods;
+    this.readBufferSize = readBufferSize;
   }
 
   @Override
@@ -132,7 +135,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
           alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer, useGetForSafeMethods,
-          usePutForIdempotentMethods);
+          usePutForIdempotentMethods, readBufferSize);
 
       @Override
       public void run() {
