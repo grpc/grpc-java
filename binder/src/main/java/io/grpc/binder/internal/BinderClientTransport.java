@@ -73,6 +73,8 @@ public final class BinderClientTransport extends BinderTransport
   private final Executor offloadExecutor;
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
+
+  @GuardedBy("this")
   private final ClientHandshake handshake;
 
   /** Number of ongoing calls which keep this transport "in-use". */
@@ -356,17 +358,17 @@ public final class BinderClientTransport extends BinderTransport
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
 
-  class LegacyClientHandshake extends ClientHandshake {
+  private final class LegacyClientHandshake implements ClientHandshake {
     @Override
     @MainThread
-    @GuardedBy("BinderClientTransport.this")
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
     public void onBound(OneWayBinderProxy binder) {
       sendSetupTransaction(binder);
     }
 
     @Override
     @BinderThread
-    @GuardedBy("BinderClientTransport.this")
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
     public void handleSetupTransport(OneWayBinderProxy binder) {
       int remoteUid = Binder.getCallingUid();
       restrictIncomingBinderToCallsFrom(remoteUid);
@@ -436,22 +438,20 @@ public final class BinderClientTransport extends BinderTransport
    *
    * <p>Supports a clean migration away from the legacy approach, one client at a time.
    */
-  abstract class ClientHandshake {
+  private interface ClientHandshake {
     /**
      * Notifies the implementation that the binding has succeeded and we are now connected to the
      * server's "endpoint" which can be reached at 'endpointBinder'.
      */
-    @GuardedBy("BinderClientTransport.this")
     @MainThread
-    abstract void onBound(OneWayBinderProxy endpointBinder);
+    void onBound(OneWayBinderProxy endpointBinder);
 
     /**
      * Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction from a
      * server that can be reached at 'serverBinder'.
      */
-    @GuardedBy("BinderClientTransport.this")
     @BinderThread
-    abstract void handleSetupTransport(OneWayBinderProxy serverBinder);
+    void handleSetupTransport(OneWayBinderProxy serverBinder);
   }
 
   private static ClientStream newFailingClientStream(
