@@ -309,33 +309,58 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   }
 
   /**
-   * Specifies how and when to authorize a server against this channel's {@link SecurityPolicy}.
+   * Specifies how and when to authorize a server against this Channel's {@link SecurityPolicy}.
    *
-   * <p>The legacy authorization strategy considers the UID of the server *process* we connect to.
-   * This is problematic for services using the `android:isolatedProcess` feature which runs them
-   * under a different UID and without any of the privileges of the hosting app. The new and
-   * improved strategy uses the server *app's* UID instead, which lets clients authorize all types
-   * of servers in the same way, isolated or not.
-   *
-   * <p>The new and improved authorization strategy performs SecurityPolicy checks earlier the
-   * handshake, which allows subsequent transactions over the connection to proceed securely without
-   * further UID checks.
+   * <p>This method selects the original "legacy" authorization strategy, which is no longer
+   * preferred for two reasons. First, the legacy strategy considers the UID of the server *process*
+   * we connect to. This is problematic for services using the `android:isolatedProcess` attribute,
+   * which runs them under a different UID and without any of the privileges of the hosting app.
+   * Second, the legacy authorization strategy performs SecurityPolicy checks later in the
+   * handshake, which means the calling UID must be rechecked on every subsequent transaction. For
+   * these reasons, prefer {@link #useV2AuthStrategy()} instead.
    *
    * <p>The server does not know which authorization strategy a client is using. Both strategies
    * work with all versions of the grpc-binder server.
    *
-   * <p>The default value of this property is true but it will become false in a future release.
-   * Clients that require a particular authorization strategy should configure it explicitly using
-   * this method rather than relying on the default. Eventually support for the legacy behavior will
-   * be removed.
-   *
-   * <p>If moving to the new authorization strategy causes a robolectric test to fail, ensure your
-   * fake service component is registered with `ShadowPackageManager` using `addOrUpdateService()`.
+   * <p>The default authorization strategy is unspecified. Clients that require the legacy strategy
+   * should configure it explicitly using this method. Eventually support for the legacy strategy
+   * will be removed.
    *
    * @return this
    */
-  public BinderChannelBuilder useLegacyAuthStrategy(boolean useLegacyAuthStrategy) {
-    transportFactoryBuilder.setUseLegacyAuthStrategy(useLegacyAuthStrategy);
+  public BinderChannelBuilder useLegacyAuthStrategy() {
+    transportFactoryBuilder.setUseLegacyAuthStrategy(true);
+    return this;
+  }
+
+  /**
+   * Specifies how and when to authorize a server against this Channel's {@link SecurityPolicy}.
+   *
+   * <p>This method selects the v2 authorization strategy. It improves on {@link
+   * #useLegacyAuthStrategy()}, by considering the UID of the server *app* we connect to, rather
+   * than the server *process*. This allows clients to connect to services using the
+   * `android:isolatedProcess` attribute, which runs them under a different ephemeral UID and
+   * without any of the privileges of the hosting app.
+   *
+   * <p>Furthermore, the v2 authorization strategy performs SecurityPolicy checks earlier the
+   * handshake, which allows subsequent transactions over the connection to proceed securely without
+   * further UID checks. For these reasons, clients should prefer the v2 strategy.
+   *
+   * <p>The server does not know which authorization strategy a client is using. Both strategies
+   * work with all versions of the grpc-binder server.
+   *
+   * <p>The default authorization strategy is unspecified. Clients that require the v2 strategy
+   * should configure it explicitly using this method. Eventually support for the legacy strategy
+   * will be removed.
+   *
+   * <p>If moving to the new authorization strategy causes a robolectric test to fail, ensure your
+   * fake Service component is registered with `ShadowPackageManager` using `addOrUpdateService()`.
+   *
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12397")
+  public BinderChannelBuilder useV2AuthStrategy() {
+    transportFactoryBuilder.setUseLegacyAuthStrategy(false);
     return this;
   }
 
