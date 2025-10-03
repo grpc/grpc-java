@@ -324,7 +324,7 @@ public class SpiffeUtilTest {
       assertEquals(2, tb_ec.getBundleMap().get("test.example.com").size());
       Optional<SpiffeId> spiffeId_ec =
           SpiffeUtil.extractSpiffeId(tb_ec.getBundleMap().get("example.com")
-                                         toArray(new X509Certificate[0]));
+                                         .toArray(new X509Certificate[0]));
       assertTrue(spiffeId_ec.isPresent());
       assertEquals("foo.bar.com", spiffeId_ec.get().getTrustDomain());
     }
