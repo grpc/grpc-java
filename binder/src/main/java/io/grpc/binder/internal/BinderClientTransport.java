@@ -131,9 +131,7 @@ public final class BinderClientTransport extends BinderTransport
             factory.sourceContext,
             factory.channelCredentials,
             targetAddress.asBindIntent(),
-            targetAddress.getTargetUser() != null
-                ? targetAddress.getTargetUser()
-                : factory.defaultTargetUserHandle,
+            targetAddress.getTargetUser(),
             factory.bindServiceFlags.toInteger(),
             this);
   }
