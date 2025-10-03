@@ -321,10 +321,10 @@ public class SpiffeUtilTest {
       assertEquals(0, tb_ec.getBundleMap().get("test.google.com.au").size());
       assertEquals(1, tb_ec.getBundleMap().get("example.com").size());
       assertEquals(2, tb_ec.getBundleMap().get("test.example.com").size());
-      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(tb_ec.getBundleMap().get("example.com")
+      Optional<SpiffeId> spiffeId_ec = SpiffeUtil.extractSpiffeId(tb_ec.getBundleMap().get("example.com")
               .toArray(new X509Certificate[0]));
-      assertTrue(spiffeId.isPresent());
-      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+      assertTrue(spiffeId_ec.isPresent());
+      assertEquals("foo.bar.com", spiffeId_ec.get().getTrustDomain());
     }
 
     @Test
