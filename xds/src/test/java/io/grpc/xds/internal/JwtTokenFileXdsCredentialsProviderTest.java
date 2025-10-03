@@ -24,11 +24,8 @@ import static org.junit.Assert.fail;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.InternalServiceProviders;
 import io.grpc.xds.XdsCredentialsProvider;
-import java.io.File;
 import java.util.Map;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,9 +34,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class JwtTokenFileXdsCredentialsProviderTest {
   private JwtTokenFileXdsCredentialsProvider provider = new JwtTokenFileXdsCredentialsProvider();
-
-  @Rule
-  public TemporaryFolder tempFolder = new TemporaryFolder();
 
   @Test
   public void provided() {
@@ -70,16 +64,14 @@ public class JwtTokenFileXdsCredentialsProviderTest {
 
   @Test
   public void callCredentialsWhenWrongConfig() {
-    Map<String, ?> jsonConfig = ImmutableMap.of("jwt_token_file", "/tmp/not-exisiting-file.txt");
+    Map<String, ?> jsonConfig = ImmutableMap.of("not_expected_config_key", "some_value");
     assertNull(provider.newCallCredentials(jsonConfig));
   }
 
   @Test
   public void callCredentialsWhenExpectedConfig() throws Exception {
-    File createdFile = tempFolder.newFile(new String("existing-file.txt"));
-    Map<String, ?> jsonConfig = ImmutableMap.of("jwt_token_file", createdFile.toString());
+    Map<String, ?> jsonConfig = ImmutableMap.of("jwt_token_file", "/path/to/jwt.token");
     assertEquals("io.grpc.auth.GoogleAuthLibraryCallCredentials",
         provider.newCallCredentials(jsonConfig).getClass().getName());
-    createdFile.delete();
   }
 }

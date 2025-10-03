@@ -20,15 +20,17 @@ import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.XdsCredentialsProvider;
-import io.grpc.xds.internal.JwtTokenFileCallCredentials;
-import java.io.File;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A wrapper class that supports {@link JwtTokenFileXdsCredentialsProvider} for
  * Xds by implementing {@link XdsCredentialsProvider}.
  */
 public final class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProvider {
+  private static final Logger logger = Logger.getLogger(
+      JwtTokenFileXdsCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "jwt_token_file";
 
   @Override
@@ -43,7 +45,8 @@ public final class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProv
     }
 
     String jwtTokenPath = JsonUtil.getString(jsonConfig, getName());
-    if (jwtTokenPath == null || !new File(jwtTokenPath).isFile()) {
+    if (jwtTokenPath == null) {
+      logger.log(Level.WARNING, "jwt_token_file credential requires jwt_token_file in the config");
       return null;
     }
 

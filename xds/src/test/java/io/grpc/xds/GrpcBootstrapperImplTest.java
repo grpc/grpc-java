@@ -41,16 +41,13 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
-import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -68,9 +65,6 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapConfigFromSysProp;
   private boolean originalExperimentalXdsFallbackFlag;
   private boolean originalExperimentalXdsBootstrapCallCredsFlag;
-
-  @Rule
-  public TemporaryFolder tempFolder = new TemporaryFolder();
 
   @Before
   public void setUp() {
@@ -131,8 +125,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -234,8 +227,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -306,8 +298,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -602,8 +593,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -625,8 +615,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -648,8 +637,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -672,8 +660,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
@@ -695,8 +682,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -941,8 +927,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(
-        InsecureChannelCredentials.class);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
   }
 
   @Test
@@ -976,42 +961,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
-  public void parseSupportedCallCredentialsWithJwtFileMissingConfig() throws Exception {
-    String rawData = "{\n"
-        + "  \"xds_servers\": [\n"
-        + "    {\n"
-        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
-        + "      \"channel_creds\": [\n"
-        + "        {\"type\": \"insecure\"}\n"
-        + "      ],\n"
-        + "      \"call_creds\": [\n"
-        + "        {\n"
-        + "          \"type\": \"jwt_token_file\",\n"
-        + "          \"config\": {\n"
-        + "            \"jwt_token_file\": \"/path/to/file\"\n"
-        + "          }\n"
-        + "        }\n"
-        + "      ]\n"
-        + "    }\n"
-        + "  ]\n"
-        + "}";
-    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
-    Exception ex = assertThrows(XdsInitializationException.class, () -> {
-      bootstrapper.bootstrap();
-    });
-
-    String expectedMsg = "Invalid bootstrap: server "
-        + SERVER_URI + " with invalid 'config' for jwt_token_file 'call_creds'";
-    String actualMsg = ex.getMessage();
-
-    assertEquals(expectedMsg, actualMsg);
-  }
-
-  @Test
   public void parseTwoSupportedCallCredentialsWithValidConfig() throws Exception {
-    File jwtToken_1 = tempFolder.newFile(new String("jwt-token-1.txt"));
-    File jwtToken_2 = tempFolder.newFile(new String("jwt-token-2.txt"));
-
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
         + "    {\n"
@@ -1023,13 +973,13 @@ public class GrpcBootstrapperImplTest {
         + "        {\n"
         + "          \"type\": \"jwt_token_file\",\n"
         + "          \"config\": {\n"
-        + "            \"jwt_token_file\": \"" + jwtToken_1.getAbsolutePath() + "\"\n"
+        + "            \"jwt_token_file\": \"/first/path/to/jwt.token\"\n"
         + "          }\n"
         + "        },\n"
         + "        {\n"
         + "          \"type\": \"jwt_token_file\",\n"
         + "          \"config\": {\n"
-        + "            \"jwt_token_file\": \"" + jwtToken_2.getAbsolutePath() + "\"\n"
+        + "            \"jwt_token_file\": \"/second/path/to/jwt.token\"\n"
         + "          }\n"
         + "        }\n"
         + "      ]\n"
@@ -1045,9 +995,6 @@ public class GrpcBootstrapperImplTest {
     CallCredentials callCredentials =
         ((CompositeChannelCredentials) serverInfo.implSpecificConfig()).getCallCredentials();
     assertThat(callCredentials).isInstanceOf(CompositeCallCredentials.class);
-
-    jwtToken_1.delete();
-    jwtToken_2.delete();
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
