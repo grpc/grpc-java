@@ -218,6 +218,7 @@ public class SpiffeUtilTest {
     private static final String SERVER_0_PEM_FILE = "server0.pem";
     private static final String TEST_DIRECTORY_PREFIX = "io/grpc/internal/";
     private static final String SPIFFE_TRUST_BUNDLE = "spiffebundle.json";
+    private static final String SPIFFE_TRUST_BUNDLE_WITH_EC_KTY = "spiffebundle_ec.json";
     private static final String SPIFFE_TRUST_BUNDLE_MALFORMED = "spiffebundle_malformed.json";
     private static final String SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT =
         "spiffebundle_corrupted_cert.json";
@@ -308,6 +309,19 @@ public class SpiffeUtilTest {
       assertEquals(1, tb.getBundleMap().get("example.com").size());
       assertEquals(2, tb.getBundleMap().get("test.example.com").size());
       Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(tb.getBundleMap().get("example.com")
+              .toArray(new X509Certificate[0]));
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+
+      SpiffeBundle tb_ec = SpiffeUtil.loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WITH_EC_KTY));
+      assertEquals(2, tb_ec.getSequenceNumbers().size());
+      assertEquals(12035488L, (long) tb_ec.getSequenceNumbers().get("example.com"));
+      assertEquals(-1L, (long) tb_ec.getSequenceNumbers().get("test.example.com"));
+      assertEquals(3, tb_ec.getBundleMap().size());
+      assertEquals(0, tb_ec.getBundleMap().get("test.google.com.au").size());
+      assertEquals(1, tb_ec.getBundleMap().get("example.com").size());
+      assertEquals(2, tb_ec.getBundleMap().get("test.example.com").size());
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(tb_ec.getBundleMap().get("example.com")
               .toArray(new X509Certificate[0]));
       assertTrue(spiffeId.isPresent());
       assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
