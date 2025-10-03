@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.xds.internal.JwtTokenFileXdsCallCredentialsProvider;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -40,7 +41,7 @@ final class XdsCallCredentialsRegistry {
    */
   public static synchronized XdsCallCredentialsRegistry getDefaultRegistry() {
     if (instance == null) {
-      instance = newRegistry().register();
+      instance = newRegistry().register(new JwtTokenFileXdsCallCredentialsProvider());
     }
     return instance;
   }

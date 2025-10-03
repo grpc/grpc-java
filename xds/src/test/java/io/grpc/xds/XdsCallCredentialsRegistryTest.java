@@ -21,6 +21,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.when;
 
+import io.grpc.xds.internal.JwtTokenFileXdsCallCredentialsProvider;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
@@ -88,6 +89,8 @@ public class XdsCallCredentialsRegistryTest {
   public void defaultRegistry_providers() {
     Map<String, XdsCallCredentialsProvider> providers =
             XdsCallCredentialsRegistry.getDefaultRegistry().providers();
-    assertThat(providers).hasSize(0);
+    assertThat(providers).hasSize(1);
+    assertThat(providers.get("jwt_token_file").getClass())
+        .isEqualTo(JwtTokenFileXdsCallCredentialsProvider.class);
   }
 }

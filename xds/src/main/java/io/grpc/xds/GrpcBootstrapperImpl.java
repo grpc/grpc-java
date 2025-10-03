@@ -177,7 +177,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
         continue;
       }
 
-      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+      XdsCallCredentialsProvider provider =  XdsCallCredentialsRegistry.getDefaultRegistry()
           .getProvider(type);
       if (provider == null) {
         continue;

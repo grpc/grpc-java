@@ -17,26 +17,20 @@
 package io.grpc.xds.internal;
 
 import io.grpc.CallCredentials;
-import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.XdsCredentialsProvider;
+import io.grpc.xds.XdsCallCredentialsProvider;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A wrapper class that supports {@link JwtTokenFileXdsCredentialsProvider} for
- * Xds by implementing {@link XdsCredentialsProvider}.
+ * A wrapper class that supports {@link JwtTokenFileXdsCallCredentialsProvider} for
+ * xDS by implementing {@link XdsCredentialsProvider}.
  */
-public final class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProvider {
+public final class JwtTokenFileXdsCallCredentialsProvider extends XdsCallCredentialsProvider {
   private static final Logger logger = Logger.getLogger(
-      JwtTokenFileXdsCredentialsProvider.class.getName());
+      JwtTokenFileXdsCallCredentialsProvider.class.getName());
   private static final String CREDS_NAME = "jwt_token_file";
-
-  @Override
-  protected ChannelCredentials newChannelCredentials(Map<String, ?> jsonConfig) {
-    return null;
-  }
 
   @Override
   protected CallCredentials newCallCredentials(Map<String, ?> jsonConfig) {
@@ -57,15 +51,4 @@ public final class JwtTokenFileXdsCredentialsProvider extends XdsCredentialsProv
   protected String getName() {
     return CREDS_NAME;
   }
-
-  @Override
-  public boolean isAvailable() {
-    return true;
-  }
-
-  @Override
-  public int priority() {
-    return 5;
-  }
-
 }

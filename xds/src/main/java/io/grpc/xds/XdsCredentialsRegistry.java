@@ -112,7 +112,7 @@ final class XdsCredentialsRegistry {
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "
-            + "TLS, Insecure and JWT token file. This is probably due to a broken build.");
+            + "TLS and Insecure. This is probably due to a broken build.");
       }
       instance = new XdsCredentialsRegistry();
       for (XdsCredentialsProvider provider : providerList) {

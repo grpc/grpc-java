@@ -18,44 +18,19 @@ package io.grpc.xds.internal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
-import io.grpc.InternalServiceProviders;
-import io.grpc.xds.XdsCredentialsProvider;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 
-/** Unit tests for {@link JwtTokenFileXdsCredentialsProvider}. */
+/** Unit tests for {@link JwtTokenFileXdsCallCredentialsProvider}. */
 @RunWith(JUnit4.class)
-public class JwtTokenFileXdsCredentialsProviderTest {
-  private JwtTokenFileXdsCredentialsProvider provider = new JwtTokenFileXdsCredentialsProvider();
-
-  @Test
-  public void provided() {
-    for (XdsCredentialsProvider current
-        : InternalServiceProviders.getCandidatesViaServiceLoader(
-          XdsCredentialsProvider.class, getClass().getClassLoader())) {
-      if (current instanceof JwtTokenFileXdsCredentialsProvider) {
-        return;
-      }
-    }
-    fail("ServiceLoader unable to load JwtTokenFileXdsCredentialsProvider");
-  }
-
-  @Test
-  public void isAvailable() {
-    assertTrue(provider.isAvailable());
-  }
-
-  @Test
-  public void channelCredentials() {
-    assertNull(provider.newChannelCredentials(null));
-  }
+public class JwtTokenFileXdsCallCredentialsProviderTest {
+  private JwtTokenFileXdsCallCredentialsProvider provider =
+      new JwtTokenFileXdsCallCredentialsProvider();
 
   @Test
   public void callCredentialsWhenNullConfig() {

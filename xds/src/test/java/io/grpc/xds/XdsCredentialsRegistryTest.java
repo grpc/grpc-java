@@ -22,13 +22,11 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableMap;
-import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
 import io.grpc.xds.XdsCredentialsRegistry;
 import io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider;
 import io.grpc.xds.internal.InsecureXdsCredentialsProvider;
-import io.grpc.xds.internal.JwtTokenFileXdsCredentialsProvider;
 import io.grpc.xds.internal.TlsXdsCredentialsProvider;
 import java.util.Map;
 import org.junit.Test;
@@ -137,13 +135,11 @@ public class XdsCredentialsRegistryTest {
   public void defaultRegistry_providers() {
     Map<String, XdsCredentialsProvider> providers =
             XdsCredentialsRegistry.getDefaultRegistry().providers();
-    assertThat(providers).hasSize(4);
+    assertThat(providers).hasSize(3);
     assertThat(providers.get("google_default").getClass())
         .isEqualTo(GoogleDefaultXdsCredentialsProvider.class);
     assertThat(providers.get("insecure").getClass())
         .isEqualTo(InsecureXdsCredentialsProvider.class);
-    assertThat(providers.get("jwt_token_file").getClass())
-        .isEqualTo(JwtTokenFileXdsCredentialsProvider.class);
     assertThat(providers.get("tls").getClass())
         .isEqualTo(TlsXdsCredentialsProvider.class);
   }
@@ -187,11 +183,6 @@ public class XdsCredentialsRegistryTest {
 
     @Override
     public ChannelCredentials newChannelCredentials(Map<String, ?> config) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public CallCredentials newCallCredentials(Map<String, ?> config) {
       throw new UnsupportedOperationException();
     }
   }
