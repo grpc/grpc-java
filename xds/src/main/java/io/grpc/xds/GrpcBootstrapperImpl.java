@@ -166,34 +166,37 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   private static CallCredentials parseCallCredentials(List<Map<String, ?>> jsonList,
                                                       String serverUri)
       throws XdsInitializationException {
-    CallCredentials callCredentials = null;
-    if (xdsBootstrapCallCredsEnabled) {
-      for (Map<String, ?> callCreds : jsonList) {
-        String type = JsonUtil.getString(callCreds, "type");
-        if (type != null) {
-          XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
-              .getProvider(type);
-          if (provider != null) {
-            Map<String, ?> config = JsonUtil.getObject(callCreds, "config");
-            if (config == null) {
-              config = ImmutableMap.of();
-            }
-            CallCredentials parsedCallCredentials = provider.newCallCredentials(config);
-            if (parsedCallCredentials == null) {
-              throw new XdsInitializationException(
-                  "Invalid bootstrap: server " + serverUri + " with invalid 'config' for " + type
-                  + " 'call_creds'");
-            }
+    if (!xdsBootstrapCallCredsEnabled) {
+      return null;
+    }
 
-            if (callCredentials == null) {
-              callCredentials = parsedCallCredentials;
-            } else {
-              callCredentials = new CompositeCallCredentials(
-                  callCredentials, parsedCallCredentials);
-            }
-          }
-        }
+    CallCredentials callCredentials = null;
+    for (Map<String, ?> callCreds : jsonList) {
+      String type = JsonUtil.getString(callCreds, "type");
+      if (type == null) {
+        continue;
       }
+
+      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      if (provider == null) {
+        continue;
+      }
+
+      Map<String, ?> config = JsonUtil.getObject(callCreds, "config");
+      if (config == null) {
+        config = ImmutableMap.of();
+      }
+      CallCredentials parsedCallCredentials = provider.newCallCredentials(config);
+      if (parsedCallCredentials == null) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " with invalid 'config' for " + type
+            + " 'call_creds'");
+      }
+
+      callCredentials = (callCredentials == null)
+          ? parsedCallCredentials
+          : new CompositeCallCredentials(callCredentials, parsedCallCredentials);
     }
     return callCredentials;
   }
