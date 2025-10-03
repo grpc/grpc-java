@@ -149,7 +149,7 @@ plugins {
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.25.5"
+    artifact = "com.google.protobuf:protoc:3.25.8"
   }
   plugins {
     grpc {
