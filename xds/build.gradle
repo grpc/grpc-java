@@ -13,9 +13,6 @@ description = "gRPC: XDS plugin"
 
 sourceSets {
     thirdparty {
-        java {
-            srcDir "${projectDir}/third_party/zero-allocation-hashing/main/java"
-        }
         proto {
             srcDir 'third_party/cel-spec/src/main/proto'
             srcDir 'third_party/envoy/src/main/proto'
@@ -26,11 +23,6 @@ sourceSets {
     }
     main {
         output.classesDirs.from(sourceSets.thirdparty.output.classesDirs)
-    }
-    test {
-        java {
-            srcDir "${projectDir}/third_party/zero-allocation-hashing/test/java"
-        }
     }
 }
 
@@ -50,6 +42,7 @@ dependencies {
             project(':grpc-util'),
             project(':grpc-services'),
             project(':grpc-auth'),
+            project(':grpc-third-party:zero-allocation-hashing'),
             project(path: ':grpc-alts', configuration: 'shadow'),
             libraries.guava,
             libraries.gson,

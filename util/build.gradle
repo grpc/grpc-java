@@ -19,6 +19,7 @@ dependencies {
     api project(':grpc-api')
 
     implementation project(':grpc-core'),
+            project(':grpc-third-party:zero-allocation-hashing'),
             libraries.animalsniffer.annotations,
             libraries.guava
     testImplementation libraries.guava.testlib,

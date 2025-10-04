@@ -1,0 +1,26 @@
+load("@rules_java//java:defs.bzl", "java_binary", "java_library", "java_test")
+
+java_library(
+    name = "zero-allocation-hashing",
+    srcs = [
+        "src/main/java/io/grpc/tp/zah/XxHash64.java",
+    ],
+    deps = [
+        "@maven//:com_google_guava_guava",
+    ],
+    visibility = [
+        "//xds:__pkg__",
+        "//util:__pkg__",
+    ],
+)
+
+java_test(
+    name = "XxHash64Test",
+    size = "small",
+    srcs = ["src/test/java/io/grpc/tp/zah/XxHash64Test.java"],
+    deps = [
+        ":zero-allocation-hashing",
+        "@maven//:com_google_guava_guava",
+        "@maven//:junit_junit",
+    ],
+)

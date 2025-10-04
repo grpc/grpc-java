@@ -18,7 +18,7 @@
  * Modified by the gRPC Authors
  */
 
-package io.grpc.xds;
+package io.grpc.tp.zah;
 
 import static org.junit.Assert.assertEquals;
 
