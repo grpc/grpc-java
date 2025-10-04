@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -24,6 +25,9 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.CallCredentials;
+import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
@@ -60,11 +64,13 @@ public class GrpcBootstrapperImplTest {
   private String originalBootstrapConfigFromEnvVar;
   private String originalBootstrapConfigFromSysProp;
   private boolean originalExperimentalXdsFallbackFlag;
+  private boolean originalExperimentalXdsBootstrapCallCredsFlag;
 
   @Before
   public void setUp() {
     saveEnvironment();
     originalExperimentalXdsFallbackFlag = CommonBootstrapperTestUtils.setEnableXdsFallback(true);
+    GrpcBootstrapperImpl.xdsBootstrapCallCredsEnabled = true;
     bootstrapper.bootstrapPathFromEnvVar = BOOTSTRAP_FILE_PATH;
   }
 
@@ -73,6 +79,8 @@ public class GrpcBootstrapperImplTest {
     originalBootstrapPathFromSysProp = bootstrapper.bootstrapPathFromSysProp;
     originalBootstrapConfigFromEnvVar = bootstrapper.bootstrapConfigFromEnvVar;
     originalBootstrapConfigFromSysProp = bootstrapper.bootstrapConfigFromSysProp;
+    originalExperimentalXdsBootstrapCallCredsFlag =
+        GrpcBootstrapperImpl.xdsBootstrapCallCredsEnabled;
   }
 
   @After
@@ -82,6 +90,8 @@ public class GrpcBootstrapperImplTest {
     bootstrapper.bootstrapConfigFromEnvVar = originalBootstrapConfigFromEnvVar;
     bootstrapper.bootstrapConfigFromSysProp = originalBootstrapConfigFromSysProp;
     CommonBootstrapperTestUtils.setEnableXdsFallback(originalExperimentalXdsFallbackFlag);
+    GrpcBootstrapperImpl.xdsBootstrapCallCredsEnabled =
+        originalExperimentalXdsBootstrapCallCredsFlag;
   }
 
   @Test
@@ -896,6 +906,95 @@ public class GrpcBootstrapperImplTest {
           "client_listener_resource_name_template: 'xdstp://wrong/' does not start with "
               + "xdstp://a.com/");
     }
+  }
+
+  @Test
+  public void parseNotSupportedCallCredentials() throws Exception {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"call_creds\": [\n"
+        + "        {\"type\": \"unknown\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+  }
+
+  @Test
+  public void parseSupportedCallCredentialsWithInvalidConfig() throws Exception {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"call_creds\": [\n"
+        + "        {\n"
+        + "          \"type\": \"jwt_token_file\",\n"
+        + "          \"config\": {}\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    Exception ex = assertThrows(XdsInitializationException.class, () -> {
+      bootstrapper.bootstrap();
+    });
+
+    String expectedMsg = "Invalid bootstrap: server "
+        + SERVER_URI + " with invalid 'config' for jwt_token_file 'call_creds'";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
+  }
+
+  @Test
+  public void parseTwoSupportedCallCredentialsWithValidConfig() throws Exception {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"call_creds\": [\n"
+        + "        {\n"
+        + "          \"type\": \"jwt_token_file\",\n"
+        + "          \"config\": {\n"
+        + "            \"jwt_token_file\": \"/first/path/to/jwt.token\"\n"
+        + "          }\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"type\": \"jwt_token_file\",\n"
+        + "          \"config\": {\n"
+        + "            \"jwt_token_file\": \"/second/path/to/jwt.token\"\n"
+        + "          }\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    assertThat(info.servers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(CompositeChannelCredentials.class);
+    CallCredentials callCredentials =
+        ((CompositeChannelCredentials) serverInfo.implSpecificConfig()).getCallCredentials();
+    assertThat(callCredentials).isInstanceOf(CompositeCallCredentials.class);
   }
 
   private static BootstrapperImpl.FileReader createFileReader(
