@@ -71,7 +71,8 @@ public final class RandomSubsettingLoadBalancer extends LoadBalancer {
       return resolvedAddresses;
     }
 
-    ArrayList<EndpointWithHash> endpointWithHashList = new ArrayList<>();
+    ArrayList<EndpointWithHash> endpointWithHashList =
+        new ArrayList<>(resolvedAddresses.getAddresses().size());
 
     for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()) {
       endpointWithHashList.add(
@@ -82,7 +83,9 @@ public final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
     Collections.sort(endpointWithHashList, new HashAddressComparator());
 
-    ArrayList<EquivalentAddressGroup> addressGroups = new ArrayList<>();
+    // array is constructed for subset sizes in range [0, Integer.MAX_VALUE), therefore casting
+    // from long to int is not going to overflow here
+    ArrayList<EquivalentAddressGroup> addressGroups = new ArrayList<>((int) subsetSize);
 
     // for loop is executed for subset sizes in range [0, Integer.MAX_VALUE), therefore indexing
     // variable is not going to overflow here
