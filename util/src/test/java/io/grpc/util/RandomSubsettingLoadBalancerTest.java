@@ -259,6 +259,7 @@ public class RandomSubsettingLoadBalancerTest {
               .setLoadBalancingPolicyConfig(config)
               .build();
 
+      loadBalancer = new RandomSubsettingLoadBalancer(mockHelper);
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
 
       verify(mockChildLb, atLeastOnce()).acceptResolvedAddresses(resolvedAddrCaptor.capture());

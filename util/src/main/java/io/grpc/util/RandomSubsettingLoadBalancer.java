@@ -24,10 +24,10 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.tp.zah.XxHash64;
-import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Random;
 
 
 /**
@@ -40,9 +40,12 @@ import java.util.Comparator;
 @Internal
 public final class RandomSubsettingLoadBalancer extends LoadBalancer {
   private final GracefulSwitchLoadBalancer switchLb;
+  private final XxHash64 hashFunc;
 
   public RandomSubsettingLoadBalancer(Helper helper) {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
+    long seed = new Random().nextLong();
+    hashFunc = new XxHash64(seed);
   }
 
   @Override
@@ -51,8 +54,7 @@ public final class RandomSubsettingLoadBalancer extends LoadBalancer {
         (RandomSubsettingLoadBalancerConfig)
             resolvedAddresses.getLoadBalancingPolicyConfig();
 
-    ResolvedAddresses subsetAddresses = filterEndpoints(
-        resolvedAddresses, config.subsetSize, new SecureRandom().nextLong());
+    ResolvedAddresses subsetAddresses = filterEndpoints(resolvedAddresses, config.subsetSize);
 
     return switchLb.acceptResolvedAddresses(
         subsetAddresses.toBuilder()
@@ -62,15 +64,13 @@ public final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
   // implements the subsetting algorithm, as described in A68:
   // https://github.com/grpc/proposal/pull/423
-  private ResolvedAddresses filterEndpoints(
-      ResolvedAddresses resolvedAddresses, long subsetSize, long seed) {
+  private ResolvedAddresses filterEndpoints(ResolvedAddresses resolvedAddresses, long subsetSize) {
     // configured subset sizes in the range [Integer.MAX_VALUE, Long.MAX_VALUE] will always fall
     // into this if statement due to collection indexing limitations in JVM
     if (subsetSize >= resolvedAddresses.getAddresses().size()) {
       return resolvedAddresses;
     }
 
-    XxHash64 hashFunc = new XxHash64(seed);
     ArrayList<EndpointWithHash> endpointWithHashList = new ArrayList<>();
 
     for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()) {
