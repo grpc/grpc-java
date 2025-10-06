@@ -66,7 +66,6 @@ import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickFirstLoadBalancerProviderAccessor;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.testing.TestMethodDescriptors;
-import io.grpc.tp.zah.XxHash64;
 import io.grpc.util.AbstractTestHelper;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.MultiChildLoadBalancer.ChildLbState;

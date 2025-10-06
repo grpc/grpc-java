@@ -18,7 +18,7 @@
  * Modified by the gRPC Authors
  */
 
-package io.grpc.tp.zah;
+package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -33,8 +33,8 @@ import java.nio.ByteOrder;
  * <a href="https://github.com/OpenHFT/Zero-Allocation-Hashing/blob/master/src/main/java/net/openhft/hashing/XxHash.java">
  * OpenHFT/Zero-Allocation-Hashing</a>.
  */
-final public class XxHash64 {
-  static public final XxHash64 INSTANCE = new XxHash64(0);
+final class XxHash64 {
+  static final XxHash64 INSTANCE = new XxHash64(0);
 
   // Primes if treated as unsigned
   private static final long P1 = -7046029288634856825L;
@@ -47,12 +47,12 @@ final public class XxHash64 {
   private final long seed;
   private final long voidHash;
 
-  public XxHash64(long seed) {
+  XxHash64(long seed) {
     this.seed = seed;
     this.voidHash = finalize(seed + P5);
   }
 
-  public long hashLong(long input) {
+  long hashLong(long input) {
     input = byteOrder == ByteOrder.LITTLE_ENDIAN ? input : Long.reverseBytes(input);
     long hash = seed + P5 + 8;
     input *= P2;
@@ -63,7 +63,7 @@ final public class XxHash64 {
     return finalize(hash);
   }
 
-  public long hashInt(int input) {
+  long hashInt(int input) {
     input = byteOrder == ByteOrder.LITTLE_ENDIAN ? input : Integer.reverseBytes(input);
     long hash = seed + P5 + 4;
     hash ^= (input & 0xFFFFFFFFL) * P1;
@@ -71,7 +71,7 @@ final public class XxHash64 {
     return finalize(hash);
   }
 
-  public long hashShort(short input) {
+  long hashShort(short input) {
     input = byteOrder == ByteOrder.LITTLE_ENDIAN ? input : Short.reverseBytes(input);
     long hash = seed + P5 + 2;
     hash ^= (input & 0xFFL) * P5;
@@ -81,22 +81,22 @@ final public class XxHash64 {
     return finalize(hash);
   }
 
-  public long hashChar(char input) {
+  long hashChar(char input) {
     return hashShort((short) input);
   }
 
-  public long hashByte(byte input) {
+  long hashByte(byte input) {
     long hash = seed + P5 + 1;
     hash ^= (input & 0xFF) * P5;
     hash = Long.rotateLeft(hash, 11) * P1;
     return finalize(hash);
   }
 
-  public long hashVoid() {
+  long hashVoid() {
     return voidHash;
   }
 
-  public long hashAsciiString(String input) {
+  long hashAsciiString(String input) {
     ByteSupplier supplier = new AsciiStringByteSupplier(input);
     return hashBytes(supplier);
   }
@@ -106,7 +106,7 @@ final public class XxHash64 {
     return hashBytes(supplier);
   }
 
-  public long hashBytes(byte[] bytes, int offset, int len) {
+  long hashBytes(byte[] bytes, int offset, int len) {
     ByteSupplier supplier = new PlainByteSupplier(bytes, offset, len);
     return hashBytes(supplier);
   }

@@ -39,7 +39,6 @@ import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.tp.zah.XxHash64;
 import io.grpc.util.MultiChildLoadBalancer;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import io.grpc.xds.client.XdsLogger;
