@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableSet;
 import io.grpc.Internal;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -106,5 +107,27 @@ public final class BackendMetricPropagation {
    */
   public boolean shouldPropagateNamedMetric(String metricKey) {
     return propagateAllNamedMetrics || namedMetricKeys.contains(metricKey);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    BackendMetricPropagation that = (BackendMetricPropagation) o;
+    return propagateCpuUtilization == that.propagateCpuUtilization
+        && propagateMemUtilization == that.propagateMemUtilization
+        && propagateApplicationUtilization == that.propagateApplicationUtilization
+        && propagateAllNamedMetrics == that.propagateAllNamedMetrics
+        && Objects.equals(namedMetricKeys, that.namedMetricKeys);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(propagateCpuUtilization, propagateMemUtilization,
+        propagateApplicationUtilization, propagateAllNamedMetrics, namedMetricKeys);
   }
 }
