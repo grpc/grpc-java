@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.tp.zah.XxHash64;
@@ -37,8 +36,7 @@ import java.util.Random;
  * <p>This implements random subsetting gRFC:
  * https://https://github.com/grpc/proposal/blob/master/A68-random-subsetting.md
  */
-@Internal
-public final class RandomSubsettingLoadBalancer extends LoadBalancer {
+final class RandomSubsettingLoadBalancer extends LoadBalancer {
   private final GracefulSwitchLoadBalancer switchLb;
   private final XxHash64 hashFunc;
 
