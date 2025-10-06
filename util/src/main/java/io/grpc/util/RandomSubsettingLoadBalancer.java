@@ -19,10 +19,14 @@ package io.grpc.util;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
+import com.google.common.primitives.UnsignedBytes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
-import io.grpc.tp.zah.XxHash64;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -37,13 +41,16 @@ import java.util.Random;
  * https://https://github.com/grpc/proposal/blob/master/A68-random-subsetting.md
  */
 final class RandomSubsettingLoadBalancer extends LoadBalancer {
+  private static final Comparator<byte[]> BYTE_ARRAY_COMPARATOR =
+      UnsignedBytes.lexicographicalComparator();
+
   private final GracefulSwitchLoadBalancer switchLb;
-  private final XxHash64 hashFunc;
+  private final HashFunction hashFunc;
 
   public RandomSubsettingLoadBalancer(Helper helper) {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
-    long seed = new Random().nextLong();
-    hashFunc = new XxHash64(seed);
+    int seed = new Random().nextInt();
+    hashFunc = Hashing.murmur3_128(seed);
   }
 
   @Override
@@ -76,7 +83,9 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
       endpointWithHashList.add(
           new EndpointWithHash(
               addressGroup,
-              hashFunc.hashAsciiString(addressGroup.getAddresses().get(0).toString())));
+              hashFunc.hashString(
+                  addressGroup.getAddresses().get(0).toString(),
+                  StandardCharsets.UTF_8)));
     }
 
     Collections.sort(endpointWithHashList, new HashAddressComparator());
@@ -106,18 +115,18 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
   private static final class EndpointWithHash {
     public final EquivalentAddressGroup addressGroup;
-    public final long hash;
+    public final HashCode hashCode;
 
-    public EndpointWithHash(EquivalentAddressGroup addressGroup, long hash) {
+    public EndpointWithHash(EquivalentAddressGroup addressGroup, HashCode hashCode) {
       this.addressGroup = addressGroup;
-      this.hash = hash;
+      this.hashCode = hashCode;
     }
   }
 
   private static final class HashAddressComparator implements Comparator<EndpointWithHash> {
     @Override
     public int compare(EndpointWithHash lhs, EndpointWithHash rhs) {
-      return Long.compare(lhs.hash, rhs.hash);
+      return BYTE_ARRAY_COMPARATOR.compare(lhs.hashCode.asBytes(), rhs.hashCode.asBytes());
     }
   }
 
