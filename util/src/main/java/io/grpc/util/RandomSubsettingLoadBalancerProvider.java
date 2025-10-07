@@ -61,7 +61,7 @@ public final class RandomSubsettingLoadBalancerProvider extends LoadBalancerProv
   }
 
   private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
-    Integer subsetSize = JsonUtil.getNumberAsInteger(rawConfig, "subsetSize");
+    Long subsetSize = JsonUtil.getNumberAsLong(rawConfig, "subsetSize");
     if (subsetSize == null) {
       return ConfigOrError.fromError(
           Status.INTERNAL.withDescription(

@@ -65,9 +65,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
   // implements the subsetting algorithm, as described in A68:
   // https://github.com/grpc/proposal/pull/423
-  private ResolvedAddresses filterEndpoints(ResolvedAddresses resolvedAddresses, long subsetSize) {
-    // configured subset sizes in the range [Integer.MAX_VALUE, Long.MAX_VALUE] will always fall
-    // into this if statement due to collection indexing limitations in JVM
+  private ResolvedAddresses filterEndpoints(ResolvedAddresses resolvedAddresses, int subsetSize) {
     if (subsetSize >= resolvedAddresses.getAddresses().size()) {
       return resolvedAddresses;
     }
@@ -86,12 +84,8 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
     Collections.sort(endpointWithHashList, new HashAddressComparator());
 
-    // array is constructed for subset sizes in range [0, Integer.MAX_VALUE), therefore casting
-    // from long to int is not going to overflow here
-    ArrayList<EquivalentAddressGroup> addressGroups = new ArrayList<>((int) subsetSize);
+    ArrayList<EquivalentAddressGroup> addressGroups = new ArrayList<>(subsetSize);
 
-    // for loop is executed for subset sizes in range [0, Integer.MAX_VALUE), therefore indexing
-    // variable is not going to overflow here
     for (int idx = 0; idx < subsetSize; ++idx) {
       addressGroups.add(endpointWithHashList.get(idx).addressGroup);
     }
@@ -127,25 +121,24 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
   }
 
   public static final class RandomSubsettingLoadBalancerConfig {
-    public final long subsetSize;
+    public final int subsetSize;
     public final Object childConfig;
 
-    private RandomSubsettingLoadBalancerConfig(long subsetSize, Object childConfig) {
+    private RandomSubsettingLoadBalancerConfig(int subsetSize, Object childConfig) {
       this.subsetSize = subsetSize;
       this.childConfig = childConfig;
     }
 
     public static class Builder {
-      Long subsetSize;
+      int subsetSize;
       Object childConfig;
 
-      public Builder setSubsetSize(Integer subsetSize) {
-        checkNotNull(subsetSize, "subsetSize");
-        // {@code Integer.toUnsignedLong(int)} is not part of Android API level 21, therefore doing
-        // it manually
-        Long subsetSizeAsLong = ((long) subsetSize) & 0xFFFFFFFFL;
-        checkArgument(subsetSizeAsLong > 0L, "Subset size must be greater than 0");
-        this.subsetSize = subsetSizeAsLong;
+      public Builder setSubsetSize(long subsetSize) {
+        checkArgument(subsetSize > 0L, "Subset size must be greater than 0");
+        // clamping subset size to Integer.MAX_VALUE due to collection indexing limitations in JVM
+        long subsetSizeClamped = Math.min(subsetSize, (long) Integer.MAX_VALUE);
+        // safe narrowing cast due to clamping
+        this.subsetSize = (int) subsetSizeClamped;
         return this;
       }
 
@@ -156,7 +149,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
       public RandomSubsettingLoadBalancerConfig build() {
         return new RandomSubsettingLoadBalancerConfig(
-            checkNotNull(subsetSize, "subsetSize"),
+            subsetSize,
             checkNotNull(childConfig, "childConfig"));
       }
     }
