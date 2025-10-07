@@ -100,7 +100,9 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
@@ -270,14 +272,19 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+    List<String> metricSpecs = Arrays.asList("cpu_utilization");
+    BackendMetricPropagation backendMetricPropagation =
+        BackendMetricPropagation.fromMetricSpecs(metricSpecs);
     Cluster cluster = EDS_CLUSTER.toBuilder()
         .setLbPolicy(Cluster.LbPolicy.RING_HASH)
         .setRingHashLbConfig(Cluster.RingHashLbConfig.newBuilder()
             .setMinimumRingSize(UInt64Value.of(10))
             .setMaximumRingSize(UInt64Value.of(100))
             .build())
+        .addAllLrsReportEndpointMetrics(metricSpecs)
         .build();
-    // One priority with two localities of different weights.
     ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
         .setClusterName(EDS_SERVICE_NAME)
         .addEndpoints(LocalityLbEndpoints.newBuilder()
@@ -331,6 +338,8 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER, EDS_SERVICE_NAME, null, null,
         null, Collections.emptyList(), "ring_hash_experimental");
+    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
     RingHashConfig ringHashConfig = (RingHashConfig)
         GracefulSwitchLoadBalancerAccessor.getChildConfig(clusterImplConfig.childConfig);
     assertThat(ringHashConfig.minRingSize).isEqualTo(10L);
@@ -871,8 +880,16 @@ public class ClusterResolverLoadBalancerTest {
 
   @Test
   public void onlyLogicalDnsCluster_endpointsResolved() {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+    List<String> metricSpecs = Arrays.asList("cpu_utilization");
+    BackendMetricPropagation backendMetricPropagation =
+        BackendMetricPropagation.fromMetricSpecs(metricSpecs);
+    Cluster logicalDnsClusterWithMetrics = LOGICAL_DNS_CLUSTER.toBuilder()
+        .addAllLrsReportEndpointMetrics(metricSpecs)
+        .build();
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
-        CLUSTER, LOGICAL_DNS_CLUSTER));
+        CLUSTER, logicalDnsClusterWithMetrics));
     startXdsDepManager(new CdsConfig(CLUSTER), /* forwardTime= */ false);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME + ":9000");
     assertThat(childBalancers).isEmpty();
@@ -895,6 +912,8 @@ public class ClusterResolverLoadBalancerTest {
         GracefulSwitchLoadBalancerAccessor.getChildConfig(priorityChildConfig.childConfig);
     assertClusterImplConfig(clusterImplConfig, CLUSTER, null, null, null, null,
         Collections.<DropOverload>emptyList(), "wrr_locality_experimental");
+    assertThat(clusterImplConfig.backendMetricPropagation).isEqualTo(backendMetricPropagation);
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
     assertAddressesEqual(
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
@@ -1002,14 +1021,14 @@ public class ClusterResolverLoadBalancerTest {
             "google_cloud_private_spiffe", true);
     DiscoveryMechanism edsDiscoveryMechanism1 =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), null);
+            Collections.emptyMap(), null, null);
     io.grpc.xds.EnvoyServerProtoData.OutlierDetection outlierDetection =
         io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
             100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
             FailurePercentageEjection.create(100, 100, 100, 100));
     DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
         DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), outlierDetection);
+            Collections.emptyMap(), outlierDetection, null);
     Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
         new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
             GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
