@@ -822,6 +822,31 @@ public final class GrpcUtil {
   }
 
   /**
+   * Returns a "clean" representation of a status code and description (not cause) like
+   * "UNAVAILABLE: The description". Should be similar to Status.formatThrowableMessage().
+   */
+  public static String statusToPrettyString(Status status) {
+    if (status.getDescription() == null) {
+      return status.getCode().toString();
+    } else {
+      return status.getCode() + ": " + status.getDescription();
+    }
+  }
+
+  /**
+   * Create a status with contextual information, propagating details from a non-null status that
+   * contributed to the failure. For example, if UNAVAILABLE, "Couldn't load bar", and status
+   * "FAILED_PRECONDITION: Foo missing" were passed as arguments, then this method would produce the
+   * status "UNAVAILABLE: Couldn't load bar: FAILED_PRECONDITION: Foo missing" with a cause if the
+   * passed status had a cause.
+   */
+  public static Status statusWithDetails(Status.Code code, String description, Status causeStatus) {
+    return code.toStatus()
+        .withDescription(description + ": " + statusToPrettyString(causeStatus))
+        .withCause(causeStatus.getCause());
+  }
+
+  /**
    * Checks whether the given item exists in the iterable.  This is copied from Guava Collect's
    * {@code Iterables.contains()} because Guava Collect is not Android-friendly thus core can't
    * depend on it.
