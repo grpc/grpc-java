@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.google.common.primitives.UnsignedBytes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -41,9 +40,6 @@ import java.util.Random;
  * https://https://github.com/grpc/proposal/blob/master/A68-random-subsetting.md
  */
 final class RandomSubsettingLoadBalancer extends LoadBalancer {
-  private static final Comparator<byte[]> BYTE_ARRAY_COMPARATOR =
-      UnsignedBytes.lexicographicalComparator();
-
   private final GracefulSwitchLoadBalancer switchLb;
   private final HashFunction hashFunc;
 
@@ -126,7 +122,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
   private static final class HashAddressComparator implements Comparator<EndpointWithHash> {
     @Override
     public int compare(EndpointWithHash lhs, EndpointWithHash rhs) {
-      return BYTE_ARRAY_COMPARATOR.compare(lhs.hashCode.asBytes(), rhs.hashCode.asBytes());
+      return Long.compare(lhs.hashCode.asLong(), rhs.hashCode.asLong());
     }
   }
 
