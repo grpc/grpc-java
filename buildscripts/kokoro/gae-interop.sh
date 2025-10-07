@@ -5,6 +5,12 @@ if [[ -f /VERSION ]]; then
   cat /VERSION
 fi
 
+update-alternatives --list java
+update-alternatives --query java
+java -version
+export PATH="/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH"
+java -version
+
 KOKORO_GAE_SERVICE="java-gae-interop-test"
 
 # We deploy as different versions of a single service, this way any stale
