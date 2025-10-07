@@ -56,6 +56,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.perfmark.Link;
 import io.perfmark.PerfMark;
@@ -813,10 +814,14 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       // TODO(ejona86): this is not thread-safe :)
       String description = "Application error processing RPC";
       Status statusToPropagate = Status.UNKNOWN.withDescription(description).withCause(t);
+      Status extractedStatus = null;
       if (t instanceof StatusRuntimeException) {
-        if (((StatusRuntimeException) t).getStatus().getCode() == Status.Code.RESOURCE_EXHAUSTED) {
-          statusToPropagate = ((StatusRuntimeException) t).getStatus().withCause(t);
-        }
+        extractedStatus = ((StatusRuntimeException) t).getStatus();
+      }  else if (t instanceof StatusException) {
+        extractedStatus = ((StatusException) t).getStatus();
+      }
+      if (extractedStatus != null && extractedStatus.getCode() == Status.Code.RESOURCE_EXHAUSTED) {
+        statusToPropagate = extractedStatus.withCause(t);
       }
       stream.close(statusToPropagate, new Metadata());
     }
