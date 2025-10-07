@@ -276,7 +276,7 @@ public class RandomSubsettingLoadBalancerTest {
 
     int maxConnections = Collections.max(connectionsByServer.values());
 
-    assertThat(maxConnections <= expectedMaxConnections).isTrue();
+    assertThat(maxConnections).isAtMost(expectedMaxConnections);
   }
 
   private class BackendDetails {
