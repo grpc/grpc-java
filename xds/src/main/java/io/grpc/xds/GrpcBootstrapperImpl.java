@@ -18,7 +18,11 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
+import io.grpc.CompositeCallCredentials;
+import io.grpc.CompositeChannelCredentials;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsInitializationException;
@@ -33,6 +37,8 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   private static final String BOOTSTRAP_PATH_SYS_PROPERTY = "io.grpc.xds.bootstrap";
   private static final String BOOTSTRAP_CONFIG_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP_CONFIG";
   private static final String BOOTSTRAP_CONFIG_SYS_PROPERTY = "io.grpc.xds.bootstrapConfig";
+  private static final String GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS =
+      "GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS";
   @VisibleForTesting
   String bootstrapPathFromEnvVar = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
   @VisibleForTesting
@@ -41,6 +47,9 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   String bootstrapConfigFromEnvVar = System.getenv(BOOTSTRAP_CONFIG_SYS_ENV_VAR);
   @VisibleForTesting
   String bootstrapConfigFromSysProp = System.getProperty(BOOTSTRAP_CONFIG_SYS_PROPERTY);
+  @VisibleForTesting
+  static boolean xdsBootstrapCallCredsEnabled = GrpcUtil.getFlag(
+      GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS, false);
 
   GrpcBootstrapperImpl() {
     super();
@@ -92,7 +101,12 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   @Override
   protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
-    return getChannelCredentials(serverConfig, serverUri);
+    ChannelCredentials channelCreds = getChannelCredentials(serverConfig, serverUri);
+    CallCredentials callCreds = getCallCredentials(serverConfig, serverUri);
+    if (callCreds != null) {
+      channelCreds = CompositeChannelCredentials.create(channelCreds, callCreds);
+    }
+    return channelCreds;
   }
 
   private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
@@ -134,5 +148,56 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
       }
     }
     return null;
+  }
+
+  private static CallCredentials getCallCredentials(Map<String, ?> serverConfig,
+                                                    String serverUri)
+      throws XdsInitializationException {
+    List<?> rawCallCredsList = JsonUtil.getList(serverConfig, "call_creds");
+    if (rawCallCredsList == null || rawCallCredsList.isEmpty()) {
+      return null;
+    }
+    CallCredentials callCredentials =
+        parseCallCredentials(JsonUtil.checkObjectList(rawCallCredsList), serverUri);
+    return callCredentials;
+  }
+
+  @Nullable
+  private static CallCredentials parseCallCredentials(List<Map<String, ?>> jsonList,
+                                                      String serverUri)
+      throws XdsInitializationException {
+    if (!xdsBootstrapCallCredsEnabled) {
+      return null;
+    }
+
+    CallCredentials callCredentials = null;
+    for (Map<String, ?> callCreds : jsonList) {
+      String type = JsonUtil.getString(callCreds, "type");
+      if (type == null) {
+        continue;
+      }
+
+      XdsCallCredentialsProvider provider =  XdsCallCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      if (provider == null) {
+        continue;
+      }
+
+      Map<String, ?> config = JsonUtil.getObject(callCreds, "config");
+      if (config == null) {
+        config = ImmutableMap.of();
+      }
+      CallCredentials parsedCallCredentials = provider.newCallCredentials(config);
+      if (parsedCallCredentials == null) {
+        throw new XdsInitializationException(
+            "Invalid bootstrap: server " + serverUri + " with invalid 'config' for " + type
+            + " 'call_creds'");
+      }
+
+      callCredentials = (callCredentials == null)
+          ? parsedCallCredentials
+          : new CompositeCallCredentials(callCredentials, parsedCallCredentials);
+    }
+    return callCredentials;
   }
 }
