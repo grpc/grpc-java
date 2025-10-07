@@ -938,9 +938,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           && localOnlyTransparentRetries.incrementAndGet() > 1_000) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
-          Status tooManyTransparentRetries = Status.INTERNAL
-              .withDescription("Too many transparent retries. Might be a bug in gRPC")
-              .withCause(status.asRuntimeException());
+          Status tooManyTransparentRetries = GrpcUtil.statusWithDetails(
+              Status.Code.INTERNAL, "Too many transparent retries. Might be a bug in gRPC", status);
           safeCloseMasterListener(tooManyTransparentRetries, rpcProgress, trailers);
         }
         return;
