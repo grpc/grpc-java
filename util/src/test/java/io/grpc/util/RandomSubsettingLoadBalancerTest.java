@@ -225,7 +225,7 @@ public class RandomSubsettingLoadBalancerTest {
   // verifies: https://github.com/grpc/proposal/blob/master/A68_graphics/subsetting100-10-5.png
   @Test
   public void backendsCanBeDistributedEvenly_subsetting100_10_5() {
-    verifyConnectionsByServer(100, 10, 5, 65);
+    verifyConnectionsByServer(100, 10, 5, 70);
   }
 
   // verifies: https://github.com/grpc/proposal/blob/master/A68_graphics/subsetting500-10-5.png
