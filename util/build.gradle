@@ -58,6 +58,7 @@ animalsniffer {
 tasks.named("javadoc").configure {
     exclude 'io/grpc/util/MultiChildLoadBalancer.java'
     exclude 'io/grpc/util/OutlierDetectionLoadBalancer*'
+    exclude 'io/grpc/util/RandomSubsettingLoadBalancer*'
     exclude 'io/grpc/util/RoundRobinLoadBalancer*'
 }
 
