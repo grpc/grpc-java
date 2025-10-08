@@ -118,7 +118,8 @@ public class RandomSubsettingLoadBalancerTest {
 
   @Before
   public void setUp() {
-    loadBalancer = new RandomSubsettingLoadBalancer(mockHelper);
+    int seed = 0;
+    loadBalancer = new RandomSubsettingLoadBalancer(mockHelper, seed);
 
     int backendSize = 5;
     backendDetails = setupBackends(backendSize);
@@ -225,7 +226,7 @@ public class RandomSubsettingLoadBalancerTest {
   // verifies: https://github.com/grpc/proposal/blob/master/A68_graphics/subsetting100-10-5.png
   @Test
   public void backendsCanBeDistributedEvenly_subsetting100_10_5() {
-    verifyConnectionsByServer(100, 10, 5, 70);
+    verifyConnectionsByServer(100, 10, 5, 65);
   }
 
   // verifies: https://github.com/grpc/proposal/blob/master/A68_graphics/subsetting500-10-5.png
@@ -252,14 +253,16 @@ public class RandomSubsettingLoadBalancerTest {
 
     Map<SocketAddress, Integer> connectionsByServer = Maps.newLinkedHashMap();
 
-    for (RandomSubsettingLoadBalancerConfig config : configs) {
+    for (int i = 0; i < clientsCount; i++) {
+      RandomSubsettingLoadBalancerConfig config = configs.get(i);
+
       ResolvedAddresses resolvedAddresses =
           ResolvedAddresses.newBuilder()
               .setAddresses(ImmutableList.copyOf(backendDetails.servers))
               .setLoadBalancingPolicyConfig(config)
               .build();
 
-      loadBalancer = new RandomSubsettingLoadBalancer(mockHelper);
+      loadBalancer = new RandomSubsettingLoadBalancer(mockHelper, i);
       loadBalancer.acceptResolvedAddresses(resolvedAddresses);
 
       verify(mockChildLb, atLeastOnce()).acceptResolvedAddresses(resolvedAddrCaptor.capture());

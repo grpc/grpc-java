@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
@@ -48,6 +49,12 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
   public RandomSubsettingLoadBalancer(Helper helper) {
     switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
     int seed = new Random().nextInt();
+    hashFunc = Hashing.murmur3_128(seed);
+  }
+
+  @VisibleForTesting
+  RandomSubsettingLoadBalancer(Helper helper, int seed) {
+    switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
     hashFunc = Hashing.murmur3_128(seed);
   }
 
