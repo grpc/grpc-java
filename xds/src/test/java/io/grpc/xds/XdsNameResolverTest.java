@@ -205,6 +205,8 @@ public class XdsNameResolverTest {
 
   @Before
   public void setUp() {
+    lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
+
     try {
       targetUri = new URI(AUTHORITY);
     } catch (URISyntaxException e) {
@@ -435,6 +437,7 @@ public class XdsNameResolverTest {
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     ArgumentCaptor<ResolutionResult> resultCaptor =
         ArgumentCaptor.forClass(ResolutionResult.class);
     String alternativeRdsResource = "route-configuration-alter.googleapis.com";
@@ -492,11 +495,13 @@ public class XdsNameResolverTest {
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverLdsResourceNotFound();  // revoke LDS resource
     assertThat(xdsClient.rdsWatchers.keySet()).isEmpty();  // stop subscribing to stale RDS resource
     assertEmptyResolutionResult(expectedLdsResourceName);
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverLdsUpdateForRdsName(RDS_RESOURCE_NAME);
     // No name resolution result until new RDS resource update is received. Do not use stale config
     verifyNoInteractions(mockListener);
@@ -533,11 +538,13 @@ public class XdsNameResolverTest {
         (Map<String, ?>) resolutionResultCaptor.getValue().getServiceConfig().getConfig());
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);  // revoke RDS resource
     assertEmptyResolutionResult(RDS_RESOURCE_NAME);
 
     // Simulate management server adds back the previously used RDS resource.
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverRdsUpdate(RDS_RESOURCE_NAME, Collections.singletonList(virtualHost));
     createAndDeliverClusterUpdates(xdsClient, cluster1);
     verify(mockListener).onResult2(resolutionResultCaptor.capture());
@@ -941,6 +948,7 @@ public class XdsNameResolverTest {
     // A different resolver/Channel.
     resolver.shutdown();
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     when(mockRandom.nextLong()).thenReturn(123L);
     resolver = new XdsNameResolver(targetUri, null, AUTHORITY, null, serviceConfigParser,
         syncContext, scheduler,
@@ -1044,6 +1052,7 @@ public class XdsNameResolverTest {
     TestCall<?, ?> firstCall = testCall;
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -1086,6 +1095,7 @@ public class XdsNameResolverTest {
   public void resolved_resourceUpdatedBeforeCallStarted() {
     InternalConfigSelector configSelector = resolveToClusters();
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -1122,6 +1132,7 @@ public class XdsNameResolverTest {
     assertCallSelectClusterResult(call1, configSelector, cluster1, 15.0);
 
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsUpdate(
         Arrays.asList(
@@ -1546,6 +1557,7 @@ public class XdsNameResolverTest {
 
     // LDS 2: resource not found.
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverLdsResourceNotFound();
     assertEmptyResolutionResult(expectedLdsResourceName);
     // Verify shutdown.
@@ -1603,6 +1615,7 @@ public class XdsNameResolverTest {
 
     // RDS 2: RDS_RESOURCE_NAME not found.
     reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
     xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
     assertEmptyResolutionResult(RDS_RESOURCE_NAME);
     assertThat(lds1Filter1.isShutdown()).isTrue();

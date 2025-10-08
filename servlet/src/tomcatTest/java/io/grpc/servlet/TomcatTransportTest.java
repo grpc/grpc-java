@@ -81,7 +81,9 @@ public class TomcatTransportTest extends AbstractTransportTest {
         ServerTransportListener serverTransportListener =
             listener.transportCreated(new ServerTransportImpl(scheduler));
         ServletAdapter adapter =
-            new ServletAdapter(serverTransportListener, streamTracerFactories, Integer.MAX_VALUE);
+            new ServletAdapter(serverTransportListener, streamTracerFactories,
+                ServletAdapter.DEFAULT_METHOD_NAME_RESOLVER,
+                Integer.MAX_VALUE);
         GrpcServlet grpcServlet = new GrpcServlet(adapter);
 
         tomcatServer = new Tomcat();

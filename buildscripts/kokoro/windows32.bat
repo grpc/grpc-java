@@ -25,7 +25,7 @@ cd "%WORKSPACE%"
 
 SET TARGET_ARCH=x86_32
 SET FAIL_ON_WARNINGS=true
-SET PROTOBUF_VER=22.5
+SET PROTOBUF_VER=26.1
 SET PKG_CONFIG_PATH=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\lib\\pkgconfig
 SET VC_PROTOBUF_LIBS=/LIBPATH:%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\lib
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\include

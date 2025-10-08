@@ -931,15 +931,12 @@ public final class ClientCalls {
         } while ((runnable = poll()) != null);
         // Wake everything up now that we've done something and they can check in their outer loop
         // if they can continue or need to wait again.
-        signallAll();
+        signalAll();
       }
     }
 
-    /**
-     * Executes all queued Runnables and if there were any wakes up any waiting threads.
-     */
-    public void drain() throws InterruptedException {
-      throwIfInterrupted();
+    /** Executes all queued Runnables and if there were any wakes up any waiting threads. */
+    void drain() {
       Runnable runnable;
       boolean didWork = false;
 
@@ -949,11 +946,11 @@ public final class ClientCalls {
       }
 
       if (didWork) {
-        signallAll();
+        signalAll();
       }
     }
 
-    private void signallAll() {
+    private void signalAll() {
       waiterLock.lock();
       try {
         waiterCondition.signalAll();

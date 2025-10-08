@@ -41,6 +41,7 @@ import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsResourceType;
+import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
   private static final int MAX_CLUSTER_RECURSION_DEPTH = 16; // Specified by gRFC A37
 
-  static boolean enableLogicalDns = false;
+  static boolean enableLogicalDns = true;
 
   private final String listenerName;
   private final XdsClient xdsClient;
@@ -394,10 +395,13 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       return StatusOr.fromStatus(dnsData.getStatus());
     }
 
-    List<Endpoints.LbEndpoint> endpoints = new ArrayList<>();
+    List<SocketAddress> addresses = new ArrayList<>();
     for (EquivalentAddressGroup eag : dnsData.getValue()) {
-      endpoints.add(Endpoints.LbEndpoint.create(eag, 1, true, dnsHostName, ImmutableMap.of()));
+      addresses.addAll(eag.getAddresses());
     }
+    EquivalentAddressGroup eag = new EquivalentAddressGroup(addresses);
+    List<Endpoints.LbEndpoint> endpoints = ImmutableList.of(
+        Endpoints.LbEndpoint.create(eag, 1, true, dnsHostName, ImmutableMap.of()));
     LocalityLbEndpoints lbEndpoints =
         LocalityLbEndpoints.create(endpoints, 1, 0, ImmutableMap.of());
     return StatusOr.fromValue(new XdsEndpointResource.EdsUpdate(

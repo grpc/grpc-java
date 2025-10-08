@@ -124,9 +124,7 @@ public final class BinderClientTransport extends BinderTransport
             factory.sourceContext,
             factory.channelCredentials,
             targetAddress.asBindIntent(),
-            targetAddress.getTargetUser() != null
-                ? targetAddress.getTargetUser()
-                : factory.defaultTargetUserHandle,
+            targetAddress.getTargetUser(),
             factory.bindServiceFlags.toInteger(),
             this);
   }
@@ -318,7 +316,6 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
     int remoteUid = Binder.getCallingUid();
-    attributes = setSecurityAttrs(attributes, remoteUid);
     if (inState(TransportState.SETUP)) {
       int version = parcel.readInt();
       IBinder binder = parcel.readStrongBinder();
@@ -328,6 +325,8 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
+        restrictIncomingBinderToCallsFrom(remoteUid);
+        attributes = setSecurityAttrs(attributes, remoteUid);
         ListenableFuture<Status> authResultFuture =
             register(checkServerAuthorizationAsync(remoteUid));
         Futures.addCallback(
