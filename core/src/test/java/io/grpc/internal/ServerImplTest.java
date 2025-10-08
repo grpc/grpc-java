@@ -77,6 +77,7 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
@@ -88,6 +89,7 @@ import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
@@ -1606,7 +1608,7 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testInternalClose_propagatesResourceExhausted() {
+  public void testInternalClose_propagatesStatusRuntimeException() {
     JumpToApplicationThreadServerStreamListener listener
         = new JumpToApplicationThreadServerStreamListener(
             executor.getScheduledExecutorService(),
@@ -1633,6 +1635,33 @@ public class ServerImplTest {
     assertEquals(Status.Code.RESOURCE_EXHAUSTED, status.getCode());
     assertEquals("exhausted", status.getDescription());
     assertEquals(statusRuntimeException, status.getCause());
+    assertTrue(metadataCaptor.getValue().keys().isEmpty());
+  }
+
+  @Test
+  public void testInternalClose_propagatesStatusException()
+      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JumpToApplicationThreadServerStreamListener listener
+            = new JumpToApplicationThreadServerStreamListener(
+            executor.getScheduledExecutorService(),
+            executor.getScheduledExecutorService(),
+            stream,
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
+
+    StatusException statusException
+            = new StatusException(Status.RESOURCE_EXHAUSTED.withDescription("exhausted"));
+    java.lang.reflect.Method internalClose =
+            JumpToApplicationThreadServerStreamListener.class.getDeclaredMethod(
+            "internalClose", Throwable.class);
+    internalClose.setAccessible(true);
+
+    internalClose.invoke(listener, statusException);
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.RESOURCE_EXHAUSTED, status.getCode());
+    assertEquals("exhausted", status.getDescription());
+    assertEquals(statusException, status.getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
 
