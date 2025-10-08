@@ -87,13 +87,6 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> authResultFuture; // null before we check auth.
-
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
 
   /**
    * Constructs a new transport instance.
@@ -195,7 +188,8 @@ public final class BinderClientTransport extends BinderTransport
     // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
     // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
     // can't typically control the exact timing of its installation.
-    preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+    ListenableFuture<Status> preAuthResultFuture =
+        register(checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid));
     Futures.addCallback(
         preAuthResultFuture,
         new FutureCallback<Status>() {
@@ -316,9 +310,6 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
-    cancelAsyncIfNeeded(preAuthResultFuture);
-    cancelAsyncIfNeeded(authResultFuture);
-
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
   }
@@ -337,7 +328,8 @@ public final class BinderClientTransport extends BinderTransport
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
       } else {
-        authResultFuture = checkServerAuthorizationAsync(remoteUid);
+        ListenableFuture<Status> authResultFuture =
+            register(checkServerAuthorizationAsync(remoteUid));
         Futures.addCallback(
             authResultFuture,
             new FutureCallback<Status>() {
@@ -396,16 +388,6 @@ public final class BinderClientTransport extends BinderTransport
     pingTracker.onPingResponse(parcel.readInt());
   }
 
-  /**
-   * Enqueues a future for cancellation later, on another thread.
-   * Useful when the caller wants to cancel while holding locks but the future is visible to
-   * user code which might have added listeners to run on directExecutor().
-   */
-  private void cancelAsyncIfNeeded(@Nullable ListenableFuture<?> future) {
-    if (future != null && !future.isDone()) {
-      offloadExecutor.execute(() -> future.cancel(false));
-    }
-  }
 
   private static ClientStream newFailingClientStream(
       Status failure, Attributes attributes, Metadata headers, ClientStreamTracer[] tracers) {

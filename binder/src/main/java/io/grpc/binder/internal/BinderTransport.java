@@ -41,9 +41,11 @@ import io.grpc.internal.ObjectPool;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -162,6 +164,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
 
   @GuardedBy("this")
+  private final List<Future<?>> ownedFutures = new ArrayList<>(); // To cancel upon terminate.
+
+  @GuardedBy("this")
   protected Attributes attributes;
 
   @GuardedBy("this")
@@ -236,6 +241,13 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     executorServicePool.returnObject(scheduledExecutorService);
   }
 
+  // Registers the specified future for eventual safe cancellation upon shutdown/terminate.
+  @GuardedBy("this")
+  protected final <T extends Future<?>> T register(T future) {
+    ownedFutures.add(future);
+    return future;
+  }
+
   @GuardedBy("this")
   boolean inState(TransportState transportState) {
     return this.transportState == transportState;
@@ -286,6 +298,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       sendShutdownTransaction();
       ArrayList<Inbound<?>> calls = new ArrayList<>(ongoingCalls.values());
       ongoingCalls.clear();
+      ArrayList<Future<?>> futuresToCancel = new ArrayList<>(ownedFutures);
+      ownedFutures.clear();
       scheduledExecutorService.execute(
           () -> {
             for (Inbound<?> inbound : calls) {
@@ -297,6 +311,11 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
               notifyTerminated();
             }
             releaseExecutors();
+            
+            for (Future<?> future : futuresToCancel) {
+              // Not holding any locks here just in case some listener runs on a direct Executor.
+              future.cancel(false); // No effect if already isDone().
+            }
           });
     }
   }
