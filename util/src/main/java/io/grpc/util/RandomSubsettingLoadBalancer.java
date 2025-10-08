@@ -18,10 +18,12 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import com.google.common.primitives.Ints;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -134,9 +136,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
       public Builder setSubsetSize(long subsetSize) {
         checkArgument(subsetSize > 0L, "Subset size must be greater than 0");
         // clamping subset size to Integer.MAX_VALUE due to collection indexing limitations in JVM
-        long subsetSizeClamped = Math.min(subsetSize, (long) Integer.MAX_VALUE);
-        // safe narrowing cast due to clamping
-        this.subsetSize = (int) subsetSizeClamped;
+        this.subsetSize = Ints.saturatedCast(subsetSize);
         return this;
       }
 
@@ -146,6 +146,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
       }
 
       public RandomSubsettingLoadBalancerConfig build() {
+        checkState(subsetSize != 0L, "Subset size must be set before building the config");
         return new RandomSubsettingLoadBalancerConfig(
             subsetSize,
             checkNotNull(childConfig, "childConfig"));
