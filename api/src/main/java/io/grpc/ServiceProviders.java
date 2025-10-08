@@ -30,23 +30,6 @@ final class ServiceProviders {
   }
 
   /**
-   * If this is not Android, returns the highest priority implementation of the class via
-   * {@link ServiceLoader}.
-   * If this is Android, returns an instance of the highest priority class in {@code hardcoded}.
-   */
-  public static <T> T load(
-      Class<T> klass,
-      Iterable<Class<?>> hardcoded,
-      ClassLoader cl,
-      PriorityAccessor<T> priorityAccessor) {
-    List<T> candidates = loadAll(klass, hardcoded, cl, priorityAccessor);
-    if (candidates.isEmpty()) {
-      return null;
-    }
-    return candidates.get(0);
-  }
-
-  /**
    * If this is not Android, returns all available implementations discovered via
    * {@link ServiceLoader}.
    * If this is Android, returns all available implementations in {@code hardcoded}.
