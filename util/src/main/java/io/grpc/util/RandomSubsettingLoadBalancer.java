@@ -74,12 +74,10 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
         new ArrayList<>(resolvedAddresses.getAddresses().size());
 
     for (EquivalentAddressGroup addressGroup : resolvedAddresses.getAddresses()) {
-      endpointWithHashList.add(
-          new EndpointWithHash(
-              addressGroup,
-              hashFunc.hashString(
-                  addressGroup.getAddresses().get(0).toString(),
-                  StandardCharsets.UTF_8)));
+      HashCode hashCode = hashFunc.hashString(
+          addressGroup.getAddresses().get(0).toString(),
+          StandardCharsets.UTF_8);
+      endpointWithHashList.add(new EndpointWithHash(addressGroup, hashCode.asLong()));
     }
 
     Collections.sort(endpointWithHashList, new HashAddressComparator());
@@ -105,9 +103,9 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
 
   private static final class EndpointWithHash {
     public final EquivalentAddressGroup addressGroup;
-    public final HashCode hashCode;
+    public final long hashCode;
 
-    public EndpointWithHash(EquivalentAddressGroup addressGroup, HashCode hashCode) {
+    public EndpointWithHash(EquivalentAddressGroup addressGroup, long hashCode) {
       this.addressGroup = addressGroup;
       this.hashCode = hashCode;
     }
@@ -116,7 +114,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
   private static final class HashAddressComparator implements Comparator<EndpointWithHash> {
     @Override
     public int compare(EndpointWithHash lhs, EndpointWithHash rhs) {
-      return Long.compare(lhs.hashCode.asLong(), rhs.hashCode.asLong());
+      return Long.compare(lhs.hashCode, rhs.hashCode);
     }
   }
 
