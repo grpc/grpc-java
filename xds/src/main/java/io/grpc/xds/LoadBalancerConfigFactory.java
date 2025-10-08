@@ -209,12 +209,12 @@ class LoadBalancerConfigFactory {
    * given config values.
    */
   private static ImmutableMap<String, ?> buildRandomSubsettingConfig(
-      RandomSubsetting randomSubsetting) {
+      String subsetSize, ImmutableMap<String, ?> childConfig) {
     return ImmutableMap.of(
         RANDOM_SUBSETTING_FIELD_NAME,
         ImmutableMap.of(
-            SUBSET_SIZE, randomSubsetting.getSubsetSize(),
-            CHILD_POLICY_FIELD, randomSubsetting.getChildPolicy()
+            SUBSET_SIZE, subsetSize,
+            CHILD_POLICY_FIELD, ImmutableList.of(childConfig)
         ));
   }
 
@@ -256,7 +256,7 @@ class LoadBalancerConfigFactory {
             serviceConfig = convertPickFirstConfig(typedConfig.unpack(PickFirst.class));
           } else if (typedConfig.is(RandomSubsetting.class)) {
             serviceConfig = convertRandomSubsettingConfig(
-                typedConfig.unpack(RandomSubsetting.class));
+                typedConfig.unpack(RandomSubsetting.class), recursionDepth);
           } else if (typedConfig.is(com.github.xds.type.v3.TypedStruct.class)) {
             serviceConfig = convertCustomConfig(
                 typedConfig.unpack(com.github.xds.type.v3.TypedStruct.class));
@@ -349,8 +349,12 @@ class LoadBalancerConfigFactory {
      * "Converts" a random_subsetting configuration to service config format.
      */
     private static ImmutableMap<String, ?> convertRandomSubsettingConfig(
-        RandomSubsetting randomSubsetting) {
-      return buildRandomSubsettingConfig(randomSubsetting);
+        RandomSubsetting randomSubsetting, int recursionDepth)
+        throws ResourceInvalidException, MaxRecursionReachedException {
+      return buildRandomSubsettingConfig(
+          randomSubsetting.getSubsetSize().toString(),
+          LoadBalancingPolicyConverter.convertToServiceConfig(
+              randomSubsetting.getChildPolicy(), recursionDepth + 1));
     }
 
     /**
