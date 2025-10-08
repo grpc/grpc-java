@@ -66,7 +66,7 @@ public class RandomSubsettingLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().toString())
         .isEqualTo(
-            Status.INTERNAL
+            Status.UNAVAILABLE
                 .withDescription("Subset size missing in random_subsetting, LB policy config={}")
                 .toString());
   }

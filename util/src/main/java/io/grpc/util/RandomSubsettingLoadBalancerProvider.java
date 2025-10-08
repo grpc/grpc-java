@@ -64,7 +64,7 @@ public final class RandomSubsettingLoadBalancerProvider extends LoadBalancerProv
     Long subsetSize = JsonUtil.getNumberAsLong(rawConfig, "subsetSize");
     if (subsetSize == null) {
       return ConfigOrError.fromError(
-          Status.INTERNAL.withDescription(
+          Status.UNAVAILABLE.withDescription(
               "Subset size missing in " + getPolicyName() + ", LB policy config=" + rawConfig));
     }
 
