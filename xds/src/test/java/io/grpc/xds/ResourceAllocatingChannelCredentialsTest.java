@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableList;
+import io.grpc.ChannelCredentials;
 import java.io.Closeable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,7 +30,7 @@ import org.junit.runners.JUnit4;
 public class ResourceAllocatingChannelCredentialsTest {
   @Test
   public void withoutBearerTokenDelegatesCall() {
-    ChannelCredentials channelChreds = new ChannelCredentials() {
+    ChannelCredentials channelCreds = new ChannelCredentials() {
       @Override
       public ChannelCredentials withoutBearerTokens() {
         return this;
@@ -37,7 +38,7 @@ public class ResourceAllocatingChannelCredentialsTest {
     };
     ImmutableList<Closeable> resources = ImmutableList.<Closeable>of();
     ChannelCredentials creds =
-        ResourceAllocatingChannelCredentials.create(channelChreds, resources);
-    assertThat(creds.withoutBearerTokens()).isEqualTo(channelChreds);
+        ResourceAllocatingChannelCredentials.create(channelCreds, resources);
+    assertThat(creds.withoutBearerTokens()).isEqualTo(channelCreds);
   }
 }

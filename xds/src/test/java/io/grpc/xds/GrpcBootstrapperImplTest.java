@@ -28,7 +28,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.testing.TestUtils;

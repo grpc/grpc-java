@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import io.grpc.ChannelCredentials;
 import java.io.Closeable;
 
 /**
