@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
+import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsInitializationException;
@@ -90,32 +90,31 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @Override
-  protected ImmutableMap<String, ?> getImplSpecificConfig(Map<String, ?> serverConfig,
-                                                          String serverUri)
+  protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
-    return getChannelCredentialsConfig(serverConfig, serverUri);
+    return getChannelCredentials(serverConfig, serverUri);
   }
 
-  private static ImmutableMap<String, ?> getChannelCredentialsConfig(Map<String, ?> serverConfig,
-                                                                     String serverUri)
+  private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
+                                                               String serverUri)
       throws XdsInitializationException {
     List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
     if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
       throw new XdsInitializationException(
           "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
     }
-    ImmutableMap<String, ?> channelCredentialsConfig =
+    ChannelCredentials channelCredentials =
         parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
-    if (channelCredentialsConfig == null) {
+    if (channelCredentials == null) {
       throw new XdsInitializationException(
           "Server " + serverUri + ": no supported channel credentials found");
     }
-    return channelCredentialsConfig;
+    return channelCredentials;
   }
 
   @Nullable
-  private static ImmutableMap<String, ?> parseChannelCredentials(List<Map<String, ?>> jsonList,
-                                                                 String serverUri)
+  private static ChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
+                                                            String serverUri)
       throws XdsInitializationException {
     for (Map<String, ?> channelCreds : jsonList) {
       String type = JsonUtil.getString(channelCreds, "type");
@@ -123,10 +122,15 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
         throw new XdsInitializationException(
             "Invalid bootstrap: server " + serverUri + " with 'channel_creds' type unspecified");
       }
-      ImmutableSet<String> supportedNames =  XdsCredentialsRegistry.getDefaultRegistry()
-          .getSupportedCredentialNames();
-      if (supportedNames.contains(type)) {
-        return ImmutableMap.copyOf(channelCreds);
+      XdsCredentialsProvider provider =  XdsCredentialsRegistry.getDefaultRegistry()
+          .getProvider(type);
+      if (provider != null) {
+        Map<String, ?> config = JsonUtil.getObject(channelCreds, "config");
+        if (config == null) {
+          config = ImmutableMap.of();
+        }
+
+        return provider.newChannelCredentials(config);
       }
     }
     return null;

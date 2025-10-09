@@ -27,6 +27,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.ResourceAllocatingChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.testing.TestUtils;
@@ -117,7 +119,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -171,11 +173,11 @@ public class GrpcBootstrapperImplTest {
     assertThat(serverInfoList.get(0).target())
         .isEqualTo("trafficdirector-foo.googleapis.com:443");
     assertThat(serverInfoList.get(0).implSpecificConfig())
-        .isEqualTo(ImmutableMap.of("type", "tls"));
+        .isInstanceOf(ResourceAllocatingChannelCredentials.class);
     assertThat(serverInfoList.get(1).target())
         .isEqualTo("trafficdirector-bar.googleapis.com:443");
     assertThat(serverInfoList.get(1).implSpecificConfig())
-        .isEqualTo(ImmutableMap.of("type", "insecure"));
+        .isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -219,7 +221,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));;
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);;
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -290,7 +292,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));;
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);;
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
@@ -585,7 +587,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -607,7 +609,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.ignoreResourceDeletion()).isFalse();
   }
 
@@ -629,7 +631,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // Only ignore_resource_deletion feature enabled: confirm it's on, and xds_v3 is off.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -652,7 +654,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(serverInfo.isTrustedXdsServer()).isTrue();
   }
 
@@ -674,7 +676,7 @@ public class GrpcBootstrapperImplTest {
     BootstrapInfo info = bootstrapper.bootstrap();
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(ImmutableMap.of("type", "insecure"));
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     // ignore_resource_deletion features enabled: confirm both are on.
     assertThat(serverInfo.ignoreResourceDeletion()).isTrue();
   }
@@ -930,13 +932,8 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isEqualTo(
-        ImmutableMap.of(
-            "type", "tls",
-            "config", ImmutableMap.of(
-                "ca_certificate_file", rootCertPath,
-                "certificate_file", certChainPath,
-                "private_key_file", privateKeyPath)));
+    assertThat(serverInfo.implSpecificConfig())
+        .isInstanceOf(ResourceAllocatingChannelCredentials.class);
   }
 
   private static BootstrapperImpl.FileReader createFileReader(

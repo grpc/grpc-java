@@ -38,6 +38,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -125,7 +126,7 @@ public class ClusterResolverLoadBalancerTest {
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final String DNS_HOST_NAME = "dns-service.googleapis.com";
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", ImmutableMap.of("type", "insecure"));
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
   private final Locality locality1 =
       Locality.create("test-region-1", "test-zone-1", "test-subzone-1");
   private final Locality locality2 =

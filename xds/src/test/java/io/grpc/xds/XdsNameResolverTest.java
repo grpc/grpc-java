@@ -52,6 +52,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
@@ -175,7 +176,7 @@ public class XdsNameResolverTest {
   private final MetricRecorder metricRecorder = new MetricRecorder() {};
   private BootstrapInfo bootstrapInfo = BootstrapInfo.builder()
       .servers(ImmutableList.of(ServerInfo.create(
-          "td.googleapis.com", ImmutableMap.of("type", "insecure"))))
+          "td.googleapis.com", InsecureChannelCredentials.create())))
       .node(Node.newBuilder().build())
       .build();
   private String expectedLdsResourceName = AUTHORITY;
@@ -300,7 +301,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithoutXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", ImmutableMap.of("type", "insecure"))))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate("%s/id=1")
         .build();
@@ -318,7 +319,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_templateWithXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", ImmutableMap.of("type", "insecure"))))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
@@ -339,7 +340,7 @@ public class XdsNameResolverTest {
   public void resolving_noTargetAuthority_xdstpWithMultipleSlashes() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", ImmutableMap.of("type", "insecure"))))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .node(Node.newBuilder().build())
         .clientDefaultListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
@@ -367,13 +368,13 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", ImmutableMap.of("type", "insecure"), true, true, false)))
+            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false)))
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
                 "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.of(ServerInfo.create(
-                    "td.googleapis.com", ImmutableMap.of("type", "insecure"), true, true, false)))))
+                    "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false)))))
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
@@ -406,7 +407,7 @@ public class XdsNameResolverTest {
         ImmutableMap.of());
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", ImmutableMap.of("type", "insecure"))))
+            "td.googleapis.com", InsecureChannelCredentials.create())))
         .clientDefaultListenerResourceNameTemplate("test-%s")
         .node(Node.newBuilder().build())
         .build();

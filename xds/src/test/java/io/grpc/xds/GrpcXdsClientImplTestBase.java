@@ -48,8 +48,10 @@ import io.envoyproxy.envoy.config.route.v3.WeightedCluster;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.grpc.BindableService;
+import io.grpc.ChannelCredentials;
 import io.grpc.Context;
 import io.grpc.Context.CancellableContext;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -158,6 +160,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private static final String NODE_ID = "cool-node-id";
   private static final Node NODE = Node.newBuilder().setId(NODE_ID).build();
   private static final Any FAILING_ANY = MessageFactory.FAILING_ANY;
+  private static final ChannelCredentials CHANNEL_CREDENTIALS = InsecureChannelCredentials.create();
   private static final XdsResourceType<?> LDS = XdsListenerResource.getInstance();
   private static final XdsResourceType<?> CDS = XdsClusterResource.getInstance();
   private static final XdsResourceType<?> RDS = XdsRouteConfigureResource.getInstance();
@@ -358,8 +361,7 @@ public abstract class GrpcXdsClientImplTestBase {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
 
-    xdsServerInfo = ServerInfo.create(
-        SERVER_URI, ImmutableMap.of("type", "insecure"), ignoreResourceDeletion(),
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
         true, false);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
@@ -370,12 +372,12 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOM_AUTHORITY, ImmutableMap.of("type", "insecure")))),
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, ImmutableMap.of("type", "insecure"))))))
+                        SERVER_URI_EMPTY_AUTHORITY, InsecureChannelCredentials.create())))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();
@@ -3189,7 +3191,7 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_schedulesExtendedTimeout() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    ServerInfo serverInfo = ServerInfo.create(SERVER_URI, ImmutableMap.of("type", "insecure"),
+    ServerInfo serverInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS,
         false, true, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
@@ -3200,7 +3202,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, ImmutableMap.of("type", "insecure"))))))
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of())
             .build();
     xdsClient = new XdsClientImpl(
@@ -3234,8 +3236,8 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void resourceTimerIsTransientError_callsOnErrorUnavailable() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
-    xdsServerInfo = ServerInfo.create(
-        SERVER_URI, ImmutableMap.of("type", "insecure"), ignoreResourceDeletion(), true, true);
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, ignoreResourceDeletion(),
+        true, true);
     BootstrapInfo bootstrapInfo =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Collections.singletonList(xdsServerInfo))
@@ -3245,12 +3247,12 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOM_AUTHORITY, ImmutableMap.of("type", "insecure")))),
+                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
                 "",
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, ImmutableMap.of("type", "insecure"))))))
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
             .build();
@@ -4352,7 +4354,7 @@ public abstract class GrpcXdsClientImplTestBase {
 
   private BootstrapInfo buildBootStrap(String serverUri) {
 
-    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, ImmutableMap.of("type", "insecure"),
+    ServerInfo xdsServerInfo = ServerInfo.create(serverUri, CHANNEL_CREDENTIALS,
         ignoreResourceDeletion(), true, false);
 
     return Bootstrapper.BootstrapInfo.builder()
@@ -4363,12 +4365,12 @@ public abstract class GrpcXdsClientImplTestBase {
             AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
                 ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_CUSTOM_AUTHORITY, ImmutableMap.of("type", "insecure")))),
+                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
             "",
             AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
                 ImmutableList.of(Bootstrapper.ServerInfo.create(
-                    SERVER_URI_EMPTY_AUTHORITY, ImmutableMap.of("type", "insecure"))))))
+                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
         .certProviders(ImmutableMap.of("cert-instance-name",
             CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
         .build();

@@ -57,7 +57,7 @@ public abstract class Bootstrapper {
   public abstract static class ServerInfo {
     public abstract String target();
 
-    public abstract ImmutableMap<String, ?> implSpecificConfig();
+    public abstract Object implSpecificConfig();
 
     public abstract boolean ignoreResourceDeletion();
 
@@ -66,15 +66,14 @@ public abstract class Bootstrapper {
     public abstract boolean resourceTimerIsTransientError();
 
     @VisibleForTesting
-    public static ServerInfo create(
-        String target, @Nullable ImmutableMap<String, ?> implSpecificConfig) {
+    public static ServerInfo create(String target, @Nullable Object implSpecificConfig) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           false, false, false);
     }
 
     @VisibleForTesting
     public static ServerInfo create(
-        String target, ImmutableMap<String, ?> implSpecificConfig, boolean ignoreResourceDeletion,
+        String target, Object implSpecificConfig, boolean ignoreResourceDeletion,
         boolean isTrustedXdsServer, boolean resourceTimerIsTransientError) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           ignoreResourceDeletion, isTrustedXdsServer, resourceTimerIsTransientError);

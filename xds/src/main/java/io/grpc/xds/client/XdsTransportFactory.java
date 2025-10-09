@@ -25,7 +25,7 @@ import io.grpc.Status;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10823")
 public interface XdsTransportFactory {
-  XdsTransport create(Bootstrapper.ServerInfo serverInfo) throws XdsInitializationException;
+  XdsTransport create(Bootstrapper.ServerInfo serverInfo);
 
   /**
    * Represents transport for xDS communication (e.g., a gRPC channel).

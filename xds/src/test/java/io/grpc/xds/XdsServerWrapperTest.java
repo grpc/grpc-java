@@ -39,6 +39,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -148,7 +149,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", ImmutableMap.of("type", "insecure"))))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
             .build();
@@ -179,7 +180,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(Arrays.asList(
-                Bootstrapper.ServerInfo.create("uri", ImmutableMap.of("type", "insecure"))))
+                Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
             .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
             .build();
     verifyBootstrapFail(b);
@@ -219,7 +220,7 @@ public class XdsServerWrapperTest {
     Bootstrapper.BootstrapInfo b = Bootstrapper.BootstrapInfo.builder()
         .servers(Arrays.asList(
             Bootstrapper.ServerInfo.create(
-                "uri", ImmutableMap.of("type", "insecure"))))
+                "uri", InsecureChannelCredentials.create())))
         .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
         .serverListenerResourceNameTemplate(
             "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/grpc/server/%s")

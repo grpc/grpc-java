@@ -113,6 +113,7 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.envoyproxy.envoy.type.v3.Int64Range;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
 import io.grpc.internal.JsonUtil;
@@ -167,7 +168,7 @@ public class GrpcXdsClientImplDataTest {
   private static final RouterFilter.Provider ROUTER_FILTER_PROVIDER = new RouterFilter.Provider();
 
   private static final ServerInfo LRS_SERVER_INFO =
-      ServerInfo.create("lrs.googleapis.com", ImmutableMap.of("type", "insecure"));
+      ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
   private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
       "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
 
@@ -3548,7 +3549,7 @@ public class GrpcXdsClientImplDataTest {
 
   private XdsResourceType.Args getXdsResourceTypeArgs(boolean isTrustedServer) {
     return new XdsResourceType.Args(
-        ServerInfo.create("http://td", ImmutableMap.of(), false, isTrustedServer, false), "1.0", null, null, null, null
+        ServerInfo.create("http://td", "", false, isTrustedServer, false), "1.0", null, null, null, null
     );
   }
 }
