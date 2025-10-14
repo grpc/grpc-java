@@ -17,10 +17,21 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ChannelCredentials;
 import java.io.Closeable;
+import java.io.IOException;
+import java.lang.reflect.Constructor;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -28,17 +39,82 @@ import org.junit.runners.JUnit4;
 /** Tests for {@link ResourceAllocatingChannelCredentials}. */
 @RunWith(JUnit4.class)
 public class ResourceAllocatingChannelCredentialsTest {
+  private ChannelCredentials channelCreds = new ChannelCredentials() {
+    @Override
+    public ChannelCredentials withoutBearerTokens() {
+      return this;
+    }
+  };
+
+  private Closeable mockCloseable = mock(Closeable.class);
+
+  @SuppressWarnings("unchecked")
+  private Supplier<ImmutableList<Closeable>> mockSupplier =
+      (Supplier<ImmutableList<Closeable>>) mock(Supplier.class);
+
+  private ResourceAllocatingChannelCredentials unit;
+
+  @Before
+  public void setUp() throws Exception {
+    Constructor<ResourceAllocatingChannelCredentials> ctor =
+        ResourceAllocatingChannelCredentials.class.getDeclaredConstructor(
+            ChannelCredentials.class, Supplier.class);
+    ctor.setAccessible(true);
+    this.unit = ctor.newInstance(channelCreds, mockSupplier);
+
+    when(mockSupplier.get()).thenReturn(ImmutableList.of(mockCloseable));
+  }
+
   @Test
-  public void withoutBearerTokenDelegatesCall() {
-    ChannelCredentials channelCreds = new ChannelCredentials() {
-      @Override
-      public ChannelCredentials withoutBearerTokens() {
-        return this;
-      }
-    };
-    ImmutableList<Closeable> resources = ImmutableList.<Closeable>of();
-    ChannelCredentials creds =
-        ResourceAllocatingChannelCredentials.create(channelCreds, resources);
-    assertThat(creds.withoutBearerTokens()).isEqualTo(channelCreds);
+  public void withoutBearerTokenThrows() {
+    Exception ex = assertThrows(UnsupportedOperationException.class, () -> {
+      unit.withoutBearerTokens();
+    });
+
+    String expectedMsg = "Cannot get stripped tokens";
+    String actualMsg = ex.getMessage();
+
+    assertThat(actualMsg).isEqualTo(expectedMsg);
+  }
+
+  @Test
+  public void channelCredentialsAcquiredAndReleasedEqualNumberOfTimes() throws IOException {
+    int cycles = 5;
+
+    for (int idx = 0; idx < cycles; ++idx) {
+      assertSame(unit.acquireChannelCredentials(), channelCreds);
+    }
+
+    for (int idx = 0; idx < cycles; ++idx) {
+      unit.releaseChannelCredentials();
+    }
+
+    verify(mockCloseable, times(1)).close();
+  }
+
+  @Test
+  public void channelCredentialsReleasedMoreTimesThanAcquired() {
+    assertSame(unit.acquireChannelCredentials(), channelCreds);
+    unit.releaseChannelCredentials();
+
+    Exception ex = assertThrows(IllegalStateException.class, () -> {
+      unit.releaseChannelCredentials();
+    });
+
+    String expectedMsg = "Channel credentials were released more times than they were acquired";
+    String actualMsg = ex.getMessage();
+
+    assertThat(actualMsg).isEqualTo(expectedMsg);
+  }
+
+
+
+  @Test
+  public void channelCredentialsAcquiredMoreTimesThanReleased() throws IOException {
+    assertSame(unit.acquireChannelCredentials(), channelCreds);
+    assertSame(unit.acquireChannelCredentials(), channelCreds);
+    unit.releaseChannelCredentials();
+
+    verify(mockCloseable, never()).close();
   }
 }

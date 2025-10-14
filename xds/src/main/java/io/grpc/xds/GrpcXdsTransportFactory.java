@@ -55,6 +55,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   static class GrpcXdsTransport implements XdsTransport {
 
     private final ManagedChannel channel;
+    private final ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials;
     private final CallCredentials callCredentials;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
@@ -69,6 +70,13 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      if (channelCredentials instanceof ResourceAllocatingChannelCredentials) {
+        this.resourceAllocatingChannelCredentials =
+            (ResourceAllocatingChannelCredentials) channelCredentials;
+        channelCredentials = resourceAllocatingChannelCredentials.acquireChannelCredentials();
+      } else {
+        this.resourceAllocatingChannelCredentials = null;
+      }
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
@@ -78,6 +86,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     @VisibleForTesting
     public GrpcXdsTransport(ManagedChannel channel, CallCredentials callCredentials) {
       this.channel = checkNotNull(channel, "channel");
+      this.resourceAllocatingChannelCredentials = null;
       this.callCredentials = callCredentials;
     }
 
@@ -99,6 +108,9 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     @Override
     public void shutdown() {
       channel.shutdown();
+      if (resourceAllocatingChannelCredentials != null) {
+        resourceAllocatingChannelCredentials.releaseChannelCredentials();
+      }
     }
 
     private class XdsStreamingCall<ReqT, RespT> implements

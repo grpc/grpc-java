@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
@@ -73,66 +74,36 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
       }
     }
 
-    ImmutableList.Builder<Closeable> resourcesBuilder = ImmutableList.builder();
-    ScheduledExecutorService scheduledExecutorService = null;
-
     // use trust certificate file path from bootstrap config if provided; else use system default
     String rootCertPath = JsonUtil.getString(jsonConfig, ROOT_FILE_KEY);
+    AdvancedTlsX509TrustManager trustManager = null;
     if (rootCertPath != null) {
-      try {
-        scheduledExecutorService = scheduledExecutorServiceFactory.create();
-        AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
-        Closeable trustManagerFuture = trustManager.updateTrustCredentials(
-            new File(rootCertPath),
-            refreshIntervalSeconds,
-            TimeUnit.SECONDS,
-            scheduledExecutorService);
-        resourcesBuilder.add(trustManagerFuture);
-        tlsChannelCredsBuilder.trustManager(trustManager);
-      } catch (Exception e) {
-        logger.log(Level.WARNING, "Unable to read root certificates", e);
-        return null;
-      }
+      trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+      tlsChannelCredsBuilder.trustManager(trustManager);
     }
 
     // use certificate chain and private key file paths from bootstrap config if provided. Mind that
     // both JSON values must be either set (mTLS case) or both unset (TLS case)
     String certChainPath = JsonUtil.getString(jsonConfig, CERT_FILE_KEY);
     String privateKeyPath = JsonUtil.getString(jsonConfig, KEY_FILE_KEY);
+    AdvancedTlsX509KeyManager keyManager = null;
     if (certChainPath != null && privateKeyPath != null) {
-      try {
-        if (scheduledExecutorService == null) {
-          scheduledExecutorService = scheduledExecutorServiceFactory.create();
-        }
-        AdvancedTlsX509KeyManager keyManager = new AdvancedTlsX509KeyManager();
-        Closeable keyManagerFuture = keyManager.updateIdentityCredentials(
-            new File(certChainPath),
-            new File(privateKeyPath),
-            refreshIntervalSeconds,
-            TimeUnit.SECONDS,
-            scheduledExecutorService);
-        resourcesBuilder.add(keyManagerFuture);
-        tlsChannelCredsBuilder.keyManager(keyManager);
-      } catch (Exception e) {
-        logger.log(Level.WARNING, "Unable to read certificate chain or private key", e);
-        return null;
-      }
+      keyManager = new AdvancedTlsX509KeyManager();
+      tlsChannelCredsBuilder.keyManager(keyManager);
     } else if (certChainPath != null || privateKeyPath != null) {
       logger.log(Level.WARNING, "Certificate chain and private key must be both set or unset");
       return null;
     }
 
-    // if executor was initialized, add it to allocated resource list
-    if (scheduledExecutorService != null) {
-      resourcesBuilder.add(asCloseable(scheduledExecutorService));
-    }
-
     return ResourceAllocatingChannelCredentials.create(
-      tlsChannelCredsBuilder.build(), resourcesBuilder.build());
-  }
-
-  private static Closeable asCloseable(ScheduledExecutorService scheduledExecutorService) {
-    return () -> scheduledExecutorService.shutdownNow();
+        tlsChannelCredsBuilder.build(),
+        new ResourcesSupplier(
+            refreshIntervalSeconds,
+            rootCertPath,
+            trustManager,
+            certChainPath,
+            privateKeyPath,
+            keyManager));
   }
 
   @Override
@@ -148,6 +119,84 @@ public final class TlsXdsCredentialsProvider extends XdsCredentialsProvider {
   @Override
   public int priority() {
     return 5;
+  }
+
+  private static final class ResourcesSupplier implements Supplier<ImmutableList<Closeable>> {
+    private final long refreshIntervalSeconds;
+    private final String rootCertPath;
+    private final AdvancedTlsX509TrustManager trustManager;
+    private final String certChainPath;
+    private final String privateKeyPath;
+    private final AdvancedTlsX509KeyManager keyManager;
+
+    ResourcesSupplier(
+        long refreshIntervalSeconds,
+        String rootCertPath,
+        AdvancedTlsX509TrustManager trustManager,
+        String certChainPath,
+        String privateKeyPath,
+        AdvancedTlsX509KeyManager keyManager) {
+      this.refreshIntervalSeconds = refreshIntervalSeconds;
+      this.rootCertPath = rootCertPath;
+      this.trustManager = trustManager;
+      this.certChainPath = certChainPath;
+      this.privateKeyPath = privateKeyPath;
+      this.keyManager = keyManager;
+    }
+
+    @Override
+    public ImmutableList<Closeable> get() {
+      ImmutableList.Builder<Closeable> resourcesBuilder = ImmutableList.builder();
+
+      ScheduledExecutorService scheduledExecutorService =
+          (trustManager != null || keyManager != null)
+              ? scheduledExecutorService = scheduledExecutorServiceFactory.create()
+              : null;
+      if (scheduledExecutorService != null) {
+        resourcesBuilder.add(asCloseable(scheduledExecutorService));
+      }
+
+      if (trustManager != null) {
+        try {
+          Closeable trustManagerFuture = trustManager.updateTrustCredentials(
+              new File(rootCertPath),
+              refreshIntervalSeconds,
+              TimeUnit.SECONDS,
+              scheduledExecutorService);
+          resourcesBuilder.add(trustManagerFuture);
+        } catch (Exception e) {
+          cleanupResources(resourcesBuilder.build());
+          throw new RuntimeException("Unable to read root certificates", e);
+        }
+      }
+
+      if (keyManager != null) {
+        try {
+          Closeable keyManagerFuture = keyManager.updateIdentityCredentials(
+              new File(certChainPath),
+              new File(privateKeyPath),
+              refreshIntervalSeconds,
+              TimeUnit.SECONDS,
+              scheduledExecutorService);
+          resourcesBuilder.add(keyManagerFuture);
+        } catch (Exception e) {
+          cleanupResources(resourcesBuilder.build());
+          throw new RuntimeException("Unable to read certificate chain or private key", e);
+        }
+      }
+
+      return resourcesBuilder.build();
+    }
+
+    private static Closeable asCloseable(ScheduledExecutorService scheduledExecutorService) {
+      return () -> scheduledExecutorService.shutdownNow();
+    }
+
+    private static void cleanupResources(ImmutableList<Closeable> resources) {
+      for (Closeable resource : resources) {
+        GrpcUtil.closeQuietly(resource);
+      }
+    }
   }
 
   abstract static class ScheduledExecutorServiceFactory {

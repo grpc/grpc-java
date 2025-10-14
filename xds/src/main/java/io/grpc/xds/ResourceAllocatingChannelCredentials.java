@@ -17,8 +17,10 @@
 package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ChannelCredentials;
+import io.grpc.internal.GrpcUtil;
 import java.io.Closeable;
 
 /**
@@ -28,29 +30,47 @@ import java.io.Closeable;
  */
 public final class ResourceAllocatingChannelCredentials extends ChannelCredentials {
   public static ChannelCredentials create(
-      ChannelCredentials channelCreds, ImmutableList<Closeable> resources) {
-    return new ResourceAllocatingChannelCredentials(channelCreds, resources);
+      ChannelCredentials channelCreds, Supplier<ImmutableList<Closeable>> resourcesSupplier) {
+    return new ResourceAllocatingChannelCredentials(channelCreds, resourcesSupplier);
   }
 
   private final ChannelCredentials channelCreds;
-  private final ImmutableList<Closeable> resources;
+  private final Supplier<ImmutableList<Closeable>> resourcesSupplier;
+  private int refCount;
+  private ImmutableList<Closeable> resourcesReleaser;
 
   private ResourceAllocatingChannelCredentials(
-      ChannelCredentials channelCreds, ImmutableList<Closeable> resources) {
+      ChannelCredentials channelCreds, Supplier<ImmutableList<Closeable>> resourcesSupplier) {
     this.channelCreds = Preconditions.checkNotNull(channelCreds, "channelCreds");
-    this.resources = Preconditions.checkNotNull(resources, "resources");
+    this.resourcesSupplier = Preconditions.checkNotNull(resourcesSupplier, "resourcesSupplier");
+    this.refCount = 0;
+    this.resourcesReleaser = null;
   }
 
-  public ChannelCredentials getChannelCredentials() {
+  public synchronized ChannelCredentials acquireChannelCredentials() {
+    if (refCount++ == 0) {
+      resourcesReleaser = resourcesSupplier.get();
+    }
     return channelCreds;
   }
 
-  public ImmutableList<Closeable> getAllocatedResources() {
-    return resources;
+  public synchronized void releaseChannelCredentials() {
+    if (--refCount == 0) {
+      for (Closeable resource : resourcesReleaser) {
+        GrpcUtil.closeQuietly(resource);
+      }
+      resourcesReleaser = null;
+    }
+    Preconditions.checkState(
+        refCount >= 0, "Channel credentials were released more times than they were acquired");
   }
 
+  /**
+   * Please use {@link #acquireChannelCredentials()} to get a shared instance of
+   * {@code ChannelCredentials} for which stripped tokens can be obtained.
+   */
   @Override
   public ChannelCredentials withoutBearerTokens() {
-    return channelCreds.withoutBearerTokens();
+    throw new UnsupportedOperationException("Cannot get stripped tokens");
   }
 }

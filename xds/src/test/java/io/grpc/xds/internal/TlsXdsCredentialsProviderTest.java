@@ -20,8 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -35,7 +37,6 @@ import io.grpc.util.AdvancedTlsX509KeyManager;
 import io.grpc.util.AdvancedTlsX509TrustManager;
 import io.grpc.xds.ResourceAllocatingChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
-import java.io.Closeable;
 import java.util.Map;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.TrustManager;
@@ -82,7 +83,20 @@ public class TlsXdsCredentialsProviderTest {
   public void channelCredentialsWhenNotExistingTrustFileConfig() {
     Map<String, ?> jsonConfig = ImmutableMap.of(
         "ca_certificate_file", "/tmp/not-exisiting-file.txt");
-    assertNull(provider.newChannelCredentials(jsonConfig));
+
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    Exception ex = assertThrows(RuntimeException.class, () -> {
+      resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    });
+
+    String expectedMsg = "Unable to read root certificates";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
   }
 
   @Test
@@ -90,7 +104,20 @@ public class TlsXdsCredentialsProviderTest {
     Map<String, ?> jsonConfig = ImmutableMap.of(
         "certificate_file", "/tmp/not-exisiting-file.txt",
         "private_key_file", "/tmp/not-exisiting-file-2.txt");
-    assertNull(provider.newChannelCredentials(jsonConfig));
+
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    Exception ex = assertThrows(RuntimeException.class, () -> {
+      resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    });
+
+    String expectedMsg = "Unable to read certificate chain or private key";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
   }
 
   @Test
@@ -112,21 +139,23 @@ public class TlsXdsCredentialsProviderTest {
         "private_key_file", privateKeyPath,
         "refresh_interval", "440s");
 
-    ChannelCredentials creds = provider.newChannelCredentials(jsonConfig);
-    assertSame(ResourceAllocatingChannelCredentials.class, creds.getClass());
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
     ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
-        (ResourceAllocatingChannelCredentials) creds;
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    ChannelCredentials acquiredChannelCredentials =
+        resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    assertSame(TlsChannelCredentials.class, acquiredChannelCredentials.getClass());
+
     TlsChannelCredentials tlsChannelCredentials =
-        (TlsChannelCredentials) resourceAllocatingChannelCredentials.getChannelCredentials();
+        (TlsChannelCredentials) acquiredChannelCredentials;
     assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
     KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
     assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
     assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
     TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
     assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
-    assertThat(resourceAllocatingChannelCredentials.getAllocatedResources()).hasSize(3);
-    for (Closeable resource : resourceAllocatingChannelCredentials.getAllocatedResources()) {
-      resource.close();
-    }
+    resourceAllocatingChannelCredentials.releaseChannelCredentials();
   }
 }
