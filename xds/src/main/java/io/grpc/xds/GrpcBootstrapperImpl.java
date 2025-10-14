@@ -96,7 +96,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
-                                                               String serverUri)
+                                                          String serverUri)
       throws XdsInitializationException {
     List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
     if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {

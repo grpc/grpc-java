@@ -203,7 +203,7 @@ public class CommonBootstrapperTestUtils {
 
     List<ServerInfo> serverInfos = new ArrayList<>();
     for (String uri : serverUris) {
-      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true,false));
+      serverInfos.add(ServerInfo.create(uri, CHANNEL_CREDENTIALS, false, true, false));
     }
     EnvoyProtoData.Node node = EnvoyProtoData.Node.newBuilder().setId("node-id").build();
 
@@ -214,15 +214,13 @@ public class CommonBootstrapperTestUtils {
             "authority.xds.com",
             Bootstrapper.AuthorityInfo.create(
                 "xdstp://authority.xds.com/envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(
-                    Bootstrapper.ServerInfo.create(
-                        SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_CUSTOM_AUTHORITY, CHANNEL_CREDENTIALS))),
             "",
             Bootstrapper.AuthorityInfo.create(
                 "xdstp:///envoy.config.listener.v3.Listener/%s",
-                ImmutableList.of(
-                    Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+                ImmutableList.of(Bootstrapper.ServerInfo.create(
+                    SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
         .certProviders(ImmutableMap.of("cert-instance-name",
             Bootstrapper.CertificateProviderInfo.create("file-watcher", ImmutableMap.of())))
         .build();

@@ -377,7 +377,7 @@ public abstract class GrpcXdsClientImplTestBase {
                 AuthorityInfo.create(
                     "xdstp:///envoy.config.listener.v3.Listener/%s",
                     ImmutableList.of(Bootstrapper.ServerInfo.create(
-                        SERVER_URI_EMPTY_AUTHORITY, InsecureChannelCredentials.create())))))
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
             .certProviders(ImmutableMap.of("cert-instance-name",
                 CertificateProviderInfo.create("file-watcher", ImmutableMap.<String, Object>of())))
             .build();

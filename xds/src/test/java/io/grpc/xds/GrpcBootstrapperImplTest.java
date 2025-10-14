@@ -220,7 +220,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);;
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(
         getNodeBuilder()
             .setId("ENVOY_NODE_ID")
@@ -291,7 +291,7 @@ public class GrpcBootstrapperImplTest {
     assertThat(info.servers()).hasSize(1);
     ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
     assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
-    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);;
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
   }
 
