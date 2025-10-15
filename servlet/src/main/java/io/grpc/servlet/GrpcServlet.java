@@ -40,7 +40,7 @@ public class GrpcServlet extends HttpServlet {
   @SuppressWarnings("serial")
   private final ServletAdapter servletAdapter;
 
-  GrpcServlet(ServletAdapter servletAdapter) {
+  protected GrpcServlet(ServletAdapter servletAdapter) {
     this.servletAdapter = servletAdapter;
   }
 
