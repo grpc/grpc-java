@@ -1620,7 +1620,8 @@ public class ServerImplTest {
     listener.setListener(mockListener);
 
     StatusRuntimeException statusRuntimeException
-            = new StatusRuntimeException(Status.RESOURCE_EXHAUSTED.withDescription("exhausted"));
+            = new StatusRuntimeException(Status.RESOURCE_EXHAUSTED
+            .withDescription("Decompressed gRPC message exceeds maximum size"));
     doThrow(statusRuntimeException).when(mockListener)
         .messagesAvailable(any(StreamListener.MessageProducer.class));
     listener.messagesAvailable(mock(StreamListener.MessageProducer.class));
@@ -1633,7 +1634,7 @@ public class ServerImplTest {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.RESOURCE_EXHAUSTED, status.getCode());
-    assertEquals("exhausted", status.getDescription());
+    assertEquals("Decompressed gRPC message exceeds maximum size", status.getDescription());
     assertEquals(statusRuntimeException, status.getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }
@@ -1650,7 +1651,8 @@ public class ServerImplTest {
             PerfMark.createTag());
 
     StatusException statusException
-            = new StatusException(Status.RESOURCE_EXHAUSTED.withDescription("exhausted"));
+            = new StatusException(Status.RESOURCE_EXHAUSTED
+            .withDescription("Decompressed gRPC message exceeds maximum size"));
     java.lang.reflect.Method internalClose =
             JumpToApplicationThreadServerStreamListener.class.getDeclaredMethod(
             "internalClose", Throwable.class);
@@ -1660,7 +1662,7 @@ public class ServerImplTest {
     verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.RESOURCE_EXHAUSTED, status.getCode());
-    assertEquals("exhausted", status.getDescription());
+    assertEquals("Decompressed gRPC message exceeds maximum size", status.getDescription());
     assertEquals(statusException, status.getCause());
     assertTrue(metadataCaptor.getValue().keys().isEmpty());
   }

@@ -820,7 +820,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       }  else if (t instanceof StatusException) {
         extractedStatus = ((StatusException) t).getStatus();
       }
-      if (extractedStatus != null && extractedStatus.getCode() == Status.Code.RESOURCE_EXHAUSTED) {
+      String message = t.getMessage();
+      if (extractedStatus != null && extractedStatus.getCode() == Status.Code.RESOURCE_EXHAUSTED
+          && message != null
+          && message.contains("Decompressed gRPC message exceeds maximum size")) {
         statusToPropagate = extractedStatus.withCause(t);
       }
       stream.close(statusToPropagate, new Metadata());
