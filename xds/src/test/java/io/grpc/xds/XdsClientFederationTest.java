@@ -154,7 +154,6 @@ public class XdsClientFederationTest {
     }
   }
 
-
   /**
    * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately
    * starts {@link LoadReportClient}s to do that.

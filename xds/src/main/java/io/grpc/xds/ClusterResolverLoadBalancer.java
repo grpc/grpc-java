@@ -44,6 +44,7 @@ import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+// import io.grpc.xds.client.BackendMetricPropagation;]
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
@@ -336,7 +337,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           new ClusterImplConfig(
               discovery.cluster, discovery.edsServiceName, discovery.lrsServerInfo,
               discovery.maxConcurrentRequests, dropOverloads, endpointLbConfig,
-              discovery.tlsContext, discovery.filterMetadata);
+              discovery.tlsContext, discovery.filterMetadata, discovery.backendMetricPropagation);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
