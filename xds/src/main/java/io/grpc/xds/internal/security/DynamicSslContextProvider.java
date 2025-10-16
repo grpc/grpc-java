@@ -44,7 +44,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
   @Nullable protected final CertificateValidationContext staticCertificateValidationContext;
   @Nullable protected AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager>
       sslContextAndTrustManager;
-  private boolean autoSniSanValidationDoesNotApply;
+  protected boolean autoSniSanValidationDoesNotApply;
 
   protected DynamicSslContextProvider(
       BaseTlsContext tlsContext, CertificateValidationContext staticCertValidationContext) {

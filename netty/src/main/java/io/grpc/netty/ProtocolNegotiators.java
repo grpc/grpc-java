@@ -634,9 +634,6 @@ final class ProtocolNegotiators {
         X509TrustManager x509TrustManager) {
       super(next, negotiationLogger);
       this.sslContext = Preconditions.checkNotNull(sslContext, "sslContext");
-      // TODO: For empty authority and fallback flag
-      // GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE present, we should parse authority
-      // but prevent it from being used for SAN validation in the TrustManager.
       if (authority != null) {
         HostPort hostPort = parseAuthority(authority);
         this.host = hostPort.host;

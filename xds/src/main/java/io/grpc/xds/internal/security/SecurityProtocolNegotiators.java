@@ -194,6 +194,7 @@ public final class SecurityProtocolNegotiators {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
     private final String sni;
+    private final boolean autoSniSanValidationDoesNotApply;
 
     ClientSecurityHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
@@ -215,10 +216,19 @@ public final class SecurityProtocolNegotiators {
       EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
       UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
       if (CertificateUtils.isXdsSniEnabled) {
-        sni = upstreamTlsContext.getAutoHostSni() && !Strings.isNullOrEmpty(endpointHostname)
+        String sniToUse = upstreamTlsContext.getAutoHostSni()
+            && !Strings.isNullOrEmpty(endpointHostname)
             ? endpointHostname : upstreamTlsContext.getSni();
+        if (sniToUse.isEmpty() && CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
+          sniToUse = grpcHandler.getAuthority();
+          autoSniSanValidationDoesNotApply = true;
+        } else {
+          autoSniSanValidationDoesNotApply = false;
+        }
+        sni = sniToUse;
       } else {
         sni = grpcHandler.getAuthority();
+        autoSniSanValidationDoesNotApply = false;
       }
     }
 
@@ -261,7 +271,7 @@ public final class SecurityProtocolNegotiators {
               ctx.fireExceptionCaught(throwable);
             }
           },
-          false);
+          autoSniSanValidationDoesNotApply);
     }
 
     @Override
