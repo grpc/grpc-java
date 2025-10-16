@@ -301,7 +301,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
   private void callUpdateSslContext(SslContextProviderSupplier sslContextProviderSupplier) {
     assertThat(sslContextProviderSupplier).isNotNull();
     SslContextProvider.Callback callback = mock(SslContextProvider.Callback.class);
-    sslContextProviderSupplier.updateSslContext(callback);
+    sslContextProviderSupplier.updateSslContext(callback, false);
   }
 
   private void sendListenerUpdate(

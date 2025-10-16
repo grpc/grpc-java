@@ -55,12 +55,15 @@ public final class SslContextProviderSupplier implements Closeable {
 
   /** Updates SslContext via the passed callback. */
   public synchronized void updateSslContext(
-      final SslContextProvider.Callback callback) {
+      final SslContextProvider.Callback callback, boolean autoSniSanValidationDoesNotApply) {
     checkNotNull(callback, "callback");
     try {
       if (!shutdown) {
         if (sslContextProvider == null) {
           sslContextProvider = getSslContextProvider();
+          if (tlsContext instanceof UpstreamTlsContext && autoSniSanValidationDoesNotApply) {
+            ((DynamicSslContextProvider) sslContextProvider).setAutoSniSanValidationDoesNotApply();
+          }
         }
       }
       // we want to increment the ref-count so call findOrCreate again...

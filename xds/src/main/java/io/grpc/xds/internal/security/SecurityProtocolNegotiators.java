@@ -260,8 +260,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+          false);
     }
 
     @Override
@@ -399,8 +399,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+          false);
     }
   }
 }
