@@ -544,6 +544,8 @@ public class MessageDeframer implements Closeable, Deframer {
   }
 
   static class TooLongDecompressedMessageException extends StatusRuntimeException {
+    private static final long serialVersionUID = 1L;
+
     public TooLongDecompressedMessageException(Status status) {
       super(status);
     }
