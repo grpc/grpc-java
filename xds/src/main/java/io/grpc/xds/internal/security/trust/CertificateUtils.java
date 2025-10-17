@@ -31,6 +31,8 @@ import java.security.cert.X509Certificate;
  */
 public final class CertificateUtils {
   public static boolean isXdsSniEnabled = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SNI", false);
+  public static boolean useChannelAuthorityIfNoSniApplicable
+      = GrpcUtil.getFlag("GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE", false);
 
   /**
    * Generates X509Certificate array from a file on disk.

@@ -215,7 +215,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        });
+        }, false);
     assertThat(executor.runDueTasks()).isEqualTo(1);
     channel.runPendingTasks();
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -401,7 +401,7 @@ public class SecurityProtocolNegotiatorsTest {
           protected void onException(Throwable throwable) {
             future.set(throwable);
           }
-        });
+        }, false);
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     assertThat(executor.runDueTasks()).isEqualTo(1);
     Object fromFuture = future.get(2, TimeUnit.SECONDS);
@@ -540,7 +540,7 @@ public class SecurityProtocolNegotiatorsTest {
             protected void onException(Throwable throwable) {
               future.set(throwable);
             }
-          });
+          }, false);
       executor.runDueTasks();
       channel.runPendingTasks(); // need this for tasks to execute on eventLoop
       Object fromFuture = future.get(5, TimeUnit.SECONDS);
