@@ -104,8 +104,8 @@ signature-java = "org.codehaus.mojo.signature:java18:1.0"
 tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.31"
 tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
 truth = "com.google.truth:truth:1.4.4"
-undertow-servlet22 = "io.undertow:undertow-servlet:2.2.38.Final"
-undertow-servlet = "io.undertow:undertow-servlet:2.3.20.Final"
+undertow-servlet22 = "io.undertow:undertow-servlet:2.2.37.Final"
+undertow-servlet = "io.undertow:undertow-servlet:2.3.18.Final"
 
 # Do not update: Pinned to the last version supporting Java 8.
 # See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
