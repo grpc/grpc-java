@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Codec;
 import io.grpc.Decompressor;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import java.io.Closeable;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -519,9 +520,9 @@ public class MessageDeframer implements Closeable, Deframer {
 
     private void verifySize() {
       if (count > maxMessageSize) {
-        throw Status.RESOURCE_EXHAUSTED
-            .withDescription("Decompressed gRPC message exceeds maximum size " + maxMessageSize)
-            .asRuntimeException();
+        throw new TooLongDecompressedMessageException(
+            Status.RESOURCE_EXHAUSTED
+            .withDescription("Decompressed gRPC message exceeds maximum size " + maxMessageSize));
       }
     }
   }
@@ -539,6 +540,12 @@ public class MessageDeframer implements Closeable, Deframer {
       InputStream messageToReturn = message;
       message = null;
       return messageToReturn;
+    }
+  }
+
+  static class TooLongDecompressedMessageException extends StatusRuntimeException {
+    public TooLongDecompressedMessageException(Status status) {
+      super(status);
     }
   }
 }

@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
+import static io.grpc.internal.MessageDeframer.TooLongDecompressedMessageException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -490,6 +491,22 @@ public class MessageDeframerTest {
       assertEquals(2, skipped);
       stream.close();
       checkSizeEnforcingInputStreamStats(tracer, 3);
+    }
+
+    @Test
+    public void testThrows_TooLongDecompressedMessageException() throws IOException {
+      ByteArrayInputStream in = new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8));
+      SizeEnforcingInputStream stream =
+              new MessageDeframer.SizeEnforcingInputStream(in, 2, statsTraceCtx);
+
+      try {
+        StatusRuntimeException e =
+                assertThrows(TooLongDecompressedMessageException.class, () -> stream.skip(4));
+        assertThat(e).hasMessageThat()
+            .isEqualTo("RESOURCE_EXHAUSTED: Decompressed gRPC message exceeds maximum size 2");
+      } finally {
+        stream.close();
+      }
     }
   }
 
