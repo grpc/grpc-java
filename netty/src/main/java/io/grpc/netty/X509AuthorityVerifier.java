@@ -103,6 +103,6 @@ final class X509AuthorityVerifier implements AuthorityVerifier {
       throw new IllegalStateException("checkServerTrustedMethod not found");
     }
     checkServerTrustedMethod.invoke(
-            x509ExtendedTrustManager, x509PeerCertificates, "RSA", sslEngineWrapper);
+            x509ExtendedTrustManager, x509PeerCertificates, "UNKNOWN", sslEngineWrapper);
   }
 }
