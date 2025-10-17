@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import com.google.protobuf.ByteString;
@@ -37,6 +38,8 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.Status.Code;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyServerBuilder;
@@ -53,7 +56,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -84,10 +90,16 @@ public class TransportCompressionTest extends AbstractInteropTest {
     compressors.register(Codec.Identity.NONE);
   }
 
+  @Rule
+  public final TestName currentTest = new TestName();
+
   @Override
   protected ServerBuilder<?> getServerBuilder() {
     NettyServerBuilder builder = NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
-        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+        .maxInboundMessageSize(
+            DECOMPRESSED_MESSAGE_TOO_LONG_METHOD_NAME.equals(currentTest.getMethodName())
+                ? 1000
+                : AbstractInteropTest.MAX_MESSAGE_SIZE)
         .compressorRegistry(compressors)
         .decompressorRegistry(decompressors)
         .intercept(new ServerInterceptor() {
@@ -124,6 +136,22 @@ public class TransportCompressionTest extends AbstractInteropTest {
     // Assert that compression took place
     assertTrue(FZIPPER.anyRead);
     assertTrue(FZIPPER.anyWritten);
+  }
+
+  private static final String DECOMPRESSED_MESSAGE_TOO_LONG_METHOD_NAME = "decompressedMessageTooLong";
+
+  @Test
+  @Ignore("for PR #12360")
+  public void decompressedMessageTooLong() {
+    assertEquals(DECOMPRESSED_MESSAGE_TOO_LONG_METHOD_NAME, currentTest.getMethodName());
+    final SimpleRequest bigRequest = SimpleRequest.newBuilder()
+        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[10_000])))
+        .build();
+    StatusRuntimeException e = assertThrows(StatusRuntimeException.class,
+        () -> blockingStub.withCompression("gzip").unaryCall(bigRequest));
+    assertCodeEquals(Code.RESOURCE_EXHAUSTED, e.getStatus());
+    assertEquals("Decompressed gRPC message exceeds maximum size 1000",
+        e.getStatus().getDescription());
   }
 
   @Override
