@@ -38,6 +38,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -58,6 +59,11 @@ final class OpenTelemetryTracingModule {
 
   @VisibleForTesting
   final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
+
+  @VisibleForTesting
+  final io.grpc.Context.Key<Baggage> baggageKey =
+      io.grpc.Context.key("opentelemetry-baggage-key");
+
   @Nullable
   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
   @Nullable
@@ -330,6 +336,8 @@ final class OpenTelemetryTracingModule {
         return next.startCall(call, headers);
       }
       Context serverCallContext = Context.current().with(span);
+      Baggage baggage = baggageKey.get(io.grpc.Context.current());
+      serverCallContext = serverCallContext.with(baggage);
       try (Scope scope = serverCallContext.makeCurrent()) {
         return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
       }
