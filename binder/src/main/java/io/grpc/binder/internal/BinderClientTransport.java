@@ -120,10 +120,10 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
-    this.handshake = new LegacyClientHandshake();
+    this.handshake =
+        factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new NewClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
@@ -394,6 +394,78 @@ public final class BinderClientTransport extends BinderTransport
             onHandshakeComplete();
           }
         }
+      }
+    }
+  }
+
+  private class NewClientHandshake implements ClientHandshake {
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy endpointBinder) {
+      Futures.addCallback(
+          Futures.submit(serviceBinding::getConnectedServiceInfo, offloadExecutor),
+          new FutureCallback<ServiceInfo>() {
+            @Override
+            public void onSuccess(ServiceInfo result) {
+              synchronized (BinderClientTransport.this) {
+                onConnectedServiceInfo(endpointBinder, result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (BinderClientTransport.this) {
+                shutdownInternal(Status.fromThrowable(t), true);
+              }
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void onConnectedServiceInfo(OneWayBinderProxy endpointBinder, ServiceInfo serviceInfo) {
+      if (inState(TransportState.SETUP)) {
+        attributes = setSecurityAttrs(attributes, serviceInfo.applicationInfo.uid);
+        ListenableFuture<Status> authResultFuture =
+            register(checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid));
+        Futures.addCallback(
+            authResultFuture,
+            new FutureCallback<Status>() {
+              @Override
+              public void onSuccess(Status result) {
+                synchronized (BinderClientTransport.this) {
+                  handleAuthResult(endpointBinder, result);
+                }
+              }
+
+              @Override
+              public void onFailure(Throwable t) {
+                BinderClientTransport.this.handleAuthResult(t);
+              }
+            },
+            offloadExecutor);
+      }
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void handleAuthResult(OneWayBinderProxy endpointBinder, Status authResult) {
+      if (inState(TransportState.SETUP)) {
+        if (!authResult.isOk()) {
+          shutdownInternal(authResult, true);
+        } else {
+          sendSetupTransaction(endpointBinder);
+        }
+      }
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport(OneWayBinderProxy serverBinder) {
+      if (!setOutgoingBinder(serverBinder)) {
+        shutdownInternal(
+            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+      } else {
+        onHandshakeComplete();
       }
     }
   }
