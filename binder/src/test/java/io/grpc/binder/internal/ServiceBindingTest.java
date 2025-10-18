@@ -116,6 +116,32 @@ public final class ServiceBindingTest {
   }
 
   @Test
+  public void testGetConnectedServiceInfo() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
+  }
+
+  @Test
+  public void testGetConnectedServiceInfoThrows() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+    shadowOf(appContext.getPackageManager()).removeService(serviceComponent);
+
+    StatusException se = assertThrows(StatusException.class, binding::getConnectedServiceInfo);
+    assertThat(se.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+  }
+
+  @Test
   public void testBindingIntent() throws Exception {
     shadowApplication.setComponentNameAndServiceForBindService(null, null);
     shadowApplication.setComponentNameAndServiceForBindServiceForIntent(
@@ -389,6 +415,7 @@ public final class ServiceBindingTest {
     binding =
         newBuilder()
             .setTargetUserHandle(user0)
+            .setTargetComponent(serviceComponent)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
@@ -401,6 +428,10 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
   }
 
   private void assertNoLockHeld() {
