@@ -20,8 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.content.Context;
-import android.os.UserHandle;
-import androidx.annotation.RequiresApi;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
@@ -232,32 +230,6 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
    */
   public BinderChannelBuilder securityPolicy(SecurityPolicy securityPolicy) {
     transportFactoryBuilder.setSecurityPolicy(securityPolicy);
-    return this;
-  }
-
-  /**
-   * Specifies the {@link UserHandle} to be searched for the remote Android Service by default.
-   *
-   * <p>Used only as a fallback if the direct or resolved {@link AndroidComponentAddress} doesn't
-   * specify a {@link UserHandle}. If neither the Channel nor the {@link AndroidComponentAddress}
-   * specifies a target user, the {@link UserHandle} of the current process will be used.
-   *
-   * <p>Connecting to a server in a different Android user is uncommon and can only be done by a
-   * "system app" client with special permissions. See {@link
-   * AndroidComponentAddress.Builder#setTargetUser(UserHandle)} for details.
-   *
-   * @deprecated This method's name is misleading because it implies an impersonated client identity
-   *     when it's actually specifying part of the server's location. It's also no longer necessary
-   *     since the target user is part of {@link AndroidComponentAddress}. Prefer to specify target
-   *     user in the address instead, either directly or via a {@link io.grpc.NameResolverProvider}.
-   * @param targetUserHandle the target user to bind into.
-   * @return this
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
-  @RequiresApi(30)
-  @Deprecated
-  public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
-    transportFactoryBuilder.setDefaultTargetUserHandle(targetUserHandle);
     return this;
   }
 

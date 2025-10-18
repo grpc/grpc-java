@@ -18,7 +18,6 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.content.Context;
-import android.os.UserHandle;
 import androidx.core.content.ContextCompat;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -39,7 +38,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 
 /** Creates new binder transports. */
 @Internal
@@ -50,7 +48,6 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
   final ObjectPool<? extends Executor> offloadExecutorPool;
   final SecurityPolicy securityPolicy;
-  @Nullable final UserHandle defaultTargetUserHandle;
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
@@ -71,7 +68,6 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
     offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
     securityPolicy = checkNotNull(builder.securityPolicy);
-    defaultTargetUserHandle = builder.defaultTargetUserHandle;
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
@@ -125,7 +121,6 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     ObjectPool<ScheduledExecutorService> scheduledExecutorPool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
-    @Nullable UserHandle defaultTargetUserHandle;
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
@@ -169,11 +164,6 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
 
     public Builder setSecurityPolicy(SecurityPolicy securityPolicy) {
       this.securityPolicy = checkNotNull(securityPolicy, "securityPolicy");
-      return this;
-    }
-
-    public Builder setDefaultTargetUserHandle(@Nullable UserHandle defaultTargetUserHandle) {
-      this.defaultTargetUserHandle = defaultTargetUserHandle;
       return this;
     }
 

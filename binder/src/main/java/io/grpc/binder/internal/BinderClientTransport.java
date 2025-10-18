@@ -92,13 +92,6 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> authResultFuture; // null before we check auth.
-
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
 
   /**
    * Constructs a new transport instance.
@@ -137,9 +130,7 @@ public final class BinderClientTransport extends BinderTransport
             factory.sourceContext,
             factory.channelCredentials,
             targetAddress.asBindIntent(),
-            targetAddress.getTargetUser() != null
-                ? targetAddress.getTargetUser()
-                : factory.defaultTargetUserHandle,
+            targetAddress.getTargetUser(),
             factory.bindServiceFlags.toInteger(),
             this);
   }
@@ -203,7 +194,8 @@ public final class BinderClientTransport extends BinderTransport
     // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
     // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
     // can't typically control the exact timing of its installation.
-    preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+    ListenableFuture<Status> preAuthResultFuture =
+        register(checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid));
     Futures.addCallback(
         preAuthResultFuture,
         new FutureCallback<Status>() {
@@ -324,12 +316,6 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
-    if (preAuthResultFuture != null) {
-      preAuthResultFuture.cancel(false); // No effect if already complete.
-    }
-    if (authResultFuture != null) {
-      authResultFuture.cancel(false); // No effect if already complete.
-    }
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
   }
@@ -373,9 +359,8 @@ public final class BinderClientTransport extends BinderTransport
       int remoteUid = Binder.getCallingUid();
       restrictIncomingBinderToCallsFrom(remoteUid);
       attributes = setSecurityAttrs(attributes, remoteUid);
-      authResultFuture = checkServerAuthorizationAsync(remoteUid);
       Futures.addCallback(
-          authResultFuture,
+          register(checkServerAuthorizationAsync(remoteUid)),
           new FutureCallback<Status>() {
             @Override
             public void onSuccess(Status result) {

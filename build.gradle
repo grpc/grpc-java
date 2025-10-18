@@ -21,7 +21,7 @@ subprojects {
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
-    version = "1.76.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.77.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -194,6 +194,25 @@ subprojects {
         // Disable Error Prone
         tasks.withType(JavaCompile).configureEach {
             options.errorprone.enabled = false
+        }
+    }
+
+    plugins.withId("com.android.base") {
+        android {
+            lint {
+                abortOnError true
+                if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                    warningsAsErrors true
+                }
+            }
+        }
+        tasks.withType(JavaCompile).configureEach {
+            it.options.compilerArgs += [
+                    "-Xlint:all"
+            ]
+            if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
+                it.options.compilerArgs += ["-Werror"]
+            }
         }
     }
 

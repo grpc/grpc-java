@@ -37,6 +37,7 @@ import io.grpc.xds.internal.security.certprovider.CertificateProvider;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderProvider;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderRegistry;
 import io.grpc.xds.internal.security.certprovider.CertificateProviderStore;
+import io.grpc.xds.internal.security.certprovider.IgnoreUpdatesWatcher;
 import io.grpc.xds.internal.security.certprovider.TestCertificateProvider;
 import org.junit.Before;
 import org.junit.Test;
@@ -84,7 +85,7 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], false);
     // verify that bootstrapInfo is cached...
     sslContextProvider =
         clientSslContextProviderFactory.create(upstreamTlsContext);
@@ -119,7 +120,7 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   @Test
@@ -145,7 +146,7 @@ public class ClientSslContextProviderFactoryTest {
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   @Test
@@ -179,7 +180,7 @@ public class ClientSslContextProviderFactoryTest {
             clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   @Test
@@ -209,8 +210,8 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
-    verifyWatcher(sslContextProvider, watcherCaptor[1]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
+    verifyWatcher(sslContextProvider, watcherCaptor[1], true);
   }
 
   @Test
@@ -246,8 +247,8 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
-    verifyWatcher(sslContextProvider, watcherCaptor[1]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
+    verifyWatcher(sslContextProvider, watcherCaptor[1], true);
   }
 
   @Test
@@ -280,7 +281,7 @@ public class ClientSslContextProviderFactoryTest {
         clientSslContextProviderFactory.create(upstreamTlsContext);
     assertThat(sslContextProvider.getClass().getSimpleName()).isEqualTo(
         "CertProviderClientSslContextProvider");
-    verifyWatcher(sslContextProvider, watcherCaptor[0]);
+    verifyWatcher(sslContextProvider, watcherCaptor[0], true);
   }
 
   static void createAndRegisterProviderProvider(
@@ -310,11 +311,18 @@ public class ClientSslContextProviderFactoryTest {
   }
 
   static void verifyWatcher(
-      SslContextProvider sslContextProvider, CertificateProvider.DistributorWatcher watcherCaptor) {
+      SslContextProvider sslContextProvider, CertificateProvider.DistributorWatcher watcherCaptor,
+      boolean usesDelegateWatcher) {
     assertThat(watcherCaptor).isNotNull();
     assertThat(watcherCaptor.getDownstreamWatchers()).hasSize(1);
-    assertThat(watcherCaptor.getDownstreamWatchers().iterator().next())
-        .isSameInstanceAs(sslContextProvider);
+    if (usesDelegateWatcher) {
+      assertThat(((IgnoreUpdatesWatcher) watcherCaptor.getDownstreamWatchers().iterator().next())
+          .getDelegate())
+          .isSameInstanceAs(sslContextProvider);
+    } else {
+      assertThat(watcherCaptor.getDownstreamWatchers().iterator().next())
+          .isSameInstanceAs(sslContextProvider);
+    }
   }
 
   static CommonTlsContext.Builder addFilenames(

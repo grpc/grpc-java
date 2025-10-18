@@ -33,7 +33,7 @@ public class StatusOr<T> {
   }
 
   /** Construct from a value. */
-  public static <T> StatusOr<T> fromValue(@Nullable T value) {
+  public static <T> StatusOr<T> fromValue(T value) {
     StatusOr<T> result = new StatusOr<T>(null, value);
     return result;
   }
@@ -54,7 +54,7 @@ public class StatusOr<T> {
    * Returns the value if set or throws exception if there is no value set. This method is meant
    * to be called after checking the return value of hasValue() first.
    */
-  public @Nullable T getValue() {
+  public T getValue() {
     if (status != null) {
       throw new IllegalStateException("No value present.");
     }
@@ -105,6 +105,7 @@ public class StatusOr<T> {
     return stringHelper.toString();
   }
 
+  @Nullable
   private final Status status;
   private final T value;
 }
