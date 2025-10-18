@@ -119,10 +119,10 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
-    this.handshake = new LegacyClientHandshake();
+    this.handshake =
+        factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new V2ClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
@@ -384,6 +384,56 @@ public final class BinderClientTransport extends BinderTransport
       return;
     }
     handshake.onServerAuthorizationOk();
+  }
+
+  private final class V2ClientHandshake implements ClientHandshake {
+
+    private OneWayBinderProxy endpointBinder;
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy endpointBinder) {
+      this.endpointBinder = endpointBinder;
+      Futures.addCallback(
+          Futures.submit(serviceBinding::getConnectedServiceInfo, offloadExecutor),
+          new FutureCallback<ServiceInfo>() {
+            @Override
+            public void onSuccess(ServiceInfo result) {
+              synchronized (BinderClientTransport.this) {
+                onConnectedServiceInfo(result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (BinderClientTransport.this) {
+                shutdownInternal(Status.fromThrowable(t), true);
+              }
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void onConnectedServiceInfo(ServiceInfo serviceInfo) {
+      if (!inState(TransportState.SETUP)) {
+        return;
+      }
+      attributes = setSecurityAttrs(attributes, serviceInfo.applicationInfo.uid);
+      checkServerAuthorization(serviceInfo.applicationInfo.uid);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this")
+    public void onServerAuthorizationOk() {
+      sendSetupTransaction(endpointBinder);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport() {
+      onHandshakeComplete();
+    }
   }
 
   @GuardedBy("this")
