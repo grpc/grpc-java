@@ -15,6 +15,9 @@
  */
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+
 import android.os.IBinder;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
@@ -57,9 +60,17 @@ public final class BinderServerTransport extends BinderTransport implements Serv
     setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
   }
 
-  public synchronized void setServerTransportListener(
-      ServerTransportListener serverTransportListener) {
-    this.serverTransportListener = serverTransportListener;
+  /**
+   * Initializes this transport instance.
+   *
+   * <p>Must be called exactly once, even if {@link #shutdown} or {@link #shutdownNow} was called
+   * first.
+   *
+   * @param serverTransportListener where this transport will report events
+   */
+  public synchronized void start(ServerTransportListener serverTransportListener) {
+    checkState(this.serverTransportListener == null, "Already started!");
+    this.serverTransportListener = checkNotNull(serverTransportListener, "serverTransportListener");
     if (isShutdown()) {
       setState(TransportState.SHUTDOWN_TERMINATED);
       notifyTerminated();
