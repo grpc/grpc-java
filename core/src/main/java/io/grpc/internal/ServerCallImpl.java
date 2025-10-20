@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static io.grpc.internal.GrpcUtil.CONTENT_LENGTH_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
-import static io.grpc.internal.MessageDeframer.TooLongDecompressedMessageException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
@@ -74,7 +73,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean closeCalled;
   private Compressor compressor;
   private boolean messageSent;
-  private Status exceptionStatus = null;
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
@@ -272,11 +270,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
    * on.
    */
   private void handleInternalError(Throwable internalError) {
-    if (exceptionStatus != null) {
-      stream.close(exceptionStatus, new Metadata());
-      exceptionStatus = null;
-      return;
-    }
     log.log(Level.WARNING, "Cancelling the stream because of internal error", internalError);
     Status status = (internalError instanceof StatusRuntimeException)
         ? ((StatusRuntimeException) internalError).getStatus()
@@ -337,17 +330,23 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
+          ReqT parsedMessage;
           try {
-            listener.onMessage(call.method.parseRequest(message));
+            parsedMessage = call.method.parseRequest(message);
+          } catch (StatusRuntimeException e) {
+            GrpcUtil.closeQuietly(message);
+            call.cancelled = true;
+            call.close(e.getStatus(), new Metadata());
+            return;
+          }
+          try {
+            listener.onMessage(parsedMessage);
           } catch (Throwable t) {
             GrpcUtil.closeQuietly(message);
             throw t;
           }
           message.close();
         }
-      } catch (TooLongDecompressedMessageException e) {
-        this.call.exceptionStatus = e.getStatus();
-        this.call.handleInternalError(e);
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
         Throwables.throwIfUnchecked(t);
