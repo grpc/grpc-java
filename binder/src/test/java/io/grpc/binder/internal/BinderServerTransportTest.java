@@ -74,7 +74,7 @@ public final class BinderServerTransportTest {
   public void testSetupTransactionFailureCausesMultipleShutdowns_b153460678() throws Exception {
     // Make the binder fail the setup transaction.
     when(mockBinder.transact(anyInt(), any(Parcel.class), isNull(), anyInt())).thenReturn(false);
-    transport.setServerTransportListener(transportListener);
+    transport.start(transportListener);
 
     // Now shut it down.
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
