@@ -138,7 +138,8 @@ public class TransportCompressionTest extends AbstractInteropTest {
     assertTrue(FZIPPER.anyWritten);
   }
 
-  private static final String DECOMPRESSED_MESSAGE_TOO_LONG_METHOD_NAME = "decompressedMessageTooLong";
+  private static final String DECOMPRESSED_MESSAGE_TOO_LONG_METHOD_NAME =
+      "decompressedMessageTooLong";
 
   @Test
   @Ignore("for PR #12360")
