@@ -59,7 +59,6 @@ dependencies {
             project(path: ':grpc-alts', configuration: 'shadow'),
             project(':grpc-auth'), // Align grpc versions
             project(':grpc-core'), // Align grpc versions
-            project(':grpc-grpclb'), // Align grpc versions
             project(':grpc-services'), // Align grpc versions
             libraries.animalsniffer.annotations, // Use our newer version
             libraries.auto.value.annotations, // Use our newer version
