@@ -232,6 +232,32 @@ public class CommonTlsContextTestsUtil {
     return builder.build();
   }
 
+  /** Helper method to build CommonTlsContext using deprecated certificate provider field. */
+  public static CommonTlsContext buildCommonTlsContextWithDeprecatedCertProviderInstance(
+      String certInstanceName,
+      String certName,
+      String rootInstanceName,
+      String rootCertName,
+      Iterable<String> alpnProtocols,
+      CertificateValidationContext staticCertValidationContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (certInstanceName != null) {
+      // Use deprecated field (field 11) instead of current field (field 14)
+      builder =
+              builder.setTlsCertificateCertificateProviderInstance(
+                      CommonTlsContext.CertificateProviderInstance.newBuilder()
+                              .setInstanceName(certInstanceName)
+                              .setCertificateName(certName));
+    }
+    builder =
+        addCertificateValidationContext(
+            builder, rootInstanceName, rootCertName, staticCertValidationContext);
+    if (alpnProtocols != null) {
+      builder.addAllAlpnProtocols(alpnProtocols);
+    }
+    return builder.build();
+  }
+
   private static CommonTlsContext buildNewCommonTlsContextForCertProviderInstance(
           String certInstanceName,
           String certName,
