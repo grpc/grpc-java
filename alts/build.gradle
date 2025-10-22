@@ -14,12 +14,10 @@ dependencies {
     implementation project(':grpc-auth'),
             project(':grpc-core'),
             project(":grpc-context"), // Override google-auth dependency with our newer version
-            project(':grpc-grpclb'),
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.protobuf.java,
             libraries.conscrypt,
-            libraries.guava.jre, // JRE required by protobuf-java-util from grpclb
             libraries.google.auth.oauth2Http
     def nettyDependency = implementation project(':grpc-netty')
 
