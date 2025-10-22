@@ -336,7 +336,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           new ClusterImplConfig(
               discovery.cluster, discovery.edsServiceName, discovery.lrsServerInfo,
               discovery.maxConcurrentRequests, dropOverloads, endpointLbConfig,
-              discovery.tlsContext, discovery.filterMetadata);
+              discovery.tlsContext, discovery.filterMetadata, discovery.backendMetricPropagation);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(

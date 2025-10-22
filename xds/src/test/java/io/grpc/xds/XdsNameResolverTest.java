@@ -1246,7 +1246,7 @@ public class XdsNameResolverTest {
       FakeXdsClient xdsClient, String... clusterNames) {
     for (String clusterName : clusterNames) {
       CdsUpdate.Builder forEds = CdsUpdate
-          .forEds(clusterName, clusterName, null, null, null, null, false)
+          .forEds(clusterName, clusterName, null, null, null, null, false, null)
               .roundRobinLbPolicy();
       xdsClient.deliverCdsUpdate(clusterName, forEds.build());
       EdsUpdate edsUpdate = new EdsUpdate(clusterName,
