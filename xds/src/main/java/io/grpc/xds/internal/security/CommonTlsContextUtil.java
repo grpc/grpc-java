@@ -56,18 +56,6 @@ public final class CommonTlsContextUtil {
         .setCertificateName(pluginInstance.getCertificateName()).build();
   }
 
-  /**
-   * Converts deprecated {@link CommonTlsContext.CertificateProviderInstance} (field 11) to
-   * internal {@link CommonTlsContext.CertificateProviderInstance}.
-   * This supports a deprecated field for backward compatibility (primarily for Istio)
-   */
-  public static CommonTlsContext.CertificateProviderInstance convertDeprecated(
-      CommonTlsContext.CertificateProviderInstance deprecatedInstance) {
-    return CommonTlsContext.CertificateProviderInstance.newBuilder()
-        .setInstanceName(deprecatedInstance.getInstanceName())
-        .setCertificateName(deprecatedInstance.getCertificateName()).build();
-  }
-
   public static boolean isUsingSystemRootCerts(CommonTlsContext commonTlsContext) {
     if (commonTlsContext.hasCombinedValidationContext()) {
       return commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()

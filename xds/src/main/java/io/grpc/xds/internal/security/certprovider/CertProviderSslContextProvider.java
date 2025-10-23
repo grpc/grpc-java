@@ -117,8 +117,7 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     @SuppressWarnings("deprecation")
     CertificateProviderInstance deprecatedInstance =
         commonTlsContext.hasTlsCertificateCertificateProviderInstance()
-            ? CommonTlsContextUtil.convertDeprecated(
-                commonTlsContext.getTlsCertificateCertificateProviderInstance())
+            ? commonTlsContext.getTlsCertificateCertificateProviderInstance()
             : null;
     return deprecatedInstance;
   }
