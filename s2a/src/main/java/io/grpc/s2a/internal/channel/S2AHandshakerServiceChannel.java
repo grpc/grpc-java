@@ -100,7 +100,7 @@ public final class S2AHandshakerServiceChannel {
     public void close(Channel instanceChannel) {
       checkNotNull(instanceChannel);
       ManagedChannel channel = (ManagedChannel) instanceChannel;
-      channel.shutdown();
+      channel.shutdownNow();
     }
 
     @Override
