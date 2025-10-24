@@ -64,8 +64,9 @@ final class RlsProtoConverters {
     @Override
     protected RlsProtoData.RouteLookupRequest doForward(RouteLookupRequest routeLookupRequest) {
       return RlsProtoData.RouteLookupRequest.create(
-          RlsProtoData.RouteLookupRequest.Reason.valueOf(routeLookupRequest.getReason().name()),
-          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()));
+          ImmutableMap.copyOf(routeLookupRequest.getKeyMapMap()),
+          RlsProtoData.RouteLookupRequest.Reason.valueOf(routeLookupRequest.getReason().name())
+      );
     }
 
     @Override
