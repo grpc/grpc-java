@@ -233,6 +233,7 @@ public class CommonTlsContextTestsUtil {
   }
 
   /** Helper method to build CommonTlsContext using deprecated certificate provider field. */
+  @SuppressWarnings("deprecation")
   public static CommonTlsContext buildCommonTlsContextWithDeprecatedCertProviderInstance(
       String certInstanceName,
       String certName,
