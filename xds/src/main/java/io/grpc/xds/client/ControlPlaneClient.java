@@ -472,12 +472,11 @@ final class ControlPlaneClient {
       // concurrently with the stopwatch and schedule.
       long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
+      close(status.asException());
       rpcRetryTimer =
           syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-
       // Notify the handler of the stream closure before cleaning up the stream state.
       xdsResponseHandler.handleStreamClosed(statusToPropagate, !responseReceived);
-      close(status.asException());
     }
 
     private void close(Exception error) {
