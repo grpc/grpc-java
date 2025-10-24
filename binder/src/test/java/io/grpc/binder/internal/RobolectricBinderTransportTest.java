@@ -43,6 +43,7 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.core.content.pm.ApplicationInfoBuilder;
 import androidx.test.core.content.pm.PackageInfoBuilder;
 import com.google.common.collect.ImmutableList;
+import com.google.common.truth.TruthJUnit;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
@@ -351,6 +352,29 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     } finally {
       ShadowBinder.setCallingUid(originalUid);
     }
+  }
+
+  @Test
+  public void clientReportsAuthzErrorToServer() throws Exception {
+    server.start(serverListener);
+    client =
+        newClientTransportBuilder()
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setSecurityPolicy(SecurityPolicies.permissionDenied("test"))
+                    .buildClientTransportFactory())
+            .build();
+    runIfNotNull(client.start(mockClientTransportListener));
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS))
+        .transportShutdown(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
+
+    TruthJUnit.assume().that(preAuthServersParam).isFalse();
+
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
+    serverTransportListener.waitForTermination(TIMEOUT_MS, MILLISECONDS);
+    assertThat(serverTransportListener.isTerminated()).isTrue();
   }
 
   @Test
