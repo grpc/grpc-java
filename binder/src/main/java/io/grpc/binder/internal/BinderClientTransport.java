@@ -87,7 +87,6 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
 
-
   /**
    * Constructs a new transport instance.
    *
@@ -324,6 +323,9 @@ public final class BinderClientTransport extends BinderTransport
       } else if (binder == null) {
         shutdownInternal(
             Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
+      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
+        shutdownInternal(
+            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
       } else {
         restrictIncomingBinderToCallsFrom(remoteUid);
         attributes = setSecurityAttrs(attributes, remoteUid);
@@ -334,7 +336,7 @@ public final class BinderClientTransport extends BinderTransport
             new FutureCallback<Status>() {
               @Override
               public void onSuccess(Status result) {
-                handleAuthResult(binder, result);
+                handleAuthResult(result);
               }
 
               @Override
@@ -353,24 +355,17 @@ public final class BinderClientTransport extends BinderTransport
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
 
-  private synchronized void handleAuthResult(IBinder binder, Status authorization) {
+  private synchronized void handleAuthResult(Status authorization) {
     if (inState(TransportState.SETUP)) {
       if (!authorization.isOk()) {
         shutdownInternal(authorization, true);
-      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
       } else {
-        // Check state again, since a failure inside setOutgoingBinder (or a callback it
-        // triggers), could have shut us down.
-        if (!isShutdown()) {
-          setState(TransportState.READY);
-          attributes = clientTransportListener.filterTransport(attributes);
-          clientTransportListener.transportReady();
-          if (readyTimeoutFuture != null) {
-            readyTimeoutFuture.cancel(false);
-            readyTimeoutFuture = null;
-          }
+        setState(TransportState.READY);
+        attributes = clientTransportListener.filterTransport(attributes);
+        clientTransportListener.transportReady();
+        if (readyTimeoutFuture != null) {
+          readyTimeoutFuture.cancel(false);
+          readyTimeoutFuture = null;
         }
       }
     }
@@ -386,7 +381,6 @@ public final class BinderClientTransport extends BinderTransport
   protected void handlePingResponse(Parcel parcel) {
     pingTracker.onPingResponse(parcel.readInt());
   }
-
 
   private static ClientStream newFailingClientStream(
       Status failure, Attributes attributes, Metadata headers, ClientStreamTracer[] tracers) {
