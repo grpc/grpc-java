@@ -15,9 +15,6 @@
  */
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
 import android.os.IBinder;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
@@ -41,7 +38,9 @@ import javax.annotation.Nullable;
 public final class BinderServerTransport extends BinderTransport implements ServerTransport {
 
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
-  @Nullable private ServerTransportListener serverTransportListener;
+
+  @GuardedBy("this")
+  private final SimplePromise<ServerTransportListener> listenerPromise = new SimplePromise<>();
 
   /**
    * Constructs a new transport instance.
@@ -69,13 +68,8 @@ public final class BinderServerTransport extends BinderTransport implements Serv
    * @param serverTransportListener where this transport will report events
    */
   public synchronized void start(ServerTransportListener serverTransportListener) {
-    checkState(this.serverTransportListener == null, "Already started!");
-    this.serverTransportListener = checkNotNull(serverTransportListener, "serverTransportListener");
-    if (isShutdown()) {
-      setState(TransportState.SHUTDOWN_TERMINATED);
-      notifyTerminated();
-      releaseExecutors();
-    } else {
+    this.listenerPromise.set(serverTransportListener);
+    if (!isShutdown()) {
       sendSetupTransaction();
       // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
       // it triggers), could have shut us down.
@@ -90,11 +84,16 @@ public final class BinderServerTransport extends BinderTransport implements Serv
     return StatsTraceContext.newServerContext(streamTracerFactories, methodName, headers);
   }
 
+  /**
+   * Reports a new ServerStream requested by the remote client.
+   *
+   * <p>Precondition: {@link #start(ServerTransportListener)} must already have been called.
+   */
   synchronized Status startStream(ServerStream stream, String methodName, Metadata headers) {
     if (isShutdown()) {
       return Status.UNAVAILABLE.withDescription("transport is shutdown");
     } else {
-      serverTransportListener.streamCreated(stream, methodName, headers);
+      listenerPromise.get().streamCreated(stream, methodName, headers);
       return Status.OK;
     }
   }
@@ -108,9 +107,7 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   @Override
   @GuardedBy("this")
   void notifyTerminated() {
-    if (serverTransportListener != null) {
-      serverTransportListener.transportTerminated();
-    }
+    listenerPromise.runWhenSet(ServerTransportListener::transportTerminated);
   }
 
   @Override

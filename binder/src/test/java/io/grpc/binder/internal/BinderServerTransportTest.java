@@ -21,8 +21,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.os.DeadObjectException;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
@@ -89,6 +91,27 @@ public final class BinderServerTransportTest {
 
     // Now shut it down externally *before* executing Runnables scheduled on the executor.
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    shadowOf(Looper.getMainLooper()).idle();
+
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void testStartAfterShutdownAndIdle() throws Exception {
+    transport = newBinderServerTransportBuilder().build();
+    transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    shadowOf(Looper.getMainLooper()).idle();
+    transport.start(transportListener);
+    shadowOf(Looper.getMainLooper()).idle();
+
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void testStartAfterShutdownNoIdle() throws Exception {
+    transport = newBinderServerTransportBuilder().build();
+    transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    transport.start(transportListener);
     shadowOf(Looper.getMainLooper()).idle();
 
     assertThat(transportListener.isTerminated()).isTrue();
