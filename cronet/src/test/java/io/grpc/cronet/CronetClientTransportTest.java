@@ -34,6 +34,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.TransportTracer;
@@ -128,7 +129,8 @@ public final class CronetClientTransportTest {
     BidirectionalStream.Callback callback2 = callbackCaptor.getValue();
     // Shut down the transport. transportShutdown should be called immediately.
     transport.shutdown();
-    verify(clientTransportListener).transportShutdown(any(Status.class));
+    verify(clientTransportListener).transportShutdown(any(Status.class),
+        any(DisconnectError.class));
     // Have two live streams. Transport has not been terminated.
     verify(clientTransportListener, times(0)).transportTerminated();
 
