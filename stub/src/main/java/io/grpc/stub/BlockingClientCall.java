@@ -225,7 +225,7 @@ public final class BlockingClientCall<ReqT, RespT> {
         (x) -> x.call.isReady() || x.closeState.get() != null;
     executor.waitAndDrainWithTimeout(waitForever, endNanoTime, predicate, this);
     CloseState savedCloseState = closeState.get();
-    if (savedCloseState == null || savedCloseState.status == null) {
+    if (savedCloseState == null) {
       call.sendMessage(request);
       return true;
     } else if (savedCloseState.status.isOk()) {
