@@ -23,6 +23,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
@@ -62,9 +63,10 @@ public final class WrrLocalityLoadBalancerProvider extends LoadBalancerProvider 
       ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
           JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
       if (childConfig.getError() != null) {
-        return ConfigOrError.fromError(Status.INTERNAL
-            .withDescription("Failed to parse child policy in wrr_locality LB policy: " + rawConfig)
-            .withCause(childConfig.getError().asRuntimeException()));
+        return ConfigOrError.fromError(GrpcUtil.statusWithDetails(
+            Status.Code.INTERNAL,
+            "Failed to parse child policy in wrr_locality LB policy",
+            childConfig.getError()));
       }
       return ConfigOrError.fromConfig(new WrrLocalityConfig(childConfig.getConfig()));
     } catch (RuntimeException e) {
