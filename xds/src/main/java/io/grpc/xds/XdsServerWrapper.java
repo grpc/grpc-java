@@ -42,6 +42,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.GrpcUtil;
@@ -382,18 +383,38 @@ final class XdsServerWrapper extends Server {
     }
 
     @Override
-    public void onChanged(final LdsUpdate update) {
+    public void onResourceChanged(final StatusOr<LdsUpdate> update) {
       if (stopped) {
         return;
       }
-      logger.log(Level.FINEST, "Received Lds update {0}", update);
-      if (update.listener() == null) {
-        onResourceDoesNotExist("Non-API");
+
+      if (!update.hasValue()) {
+        // This is a definitive resource error (e.g., NOT_FOUND).
+        // We must treat the resource as unavailable and tear down the server.
+        Status status = update.getStatus();
+        StatusException statusException = Status.UNAVAILABLE.withDescription(
+                String.format("Listener %s unavailable: %s", resourceName, status.getDescription()))
+            .withCause(status.asException())
+            .asException();
+        handleConfigNotFoundOrMismatch(statusException);
         return;
       }
 
-      String ldsAddress = update.listener().address();
-      if (ldsAddress == null || update.listener().protocol() != Protocol.TCP
+      // The original 'onChanged' logic starts here.
+      final LdsUpdate ldsUpdate = update.getValue();
+      logger.log(Level.FINEST, "Received Lds update {0}", ldsUpdate);
+      if (ldsUpdate.listener() == null) {
+        handleConfigNotFoundOrMismatch(
+            Status.NOT_FOUND.withDescription("Listener is null in LdsUpdate").asException());
+        return;
+      }
+
+      // This check is now covered by the '!update.hasValue()' block above.
+      // The original check was: if (update.listener() == null)
+
+      // The ipAddressesMatch function and its logic remain critical.
+      String ldsAddress = ldsUpdate.listener().address();
+      if (ldsAddress == null || ldsUpdate.listener().protocol() != Protocol.TCP
           || !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
             Status.UNKNOWN.withDescription(
@@ -402,21 +423,19 @@ final class XdsServerWrapper extends Server {
                     listenerAddress, ldsAddress)).asException());
         return;
       }
+
+      // The rest of the logic is a direct copy from the original onChanged method.
       if (!pendingRds.isEmpty()) {
-        // filter chain state has not yet been applied to filterChainSelectorManager and there
-        // are two sets of sslContextProviderSuppliers, so we release the old ones.
         releaseSuppliersInFlight();
         pendingRds.clear();
       }
 
-      filterChains = update.listener().filterChains();
-      defaultFilterChain = update.listener().defaultFilterChain();
-      // Filters are loaded even if the server isn't serving yet.
+      filterChains = ldsUpdate.listener().filterChains();
+      defaultFilterChain = ldsUpdate.listener().defaultFilterChain();
       updateActiveFilters();
 
-      List<FilterChain> allFilterChains = filterChains;
+      List<FilterChain> allFilterChains = new ArrayList<>(filterChains);
       if (defaultFilterChain != null) {
-        allFilterChains = new ArrayList<>(filterChains);
         allFilterChains.add(defaultFilterChain);
       }
 
@@ -450,6 +469,24 @@ final class XdsServerWrapper extends Server {
       }
     }
 
+    @Override
+    public void onAmbientError(final Status error) {
+      if (stopped) {
+        return;
+      }
+      // This logic is preserved from the original 'onError' method.
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = error.withDescription(
+          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
+
+      // If the server isn't serving yet, a transient error is a startup failure.
+      // If it is already serving, we ignore it to prevent an outage.
+      if (!isServing) {
+        listener.onNotServing(errorWithNodeId.asException());
+      }
+    }
+
     private boolean ipAddressesMatch(String ldsAddress) {
       HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
       HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
@@ -460,31 +497,6 @@ final class XdsServerWrapper extends Server {
       InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
       InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
       return listenerIp.equals(ldsIp);
-    }
-
-    @Override
-    public void onResourceDoesNotExist(final String resourceName) {
-      if (stopped) {
-        return;
-      }
-      StatusException statusException = Status.UNAVAILABLE.withDescription(
-          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
-              xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFoundOrMismatch(statusException);
-    }
-
-    @Override
-    public void onError(final Status error) {
-      if (stopped) {
-        return;
-      }
-      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
-      Status errorWithNodeId = error.withDescription(
-          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
-      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
-      if (!isServing) {
-        listener.onNotServing(errorWithNodeId.asException());
-      }
     }
 
     private void shutdown() {
@@ -775,54 +787,45 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onChanged(final RdsUpdate update) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
+      public void onResourceChanged(final StatusOr<RdsUpdate> update) {
+        syncContext.execute(() -> {
+          if (!routeDiscoveryStates.containsKey(resourceName)) {
+            return; // Watcher has been cancelled.
+          }
+
+          if (update.hasValue()) {
+            // This is a successful update, taken from the original onChanged.
             if (savedVirtualHosts == null && !isPending) {
               logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
             }
-            savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
-            updateRdsRoutingConfig();
-            maybeUpdateSelector();
-          }
-        });
-      }
-
-      @Override
-      public void onResourceDoesNotExist(final String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
-            logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
+            savedVirtualHosts = ImmutableList.copyOf(update.getValue().virtualHosts);
+          } else {
+            // This is a definitive resource error, taken from onResourceDoesNotExist.
+            logger.log(Level.WARNING, "Rds {0} unavailable: {1}",
+                new Object[]{resourceName, update.getStatus()});
             savedVirtualHosts = null;
-            updateRdsRoutingConfig();
-            maybeUpdateSelector();
           }
+          // In both cases, a change has occurred that requires a config update.
+          updateRdsRoutingConfig();
+          maybeUpdateSelector();
         });
       }
 
       @Override
-      public void onError(final Status error) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
-            String description = error.getDescription() == null ? "" : error.getDescription() + " ";
-            Status errorWithNodeId = error.withDescription(
-                    description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
-            logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
-                    new Object[]{resourceName, errorWithNodeId});
-            maybeUpdateSelector();
+      public void onAmbientError(final Status error) {
+        syncContext.execute(() -> {
+          if (!routeDiscoveryStates.containsKey(resourceName)) {
+            return; // Watcher has been cancelled.
           }
+          // This is a transient error, taken from the original onError.
+          String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+          Status errorWithNodeId = error.withDescription(
+              description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+          logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
+              new Object[]{resourceName, errorWithNodeId});
+
+          // Per gRFC A88, ambient errors should not trigger a configuration change.
+          // Therefore, we do NOT call maybeUpdateSelector() here.
         });
       }
 

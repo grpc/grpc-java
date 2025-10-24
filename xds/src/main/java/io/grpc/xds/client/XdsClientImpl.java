@@ -33,6 +33,7 @@ import com.google.protobuf.Any;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -292,6 +293,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   private <T extends ResourceUpdate> CpcWithFallbackState manageControlPlaneClient(
       ResourceSubscriber<T> subscriber) {
 
+    ControlPlaneClient activeCpc = getActiveCpc(subscriber.authority);
     ControlPlaneClient cpcToUse;
     boolean didFallback = false;
     try {
@@ -311,17 +313,16 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       return new CpcWithFallbackState(null, false);
     }
 
-    ControlPlaneClient activeCpClient = getActiveCpc(subscriber.authority);
-    if (cpcToUse != activeCpClient) {
-      addCpcToAuthority(subscriber.authority, cpcToUse); // makes it active
-      if (activeCpClient != null) {
+    if (cpcToUse != activeCpc) {
+      addCpcToAuthority(subscriber.authority, cpcToUse);
+      if (activeCpc != null) {
         didFallback = cpcToUse != null && !cpcToUse.isInError();
         if (didFallback) {
           logger.log(XdsLogLevel.INFO, "Falling back to XDS server {0}",
               cpcToUse.getServerInfo().target());
         } else {
           logger.log(XdsLogLevel.WARNING, "No working fallback XDS Servers found from {0}",
-              activeCpClient.getServerInfo().target());
+              activeCpc.getServerInfo().target());
         }
       }
     }
@@ -730,17 +731,20 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       Status savedError = lastError;
       watcherExecutor.execute(() -> {
         if (errorDescription != null) {
-          watcher.onError(Status.INVALID_ARGUMENT.withDescription(errorDescription));
-          return;
-        }
-        if (savedError != null) {
-          watcher.onError(savedError);
+          watcher.onResourceChanged(StatusOr.fromStatus(
+              Status.INVALID_ARGUMENT.withDescription(errorDescription)));
           return;
         }
         if (savedData != null) {
-          notifyWatcher(watcher, savedData);
+          watcher.onResourceChanged(StatusOr.fromValue(savedData));
+          if (savedError != null) {
+            watcher.onAmbientError(savedError);
+          }
+        } else if (savedError != null) {
+          watcher.onResourceChanged(StatusOr.fromStatus(savedError));
         } else if (savedAbsent) {
-          watcher.onResourceDoesNotExist(resource);
+          watcher.onResourceChanged(StatusOr.fromStatus(
+              Status.NOT_FOUND.withDescription("Resource " + resource + " does not exist")));
         }
       });
     }
@@ -768,8 +772,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         public void run() {
           logger.log(XdsLogLevel.INFO, "{0} resource {1} initial fetch timeout",
               type, resource);
-          respTimer = null;
           onAbsent(null, activeCpc.getServerInfo());
+          respTimer = null;
         }
 
         @Override
@@ -825,8 +829,8 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
       ResourceUpdate oldData = this.data;
       this.data = parsedResource.getResourceUpdate();
-      this.metadata = ResourceMetadata
-          .newResourceMetadataAcked(parsedResource.getRawResource(), version, updateTime);
+      this.metadata = ResourceMetadata.newResourceMetadataAcked(
+          parsedResource.getRawResource(), version, updateTime);
       absent = false;
       lastError = null;
       if (resourceDeletionIgnored) {
@@ -836,11 +840,14 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         resourceDeletionIgnored = false;
       }
       if (!Objects.equals(oldData, data)) {
-        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+        StatusOr<T> update = StatusOr.fromValue(data);
+        for (Map.Entry<ResourceWatcher<T>, Executor> entry : watchers.entrySet()) {
+          ResourceWatcher<T> watcher = entry.getKey();
+          Executor executor = entry.getValue();
           processingTracker.startTask();
-          watchers.get(watcher).execute(() -> {
+          executor.execute(() -> {
             try {
-              notifyWatcher(watcher, data);
+              watcher.onResourceChanged(update); // Call the new method
             } finally {
               processingTracker.onComplete();
             }
@@ -871,6 +878,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
               serverInfo.target(), type, resource);
           resourceDeletionIgnored = true;
         }
+        Status deletionStatus = Status.NOT_FOUND.withDescription(
+            "Resource " + resource + " deleted from server");
+        onAmbientError(deletionStatus, processingTracker);
         return;
       }
 
@@ -879,21 +889,30 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         data = null;
         absent = true;
         lastError = null;
-        metadata = serverInfo.resourceTimerIsTransientError()
-            ? ResourceMetadata.newResourceMetadataTimeout()
-            : ResourceMetadata.newResourceMetadataDoesNotExist();
-        for (ResourceWatcher<T> watcher : watchers.keySet()) {
+
+        Status status;
+        if (respTimer == null) {
+          status = Status.NOT_FOUND.withDescription("Resource " + resource + " does not exist");
+          metadata = ResourceMetadata.newResourceMetadataDoesNotExist();
+        } else {
+          status = serverInfo.resourceTimerIsTransientError()
+              ? Status.UNAVAILABLE.withDescription(
+                  "Timed out waiting for resource " + resource + " from xDS server")
+              : Status.NOT_FOUND.withDescription(
+                  "Timed out waiting for resource " + resource + " from xDS server");
+          metadata = serverInfo.resourceTimerIsTransientError()
+              ? ResourceMetadata.newResourceMetadataTimeout()
+              : ResourceMetadata.newResourceMetadataDoesNotExist();
+        }
+
+        StatusOr<T> update = StatusOr.fromStatus(status);
+        for (Map.Entry<ResourceWatcher<T>, Executor> entry : watchers.entrySet()) {
           if (processingTracker != null) {
             processingTracker.startTask();
           }
-          watchers.get(watcher).execute(() -> {
+          entry.getValue().execute(() -> {
             try {
-              if (serverInfo.resourceTimerIsTransientError()) {
-                watcher.onError(Status.UNAVAILABLE.withDescription(
-                    "Timed out waiting for resource " + resource + " from xDS server"));
-              } else {
-                watcher.onResourceDoesNotExist(resource);
-              }
+              entry.getKey().onResourceChanged(update);
             } finally {
               if (processingTracker != null) {
                 processingTracker.onComplete();
@@ -918,13 +937,37 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           .withCause(error.getCause());
       this.lastError = errorAugmented;
 
-      for (ResourceWatcher<T> watcher : watchers.keySet()) {
+      if (data != null) {
+        // We have cached data, so this is an ambient error.
+        onAmbientError(errorAugmented, tracker);
+      } else {
+        // No data, this is a definitive resource error.
+        StatusOr<T> update = StatusOr.fromStatus(errorAugmented);
+        for (Map.Entry<ResourceWatcher<T>, Executor> entry : watchers.entrySet()) {
+          if (tracker != null) {
+            tracker.startTask();
+          }
+          entry.getValue().execute(() -> {
+            try {
+              entry.getKey().onResourceChanged(update);
+            } finally {
+              if (tracker != null) {
+                tracker.onComplete();
+              }
+            }
+          });
+        }
+      }
+    }
+
+    private void onAmbientError(Status error, @Nullable ProcessingTracker tracker) {
+      for (Map.Entry<ResourceWatcher<T>, Executor> entry : watchers.entrySet()) {
         if (tracker != null) {
           tracker.startTask();
         }
-        watchers.get(watcher).execute(() -> {
+        entry.getValue().execute(() -> {
           try {
-            watcher.onError(errorAugmented);
+            entry.getKey().onAmbientError(error);
           } finally {
             if (tracker != null) {
               tracker.onComplete();
@@ -938,10 +981,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       metadata = ResourceMetadata
           .newResourceMetadataNacked(metadata, rejectedVersion, rejectedTime, rejectedDetails,
               data != null);
-    }
-
-    private void notifyWatcher(ResourceWatcher<T> watcher, T update) {
-      watcher.onChanged(update);
     }
   }
 
@@ -982,33 +1021,54 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       cleanUpResourceTimers(cpcClosed);
 
       if (status.isOk()) {
-        return; // Not considered an error
+        return; // Not an error.
       }
 
-      metricReporter.reportServerFailure(1L, serverInfo.target());
+      if (shouldTryFallback) { // This indicates no response was received on the stream.
+        metricReporter.reportServerFailure(1L, serverInfo.target());
+      }
 
+      // Step 1: Determine if we even need to consider falling back.
+      // We only fall back if the stream failed AND we are missing at least one resource.
+      boolean anyWatcherIsMissingResource = false;
       Collection<String> authoritiesForClosedCpc = getActiveAuthorities(cpcClosed);
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-          if (subscriber.hasResult() || !authoritiesForClosedCpc.contains(subscriber.authority)) {
-            continue;
+          if (authoritiesForClosedCpc.contains(subscriber.authority) && !subscriber.hasResult()) {
+            anyWatcherIsMissingResource = true;
+            break;
           }
+        }
+        if (anyWatcherIsMissingResource) {
+          break;
+        }
+      }
 
-          // try to fallback to lower priority control plane client
-          if (shouldTryFallback && manageControlPlaneClient(subscriber).didFallback) {
-            authoritiesForClosedCpc.remove(subscriber.authority);
-            if (authoritiesForClosedCpc.isEmpty()) {
-              return; // optimization: no need to continue once all authorities have done fallback
+      // Step 2: If fallback is possible and needed, attempt it for the watchers that need it.
+      if (shouldTryFallback && anyWatcherIsMissingResource) {
+        for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
+            resourceSubscribers.values()) {
+          for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
+            if (!subscriber.hasResult() && authoritiesForClosedCpc.contains(subscriber.authority)) {
+              manageControlPlaneClient(subscriber);
             }
-            continue; // since we did fallback, don't consider it an error
           }
+        }
+      }
 
-          subscriber.onError(status, null);
+      // Step 3: Notify all affected watchers about the stream error.
+      // The subscriber's internal 'onError' will correctly delegate to the watcher's
+      // 'onAmbientError' or 'onResourceChanged' based on its current state (i.e. if it has data).
+      for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
+          resourceSubscribers.values()) {
+        for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
+          if (authoritiesForClosedCpc.contains(subscriber.authority)) {
+            subscriber.onError(status, null);
+          }
         }
       }
     }
-
   }
 
   private static class CpcWithFallbackState {

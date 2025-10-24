@@ -256,13 +256,15 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       Object implSpecificConfig = getImplSpecificConfig(serverConfig, serverUri);
 
       boolean resourceTimerIsTransientError = false;
-      boolean ignoreResourceDeletion = false;
+      boolean ignoreResourceDeletion = xdsDataErrorHandlingEnabled;
       // "For forward compatibility reasons, the client will ignore any entry in the list that it
       // does not understand, regardless of type."
       List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
+        if (serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION)) {
+          ignoreResourceDeletion = true;
+        }
         resourceTimerIsTransientError = xdsDataErrorHandlingEnabled
             && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
       }
