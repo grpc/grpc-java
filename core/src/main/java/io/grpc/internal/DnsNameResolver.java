@@ -23,7 +23,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
 import com.google.common.base.VerifyException;
 import io.grpc.Attributes;
@@ -211,20 +210,8 @@ public class DnsNameResolver extends NameResolver {
     resolve();
   }
 
-  private List<EquivalentAddressGroup> resolveAddresses() {
-    List<? extends InetAddress> addresses;
-    Exception addressesException = null;
-    try {
-      addresses = addressResolver.resolveAddress(host);
-    } catch (Exception e) {
-      addressesException = e;
-      Throwables.throwIfUnchecked(e);
-      throw new RuntimeException(e);
-    } finally {
-      if (addressesException != null) {
-        logger.log(Level.FINE, "Address resolution failure", addressesException);
-      }
-    }
+  private List<EquivalentAddressGroup> resolveAddresses() throws Exception {
+    List<? extends InetAddress> addresses = addressResolver.resolveAddress(host);
     // Each address forms an EAG
     List<EquivalentAddressGroup> servers = new ArrayList<>(addresses.size());
     for (InetAddress inetAddr : addresses) {
@@ -280,6 +267,7 @@ public class DnsNameResolver extends NameResolver {
     try {
       result.addresses = resolveAddresses();
     } catch (Exception e) {
+      logger.log(Level.FINE, "Address resolution failure", e);
       if (!forceTxt) {
         result.error =
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e);
