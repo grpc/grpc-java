@@ -653,10 +653,11 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
       } else {
         Status status = update.getStatus();
         Status translatedStatus = Status.UNAVAILABLE.withDescription(
-            String.format("Error retrieving %s: %s. Details: %s",
+            String.format("Error retrieving %s: %s. Details: %s%s",
                 toContextString(),
                 status.getCode(),
-                status.getDescription() != null ? status.getDescription() : ""));
+                status.getDescription() != null ? status.getDescription() : "",
+                nodeInfo()));
 
         data = StatusOr.fromStatus(translatedStatus);
       }

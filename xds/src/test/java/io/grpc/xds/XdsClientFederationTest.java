@@ -26,7 +26,6 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.MetricRecorder;
-import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -83,7 +82,6 @@ public class XdsClientFederationTest {
 
   @Before
   public void setUp() throws XdsInitializationException {
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_DATA_ERROR_HANDLING", "true");
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
     clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
     xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET, metricRecorder);
@@ -131,10 +129,6 @@ public class XdsClientFederationTest {
     // watcher of another control plane (here the DirectPath one).
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("new-server"));
-    ArgumentCaptor<Status> errorCaptor = ArgumentCaptor.forClass(Status.class);
-    // okshiva: flaky
-    // verify(mockWatcher, timeout(20000)).onAmbientError(errorCaptor.capture());
-    // assertThat(errorCaptor.getValue().getCode()).isEqualTo(Status.Code.NOT_FOUND);
     verify(mockDirectPathWatcher, times(1)).onResourceChanged(any());
     verify(mockDirectPathWatcher, never()).onAmbientError(any());
   }

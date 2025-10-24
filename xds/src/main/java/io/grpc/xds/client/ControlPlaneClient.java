@@ -456,7 +456,7 @@ final class ControlPlaneClient {
       Status statusToPropagate = status;
       if (!responseReceived && status.isOk()) {
         // If the ADS stream is closed with OK without ever having received a response,
-        // it is a connectivity error.
+        // it is a connectivity error (see gRFC A57).
         statusToPropagate = Status.UNAVAILABLE.withDescription(
             "ADS stream closed with OK before receiving a response");
       }
