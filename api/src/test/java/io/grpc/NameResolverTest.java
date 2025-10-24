@@ -192,6 +192,53 @@ public class NameResolverTest {
         Objects.hashCode(StatusOr.fromValue(ADDRESSES), ATTRIBUTES, CONFIG));
   }
 
+    @Test
+    public void startOnOldListener_resolverReportsError() {
+        final boolean[] errorCalled = new boolean[1];
+        final Status[] receivedError = new Status[1];
+
+        NameResolver resolver = new NameResolver() {
+            @Override
+            public String getServiceAuthority() {
+                return "example.com";
+            }
+
+            @Override
+            public void shutdown() {}
+
+            @Override
+            public void start(Listener2 listener) {
+                ResolutionResult errorResult = ResolutionResult.newBuilder()
+                        .setAddressesOrError(StatusOr.fromStatus(
+                                Status.UNAVAILABLE.withDescription("DNS resolution failed")))
+                        .build();
+
+                listener.onResult(errorResult);
+            }
+        };
+
+        NameResolver.Listener oldListener = new NameResolver.Listener() {
+            @Override
+            public void onAddresses(
+                    List<EquivalentAddressGroup> servers,
+                    Attributes attributes) {
+                throw new AssertionError("Should not get addresses on error");
+            }
+
+            @Override
+            public void onError(Status error) {
+                errorCalled[0] = true;
+                receivedError[0] = error;
+            }
+        };
+
+        resolver.start(oldListener);
+
+        assertThat(errorCalled[0]).isTrue();
+        assertThat(receivedError[0].getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+        assertThat(receivedError[0].getDescription()).isEqualTo("DNS resolution failed");
+    }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 
