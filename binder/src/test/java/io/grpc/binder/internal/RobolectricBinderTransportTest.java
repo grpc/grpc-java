@@ -25,6 +25,7 @@ import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -119,11 +120,19 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
   private int nextServerAddress;
 
-  @Parameter public boolean preAuthServersParam;
+  @Parameter(value = 0)
+  public boolean preAuthServersParam;
 
-  @Parameters(name = "preAuthServersParam={0}")
-  public static ImmutableList<Boolean> data() {
-    return ImmutableList.of(true, false);
+  @Parameter(value = 1)
+  public boolean useLegacyAuthStrategy;
+
+  @Parameters(name = "preAuthServersParam={0};useLegacyAuthStrategy={1}")
+  public static ImmutableList<Object[]> data() {
+    return ImmutableList.of(
+        new Object[] {false, false},
+        new Object[] {false, true},
+        new Object[] {true, false},
+        new Object[] {true, true});
   }
 
   @Override
@@ -189,6 +198,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   BinderClientTransportFactory.Builder newClientTransportFactoryBuilder() {
     return new BinderClientTransportFactory.Builder()
         .setPreAuthorizeServers(preAuthServersParam)
+        .setUseLegacyAuthStrategy(useLegacyAuthStrategy)
         .setSourceContext(application)
         .setScheduledExecutorPool(executorServicePool)
         .setOffloadExecutorPool(offloadExecutorPool);
@@ -249,7 +259,11 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     }
 
     AuthRequest authRequest = securityPolicy.takeNextAuthRequest(TIMEOUT_MS, MILLISECONDS);
-    assertThat(authRequest.uid).isEqualTo(11111);
+    if (useLegacyAuthStrategy) {
+      assertThat(authRequest.uid).isEqualTo(11111);
+    } else {
+      assertThat(authRequest.uid).isEqualTo(22222);
+    }
     verify(mockClientTransportListener, never()).transportReady();
     authRequest.setResult(Status.OK);
 
@@ -320,6 +334,10 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   @Test
   public void clientIgnoresTransactionFromNonServerUids() throws Exception {
     server.start(serverListener);
+
+    // This test is not applicable to the new auth strategy which keeps the client Binder a secret.
+    assumeTrue(useLegacyAuthStrategy);
+
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
 
