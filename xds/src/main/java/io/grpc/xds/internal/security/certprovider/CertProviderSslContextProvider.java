@@ -113,7 +113,13 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return CommonTlsContextUtil.convert(commonTlsContext.getTlsCertificateProviderInstance());
     }
-    return null;
+    // Fall back to deprecated field for backward compatibility with Istio
+    @SuppressWarnings("deprecation")
+    CertificateProviderInstance deprecatedInstance =
+        commonTlsContext.hasTlsCertificateCertificateProviderInstance()
+            ? commonTlsContext.getTlsCertificateCertificateProviderInstance()
+            : null;
+    return deprecatedInstance;
   }
 
   @Nullable
