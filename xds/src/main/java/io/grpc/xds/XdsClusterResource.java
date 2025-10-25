@@ -564,6 +564,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
         return combinedCertificateValidationContext.getDefaultValidationContext()
             .getCaCertificateProviderInstance().getInstanceName();
       }
+      // Fall back to deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      String instanceName = combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()
+          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
+              .getInstanceName()
+          : null;
+      if (instanceName != null) {
+        return instanceName;
+      }
     }
     return null;
   }

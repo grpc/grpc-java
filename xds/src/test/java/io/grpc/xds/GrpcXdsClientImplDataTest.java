@@ -3235,6 +3235,24 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
+  public void validateCommonTlsContext_combinedValidationContextDeprecatedCertProvider()
+      throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("cert1"))
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(
+                    CommonTlsContext.CertificateProviderInstance.newBuilder()
+                        .setInstanceName("root1"))
+                .build())
+        .build();
+    XdsClusterResource
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("cert1", "root1"), true);
+  }
+
+  @Test
   public void validateCommonTlsContext_validationContextSystemRootCerts_envVarNotSet_throws() {
     XdsClusterResource.enableSystemRootCerts = false;
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
