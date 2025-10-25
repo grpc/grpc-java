@@ -61,6 +61,7 @@ import io.grpc.rls.LruCache.EvictionType;
 import io.grpc.rls.RlsProtoConverters.RouteLookupResponseConverter;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.RouteLookupRequestKey;
 import io.grpc.rls.RlsProtoData.RouteLookupResponse;
 import io.grpc.stub.StreamObserver;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -112,7 +113,7 @@ final class CachingRlsLbClient {
   private final Future<?> periodicCleaner;
   // any RPC on the fly will cached in this map
   @GuardedBy("lock")
-  private final Map<RouteLookupRequest, PendingCacheEntry> pendingCallCache = new HashMap<>();
+  private final Map<RouteLookupRequestKey, PendingCacheEntry> pendingCallCache = new HashMap<>();
 
   private final ScheduledExecutorService scheduledExecutorService;
   private final Ticker ticker;
@@ -127,6 +128,7 @@ final class CachingRlsLbClient {
   private final RlsLbHelper helper;
   private final ManagedChannel rlsChannel;
   private final RouteLookupServiceStub rlsStub;
+  private final RlsRequestFactory requestFactory;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   @GuardedBy("lock")
@@ -195,7 +197,7 @@ final class CachingRlsLbClient {
           ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
       serverHost = helper.getAuthority();
     }
-    RlsRequestFactory requestFactory = new RlsRequestFactory(
+    requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
     rlsPicker = new RlsPicker(requestFactory, rlsConfig.lookupService());
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
@@ -292,18 +294,22 @@ final class CachingRlsLbClient {
   /** Populates async cache entry for new request. */
   @GuardedBy("lock")
   private CachedRouteLookupResponse asyncRlsCall(
-      RouteLookupRequest request, @Nullable BackoffPolicy backoffPolicy) {
+      RouteLookupRequestKey routeLookupRequestKey, @Nullable BackoffPolicy backoffPolicy,
+      RouteLookupRequest.Reason routeLookupReason) {
     if (throttler.shouldThrottle()) {
-      logger.log(ChannelLogLevel.DEBUG, "[RLS Entry {0}] Throttled RouteLookup", request);
+      logger.log(ChannelLogLevel.DEBUG, "[RLS Entry {0}] Throttled RouteLookup",
+          routeLookupRequestKey);
       // Cache updated, but no need to call updateBalancingState because no RPCs were queued waiting
       // on this result
       return CachedRouteLookupResponse.backoffEntry(createBackOffEntry(
-          request, Status.RESOURCE_EXHAUSTED.withDescription("RLS throttled"), backoffPolicy));
+          routeLookupRequestKey, Status.RESOURCE_EXHAUSTED.withDescription("RLS throttled"),
+          backoffPolicy, routeLookupReason));
     }
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
-    io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(request);
+    io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(
+        requestFactory.create(routeLookupRequestKey, routeLookupReason));
     logger.log(ChannelLogLevel.DEBUG,
-        "[RLS Entry {0}] Starting RouteLookup: {1}", request, routeLookupRequest);
+        "[RLS Entry {0}] Starting RouteLookup: {1}", routeLookupRequestKey, routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
         .routeLookup(
             routeLookupRequest,
@@ -311,14 +317,14 @@ final class CachingRlsLbClient {
               @Override
               public void onNext(io.grpc.lookup.v1.RouteLookupResponse value) {
                 logger.log(ChannelLogLevel.DEBUG,
-                    "[RLS Entry {0}] RouteLookup succeeded: {1}", request, value);
+                    "[RLS Entry {0}] RouteLookup succeeded: {1}", routeLookupRequestKey, value);
                 response.set(RESPONSE_CONVERTER.reverse().convert(value));
               }
 
               @Override
               public void onError(Throwable t) {
                 logger.log(ChannelLogLevel.DEBUG,
-                    "[RLS Entry {0}] RouteLookup failed: {1}", request, t);
+                    "[RLS Entry {0}] RouteLookup failed: {1}", routeLookupRequestKey, t);
                 response.setException(t);
                 throttler.registerBackendResponse(true);
               }
@@ -329,7 +335,7 @@ final class CachingRlsLbClient {
               }
             });
     return CachedRouteLookupResponse.pendingResponse(
-        createPendingEntry(request, response, backoffPolicy));
+        createPendingEntry(routeLookupRequestKey, response, backoffPolicy, routeLookupReason));
   }
 
   /**
@@ -338,16 +344,17 @@ final class CachingRlsLbClient {
    * changed after the return.
    */
   @CheckReturnValue
-  final CachedRouteLookupResponse get(final RouteLookupRequest request) {
+  final CachedRouteLookupResponse get(final RouteLookupRequestKey routeLookupRequestKey) {
     synchronized (lock) {
       final CacheEntry cacheEntry;
-      cacheEntry = linkedHashLruCache.read(request);
+      cacheEntry = linkedHashLruCache.read(routeLookupRequestKey);
       if (cacheEntry == null) {
-        PendingCacheEntry pendingEntry = pendingCallCache.get(request);
+        PendingCacheEntry pendingEntry = pendingCallCache.get(routeLookupRequestKey);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
         }
-        return asyncRlsCall(request, /* backoffPolicy= */ null);
+        return asyncRlsCall(routeLookupRequestKey, /* backoffPolicy= */ null,
+            RouteLookupRequest.Reason.REASON_MISS);
       }
 
       if (cacheEntry instanceof DataCacheEntry) {
@@ -383,13 +390,15 @@ final class CachingRlsLbClient {
 
   @GuardedBy("lock")
   private PendingCacheEntry createPendingEntry(
-      RouteLookupRequest request,
+      RouteLookupRequestKey routeLookupRequestKey,
       ListenableFuture<RouteLookupResponse> pendingCall,
-      @Nullable BackoffPolicy backoffPolicy) {
-    PendingCacheEntry entry = new PendingCacheEntry(request, pendingCall, backoffPolicy);
+      @Nullable BackoffPolicy backoffPolicy,
+      RouteLookupRequest.Reason routeLookupReason) {
+    PendingCacheEntry entry = new PendingCacheEntry(routeLookupRequestKey, pendingCall,
+        backoffPolicy, routeLookupReason);
     // Add the entry to the map before adding the Listener, because the listener removes the
     // entry from the map
-    pendingCallCache.put(request, entry);
+    pendingCallCache.put(routeLookupRequestKey, entry);
     // Beware that the listener can run immediately on the current thread
     pendingCall.addListener(() -> pendingRpcComplete(entry), MoreExecutors.directExecutor());
     return entry;
@@ -397,17 +406,18 @@ final class CachingRlsLbClient {
 
   private void pendingRpcComplete(PendingCacheEntry entry) {
     synchronized (lock) {
-      boolean clientClosed = pendingCallCache.remove(entry.request) == null;
+      boolean clientClosed = pendingCallCache.remove(entry.routeLookupRequestKey) == null;
       if (clientClosed) {
         return;
       }
 
       try {
-        createDataEntry(entry.request, Futures.getDone(entry.pendingCall));
+        createDataEntry(entry.routeLookupRequestKey, Futures.getDone(entry.pendingCall));
         // Cache updated. DataCacheEntry constructor indirectly calls updateBalancingState() to
         // reattempt picks when the child LB is done connecting
       } catch (Exception e) {
-        createBackOffEntry(entry.request, Status.fromThrowable(e), entry.backoffPolicy);
+        createBackOffEntry(entry.routeLookupRequestKey, Status.fromThrowable(e),
+            entry.backoffPolicy, entry.routeLookupReason);
         // Cache updated. updateBalancingState() to reattempt picks
         helper.triggerPendingRpcProcessing();
       }
@@ -416,21 +426,22 @@ final class CachingRlsLbClient {
 
   @GuardedBy("lock")
   private DataCacheEntry createDataEntry(
-      RouteLookupRequest request, RouteLookupResponse routeLookupResponse) {
+      RouteLookupRequestKey routeLookupRequestKey, RouteLookupResponse routeLookupResponse) {
     logger.log(
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to data cache: routeLookupResponse={1}",
-        request, routeLookupResponse);
-    DataCacheEntry entry = new DataCacheEntry(request, routeLookupResponse);
+        routeLookupRequestKey, routeLookupResponse);
+    DataCacheEntry entry = new DataCacheEntry(routeLookupRequestKey, routeLookupResponse);
     // Constructor for DataCacheEntry causes updateBalancingState, but the picks can't happen until
     // this cache update because the lock is held
-    linkedHashLruCache.cacheAndClean(request, entry);
+    linkedHashLruCache.cacheAndClean(routeLookupRequestKey, entry);
     return entry;
   }
 
   @GuardedBy("lock")
   private BackoffCacheEntry createBackOffEntry(
-      RouteLookupRequest request, Status status, @Nullable BackoffPolicy backoffPolicy) {
+      RouteLookupRequestKey routeLookupRequestKey, Status status,
+      @Nullable BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
     if (backoffPolicy == null) {
       backoffPolicy = backoffProvider.get();
     }
@@ -438,12 +449,13 @@ final class CachingRlsLbClient {
     logger.log(
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
-        request, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
+        routeLookupRequestKey, status, delayNanos);
+    BackoffCacheEntry entry = new BackoffCacheEntry(routeLookupRequestKey, status, backoffPolicy,
+        routeLookupReason);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
-    linkedHashLruCache.cacheAndClean(request, entry);
+    linkedHashLruCache.cacheAndClean(routeLookupRequestKey, entry);
     return entry;
   }
 
@@ -455,9 +467,9 @@ final class CachingRlsLbClient {
         return;
       }
       logger.log(ChannelLogLevel.DEBUG,
-          "[RLS Entry {0}] Calling RLS for transition to pending", entry.request);
-      linkedHashLruCache.invalidate(entry.request);
-      asyncRlsCall(entry.request, entry.backoffPolicy);
+          "[RLS Entry {0}] Calling RLS for transition to pending", entry.routeLookupRequestKey);
+      linkedHashLruCache.invalidate(entry.routeLookupRequestKey);
+      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy, entry.routeLookupReason);
     }
   }
 
@@ -590,23 +602,26 @@ final class CachingRlsLbClient {
   /** A pending cache entry when the async RouteLookup RPC is still on the fly. */
   static final class PendingCacheEntry {
     private final ListenableFuture<RouteLookupResponse> pendingCall;
-    private final RouteLookupRequest request;
+    private final RouteLookupRequestKey routeLookupRequestKey;
     @Nullable
     private final BackoffPolicy backoffPolicy;
+    private final RouteLookupRequest.Reason routeLookupReason;
 
     PendingCacheEntry(
-        RouteLookupRequest request,
+        RouteLookupRequestKey routeLookupRequestKey,
         ListenableFuture<RouteLookupResponse> pendingCall,
-        @Nullable BackoffPolicy backoffPolicy) {
-      this.request = checkNotNull(request, "request");
+        @Nullable BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
+      this.routeLookupRequestKey = checkNotNull(routeLookupRequestKey, "request");
       this.pendingCall = checkNotNull(pendingCall, "pendingCall");
       this.backoffPolicy = backoffPolicy;
+      this.routeLookupReason = routeLookupReason;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("request", request)
+          .add("routeLookupRequestKey", routeLookupRequestKey)
+          .add("routeLookupReason", routeLookupReason)
           .toString();
     }
   }
@@ -614,10 +629,10 @@ final class CachingRlsLbClient {
   /** Common cache entry data for {@link RlsAsyncLruCache}. */
   abstract static class CacheEntry {
 
-    protected final RouteLookupRequest request;
+    protected final RouteLookupRequestKey routeLookupRequestKey;
 
-    CacheEntry(RouteLookupRequest request) {
-      this.request = checkNotNull(request, "request");
+    CacheEntry(RouteLookupRequestKey routeLookupRequestKey) {
+      this.routeLookupRequestKey = checkNotNull(routeLookupRequestKey, "request");
     }
 
     abstract int getSizeBytes();
@@ -640,8 +655,9 @@ final class CachingRlsLbClient {
     private final List<ChildPolicyWrapper> childPolicyWrappers;
 
     // GuardedBy CachingRlsLbClient.lock
-    DataCacheEntry(RouteLookupRequest request, final RouteLookupResponse response) {
-      super(request);
+    DataCacheEntry(RouteLookupRequestKey routeLookupRequestKey,
+        final RouteLookupResponse response) {
+      super(routeLookupRequestKey);
       this.response = checkNotNull(response, "response");
       checkState(!response.targets().isEmpty(), "No targets returned by RLS");
       childPolicyWrappers =
@@ -669,13 +685,14 @@ final class CachingRlsLbClient {
      */
     void maybeRefresh() {
       synchronized (lock) { // Lock is already held, but ErrorProne can't tell
-        if (pendingCallCache.containsKey(request)) {
+        if (pendingCallCache.containsKey(routeLookupRequestKey)) {
           // pending already requested
           return;
         }
         logger.log(ChannelLogLevel.DEBUG,
-            "[RLS Entry {0}] Cache entry is stale, refreshing", request);
-        asyncRlsCall(request, /* backoffPolicy= */ null);
+            "[RLS Entry {0}] Cache entry is stale, refreshing", routeLookupRequestKey);
+        asyncRlsCall(routeLookupRequestKey, /* backoffPolicy= */ null,
+            RouteLookupRequest.Reason.REASON_STALE);
       }
     }
 
@@ -745,7 +762,7 @@ final class CachingRlsLbClient {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("request", request)
+          .add("request", routeLookupRequestKey)
           .add("response", response)
           .add("expireTime", expireTime)
           .add("staleTime", staleTime)
@@ -762,12 +779,15 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
+    private final RouteLookupRequest.Reason routeLookupReason;
     private Future<?> scheduledFuture;
 
-    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
-      super(request);
+    BackoffCacheEntry(RouteLookupRequestKey routeLookupRequestKey, Status status,
+        BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
+      super(routeLookupRequestKey);
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
+      this.routeLookupReason = checkNotNull(routeLookupReason, "routeLookupReason");
     }
 
     Status getStatus() {
@@ -792,7 +812,7 @@ final class CachingRlsLbClient {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("request", request)
+          .add("request", routeLookupRequestKey)
           .add("status", status)
           .toString();
     }
@@ -811,7 +831,7 @@ final class CachingRlsLbClient {
     private Throttler throttler = new HappyThrottler();
     private ResolvedAddressFactory resolvedAddressFactory;
     private Ticker ticker = Ticker.systemTicker();
-    private EvictionListener<RouteLookupRequest, CacheEntry> evictionListener;
+    private EvictionListener<RouteLookupRequestKey, CacheEntry> evictionListener;
     private BackoffPolicy.Provider backoffProvider = new ExponentialBackoffPolicy.Provider();
 
     Builder setHelper(Helper helper) {
@@ -845,7 +865,7 @@ final class CachingRlsLbClient {
     }
 
     Builder setEvictionListener(
-        @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener) {
+        @Nullable EvictionListener<RouteLookupRequestKey, CacheEntry> evictionListener) {
       this.evictionListener = evictionListener;
       return this;
     }
@@ -867,17 +887,17 @@ final class CachingRlsLbClient {
    * CacheEntry#cleanup()} after original {@link EvictionListener} is finished.
    */
   private static final class AutoCleaningEvictionListener
-      implements EvictionListener<RouteLookupRequest, CacheEntry> {
+      implements EvictionListener<RouteLookupRequestKey, CacheEntry> {
 
-    private final EvictionListener<RouteLookupRequest, CacheEntry> delegate;
+    private final EvictionListener<RouteLookupRequestKey, CacheEntry> delegate;
 
     AutoCleaningEvictionListener(
-        @Nullable EvictionListener<RouteLookupRequest, CacheEntry> delegate) {
+        @Nullable EvictionListener<RouteLookupRequestKey, CacheEntry> delegate) {
       this.delegate = delegate;
     }
 
     @Override
-    public void onEviction(RouteLookupRequest key, CacheEntry value, EvictionType cause) {
+    public void onEviction(RouteLookupRequestKey key, CacheEntry value, EvictionType cause) {
       if (delegate != null) {
         delegate.onEviction(key, value, cause);
       }
@@ -902,29 +922,29 @@ final class CachingRlsLbClient {
 
   /** Implementation of {@link LinkedHashLruCache} for RLS. */
   private static final class RlsAsyncLruCache
-      extends LinkedHashLruCache<RouteLookupRequest, CacheEntry> {
+      extends LinkedHashLruCache<RouteLookupRequestKey, CacheEntry> {
     private final RlsLbHelper helper;
 
     RlsAsyncLruCache(long maxEstimatedSizeBytes,
-        @Nullable EvictionListener<RouteLookupRequest, CacheEntry> evictionListener,
+        @Nullable EvictionListener<RouteLookupRequestKey, CacheEntry> evictionListener,
         Ticker ticker, RlsLbHelper helper) {
       super(maxEstimatedSizeBytes, evictionListener, ticker);
       this.helper = checkNotNull(helper, "helper");
     }
 
     @Override
-    protected boolean isExpired(RouteLookupRequest key, CacheEntry value, long nowNanos) {
+    protected boolean isExpired(RouteLookupRequestKey key, CacheEntry value, long nowNanos) {
       return value.isExpired(nowNanos);
     }
 
     @Override
-    protected int estimateSizeOf(RouteLookupRequest key, CacheEntry value) {
+    protected int estimateSizeOf(RouteLookupRequestKey key, CacheEntry value) {
       return value.getSizeBytes();
     }
 
     @Override
     protected boolean shouldInvalidateEldestEntry(
-        RouteLookupRequest eldestKey, CacheEntry eldestValue, long now) {
+        RouteLookupRequestKey eldestKey, CacheEntry eldestValue, long now) {
       if (!eldestValue.isOldEnoughToBeEvicted(now)) {
         return false;
       }
@@ -933,7 +953,7 @@ final class CachingRlsLbClient {
       return this.estimatedSizeBytes() > this.estimatedMaxSizeBytes();
     }
 
-    public CacheEntry cacheAndClean(RouteLookupRequest key, CacheEntry value) {
+    public CacheEntry cacheAndClean(RouteLookupRequestKey key, CacheEntry value) {
       CacheEntry newEntry = cache(key, value);
 
       // force cleanup if new entry pushed cache over max size (in bytes)
@@ -989,9 +1009,9 @@ final class CachingRlsLbClient {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       String serviceName = args.getMethodDescriptor().getServiceName();
       String methodName = args.getMethodDescriptor().getBareMethodName();
-      RouteLookupRequest request =
+      RlsProtoData.RouteLookupRequestKey lookupRequestKey =
           requestFactory.create(serviceName, methodName, args.getHeaders());
-      final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(request);
+      final CachedRouteLookupResponse response = CachingRlsLbClient.this.get(lookupRequestKey);
 
       if (response.getHeaderData() != null && !response.getHeaderData().isEmpty()) {
         Metadata headers = args.getHeaders();

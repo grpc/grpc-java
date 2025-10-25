@@ -166,15 +166,19 @@ public class RlsLoadBalancerTest {
             .build();
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            RouteLookupRequest.create(ImmutableMap.of(
+            RouteLookupRequest.create(
+                ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
-                "method-key", "Search")),
+                "method-key", "Search"),
+                RouteLookupRequest.Reason.REASON_MISS),
             RouteLookupResponse.create(ImmutableList.of("wilderness"), "where are you?"),
-            RouteLookupRequest.create(ImmutableMap.of(
+            RouteLookupRequest.create(
+                ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
-                "method-key", "Rescue")),
+                "method-key", "Rescue"),
+                RouteLookupRequest.Reason.REASON_MISS),
             RouteLookupResponse.create(ImmutableList.of("civilization"), "you are safe")));
 
     rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);

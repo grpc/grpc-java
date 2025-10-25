@@ -28,12 +28,13 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
 import io.grpc.rls.RlsProtoData.RouteLookupRequest;
+import io.grpc.rls.RlsProtoData.RouteLookupRequestKey;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * A RlsRequestFactory creates {@link RouteLookupRequest} using key builder map from {@link
+ * A RlsRequestFactory creates {@link RouteLookupRequestKey} using key builder map from {@link
  * RouteLookupConfig}.
  */
 final class RlsRequestFactory {
@@ -61,9 +62,9 @@ final class RlsRequestFactory {
     return table;
   }
 
-  /** Creates a {@link RouteLookupRequest} for given request's metadata. */
+  /** Creates a {@link RouteLookupRequestKey} for the given request lookup metadata. */
   @CheckReturnValue
-  RouteLookupRequest create(String service, String method, Metadata metadata) {
+  RouteLookupRequestKey create(String service, String method, Metadata metadata) {
     checkNotNull(service, "service");
     checkNotNull(method, "method");
     String path = "/" + service + "/" + method;
@@ -73,7 +74,7 @@ final class RlsRequestFactory {
       grpcKeyBuilder = keyBuilderTable.get("/" + service + "/*");
     }
     if (grpcKeyBuilder == null) {
-      return RouteLookupRequest.create(ImmutableMap.<String, String>of());
+      return RouteLookupRequestKey.create(ImmutableMap.of());
     }
     ImmutableMap.Builder<String, String> rlsRequestHeaders =
         createRequestHeaders(metadata, grpcKeyBuilder.headers());
@@ -89,7 +90,14 @@ final class RlsRequestFactory {
       rlsRequestHeaders.put(extraKeys.method(), method);
     }
     rlsRequestHeaders.putAll(constantKeys);
-    return RouteLookupRequest.create(rlsRequestHeaders.buildOrThrow());
+    return RouteLookupRequestKey.create(rlsRequestHeaders.buildOrThrow());
+  }
+
+  /** Creates a {@link RouteLookupRequest} using the given request lookup key and reason. */
+  @CheckReturnValue
+  RouteLookupRequest create(RouteLookupRequestKey routeLookupRequestKey,
+      RouteLookupRequest.Reason reason) {
+    return RouteLookupRequest.create(routeLookupRequestKey.keyMap(), reason);
   }
 
   private ImmutableMap.Builder<String, String> createRequestHeaders(

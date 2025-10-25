@@ -27,16 +27,39 @@ final class RlsProtoData {
 
   private RlsProtoData() {}
 
+  /** A key object for the Rls route lookup data cache. */
+  @AutoValue
+  @Immutable
+  abstract static class RouteLookupRequestKey {
+
+    /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
+    abstract ImmutableMap<String, String> keyMap();
+
+    static RouteLookupRequestKey create(ImmutableMap<String, String> keyMap) {
+      return new AutoValue_RlsProtoData_RouteLookupRequestKey(keyMap);
+    }
+  }
+
   /** A request object sent to route lookup service. */
   @AutoValue
   @Immutable
   abstract static class RouteLookupRequest {
 
+    // Names should match those in grpc.lookup.v1.RouteLookupRequest.Reason
+    enum Reason {
+      REASON_UNKNOWN,  // Unused
+      REASON_MISS,     // No data available in local cache
+      REASON_STALE;    // Data in local cache is stale
+    }
+
+    // Reason for making this request.
+    abstract Reason reason();
+
     /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
     abstract ImmutableMap<String, String> keyMap();
 
-    static RouteLookupRequest create(ImmutableMap<String, String> keyMap) {
-      return new AutoValue_RlsProtoData_RouteLookupRequest(keyMap);
+    static RouteLookupRequest create(ImmutableMap<String, String> keyMap, Reason reason) {
+      return new AutoValue_RlsProtoData_RouteLookupRequest(reason, keyMap);
     }
   }
 
