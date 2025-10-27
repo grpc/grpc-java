@@ -1023,43 +1023,27 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       if (status.isOk()) {
         return; // Not considered an error
       }
-      if (shouldTryFallback) { // This indicates no response was received on the stream.
-        metricReporter.reportServerFailure(1L, serverInfo.target());
-      }
-      boolean anyWatcherIsMissingResource = false;
+
+      metricReporter.reportServerFailure(1L, serverInfo.target());
+
       Collection<String> authoritiesForClosedCpc = getActiveAuthorities(cpcClosed);
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-          if (authoritiesForClosedCpc.contains(subscriber.authority) && !subscriber.hasResult()) {
-            anyWatcherIsMissingResource = true;
-            break;
+          if (subscriber.hasResult() || !authoritiesForClosedCpc.contains(subscriber.authority)) {
+            continue;
           }
-        }
-        if (anyWatcherIsMissingResource) {
-          break;
-        }
-      }
-      if (shouldTryFallback && anyWatcherIsMissingResource) {
-        for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
-            resourceSubscribers.values()) {
-          for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-            if (!subscriber.hasResult() && authoritiesForClosedCpc.contains(subscriber.authority)) {
-              manageControlPlaneClient(subscriber);
-            }
-          }
-        }
-      }
 
-      // Notify all affected watchers about the stream error.
-      // The subscriber's internal 'onError' will correctly delegate to the watcher's
-      // 'onAmbientError' or 'onResourceChanged' based on its current state (i.e. if it has data).
-      for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
-          resourceSubscribers.values()) {
-        for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-          if (authoritiesForClosedCpc.contains(subscriber.authority)) {
-            subscriber.onError(status, null);
+          // try to fallback to lower priority control plane client
+          if (shouldTryFallback && manageControlPlaneClient(subscriber).didFallback) {
+            authoritiesForClosedCpc.remove(subscriber.authority);
+            if (authoritiesForClosedCpc.isEmpty()) {
+              return; // optimization: no need to continue once all authorities have done fallback
+            }
+            continue; // since we did fallback, don't consider it an error
           }
+
+          subscriber.onError(status, null);
         }
       }
     }

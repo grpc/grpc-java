@@ -406,11 +406,8 @@ public class XdsClientFallbackTest {
     fakeClock.forwardTime(5, TimeUnit.SECONDS); // Let the client detect the disconnection
 
     // The stream is down, so we should get an ambient error. No fallback yet.
-    verify(ldsWatcher, timeout(5000).atLeastOnce()).onAmbientError(any());
-    verify(ldsWatcher, never()).onResourceChanged(
-        argThat(statusOr -> statusOr.hasValue() && statusOr.getValue().equals(
-            XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER))));
-
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(
+        StatusOr.fromValue(LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
     // Watching a cached resource should still work and not trigger a fallback.
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher2);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher2);
