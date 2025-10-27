@@ -32,7 +32,7 @@ dependencies {
             libraries.junit,
             libraries.mockito.core,
             libraries.truth
-
+    testImplementation 'com.github.stefanbirkner:system-rules:1.19.0'
     testImplementation libraries.guava.testlib
     testRuntimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes

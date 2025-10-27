@@ -39,7 +39,8 @@ import java.util.concurrent.TimeUnit;
 final class HandshakerServiceChannel {
 
   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
-      new ChannelResource("metadata.google.internal.:8080");
+      new ChannelResource(MetadataServerAddressUtil.getHandshakerAddress());
+
 
   /** Returns a resource of handshaker service channel for testing only. */
   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {

@@ -30,6 +30,7 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.contrib.java.lang.system.EnvironmentVariables;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,6 +38,7 @@ import org.junit.runners.JUnit4;
 public final class HandshakerServiceChannelTest {
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+  @Rule public final EnvironmentVariables environmentVariables = new EnvironmentVariables();
   private final Server server = grpcCleanup.register(
       ServerBuilder.forPort(0)
         .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {
@@ -54,6 +56,18 @@ public final class HandshakerServiceChannelTest {
     server.start();
     resource =
         HandshakerServiceChannel.getHandshakerChannelForTesting("localhost:" + server.getPort());
+  }
+
+  @Test
+  public void handshakerAddress_default() {
+    assertThat(MetadataServerAddressUtil.getHandshakerAddress())
+        .isEqualTo("metadata.google.internal.:8080");
+  }
+
+  @Test
+  public void handshakerAddress_withEnvVar() {
+    environmentVariables.set("GCE_METADATA_HOST", "169.254.169.254:8080");
+    assertThat(MetadataServerAddressUtil.getHandshakerAddress()).isEqualTo("169.254.169.254:8080");
   }
 
   @Test
