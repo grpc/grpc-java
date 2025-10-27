@@ -350,7 +350,7 @@ class NettyClientTransport implements ConnectionClientTransport,
 
   @Override
   public void shutdown(Status reason) {
-    shutdown(reason, SimpleDisconnectError.UNKNOWN);
+    shutdown(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
   }
 
   @Override
@@ -367,7 +367,7 @@ class NettyClientTransport implements ConnectionClientTransport,
 
   @Override
   public void shutdownNow(final Status reason) {
-    shutdownNow(reason, SimpleDisconnectError.UNKNOWN);
+    shutdownNow(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
   }
 
   @Override
