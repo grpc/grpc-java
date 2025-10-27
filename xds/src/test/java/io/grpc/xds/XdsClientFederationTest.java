@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.MetricRecorder;
+import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.Filter.NamedFilterConfig;
@@ -129,6 +131,11 @@ public class XdsClientFederationTest {
     // watcher of another control plane (here the DirectPath one).
     trafficdirector.setLdsConfig(ControlPlaneRule.buildServerListener(),
         ControlPlaneRule.buildClientListener("new-server"));
+    verify(mockWatcher, timeout(20000)).onResourceChanged(argThat(statusOr -> {
+      return !statusOr.hasValue()
+          && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND
+          && statusOr.getStatus().getDescription().contains("test-server");
+    }));
     verify(mockDirectPathWatcher, times(1)).onResourceChanged(any());
     verify(mockDirectPathWatcher, never()).onAmbientError(any());
   }
