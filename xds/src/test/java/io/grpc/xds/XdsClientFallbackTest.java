@@ -461,18 +461,14 @@ public class XdsClientFallbackTest {
   public void connect_then_mainServerRestart_fallbackServerdown() {
     mainXdsServer.restartXdsServer();
     xdsClient = xdsClientPool.getObject();
-
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher);
 
     verify(ldsWatcher, timeout(5000)).onResourceChanged(
         argThat(statusOr -> statusOr.hasValue() && statusOr.getValue().equals(
             LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER))));
-
     mainXdsServer.getServer().shutdownNow();
     fallbackServer.getServer().shutdownNow();
-
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher);
-
     mainXdsServer.restartXdsServer();
 
     verify(cdsWatcher, timeout(5000)).onResourceChanged(

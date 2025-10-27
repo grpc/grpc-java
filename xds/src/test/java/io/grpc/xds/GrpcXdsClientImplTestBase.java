@@ -4580,9 +4580,15 @@ public abstract class GrpcXdsClientImplTestBase {
         argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
     rdsWatcherInOrder.verify(rdsResourceWatcher).onAmbientError(
         argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
-    // Server Failure metric will not be reported, as stream is closed with an error after receiving
+    cdsWatcherInOrder.verify(cdsResourceWatcher).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
+    edsWatcherInOrder.verify(edsResourceWatcher).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
+    // Server Failure metric is now reported, as stream is closed with an error after receiving
     // a response
-    verifyServerFailureCount(2, 1, xdsServerInfo.target());
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -4597,7 +4603,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     ldsWatcherInOrder.verify(ldsResourceWatcher).onAmbientError(
         argThat(status -> status.getCode() == Code.UNAVAILABLE));
-    verifyServerFailureCount(3, 1, xdsServerInfo.target());
+    verifyServerFailureCount(4, 1, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -4610,11 +4616,9 @@ public abstract class GrpcXdsClientImplTestBase {
     List<Any> clusters = ImmutableList.of(FAILING_ANY, testClusterRoundRobin);
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     call.sendCompleted();
-    // Server Failure metric will not be reported once again, as stream is closed after receiving a
-    // response
-    verifyServerFailureCount(3, 1, xdsServerInfo.target());
+    // Server Failure metric will not be reported, as stream is closed gracefully.
+    verifyServerFailureCount(4, 1, xdsServerInfo.target());
   }
-
 
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
