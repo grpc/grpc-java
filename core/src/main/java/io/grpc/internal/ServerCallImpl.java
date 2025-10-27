@@ -327,14 +327,15 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
-      InputStream message;
       try {
+        InputStream message;
         while ((message = producer.next()) != null) {
           ReqT parsedMessage;
           try {
             parsedMessage = call.method.parseRequest(message);
           } catch (StatusRuntimeException e) {
             GrpcUtil.closeQuietly(message);
+            GrpcUtil.closeQuietly(producer);
             call.cancelled = true;
             call.close(e.getStatus(), new Metadata());
             return;
@@ -343,9 +344,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
             listener.onMessage(parsedMessage);
           } catch (Throwable t) {
             GrpcUtil.closeQuietly(message);
+            message.close();
             throw t;
           }
-          message.close();
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
