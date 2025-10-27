@@ -34,6 +34,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
@@ -198,13 +199,14 @@ public class XdsServerBuilderTest {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
             tlsContextManager);
     future.get(5000, TimeUnit.MILLISECONDS);
-    xdsClient.ldsWatcher.onError(Status.ABORTED);
+    xdsClient.ldsWatcher.onAmbientError(Status.ABORTED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onError(Status.CANCELLED);
+    xdsClient.ldsWatcher.onAmbientError(Status.CANCELLED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onResourceDoesNotExist("not found error");
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("not found error");
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     verify(mockXdsServingStatusListener).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
@@ -255,7 +257,7 @@ public class XdsServerBuilderTest {
             tlsContextManager);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     verifyServer(future, mockXdsServingStatusListener, null);
-    xdsClient.ldsWatcher.onError(Status.ABORTED);
+    xdsClient.ldsWatcher.onAmbientError(Status.ABORTED);
     verifyServer(null, mockXdsServingStatusListener, null);
   }
 

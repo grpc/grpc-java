@@ -64,13 +64,15 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
         new XdsTrustManagerFactory(
             savedSpiffeTrustMap,
             certificateValidationContext,
-            ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
+            autoSniSanValidationDoesNotApply
+                ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else if (savedTrustedRoots != null) {
       sslContextBuilder = sslContextBuilder.trustManager(
           new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContext,
-              ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
+              autoSniSanValidationDoesNotApply
+                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
     } else {
       // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
       throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");

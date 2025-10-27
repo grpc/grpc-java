@@ -320,15 +320,16 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
                 inbound.closeAbnormal(shutdownStatus);
               }
             }
-            synchronized (this) {
-              notifyTerminated();
-            }
-            releaseExecutors();
-            
+
             for (Future<?> future : futuresToCancel) {
               // Not holding any locks here just in case some listener runs on a direct Executor.
               future.cancel(false); // No effect if already isDone().
             }
+
+            synchronized (this) {
+              notifyTerminated();
+            }
+            releaseExecutors();
           });
     }
   }

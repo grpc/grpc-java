@@ -49,6 +49,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.TestMethodDescriptors;
@@ -341,7 +342,8 @@ public class XdsServerWrapperTest {
       }
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("Resource not found: " + ldsResource);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     verify(listener, timeout(5000)).onNotServing(any());
     try {
       start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
@@ -530,7 +532,8 @@ public class XdsServerWrapperTest {
     verify(mockServer).start();
 
     // server shutdown after resourceDoesNotExist
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("Resource not found: " + ldsResource);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     verify(mockServer).shutdown();
 
     // re-deliver lds resource
@@ -845,7 +848,7 @@ public class XdsServerWrapperTest {
     EnvoyServerProtoData.FilterChain f1 = createFilterChain("filter-chain-1", createRds("r0"));
     xdsClient.deliverLdsUpdate(Arrays.asList(f0, f1), null);
     xdsClient.awaitRds(FakeXdsClient.DEFAULT_TIMEOUT);
-    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
+    xdsClient.rdsWatchers.get("r0").onResourceChanged(StatusOr.fromStatus(Status.CANCELLED));
     start.get(5000, TimeUnit.MILLISECONDS);
     assertThat(selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().size())
         .isEqualTo(2);
@@ -865,13 +868,14 @@ public class XdsServerWrapperTest {
         Collections.singletonList(createVirtualHost("virtual-host-1")));
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
-    xdsClient.rdsWatchers.get("r0").onError(Status.CANCELLED);
+    xdsClient.rdsWatchers.get("r0").onAmbientError(Status.CANCELLED);
     realConfig = selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().get(f1).get();
     assertThat(realConfig.virtualHosts()).isEqualTo(
         Collections.singletonList(createVirtualHost("virtual-host-1")));
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
-    xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("Resource r0 does not exist");
+    xdsClient.rdsWatchers.get("r0").onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     realConfig = selectorManager.getSelectorToUpdateSelector().getRoutingConfigs().get(f1).get();
     assertThat(realConfig.virtualHosts()).isEmpty();
     assertThat(realConfig.interceptors()).isEmpty();
@@ -891,7 +895,9 @@ public class XdsServerWrapperTest {
       }
     });
     String ldsResource = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    Status notFoundStatus = Status.NOT_FOUND.withDescription(
+        "FakeXdsClient: Resource not found: " + ldsResource);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     verify(listener, timeout(5000)).onNotServing(any());
     try {
       start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
@@ -905,10 +911,10 @@ public class XdsServerWrapperTest {
     FilterChain filterChain0 = createFilterChain("filter-chain-0", createRds("rds"));
     SslContextProviderSupplier sslSupplier0 = filterChain0.sslContextProviderSupplier();
     xdsClient.deliverLdsUpdate(Collections.singletonList(filterChain0), null);
-    xdsClient.ldsWatcher.onError(Status.INTERNAL);
+    ResourceWatcher<RdsUpdate> saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(Status.INTERNAL));
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
-    ResourceWatcher<RdsUpdate> saveRdsWatcher = xdsClient.rdsWatchers.get("rds");
     verify(mockBuilder, times(1)).build();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier0.isShutdown()).isFalse();
@@ -944,7 +950,7 @@ public class XdsServerWrapperTest {
     xdsClient.deliverRdsUpdate("rds",
             Collections.singletonList(createVirtualHost("virtual-host-2")));
     assertThat(sslSupplier1.isShutdown()).isFalse();
-    xdsClient.ldsWatcher.onError(Status.DEADLINE_EXCEEDED);
+    xdsClient.ldsWatcher.onAmbientError(Status.DEADLINE_EXCEEDED);
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
     verify(listener, times(2)).onNotServing(any(StatusException.class));
@@ -959,17 +965,18 @@ public class XdsServerWrapperTest {
     assertThat(sslSupplier1.isShutdown()).isFalse();
 
     // not serving after serving
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     assertThat(xdsClient.rdsWatchers).isEmpty();
-    verify(mockServer, times(2)).shutdown();
+    verify(mockServer, times(3)).shutdown(); // This is the 3rd shutdown in the test.
     when(mockServer.isShutdown()).thenReturn(true);
     assertThat(selectorManager.getSelectorToUpdateSelector())
         .isSameInstanceAs(FilterChainSelector.NO_FILTER_CHAIN);
     verify(listener, times(3)).onNotServing(any(StatusException.class));
     assertThat(sslSupplier1.isShutdown()).isTrue();
+    assertThat(xdsClient.rdsWatchers.get("rds")).isNull();
     // no op
-    saveRdsWatcher.onChanged(
-            new RdsUpdate(Collections.singletonList(createVirtualHost("virtual-host-1"))));
+    saveRdsWatcher.onResourceChanged(StatusOr.fromValue(
+        new RdsUpdate(Collections.singletonList(createVirtualHost("virtual-host-1")))));
     verify(mockBuilder, times(1)).build();
     verify(mockServer, times(2)).start();
     verify(listener, times(1)).onServing();
@@ -998,8 +1005,8 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
     assertThat(executor.numPendingTasks()).isEqualTo(1);
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsResource);
-    verify(mockServer, times(3)).shutdown();
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
+    verify(mockServer, times(4)).shutdown();
     verify(listener, times(4)).onNotServing(any(StatusException.class));
     verify(listener, times(1)).onNotServing(any(IOException.class));
     when(mockServer.isShutdown()).thenReturn(true);
@@ -1027,7 +1034,7 @@ public class XdsServerWrapperTest {
     assertThat(realConfig.interceptors()).isEqualTo(ImmutableMap.of());
 
     xdsServerWrapper.shutdown();
-    verify(mockServer, times(4)).shutdown();
+    verify(mockServer, times(5)).shutdown();
     assertThat(sslSupplier3.isShutdown()).isTrue();
     when(mockServer.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);
     assertThat(xdsServerWrapper.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
@@ -1421,7 +1428,8 @@ public class XdsServerWrapperTest {
     assertThat(interceptorTrace).isEqualTo(Arrays.asList(0, 0));
     verify(mockNext, times(2)).startCall(eq(serverCall), any(Metadata.class));
 
-    xdsClient.rdsWatchers.get("r0").onResourceDoesNotExist("r0");
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("Resource r0 does not exist");
+    xdsClient.rdsWatchers.get("r0").onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     assertThat(selectorManager.getSelectorToUpdateSelector().getRoutingConfigs()
         .get(filterChain).get()).isEqualTo(noopConfig);
   }
