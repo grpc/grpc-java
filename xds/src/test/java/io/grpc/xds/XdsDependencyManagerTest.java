@@ -853,7 +853,7 @@ public class XdsDependencyManagerTest {
         serverName,
         resourceWatcher,
         MoreExecutors.directExecutor());
-    verify(resourceWatcher).onChanged(any());
+    verify(resourceWatcher).onResourceChanged(argThat(StatusOr::hasValue));
 
     syncContext.execute(() -> {
       // Shutdown before any updates. This will unsubscribe from XdsClient, but only after this
@@ -862,7 +862,7 @@ public class XdsDependencyManagerTest {
 
       XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS2", "CDS", "EDS",
           ENDPOINT_HOSTNAME, ENDPOINT_PORT);
-      verify(resourceWatcher, times(2)).onChanged(any());
+      verify(resourceWatcher, times(2)).onResourceChanged(argThat(StatusOr::hasValue));
       xdsClient.cancelXdsResourceWatch(
           XdsListenerResource.getInstance(), serverName, resourceWatcher);
     });
@@ -885,7 +885,7 @@ public class XdsDependencyManagerTest {
         "RDS",
         resourceWatcher,
         MoreExecutors.directExecutor());
-    verify(resourceWatcher).onChanged(any());
+    verify(resourceWatcher).onResourceChanged(argThat(StatusOr::hasValue));
 
     syncContext.execute(() -> {
       // Shutdown before any updates. This will unsubscribe from XdsClient, but only after this
@@ -894,7 +894,7 @@ public class XdsDependencyManagerTest {
 
       XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS2", "EDS",
           ENDPOINT_HOSTNAME, ENDPOINT_PORT);
-      verify(resourceWatcher, times(2)).onChanged(any());
+      verify(resourceWatcher, times(2)).onResourceChanged(argThat(StatusOr::hasValue));
       xdsClient.cancelXdsResourceWatch(
           XdsRouteConfigureResource.getInstance(), serverName, resourceWatcher);
     });
@@ -910,14 +910,14 @@ public class XdsDependencyManagerTest {
     verify(xdsConfigWatcher).onUpdate(any());
 
     @SuppressWarnings("unchecked")
-    XdsClient.ResourceWatcher<XdsClusterResource.CdsUpdate> resourceWatcher =
+    XdsClient.ResourceWatcher<CdsUpdate> resourceWatcher =
         mock(XdsClient.ResourceWatcher.class);
     xdsClient.watchXdsResource(
         XdsClusterResource.getInstance(),
         "CDS",
         resourceWatcher,
         MoreExecutors.directExecutor());
-    verify(resourceWatcher).onChanged(any());
+    verify(resourceWatcher).onResourceChanged(argThat(StatusOr::hasValue));
 
     syncContext.execute(() -> {
       // Shutdown before any updates. This will unsubscribe from XdsClient, but only after this
@@ -926,7 +926,7 @@ public class XdsDependencyManagerTest {
 
       XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS2",
           ENDPOINT_HOSTNAME, ENDPOINT_PORT);
-      verify(resourceWatcher, times(2)).onChanged(any());
+      verify(resourceWatcher, times(2)).onResourceChanged(argThat(StatusOr::hasValue));
       xdsClient.cancelXdsResourceWatch(
           XdsClusterResource.getInstance(), serverName, resourceWatcher);
     });
@@ -949,7 +949,7 @@ public class XdsDependencyManagerTest {
         "EDS",
         resourceWatcher,
         MoreExecutors.directExecutor());
-    verify(resourceWatcher).onChanged(any());
+    verify(resourceWatcher).onResourceChanged(argThat(StatusOr::hasValue));
 
     syncContext.execute(() -> {
       // Shutdown before any updates. This will unsubscribe from XdsClient, but only after this
@@ -958,7 +958,7 @@ public class XdsDependencyManagerTest {
 
       XdsTestUtils.setAdsConfig(controlPlaneService, serverName, "RDS", "CDS", "EDS",
           ENDPOINT_HOSTNAME + "2", ENDPOINT_PORT);
-      verify(resourceWatcher, times(2)).onChanged(any());
+      verify(resourceWatcher, times(2)).onResourceChanged(argThat(StatusOr::hasValue));
       xdsClient.cancelXdsResourceWatch(
           XdsEndpointResource.getInstance(), serverName, resourceWatcher);
     });

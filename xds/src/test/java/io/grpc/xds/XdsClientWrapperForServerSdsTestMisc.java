@@ -36,6 +36,7 @@ import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.internal.TestUtils.NoopChannelLogger;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -171,7 +172,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
             null,
             Protocol.TCP);
     LdsUpdate listenerUpdate = LdsUpdate.forTcpListener(tcpListener);
-    xdsClient.ldsWatcher.onChanged(listenerUpdate);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromValue(listenerUpdate));
     verify(listener, timeout(5000)).onServing();
     start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
     FilterChainSelector selector = selectorManager.getSelectorToUpdateSelector();
@@ -192,7 +193,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
       }
     });
     String ldsWatched = xdsClient.ldsResource.get(5, TimeUnit.SECONDS);
-    xdsClient.ldsWatcher.onResourceDoesNotExist(ldsWatched);
+    Status status = Status.NOT_FOUND.withDescription("Resource not found: " + ldsWatched);
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(status));
     verify(listener, timeout(5000)).onNotServing(any());
     try {
       start.get(START_WAIT_AFTER_LISTENER_MILLIS, TimeUnit.MILLISECONDS);
@@ -277,7 +279,8 @@ public class XdsClientWrapperForServerSdsTestMisc {
             getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onResourceDoesNotExist("not-found Error");
+    Status status = Status.NOT_FOUND.withDescription("not-found Error");
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(status));
     verify(tlsContextManager, times(1)).releaseServerSslContextProvider(eq(sslContextProvider1));
   }
 
@@ -294,7 +297,7 @@ public class XdsClientWrapperForServerSdsTestMisc {
             getSslContextProviderSupplier(selectorManager.getSelectorToUpdateSelector());
     assertThat(returnedSupplier.getTlsContext()).isSameInstanceAs(tlsContext1);
     callUpdateSslContext(returnedSupplier);
-    xdsClient.ldsWatcher.onError(Status.CANCELLED);
+    xdsClient.ldsWatcher.onAmbientError(Status.CANCELLED);
     verify(tlsContextManager, never()).releaseServerSslContextProvider(eq(sslContextProvider1));
   }
 
