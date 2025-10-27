@@ -589,13 +589,8 @@ public class XdsClientFallbackTest {
 
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher);
 
-    @SuppressWarnings("unchecked")
-    ArgumentCaptor<StatusOr<CdsUpdate>> cdsUpdateCaptor = ArgumentCaptor.forClass(StatusOr.class);
-    verify(cdsWatcher, timeout(5000)).onResourceChanged(cdsUpdateCaptor.capture());
-    // okshiva: flaky
-    // assertThat(cdsUpdateCaptor.getValue().getStatus().isOk()).isTrue();
-    // okshiva: I'm skeptical about this behaviour(commented in next line)
-    // assertThat(getLrsServerInfo("localhost:" + fallbackServer.getServer().getPort())).isNull();
+    verify(cdsWatcher, timeout(5000)).onResourceChanged(any());
+    assertThat(getLrsServerInfo("localhost:" + fallbackServer.getServer().getPort())).isNull();
   }
 
   private Map<String, ?> defaultBootstrapOverride() {
@@ -622,5 +617,4 @@ public class XdsClientFallbackTest {
         "fallback-policy", "fallback"
       );
   }
-
 }

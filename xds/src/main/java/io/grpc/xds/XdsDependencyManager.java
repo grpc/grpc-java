@@ -633,7 +633,8 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     @Nullable
     private StatusOr<T> data;
     @Nullable
-    private Status ambientError; // To hold transient errors
+    @SuppressWarnings("unused")
+    private Status ambientError;
 
 
     private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
