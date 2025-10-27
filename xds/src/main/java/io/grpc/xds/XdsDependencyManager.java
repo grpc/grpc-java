@@ -674,7 +674,7 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
           String.format("Ambient error for %s: %s. Details: %s%s",
               toContextString(),
               error.getCode(),
-              error.getDescription(),
+              error.getDescription() != null ? error.getDescription() : "",
               nodeInfo()));
     }
 
