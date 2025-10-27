@@ -93,13 +93,6 @@ final class RlsRequestFactory {
     return RouteLookupRequestKey.create(rlsRequestHeaders.buildOrThrow());
   }
 
-  /** Creates a {@link RouteLookupRequest} using the given request lookup key and reason. */
-  @CheckReturnValue
-  RouteLookupRequest create(RouteLookupRequestKey routeLookupRequestKey,
-      RouteLookupRequest.Reason reason) {
-    return RouteLookupRequest.create(routeLookupRequestKey.keyMap(), reason);
-  }
-
   private ImmutableMap.Builder<String, String> createRequestHeaders(
       Metadata metadata, List<NameMatcher> keyBuilder) {
     ImmutableMap.Builder<String, String> rlsRequestHeaders = ImmutableMap.builder();

@@ -307,7 +307,7 @@ final class CachingRlsLbClient {
     }
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(
-        requestFactory.create(routeLookupRequestKey, routeLookupReason));
+        RouteLookupRequest.create(routeLookupRequestKey.keyMap(), routeLookupReason));
     logger.log(ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Starting RouteLookup: {1}", routeLookupRequestKey, routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
