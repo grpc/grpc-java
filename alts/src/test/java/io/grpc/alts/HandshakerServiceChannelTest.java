@@ -66,7 +66,7 @@ public final class HandshakerServiceChannelTest {
   public void handshakerAddress_withEnvVar() {
     if (MetadataServerAddressUtil.TEST_METADATA_HOST_ENV_VAR != null ) {
       assertThat(MetadataServerAddressUtil.getHandshakerAddress())
-        .isEqualTo(MetadataServerAddressUtil.TEST_METADATA_HOST_ENV_VAR);
+          .isEqualTo(MetadataServerAddressUtil.TEST_METADATA_HOST_ENV_VAR);
     }
   }
 
