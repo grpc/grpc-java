@@ -389,8 +389,6 @@ final class XdsServerWrapper extends Server {
       }
 
       if (!update.hasValue()) {
-        // This is a definitive resource error (e.g., NOT_FOUND).
-        // We must treat the resource as unavailable and tear down the server.
         Status status = update.getStatus();
         StatusException statusException = Status.UNAVAILABLE.withDescription(
                 String.format("Listener %s unavailable: %s", resourceName, status.getDescription()))
@@ -400,7 +398,6 @@ final class XdsServerWrapper extends Server {
         return;
       }
 
-      // The original 'onChanged' logic starts here.
       final LdsUpdate ldsUpdate = update.getValue();
       logger.log(Level.FINEST, "Received Lds update {0}", ldsUpdate);
       if (ldsUpdate.listener() == null) {
@@ -408,11 +405,6 @@ final class XdsServerWrapper extends Server {
             Status.NOT_FOUND.withDescription("Listener is null in LdsUpdate").asException());
         return;
       }
-
-      // This check is now covered by the '!update.hasValue()' block above.
-      // The original check was: if (update.listener() == null)
-
-      // The ipAddressesMatch function and its logic remain critical.
       String ldsAddress = ldsUpdate.listener().address();
       if (ldsAddress == null || ldsUpdate.listener().protocol() != Protocol.TCP
           || !ipAddressesMatch(ldsAddress)) {
@@ -424,7 +416,6 @@ final class XdsServerWrapper extends Server {
         return;
       }
 
-      // The rest of the logic is a direct copy from the original onChanged method.
       if (!pendingRds.isEmpty()) {
         releaseSuppliersInFlight();
         pendingRds.clear();
@@ -434,8 +425,9 @@ final class XdsServerWrapper extends Server {
       defaultFilterChain = ldsUpdate.listener().defaultFilterChain();
       updateActiveFilters();
 
-      List<FilterChain> allFilterChains = new ArrayList<>(filterChains);
+      List<FilterChain> allFilterChains = filterChains;
       if (defaultFilterChain != null) {
+        allFilterChains = new ArrayList<>(filterChains);
         allFilterChains.add(defaultFilterChain);
       }
 
@@ -474,14 +466,11 @@ final class XdsServerWrapper extends Server {
       if (stopped) {
         return;
       }
-      // This logic is preserved from the original 'onError' method.
       String description = error.getDescription() == null ? "" : error.getDescription() + " ";
       Status errorWithNodeId = error.withDescription(
           description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
       logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
 
-      // If the server isn't serving yet, a transient error is a startup failure.
-      // If it is already serving, we ignore it to prevent an outage.
       if (!isServing) {
         listener.onNotServing(errorWithNodeId.asException());
       }
@@ -794,13 +783,11 @@ final class XdsServerWrapper extends Server {
           }
 
           if (update.hasValue()) {
-            // This is a successful update, taken from the original onChanged.
             if (savedVirtualHosts == null && !isPending) {
               logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
             }
             savedVirtualHosts = ImmutableList.copyOf(update.getValue().virtualHosts);
           } else {
-            // This is a definitive resource error, taken from onResourceDoesNotExist.
             logger.log(Level.WARNING, "Rds {0} unavailable: {1}",
                 new Object[]{resourceName, update.getStatus()});
             savedVirtualHosts = null;
@@ -817,7 +804,6 @@ final class XdsServerWrapper extends Server {
           if (!routeDiscoveryStates.containsKey(resourceName)) {
             return; // Watcher has been cancelled.
           }
-          // This is a transient error, taken from the original onError.
           String description = error.getDescription() == null ? "" : error.getDescription() + " ";
           Status errorWithNodeId = error.withDescription(
               description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());

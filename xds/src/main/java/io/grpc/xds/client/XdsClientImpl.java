@@ -1021,15 +1021,11 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       cleanUpResourceTimers(cpcClosed);
 
       if (status.isOk()) {
-        return; // Not an error.
+        return; // Not considered an error
       }
-
       if (shouldTryFallback) { // This indicates no response was received on the stream.
         metricReporter.reportServerFailure(1L, serverInfo.target());
       }
-
-      // Step 1: Determine if we even need to consider falling back.
-      // We only fall back if the stream failed AND we are missing at least one resource.
       boolean anyWatcherIsMissingResource = false;
       Collection<String> authoritiesForClosedCpc = getActiveAuthorities(cpcClosed);
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
@@ -1044,8 +1040,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           break;
         }
       }
-
-      // Step 2: If fallback is possible and needed, attempt it for the watchers that need it.
       if (shouldTryFallback && anyWatcherIsMissingResource) {
         for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
             resourceSubscribers.values()) {
@@ -1057,7 +1051,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         }
       }
 
-      // Step 3: Notify all affected watchers about the stream error.
+      // Notify all affected watchers about the stream error.
       // The subscriber's internal 'onError' will correctly delegate to the watcher's
       // 'onAmbientError' or 'onResourceChanged' based on its current state (i.e. if it has data).
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
