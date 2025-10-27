@@ -21,7 +21,7 @@ final class MetadataServerAddressUtil {
   private static final String GCE_METADATA_HOST_ENV_VAR = "GCE_METADATA_HOST";
   private static final String DEFAULT_HANDSHAKER_ADDRESS = "metadata.google.internal.:8080";
 
-  
+  static final String TEST_METADATA_HOST_ENV_VAR = System.getenv(GCE_METADATA_HOST_ENV_VAR);
 
   /**
    * Returns the ALTS handshaker service address by checking GCE_METADATA_HOST environment
