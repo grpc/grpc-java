@@ -475,7 +475,6 @@ final class ControlPlaneClient {
       close(status.asException());
       rpcRetryTimer =
           syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-      // Notify the handler of the stream closure before cleaning up the stream state.
       xdsResponseHandler.handleStreamClosed(statusToPropagate, !responseReceived);
     }
 
