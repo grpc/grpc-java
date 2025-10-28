@@ -55,7 +55,6 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.protobuf.ProtoUtils;
@@ -140,19 +139,6 @@ public class ClusterImplLoadBalancerTest {
   private final LoadStatsManager2 loadStatsManager =
       new LoadStatsManager2(fakeClock.getStopwatchSupplier());
   private final FakeXdsClient xdsClient = new FakeXdsClient();
-  private final ObjectPool<XdsClient> xdsClientPool = new ObjectPool<XdsClient>() {
-    @Override
-    public XdsClient getObject() {
-      xdsClientRefs++;
-      return xdsClient;
-    }
-
-    @Override
-    public XdsClient returnObject(Object object) {
-      xdsClientRefs--;
-      return null;
-    }
-  };
   private final CallCounterProvider callCounterProvider = new CallCounterProvider() {
     @Override
     public AtomicLong getOrCreate(String cluster, @Nullable String edsServiceName) {
@@ -199,8 +185,8 @@ public class ClusterImplLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(downstreamBalancers);
     assertThat(Iterables.getOnlyElement(childBalancer.addresses)).isEqualTo(endpoint);
     assertThat(childBalancer.config).isSameInstanceAs(weightedTargetConfig);
-    assertThat(childBalancer.attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL))
-        .isSameInstanceAs(xdsClientPool);
+    assertThat(childBalancer.attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT))
+        .isSameInstanceAs(xdsClient);
     assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
   }
 
@@ -673,7 +659,7 @@ public class ClusterImplLoadBalancerTest {
             .setAddresses(Collections.singletonList(endpoint))
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT, xdsClient)
                     .build())
             .setLoadBalancingPolicyConfig(config)
             .build());
@@ -1070,7 +1056,7 @@ public class ClusterImplLoadBalancerTest {
             .setAddresses(addresses)
             .setAttributes(
                 Attributes.newBuilder()
-                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+                    .set(io.grpc.xds.XdsAttributes.XDS_CLIENT, xdsClient)
                     .set(io.grpc.xds.XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
                     .build())
             .setLoadBalancingPolicyConfig(config)

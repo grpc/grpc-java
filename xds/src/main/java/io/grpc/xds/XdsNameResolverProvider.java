@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.xds.client.XdsClient;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -29,6 +30,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
@@ -43,6 +45,13 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class XdsNameResolverProvider extends NameResolverProvider {
+  /**
+   * If provided, the suppler must return non-null when lb.start() is called (which implies not
+   * throwing), and the XdsClient must remain alive until lb.shutdown() returns. It may only be
+   * called from the synchronization context.
+   */
+  public static final Args.Key<Supplier<XdsClient>> XDS_CLIENT_SUPPLIER =
+      Args.Key.create("io.grpc.xds.XdsNameResolverProvider.XDS_CLIENT_SUPPLIER");
 
   private static final String SCHEME = "xds";
   private final String scheme;

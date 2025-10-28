@@ -37,7 +37,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.services.MetricReport;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.ForwardingSubchannel;
@@ -96,7 +95,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private String cluster;
   @Nullable
   private String edsServiceName;
-  private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ClusterDropStats dropStats;
@@ -119,10 +117,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     Attributes attributes = resolvedAddresses.getAttributes();
-    if (xdsClientPool == null) {
-      xdsClientPool = attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT_POOL);
-      assert xdsClientPool != null;
-      xdsClient = xdsClientPool.getObject();
+    if (xdsClient == null) {
+      xdsClient = checkNotNull(attributes.get(io.grpc.xds.XdsAttributes.XDS_CLIENT), "xdsClient");
     }
     if (callCounterProvider == null) {
       callCounterProvider = attributes.get(io.grpc.xds.XdsAttributes.CALL_COUNTER_PROVIDER);
@@ -192,9 +188,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         childLbHelper = null;
       }
     }
-    if (xdsClient != null) {
-      xdsClient = xdsClientPool.returnObject(xdsClient);
-    }
+    xdsClient = null;
   }
 
   /**

@@ -753,6 +753,7 @@ public class XdsSecurityClientServerTest {
     ServerCredentials xdsCredentials = XdsServerCredentials.create(fallbackCredentials);
     XdsServerBuilder builder = XdsServerBuilder.forPort(0, xdsCredentials)
             .xdsClientPoolFactory(fakePoolFactory)
+            .overrideBootstrapForTest(XdsServerTestHelper.RAW_BOOTSTRAP)
             .addService(new SimpleServiceImpl());
     buildServer(builder, downstreamTlsContext);
   }
@@ -872,7 +873,18 @@ public class XdsSecurityClientServerTest {
         }
       }
     });
-    xdsClient.ldsResource.get(8000, TimeUnit.MILLISECONDS);
+    try {
+      xdsClient.ldsResource.get(8000, TimeUnit.MILLISECONDS);
+    } catch (Exception ex) {
+      // start() probably failed, so throw its exception
+      if (settableFuture.isDone()) {
+        Throwable t = settableFuture.get();
+        if (t != null) {
+          throw new Exception(t);
+        }
+      }
+      throw ex;
+    }
     return settableFuture;
   }
 

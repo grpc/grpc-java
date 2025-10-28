@@ -22,13 +22,11 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.InternalSharedXdsClientPoolProvider;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Map;
 
 /**
  * A provider for {@link GoogleCloudToProdNameResolver}.
@@ -52,8 +50,7 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
   public NameResolver newNameResolver(URI targetUri, Args args) {
     if (scheme.equals(targetUri.getScheme())) {
       return new GoogleCloudToProdNameResolver(
-          targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR,
-          new SharedXdsClientPoolProviderBootstrapSetter());
+          targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);
     }
     return null;
   }
@@ -76,13 +73,5 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
   @Override
   public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);
-  }
-
-  private static final class SharedXdsClientPoolProviderBootstrapSetter
-      implements GoogleCloudToProdNameResolver.BootstrapSetter {
-    @Override
-    public void setBootstrap(Map<String, ?> bootstrap) {
-      InternalSharedXdsClientPoolProvider.setDefaultProviderBootstrapOverride(bootstrap);
-    }
   }
 }
