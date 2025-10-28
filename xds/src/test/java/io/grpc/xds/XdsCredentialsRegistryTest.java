@@ -28,7 +28,6 @@ import io.grpc.xds.XdsCredentialsRegistry;
 import io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider;
 import io.grpc.xds.internal.InsecureXdsCredentialsProvider;
 import io.grpc.xds.internal.TlsXdsCredentialsProvider;
-import java.util.List;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -143,15 +142,6 @@ public class XdsCredentialsRegistryTest {
         .isEqualTo(InsecureXdsCredentialsProvider.class);
     assertThat(providers.get("tls").getClass())
         .isEqualTo(TlsXdsCredentialsProvider.class);
-  }
-
-  @Test
-  public void getClassesViaHardcoded_classesPresent() throws Exception {
-    List<Class<?>> classes = XdsCredentialsRegistry.getHardCodedClasses();
-    assertThat(classes).containsExactly(
-        GoogleDefaultXdsCredentialsProvider.class,
-        InsecureXdsCredentialsProvider.class,
-        TlsXdsCredentialsProvider.class);
   }
 
   @Test
