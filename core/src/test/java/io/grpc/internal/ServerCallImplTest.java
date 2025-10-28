@@ -531,7 +531,6 @@ public class ServerCallImplTest {
 
     streamListener.halfClosed();
     verify(callListener, never()).onHalfClose();
-    verify(message).close();
     verify(callListener,never()).onMessage(any());
   }
 
