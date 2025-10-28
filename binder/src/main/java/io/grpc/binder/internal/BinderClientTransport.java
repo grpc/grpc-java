@@ -206,13 +206,16 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   private synchronized void handlePreAuthResult(Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else {
-        serviceBinding.bind();
-      }
+    if (!inState(TransportState.SETUP)) {
+      return;
     }
+
+    if (!authorization.isOk()) {
+      shutdownInternal(authorization, true);
+      return;
+    }
+
+    serviceBinding.bind();
   }
 
   private synchronized void onReadyTimeout() {
@@ -358,18 +361,21 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   private synchronized void handleAuthResult(Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else {
-        setState(TransportState.READY);
-        attributes = clientTransportListener.filterTransport(attributes);
-        clientTransportListener.transportReady();
-        if (readyTimeoutFuture != null) {
-          readyTimeoutFuture.cancel(false);
-          readyTimeoutFuture = null;
-        }
-      }
+    if (!inState(TransportState.SETUP)) {
+      return;
+    }
+
+    if (!authorization.isOk()) {
+      shutdownInternal(authorization, true);
+      return;
+    }
+
+    setState(TransportState.READY);
+    attributes = clientTransportListener.filterTransport(attributes);
+    clientTransportListener.transportReady();
+    if (readyTimeoutFuture != null) {
+      readyTimeoutFuture.cancel(false);
+      readyTimeoutFuture = null;
     }
   }
 
