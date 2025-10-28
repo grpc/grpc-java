@@ -319,39 +319,46 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
-    int remoteUid = Binder.getCallingUid();
-    if (inState(TransportState.SETUP)) {
-      int version = parcel.readInt();
-      IBinder binder = parcel.readStrongBinder();
-      if (version != WIRE_FORMAT_VERSION) {
-        shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
-      } else if (binder == null) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
-      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
-      } else {
-        restrictIncomingBinderToCallsFrom(remoteUid);
-        attributes = setSecurityAttrs(attributes, remoteUid);
-        ListenableFuture<Status> authResultFuture =
-            register(checkServerAuthorizationAsync(remoteUid));
-        Futures.addCallback(
-            authResultFuture,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {
-                handleAuthResult(result);
-              }
-
-              @Override
-              public void onFailure(Throwable t) {
-                handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
-      }
+    if (!inState(TransportState.SETUP)) {
+      return;
     }
+
+    int version = parcel.readInt();
+    if (version != WIRE_FORMAT_VERSION) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+      return;
+    }
+
+    IBinder binder = parcel.readStrongBinder();
+    if (binder == null) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
+      return;
+    }
+
+    if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
+      shutdownInternal(
+          Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+      return;
+    }
+
+    int remoteUid = Binder.getCallingUid();
+    restrictIncomingBinderToCallsFrom(remoteUid);
+    attributes = setSecurityAttrs(attributes, remoteUid);
+    ListenableFuture<Status> authResultFuture = register(checkServerAuthorizationAsync(remoteUid));
+    Futures.addCallback(
+        authResultFuture,
+        new FutureCallback<Status>() {
+          @Override
+          public void onSuccess(Status result) {
+            handleAuthResult(result);
+          }
+
+          @Override
+          public void onFailure(Throwable t) {
+            handleAuthResult(t);
+          }
+        },
+        offloadExecutor);
   }
 
   private ListenableFuture<Status> checkServerAuthorizationAsync(int remoteUid) {
