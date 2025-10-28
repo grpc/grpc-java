@@ -257,17 +257,17 @@ public final class BinderClientTransport extends BinderTransport
       Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
       shutdownInternal(failure, true);
       return newFailingClientStream(failure, attributes, headers, tracers);
+    }
+
+    if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+      clientTransportListener.transportInUse(true);
+    }
+    Outbound.ClientOutbound outbound =
+        new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
+    if (method.getType().clientSendsOneMessage()) {
+      return new SingleMessageClientStream(inbound, outbound, attributes);
     } else {
-      if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-        clientTransportListener.transportInUse(true);
-      }
-      Outbound.ClientOutbound outbound =
-          new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
-      if (method.getType().clientSendsOneMessage()) {
-        return new SingleMessageClientStream(inbound, outbound, attributes);
-      } else {
-        return new MultiMessageClientStream(inbound, outbound, attributes);
-      }
+      return new MultiMessageClientStream(inbound, outbound, attributes);
     }
   }
 
