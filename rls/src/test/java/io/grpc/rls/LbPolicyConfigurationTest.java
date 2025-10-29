@@ -78,8 +78,7 @@ public class LbPolicyConfigurationTest {
               ImmutableMap.<String, Object>of("foo", "bar"),
               lbProvider),
           resolvedAddressFactory,
-          new ChildLoadBalancerHelperProvider(helper, subchannelStateManager, picker),
-          childLbStatusListener);
+          new ChildLoadBalancerHelperProvider(helper, subchannelStateManager, picker));
 
   @Before
   public void setUp() {

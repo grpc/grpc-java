@@ -59,6 +59,7 @@ import io.grpc.MetricRecorder.BatchCallback;
 import io.grpc.MetricRecorder.BatchRecorder;
 import io.grpc.MetricRecorder.Registration;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -66,7 +67,10 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.rls.CachingRlsLbClient.CacheEntry;
 import io.grpc.rls.CachingRlsLbClient.CachedRouteLookupResponse;
@@ -96,10 +100,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
@@ -160,8 +167,9 @@ public class CachingRlsLbClientTest {
           fakeClock.getScheduledExecutorService());
   private final ChildLoadBalancingPolicy childLbPolicy =
       new ChildLoadBalancingPolicy("target", Collections.<String, Object>emptyMap(), lbProvider);
+  private final FakeHelper fakeHelper = new FakeHelper();
   private final Helper helper =
-      mock(Helper.class, delegatesTo(new FakeHelper()));
+      mock(Helper.class, delegatesTo(fakeHelper));
   private final FakeThrottler fakeThrottler = new FakeThrottler();
   private final LbPolicyConfiguration lbPolicyConfiguration =
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, null, childLbPolicy);
@@ -325,29 +333,94 @@ public class CachingRlsLbClientTest {
 
     assertThat(resp.hasError()).isTrue();
 
-    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
-    // initially backed off entry is backed off again
-    verify(evictionListener)
-        .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
-
-    resp = getInSyncContext(routeLookupRequest);
-
-    assertThat(resp.hasError()).isTrue();
-
     // let it pass throttler
     fakeThrottler.nextResult = false;
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    // Backoff entry evicted from cache.
+    verify(evictionListener)
+        .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
+    // Assert that Rls LB policy picker was updated.
+    assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
+  }
 
-    resp = getInSyncContext(routeLookupRequest);
+  @Test
+  public void controlPlaneTransientToReady_backOffEntriesRemovedAndPickerUpdated()
+      throws Exception {
+    setUpRlsLbClient();
+    final ConnectivityState[] rlsChannelState = new ConnectivityState[1];
+    Runnable channelStateListener = new Runnable() {
+      @Override
+      public void run() {
+        rlsChannelState[0] = fakeHelper.oobChannel.getState(false);
+        fakeHelper.oobChannel.notifyWhenStateChanged(rlsChannelState[0], this);
+        synchronized (this) {
+          notify();
+        }
+      }
+    };
+    fakeHelper.oobChannel.notifyWhenStateChanged(fakeHelper.oobChannel.getState(false),
+        channelStateListener);
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
-
-    // server responses
+    // server response
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
-
     resp = getInSyncContext(routeLookupRequest);
-
     assertThat(resp.hasData()).isTrue();
+
+    fakeHelper.server.shutdown();
+    // Channel goes to IDLE state from the shutdown listener handling.
+    try {
+      if (!fakeHelper.server.awaitTermination(10, TimeUnit.SECONDS)) {
+        fakeHelper.server.shutdownNow(); // Forceful shutdown if graceful timeout expires
+      }
+    } catch (InterruptedException e) {
+      fakeHelper.server.shutdownNow();
+    }
+    // Use a different key to cause a cache miss and trigger a RPC.
+    RouteLookupRequest routeLookupRequest2 = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo2", "method-key", "bar"));
+    // Rls channel will go to TRANSIENT_FAILURE (back-off) because the picker notices the
+    // subchannel state IDLE and the server transport listener is null.
+    resp = getInSyncContext(routeLookupRequest2);
+    assertThat(resp.isPending()).isTrue();
+    assertThat(rlsChannelState[0]).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+    // Throttle the next rpc call.
+    fakeThrottler.nextResult = true;
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
+
+    // Cause another cache miss by using a new request key. This will create a back-off Rls
+    // cache entry.
+    RouteLookupRequest routeLookupRequest3 = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo3", "method-key", "bar"));
+    resp = getInSyncContext(routeLookupRequest3);
+
+    assertThat(resp.hasError()).isTrue();
+
+    fakeHelper.createServerAndRegister("service1");
+    // Wait for Rls subchannel back-off expiry and its moving to READY
+    synchronized (channelStateListener) {
+      channelStateListener.wait(5000);
+    }
+    assertThat(rlsChannelState[0]).isEqualTo(ConnectivityState.READY);
+    final ObjectPool<? extends Executor> defaultExecutorPool =
+        SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+    AtomicBoolean isSuccess = new AtomicBoolean(false);
+    ((ExecutorService) defaultExecutorPool.getObject()).submit(() -> {
+      // Backoff entry evicted from cache.
+      verify(evictionListener)
+          .onEviction(eq(routeLookupRequest3), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
+      // Assert that Rls LB policy picker was updated.
+      assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
+      isSuccess.set(true);
+    }).get();
+    assertThat(isSuccess.get()).isTrue();
   }
 
   @Test
@@ -894,16 +967,24 @@ public class CachingRlsLbClientTest {
 
   private final class FakeHelper extends Helper {
 
+    SubchannelPicker lastPicker;
+    Server server;
+    ManagedChannel oobChannel;
+
+    void createServerAndRegister(String target) throws IOException {
+      server = InProcessServerBuilder.forName(target)
+          .addService(rlsServerImpl)
+          .directExecutor()
+          .build()
+          .start();
+      grpcCleanupRule.register(server);
+    }
+
     @Override
     public ManagedChannelBuilder<?> createResolvingOobChannelBuilder(
         String target, ChannelCredentials creds) {
       try {
-        grpcCleanupRule.register(
-            InProcessServerBuilder.forName(target)
-                .addService(rlsServerImpl)
-                .directExecutor()
-                .build()
-                .start());
+        createServerAndRegister(target);
       } catch (IOException e) {
         throw new RuntimeException("cannot create server: " + target, e);
       }
@@ -919,7 +1000,8 @@ public class CachingRlsLbClientTest {
 
         @Override
         public ManagedChannel build() {
-          return grpcCleanupRule.register(super.build());
+          oobChannel = super.build();
+          return grpcCleanupRule.register(oobChannel);
         }
 
         @Override
@@ -948,7 +1030,7 @@ public class CachingRlsLbClientTest {
     @Override
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
-      // no-op
+      lastPicker = newPicker;
     }
 
     @Override
