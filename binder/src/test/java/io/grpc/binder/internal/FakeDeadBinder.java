@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.binder;
+package io.grpc.binder.internal;
 
 import android.os.DeadObjectException;
 import android.os.IBinder;
