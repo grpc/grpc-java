@@ -79,8 +79,10 @@ public class XdsClientFederationTest {
   @Before
   public void setUp() throws XdsInitializationException {
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
-    clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET, metricRecorder);
+    xdsClientPool = clientPoolProvider.getOrCreate(
+        DUMMY_TARGET,
+        new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride()),
+        metricRecorder);
     xdsClient = xdsClientPool.getObject();
   }
 

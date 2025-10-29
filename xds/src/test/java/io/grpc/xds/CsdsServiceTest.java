@@ -513,13 +513,8 @@ public class CsdsServiceTest {
     }
 
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
-    }
-
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder) {
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

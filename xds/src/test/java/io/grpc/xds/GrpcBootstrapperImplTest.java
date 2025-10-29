@@ -85,6 +85,19 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
+  public void parseBootstrap_emptyServers_throws() {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: 'xds_servers' is empty");
+  }
+
+  @Test
   public void parseBootstrap_singleXdsServer() throws XdsInitializationException {
     String rawData = "{\n"
         + "  \"node\": {\n"
@@ -352,7 +365,14 @@ public class GrpcBootstrapperImplTest {
   public void parseBootstrap_certProviderInstances() throws XdsInitializationException {
     String rawData =
         "{\n"
-            + "  \"xds_servers\": [],\n"
+            + "  \"xds_servers\": [\n"
+            + "    {\n"
+            + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+            + "      \"channel_creds\": [\n"
+            + "        {\"type\": \"insecure\"}\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  ],\n"
             + "  \"certificate_providers\": {\n"
             + "    \"gcp_id\": {\n"
             + "      \"plugin_name\": \"meshca\",\n"
@@ -389,7 +409,6 @@ public class GrpcBootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    assertThat(info.servers()).isEmpty();
     assertThat(info.node()).isEqualTo(getNodeBuilder().build());
     Map<String, Bootstrapper.CertificateProviderInfo> certProviders = info.certProviders();
     assertThat(certProviders).isNotNull();
@@ -556,7 +575,14 @@ public class GrpcBootstrapperImplTest {
   @Test
   public void parseBootstrap_grpcServerResourceId() throws XdsInitializationException {
     String rawData = "{\n"
-            + "  \"xds_servers\": [],\n"
+            + "  \"xds_servers\": [\n"
+            + "    {\n"
+            + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+            + "      \"channel_creds\": [\n"
+            + "        {\"type\": \"insecure\"}\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  ],\n"
             + "  \"server_listener_resource_name_template\": \"grpc/serverx=%s\"\n"
             + "}";
 
@@ -779,6 +805,12 @@ public class GrpcBootstrapperImplTest {
   public void parseClientDefaultListenerResourceNameTemplate() throws Exception {
     String rawData = "{\n"
         + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
         + "  ]\n"
         + "}";
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
@@ -788,6 +820,12 @@ public class GrpcBootstrapperImplTest {
     rawData = "{\n"
         + "  \"client_default_listener_resource_name_template\": \"xdstp://a.com/faketype/%s\",\n"
         + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ]\n"
+        + "    }\n"
         + "  ]\n"
         + "}";
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));

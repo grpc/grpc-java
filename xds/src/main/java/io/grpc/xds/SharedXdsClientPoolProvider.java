@@ -73,7 +73,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     return SharedXdsClientPoolProviderHolder.instance;
   }
 
-  @Override
+  @Deprecated
   public void setBootstrapOverride(Map<String, ?> bootstrap) {
     bootstrapOverride.set(bootstrap);
   }
@@ -84,30 +84,36 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     return targetToXdsClientMap.get(target);
   }
 
-  @Override
-  public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
-      throws XdsInitializationException {
-    return getOrCreate(target, metricRecorder, null);
-  }
-
+  @Deprecated
   public ObjectPool<XdsClient> getOrCreate(
       String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
       throws XdsInitializationException {
+    BootstrapInfo bootstrapInfo;
+    Map<String, ?> rawBootstrap = bootstrapOverride.get();
+    if (rawBootstrap != null) {
+      bootstrapInfo = bootstrapper.bootstrap(rawBootstrap);
+    } else {
+      bootstrapInfo = bootstrapper.bootstrap();
+    }
+    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials);
+  }
+
+  @Override
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null);
+  }
+
+  public ObjectPool<XdsClient> getOrCreate(
+      String target,
+      BootstrapInfo bootstrapInfo,
+      MetricRecorder metricRecorder,
+      CallCredentials transportCallCredentials) {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
         ref = targetToXdsClientMap.get(target);
         if (ref == null) {
-          BootstrapInfo bootstrapInfo;
-          Map<String, ?> rawBootstrap = bootstrapOverride.get();
-          if (rawBootstrap != null) {
-            bootstrapInfo = bootstrapper.bootstrap(rawBootstrap);
-          } else {
-            bootstrapInfo = bootstrapper.bootstrap();
-          }
-          if (bootstrapInfo.servers().isEmpty()) {
-            throw new XdsInitializationException("No xDS server provided");
-          }
           ref =
               new RefCountedXdsClientObjectPool(
                   bootstrapInfo, target, metricRecorder, transportCallCredentials);
@@ -157,9 +163,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         String target,
         MetricRecorder metricRecorder,
         CallCredentials transportCallCredentials) {
-      this.bootstrapInfo = checkNotNull(bootstrapInfo);
+      this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
       this.target = target;
-      this.metricRecorder = metricRecorder;
+      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
       this.transportCallCredentials = transportCallCredentials;
     }
 

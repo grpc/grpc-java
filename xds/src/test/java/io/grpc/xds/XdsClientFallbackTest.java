@@ -178,8 +178,10 @@ public class XdsClientFallbackTest {
     setAdsConfig(fallbackServer, FALLBACK_SERVER);
 
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
-    clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET, metricRecorder);
+    xdsClientPool = clientPoolProvider.getOrCreate(
+        DUMMY_TARGET,
+        new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride()),
+        metricRecorder);
   }
 
   @After

@@ -43,7 +43,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -84,6 +83,7 @@ public class XdsServerBuilderTest {
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
     builder.xdsClientPoolFactory(xdsClientPoolFactory);
+    builder.overrideBootstrapForTest(XdsServerTestHelper.RAW_BOOTSTRAP);
     if (xdsServingStatusListener != null) {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
@@ -138,7 +138,18 @@ public class XdsServerBuilderTest {
         }
       }
     });
-    xdsClient.ldsResource.get(5000, TimeUnit.MILLISECONDS);
+    try {
+      xdsClient.ldsResource.get(5000, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException ex) {
+      // start() probably failed, so throw its exception
+      if (settableFuture.isDone()) {
+        Throwable t = settableFuture.get();
+        if (t != null) {
+          throw new ExecutionException(t);
+        }
+      }
+      throw ex;
+    }
     return settableFuture;
   }
 
@@ -304,9 +315,12 @@ public class XdsServerBuilderTest {
 
   @Test
   public void testOverrideBootstrap() throws Exception {
-    Map<String, Object> b = new HashMap<>();
+    Map<String, ?> b = XdsServerTestHelper.RAW_BOOTSTRAP;
     buildBuilder(null);
     builder.overrideBootstrapForTest(b);
-    assertThat(xdsClientPoolFactory.savedBootstrap).isEqualTo(b);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+    Future<Throwable> unused = startServerAsync();
+    assertThat(xdsClientPoolFactory.savedBootstrapInfo.node().getId())
+        .isEqualTo(XdsServerTestHelper.BOOTSTRAP_INFO.node().getId());
   }
 }
