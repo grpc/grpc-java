@@ -128,7 +128,6 @@ final class CachingRlsLbClient {
   private final RlsLbHelper helper;
   private final ManagedChannel rlsChannel;
   private final RouteLookupServiceStub rlsStub;
-  private final RlsRequestFactory requestFactory;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   @GuardedBy("lock")
@@ -197,7 +196,7 @@ final class CachingRlsLbClient {
           ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
       serverHost = helper.getAuthority();
     }
-    requestFactory = new RlsRequestFactory(
+    RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
     rlsPicker = new RlsPicker(requestFactory, rlsConfig.lookupService());
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
@@ -303,7 +302,7 @@ final class CachingRlsLbClient {
       // on this result
       return CachedRouteLookupResponse.backoffEntry(createBackOffEntry(
           routeLookupRequestKey, Status.RESOURCE_EXHAUSTED.withDescription("RLS throttled"),
-          backoffPolicy, routeLookupReason));
+          backoffPolicy));
     }
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(
@@ -417,7 +416,7 @@ final class CachingRlsLbClient {
         // reattempt picks when the child LB is done connecting
       } catch (Exception e) {
         createBackOffEntry(entry.routeLookupRequestKey, Status.fromThrowable(e),
-            entry.backoffPolicy, entry.routeLookupReason);
+            entry.backoffPolicy);
         // Cache updated. updateBalancingState() to reattempt picks
         helper.triggerPendingRpcProcessing();
       }
@@ -439,9 +438,8 @@ final class CachingRlsLbClient {
   }
 
   @GuardedBy("lock")
-  private BackoffCacheEntry createBackOffEntry(
-      RouteLookupRequestKey routeLookupRequestKey, Status status,
-      @Nullable BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
+  private BackoffCacheEntry createBackOffEntry(RouteLookupRequestKey routeLookupRequestKey,
+      Status status, @Nullable BackoffPolicy backoffPolicy) {
     if (backoffPolicy == null) {
       backoffPolicy = backoffProvider.get();
     }
@@ -450,8 +448,7 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         routeLookupRequestKey, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(routeLookupRequestKey, status, backoffPolicy,
-        routeLookupReason);
+    BackoffCacheEntry entry = new BackoffCacheEntry(routeLookupRequestKey, status, backoffPolicy);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
@@ -469,7 +466,7 @@ final class CachingRlsLbClient {
       logger.log(ChannelLogLevel.DEBUG,
           "[RLS Entry {0}] Calling RLS for transition to pending", entry.routeLookupRequestKey);
       linkedHashLruCache.invalidate(entry.routeLookupRequestKey);
-      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy, entry.routeLookupReason);
+      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy, RouteLookupRequest.Reason.REASON_MISS);
     }
   }
 
@@ -779,15 +776,13 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
-    private final RouteLookupRequest.Reason routeLookupReason;
     private Future<?> scheduledFuture;
 
     BackoffCacheEntry(RouteLookupRequestKey routeLookupRequestKey, Status status,
-        BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
+        BackoffPolicy backoffPolicy) {
       super(routeLookupRequestKey);
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
-      this.routeLookupReason = checkNotNull(routeLookupReason, "routeLookupReason");
     }
 
     Status getStatus() {

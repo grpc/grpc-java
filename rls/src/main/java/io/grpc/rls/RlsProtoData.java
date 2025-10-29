@@ -47,9 +47,12 @@ final class RlsProtoData {
 
     /** Names should match those in {@link io.grpc.lookup.v1.RouteLookupRequest.Reason} */
     enum Reason {
-      REASON_UNKNOWN,  // Unused
-      REASON_MISS,     // No data available in local cache
-      REASON_STALE;    // Data in local cache is stale
+      /** Unused */
+      REASON_UNKNOWN,
+      /** No data available in local cache */
+      REASON_MISS,
+      /** Data in local cache is stale */
+      REASON_STALE;
     }
 
     /** Reason for making this request. */
