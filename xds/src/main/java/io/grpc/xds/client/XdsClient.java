@@ -140,6 +140,13 @@ public abstract class XdsClient {
 
   /**
    * Watcher interface for a single requested xDS resource.
+   *
+   * <p>Note that we expect that the implementer to:
+   * - Comply with the guarantee to not generate certain statuses by the library:
+   *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
+   *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
+   * - Keep {@link Status} description in one form or another, as it contains valuable debugging
+   *   information.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
   public interface ResourceWatcher<T extends ResourceUpdate> {

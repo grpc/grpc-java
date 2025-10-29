@@ -293,7 +293,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
   private <T extends ResourceUpdate> CpcWithFallbackState manageControlPlaneClient(
       ResourceSubscriber<T> subscriber) {
 
-    ControlPlaneClient activeCpc = getActiveCpc(subscriber.authority);
     ControlPlaneClient cpcToUse;
     boolean didFallback = false;
     try {
@@ -313,16 +312,17 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       return new CpcWithFallbackState(null, false);
     }
 
-    if (cpcToUse != activeCpc) {
+    ControlPlaneClient activeCpClient = getActiveCpc(subscriber.authority);
+    if (cpcToUse != activeCpClient) {
       addCpcToAuthority(subscriber.authority, cpcToUse);
-      if (activeCpc != null) {
+      if (activeCpClient != null) {
         didFallback = cpcToUse != null && !cpcToUse.isInError();
         if (didFallback) {
           logger.log(XdsLogLevel.INFO, "Falling back to XDS server {0}",
               cpcToUse.getServerInfo().target());
         } else {
           logger.log(XdsLogLevel.WARNING, "No working fallback XDS Servers found from {0}",
-              activeCpc.getServerInfo().target());
+              activeCpClient.getServerInfo().target());
         }
       }
     }
@@ -847,7 +847,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           processingTracker.startTask();
           executor.execute(() -> {
             try {
-              watcher.onResourceChanged(update); // Call the new method
+              watcher.onResourceChanged(update);
             } finally {
               processingTracker.onComplete();
             }
@@ -1031,10 +1031,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
           if (!authoritiesForClosedCpc.contains(subscriber.authority)) {
-            continue;
-          }
-          if (subscriber.hasResult()) {
-            subscriber.onError(status, null); // This will become an onAmbientError
             continue;
           }
 
