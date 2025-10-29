@@ -239,6 +239,7 @@ public class CachingRlsLbClientTest {
     // cache hit for staled entry
     fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
 
+    rlsServerImpl.routeLookupReason = null;
     resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.hasData()).isTrue();
 
@@ -250,6 +251,7 @@ public class CachingRlsLbClientTest {
 
     resp = getInSyncContext(routeLookupRequestKey);
 
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_STALE);
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
@@ -298,6 +300,7 @@ public class CachingRlsLbClientTest {
             routeLookupRequestKey,
             RouteLookupResponse.create(ImmutableList.of("target"), "header")));
 
+    rlsServerImpl.routeLookupReason = null;
     // initial request
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.isPending()).isTrue();
@@ -307,6 +310,7 @@ public class CachingRlsLbClientTest {
 
     resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.hasData()).isTrue();
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
 
     assertThat(rlsChannelOverriddenAuthority).isEqualTo("bigtable.googleapis.com:443");
     assertThat(rlsChannelServiceConfig).isEqualTo(routeLookupChannelServiceConfig);
@@ -348,8 +352,10 @@ public class CachingRlsLbClientTest {
 
     assertThat(resp.isPending()).isTrue();
 
+    rlsServerImpl.routeLookupReason = null;
     // server responses
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
 
     resp = getInSyncContext(routeLookupRequestKey);
 
@@ -881,6 +887,7 @@ public class CachingRlsLbClientTest {
 
     private Map<RlsProtoData.RouteLookupRequestKey, RouteLookupResponse> lookupTable =
         ImmutableMap.of();
+    io.grpc.lookup.v1.RouteLookupRequest.Reason routeLookupReason;
 
     public StaticFixedDelayRlsServerImpl(
         long responseDelayNano, ScheduledExecutorService scheduledExecutorService) {
@@ -903,6 +910,7 @@ public class CachingRlsLbClientTest {
               new Runnable() {
                 @Override
                 public void run() {
+                  routeLookupReason = request.getReason();
                   RouteLookupResponse response =
                       lookupTable.get(
                           RlsProtoData.RouteLookupRequestKey.create(
