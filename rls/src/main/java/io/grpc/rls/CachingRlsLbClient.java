@@ -128,7 +128,6 @@ final class CachingRlsLbClient {
   private final RlsLbHelper helper;
   private final ManagedChannel rlsChannel;
   private final RouteLookupServiceStub rlsStub;
-  private final RlsRequestFactory requestFactory;
   private final RlsPicker rlsPicker;
   private final ResolvedAddressFactory childLbResolvedAddressFactory;
   @GuardedBy("lock")
@@ -197,7 +196,7 @@ final class CachingRlsLbClient {
           ChannelLogLevel.DEBUG, "Can not get hostname from authority: {0}", helper.getAuthority());
       serverHost = helper.getAuthority();
     }
-    requestFactory = new RlsRequestFactory(
+    RlsRequestFactory requestFactory = new RlsRequestFactory(
         lbPolicyConfig.getRouteLookupConfig(), serverHost);
     rlsPicker = new RlsPicker(requestFactory, rlsConfig.lookupService());
     // It is safe to use helper.getUnsafeChannelCredentials() because the client authenticates the
