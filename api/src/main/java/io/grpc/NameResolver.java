@@ -97,14 +97,14 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-              StatusOr<List<EquivalentAddressGroup>> addressesOrError =
-                      resolutionResult.getAddressesOrError();
-              if (addressesOrError.hasValue()) {
-                  listener.onAddresses(addressesOrError.getValue(),
-                          resolutionResult.getAttributes());
-              } else {
-                  listener.onError(addressesOrError.getStatus());
-              }
+            StatusOr<List<EquivalentAddressGroup>> addressesOrError =
+                resolutionResult.getAddressesOrError();
+            if (addressesOrError.hasValue()) {
+              listener.onAddresses(addressesOrError.getValue(),
+                  resolutionResult.getAttributes());
+            } else {
+              listener.onError(addressesOrError.getStatus());
+            }
           }
       });
     }
