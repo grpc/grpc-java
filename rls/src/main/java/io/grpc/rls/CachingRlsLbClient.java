@@ -334,7 +334,7 @@ final class CachingRlsLbClient {
               }
             });
     return CachedRouteLookupResponse.pendingResponse(
-        createPendingEntry(routeLookupRequestKey, response, backoffPolicy, routeLookupReason));
+        createPendingEntry(routeLookupRequestKey, response, backoffPolicy));
   }
 
   /**
@@ -391,10 +391,9 @@ final class CachingRlsLbClient {
   private PendingCacheEntry createPendingEntry(
       RouteLookupRequestKey routeLookupRequestKey,
       ListenableFuture<RouteLookupResponse> pendingCall,
-      @Nullable BackoffPolicy backoffPolicy,
-      RouteLookupRequest.Reason routeLookupReason) {
+      @Nullable BackoffPolicy backoffPolicy) {
     PendingCacheEntry entry = new PendingCacheEntry(routeLookupRequestKey, pendingCall,
-        backoffPolicy, routeLookupReason);
+        backoffPolicy);
     // Add the entry to the map before adding the Listener, because the listener removes the
     // entry from the map
     pendingCallCache.put(routeLookupRequestKey, entry);
@@ -602,23 +601,20 @@ final class CachingRlsLbClient {
     private final RouteLookupRequestKey routeLookupRequestKey;
     @Nullable
     private final BackoffPolicy backoffPolicy;
-    private final RouteLookupRequest.Reason routeLookupReason;
 
     PendingCacheEntry(
         RouteLookupRequestKey routeLookupRequestKey,
         ListenableFuture<RouteLookupResponse> pendingCall,
-        @Nullable BackoffPolicy backoffPolicy, RouteLookupRequest.Reason routeLookupReason) {
+        @Nullable BackoffPolicy backoffPolicy) {
       this.routeLookupRequestKey = checkNotNull(routeLookupRequestKey, "request");
       this.pendingCall = checkNotNull(pendingCall, "pendingCall");
       this.backoffPolicy = backoffPolicy;
-      this.routeLookupReason = routeLookupReason;
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("routeLookupRequestKey", routeLookupRequestKey)
-          .add("routeLookupReason", routeLookupReason)
           .toString();
     }
   }
