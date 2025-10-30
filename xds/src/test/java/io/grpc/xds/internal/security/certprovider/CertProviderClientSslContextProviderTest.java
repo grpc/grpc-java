@@ -470,6 +470,58 @@ public class CertProviderClientSslContextProviderTest {
             .build(), false);
   }
 
+  @Test
+  public void testProviderForClient_deprecatedCertProviderField() throws Exception {
+    final CertificateProvider.DistributorWatcher[] watcherCaptor =
+        new CertificateProvider.DistributorWatcher[1];
+    TestCertificateProvider.createAndRegisterProviderProvider(
+        certificateProviderRegistry, watcherCaptor, "testca", 0);
+    
+    // Build UpstreamTlsContext using deprecated field
+    EnvoyServerProtoData.UpstreamTlsContext upstreamTlsContext =
+        new EnvoyServerProtoData.UpstreamTlsContext(
+            CommonTlsContextTestsUtil.buildCommonTlsContextWithDeprecatedCertProviderInstance(
+                "gcp_id",
+                "cert-default",
+                "gcp_id",
+                "root-default",
+                /* alpnProtocols= */ null,
+                /* staticCertValidationContext= */ null));
+    
+    Bootstrapper.BootstrapInfo bootstrapInfo = CommonBootstrapperTestUtils.getTestBootstrapInfo();
+    CertProviderClientSslContextProvider provider =
+        (CertProviderClientSslContextProvider)
+            certProviderClientSslContextProviderFactory.getProvider(
+                upstreamTlsContext,
+                bootstrapInfo.node().toEnvoyProtoNode(),
+                bootstrapInfo.certProviders());
+
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
+
+    // Generate cert update
+    watcherCaptor[0].updateCertificate(
+        CommonCertProviderTestUtils.getPrivateKey(CLIENT_KEY_FILE),
+        ImmutableList.of(getCertFromResourceName(CLIENT_PEM_FILE)));
+    assertThat(provider.savedKey).isNotNull();
+    assertThat(provider.savedCertChain).isNotNull();
+    assertThat(provider.getSslContextAndTrustManager()).isNull();
+
+    // Generate root cert update
+    watcherCaptor[0].updateTrustedRoots(ImmutableList.of(getCertFromResourceName(CA_PEM_FILE)));
+    assertThat(provider.getSslContextAndTrustManager()).isNotNull();
+    assertThat(provider.savedKey).isNull();
+    assertThat(provider.savedCertChain).isNull();
+    assertThat(provider.savedTrustedRoots).isNull();
+
+    TestCallback testCallback =
+        CommonTlsContextTestsUtil.getValueThruCallback(provider);
+
+    doChecksOnSslContext(false, testCallback.updatedSslContext, /* expectedApnProtos= */ null);
+  }
+
   static class QueuedExecutor implements Executor {
     /** A list of Runnables to be run in order. */
     @VisibleForTesting final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<>();

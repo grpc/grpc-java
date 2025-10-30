@@ -541,7 +541,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
     }
-    return null;
+    // Fall back to deprecated field (field 11) for backward compatibility with Istio
+    @SuppressWarnings("deprecation")
+    String instanceName = commonTlsContext.hasTlsCertificateCertificateProviderInstance()
+        ? commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName()
+        : null;
+    return instanceName;
   }
 
   private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
@@ -558,6 +563,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .hasCaCertificateProviderInstance()) {
         return combinedCertificateValidationContext.getDefaultValidationContext()
             .getCaCertificateProviderInstance().getInstanceName();
+      }
+      // Fall back to deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      String instanceName = combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()
+          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
+              .getInstanceName()
+          : null;
+      if (instanceName != null) {
+        return instanceName;
       }
     }
     return null;

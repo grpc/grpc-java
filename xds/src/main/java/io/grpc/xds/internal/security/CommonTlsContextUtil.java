@@ -28,7 +28,10 @@ public final class CommonTlsContextUtil {
     if (commonTlsContext == null) {
       return false;
     }
+    @SuppressWarnings("deprecation")
+    boolean hasDeprecatedField = commonTlsContext.hasTlsCertificateCertificateProviderInstance();
     return commonTlsContext.hasTlsCertificateProviderInstance()
+        || hasDeprecatedField
         || hasValidationProviderInstance(commonTlsContext);
   }
 
@@ -37,9 +40,19 @@ public final class CommonTlsContextUtil {
         .hasCaCertificateProviderInstance()) {
       return true;
     }
-    return commonTlsContext.hasCombinedValidationContext()
-        && commonTlsContext.getCombinedValidationContext().getDefaultValidationContext()
-          .hasCaCertificateProviderInstance();
+    if (commonTlsContext.hasCombinedValidationContext()) {
+      CommonTlsContext.CombinedCertificateValidationContext combined =
+          commonTlsContext.getCombinedValidationContext();
+      if (combined.hasDefaultValidationContext()
+          && combined.getDefaultValidationContext().hasCaCertificateProviderInstance()) {
+        return true;
+      }
+      // Check deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      boolean hasDeprecatedField = combined.hasValidationContextCertificateProviderInstance();
+      return hasDeprecatedField;
+    }
+    return false;
   }
 
   /**
