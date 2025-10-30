@@ -41,7 +41,7 @@ public final class InternalSharedXdsClientPoolProvider {
    */
   @Deprecated
   public static void setDefaultProviderBootstrapOverride(Map<String, ?> bootstrap) {
-    SharedXdsClientPoolProvider.getDefaultProvider().setBootstrapOverride(bootstrap);
+    GrpcBootstrapperImpl.setDefaultBootstrapOverride(bootstrap);
   }
 
   /**
