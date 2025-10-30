@@ -56,7 +56,6 @@ public final class HandshakerServiceChannelTest {
         HandshakerServiceChannel.getHandshakerChannelForTesting("localhost:" + server.getPort());
   }
 
-
   @Test
   public void sharedChannel_authority() {
     resource = HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL;
