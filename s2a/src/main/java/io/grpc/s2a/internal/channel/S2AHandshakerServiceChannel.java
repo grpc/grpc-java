@@ -101,13 +101,6 @@ public final class S2AHandshakerServiceChannel {
       checkNotNull(instanceChannel);
       ManagedChannel channel = (ManagedChannel) instanceChannel;
       channel.shutdownNow();
-      try {
-        channel.awaitTermination(CHANNEL_SHUTDOWN_TIMEOUT.getSeconds(), SECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        logger.log(Level.WARNING, "Channel to S2A was not shutdown.");
-      }
-
     }
 
     @Override
