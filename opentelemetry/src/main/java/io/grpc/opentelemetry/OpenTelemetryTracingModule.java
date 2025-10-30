@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -59,10 +60,6 @@ final class OpenTelemetryTracingModule {
 
   @VisibleForTesting
   final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
-
-  @VisibleForTesting
-  final io.grpc.Context.Key<Baggage> baggageKey =
-      io.grpc.Context.key("opentelemetry-baggage-key");
 
   @Nullable
   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
@@ -248,13 +245,15 @@ final class OpenTelemetryTracingModule {
     private final Span span;
     volatile int streamClosed;
     private int seqNo;
+    private Baggage baggage;
 
-    ServerTracer(String fullMethodName, @Nullable Span remoteSpan) {
+    ServerTracer(String fullMethodName, @Nullable Span remoteSpan, Baggage baggage) {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           otelTracer.spanBuilder(generateTraceSpanName(true, fullMethodName))
               .setParent(remoteSpan == null ? null : Context.current().with(remoteSpan))
               .startSpan();
+      this.baggage = baggage;
     }
 
     /**
@@ -280,7 +279,9 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public io.grpc.Context filterContext(io.grpc.Context context) {
-      return context.withValue(otelSpan, span);
+      return context
+          .withValue(otelSpan, span)
+          .withValue(BAGGAGE_KEY, baggage);
     }
 
     @Override
@@ -320,7 +321,8 @@ final class OpenTelemetryTracingModule {
       if (remoteSpan == Span.getInvalid()) {
         remoteSpan = null;
       }
-      return new ServerTracer(fullMethodName, remoteSpan);
+      Baggage baggage = Baggage.fromContext(context);
+      return new ServerTracer(fullMethodName, remoteSpan, baggage);
     }
   }
 
@@ -335,9 +337,12 @@ final class OpenTelemetryTracingModule {
             + "tracing must be set.");
         return next.startCall(call, headers);
       }
-      Context serverCallContext = Context.current().with(span);
-      Baggage baggage = baggageKey.get(io.grpc.Context.current());
-      serverCallContext = serverCallContext.with(baggage);
+      Context serverCallContext = Context.current();
+      serverCallContext = serverCallContext.with(span);
+      Baggage baggage = BAGGAGE_KEY.get(io.grpc.Context.current());
+      if (baggage != null) {
+        serverCallContext = serverCallContext.with(baggage);
+      }
       try (Scope scope = serverCallContext.makeCurrent()) {
         return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
       }

@@ -17,12 +17,15 @@
 package io.grpc.opentelemetry;
 
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -62,9 +65,12 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
+import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.SpanId;
 import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.TraceFlags;
 import io.opentelemetry.api.trace.TraceId;
+import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.api.trace.TracerBuilder;
 import io.opentelemetry.api.trace.TracerProvider;
@@ -751,46 +757,113 @@ public class OpenTelemetryTracingModuleTest {
     }
   }
 
+  /**
+   * Tests that baggage from the initial context is propagated
+   * to the context active during the next handler's execution.
+   */
   @Test
-  public void serverSpanPropagationInterceptor_propagatesBaggage() {
-    // 1. Arrange: Setup the module, interceptor, and mocks.
+  public void testBaggageIsPropagatedToHandlerContext() {
+    // 1. ARRANGE
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
+
+    // Create mocks for the gRPC call chain
+    @SuppressWarnings("unchecked")
+    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
+    @SuppressWarnings("unchecked")
+    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
+    ServerCall<String, String> mockCall = new NoopServerCall<>();
+    Metadata mockHeaders = new Metadata();
+
+    // Create a non-null Span (required to pass the first 'if' check)
+    Span testSpan = Span.wrap(
+        SpanContext.create("time-period", "star-wars",
+            TraceFlags.getSampled(), TraceState.getDefault()));
+
+    // Create the test Baggage
+    Baggage testBaggage = Baggage.builder().put("best-bot", "R2D2").build();
+
+    // Create the initial gRPC context that the interceptor will read from
+    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
+        .withValue(tracingModule.otelSpan, testSpan)
+        .withValue(BAGGAGE_KEY, testBaggage);
+
+    // This AtomicReference will capture the Baggage from *within* the handler
+    final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
+
+    // Stub the handler to capture the *current* context when it's called
+    doAnswer(invocation -> {
+      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
+      capturedBaggage.set(Baggage.current());
+      return mockListener;
+    }).when(mockHandler).startCall(any(), any());
+
+    // 2. ACT
+    // Run the interceptCall method within the prepared context
+    io.grpc.Context previous = initialGrpcContext.attach();
+    try {
+      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
+    } finally {
+      initialGrpcContext.detach(previous);
+    }
+
+    // 3. ASSERT
+    // Verify the next handler was called
+    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
+
+    // Check the baggage that was captured
+    assertNotNull("Baggage should not be null in handler context", capturedBaggage.get());
+    assertEquals("Baggage was not correctly propagated to the handler's context",
+        "R2D2", capturedBaggage.get().getEntryValue("best-bot"));
+  }
+
+  /**
+   * Tests that the interceptor proceeds correctly if baggage is null or empty.
+   */
+  @Test
+  public void testNullBaggageIsHandledGracefully() {
+    // 1. ARRANGE
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
     ServerInterceptor interceptor = tracingModule.getServerSpanPropagationInterceptor();
 
     @SuppressWarnings("unchecked")
-    ServerCallHandler<String, String> handler = mock(ServerCallHandler.class);
-    ServerCall<String, String> call = new NoopServerCall<>();
-    Metadata metadata = new Metadata();
+    ServerCallHandler<String, String> mockHandler = mock(ServerCallHandler.class);
+    @SuppressWarnings("unchecked")
+    ServerCall.Listener<String> mockListener = mock(ServerCall.Listener.class);
+    ServerCall<String, String> mockCall = new NoopServerCall<>();
+    Metadata mockHeaders = new Metadata();
+
+    Span testSpan = Span.getInvalid(); // A non-null span
+
+    // No baggage is set in the context
+    io.grpc.Context initialGrpcContext = io.grpc.Context.current()
+        .withValue(tracingModule.otelSpan, testSpan);
+
     final AtomicReference<Baggage> capturedBaggage = new AtomicReference<>();
 
-    // Mock the handler to capture the Baggage from the current context when it's called.
-    when(handler.startCall(any(), any())).thenAnswer(invocation -> {
-      capturedBaggage.set(io.opentelemetry.api.baggage.Baggage.current());
-      return mockServerCallListener;
-    });
+    // Stub the handler to capture the *current* context when it's called
+    doAnswer(invocation -> {
+      // Baggage.current() gets baggage from io.opentelemetry.context.Context.current()
+      capturedBaggage.set(Baggage.current());
+      return mockListener;
+    }).when(mockHandler).startCall(any(), any());
 
-    // Create a test Span and Baggage to be propagated.
-    Span parentSpan = tracerRule.spanBuilder("parent-span").startSpan();
-    io.opentelemetry.api.baggage.Baggage testBaggage =
-        io.opentelemetry.api.baggage.Baggage.builder().put("testKey", "testValue").build();
-
-    // Attach the Span and Baggage to the gRPC context.
-    io.grpc.Context grpcContext = io.grpc.Context.current()
-        .withValue(tracingModule.otelSpan, parentSpan)
-        .withValue(tracingModule.baggageKey, testBaggage);
-
-    io.grpc.Context previous = grpcContext.attach();
+    // 2. ACT
+    io.grpc.Context previous = initialGrpcContext.attach();
     try {
-      // 2. Act: Call the interceptor.
-      interceptor.interceptCall(call, metadata, handler);
+      interceptor.interceptCall(mockCall, mockHeaders, mockHandler);
     } finally {
-      grpcContext.detach(previous);
+      initialGrpcContext.detach(previous);
     }
 
-    // 3. Assert: Verify the handler was called and the correct Baggage was propagated.
-    verify(handler).startCall(same(call), same(metadata));
-    assertEquals(testBaggage, capturedBaggage.get());
+    // 3. ASSERT
+    verify(mockHandler).startCall(same(mockCall), same(mockHeaders));
+
+    // Baggage should be null in the downstream context
+    assertEquals("Baggage should be empty when not provided",
+        Baggage.empty(), capturedBaggage.get());
   }
 
   @Test

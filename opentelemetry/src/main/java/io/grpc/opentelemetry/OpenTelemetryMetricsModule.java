@@ -18,6 +18,7 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -44,7 +45,9 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
+import io.opentelemetry.context.Context;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -94,8 +97,8 @@ final class OpenTelemetryMetricsModule {
   private final ImmutableList<OpenTelemetryPlugin> plugins;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
-      OpenTelemetryMetricsResource resource, Collection<String> optionalLabels,
-      List<OpenTelemetryPlugin> plugins) {
+                             OpenTelemetryMetricsResource resource,
+                             Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
@@ -126,6 +129,14 @@ final class OpenTelemetryMetricsModule {
 
   static String recordMethodName(String fullMethodName, boolean isGeneratedMethod) {
     return isGeneratedMethod ? fullMethodName : "other";
+  }
+
+  private static Context otelContextWithBaggage() {
+    Baggage baggage = BAGGAGE_KEY.get(io.grpc.Context.current());
+    if (baggage == null) {
+      return Context.current();
+    }
+    return Context.current().with(baggage);
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
@@ -243,6 +254,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
+      Context otelContext = otelContextWithBaggage();
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
@@ -268,15 +280,15 @@ final class OpenTelemetryMetricsModule {
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
-            .record(attemptNanos * SECONDS_PER_NANO, attribute);
+            .record(attemptNanos * SECONDS_PER_NANO, attribute, otelContext);
       }
       if (module.resource.clientTotalSentCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalSentCompressedMessageSizeCounter()
-            .record(outboundWireSize, attribute);
+            .record(outboundWireSize, attribute, otelContext);
       }
       if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalReceivedCompressedMessageSizeCounter()
-            .record(inboundWireSize, attribute);
+            .record(inboundWireSize, attribute, otelContext);
       }
     }
   }
@@ -408,6 +420,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedCall() {
+      Context otelContext = otelContextWithBaggage();
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -429,7 +442,8 @@ final class OpenTelemetryMetricsModule {
             callLatencyNanos * SECONDS_PER_NANO,
             baseAttributes.toBuilder()
                 .put(STATUS_KEY, status.getCode().toString())
-                .build()
+                .build(),
+            otelContext
         );
       }
 
@@ -437,7 +451,8 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientCallRetriesCounter() != null) {
         long retriesPerCall = Math.max(attemptsPerCall.get() - 1, 0);
         if (retriesPerCall > 0) {
-          module.resource.clientCallRetriesCounter().record(retriesPerCall, baseAttributes);
+          module.resource.clientCallRetriesCounter()
+              .record(retriesPerCall, baseAttributes, otelContext);
         }
       }
 
@@ -446,7 +461,7 @@ final class OpenTelemetryMetricsModule {
         long hedges = hedgedAttemptsPerCall.get();
         if (hedges > 0) {
           module.resource.clientCallHedgesCounter()
-              .record(hedges, baseAttributes);
+              .record(hedges, baseAttributes, otelContext);
         }
       }
 
@@ -454,8 +469,8 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientCallTransparentRetriesCounter() != null) {
         long transparentRetries = transparentRetriesPerCall.get();
         if (transparentRetries > 0) {
-          module.resource.clientCallTransparentRetriesCounter().record(
-              transparentRetries, baseAttributes);
+          module.resource.clientCallTransparentRetriesCounter()
+              .record(transparentRetries, baseAttributes, otelContext);
         }
       }
 
@@ -463,7 +478,8 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientCallRetryDelayCounter() != null) {
         module.resource.clientCallRetryDelayCounter().record(
             retryDelayNanos * SECONDS_PER_NANO,
-            baseAttributes
+            baseAttributes,
+            otelContext
         );
       }
     }
@@ -562,6 +578,7 @@ final class OpenTelemetryMetricsModule {
      */
     @Override
     public void streamClosed(Status status) {
+      Context otelContext = otelContextWithBaggage();
       if (streamClosedUpdater != null) {
         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
           return;
@@ -584,15 +601,15 @@ final class OpenTelemetryMetricsModule {
 
       if (module.resource.serverCallDurationCounter() != null) {
         module.resource.serverCallDurationCounter()
-            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes);
+            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes, otelContext);
       }
       if (module.resource.serverTotalSentCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalSentCompressedMessageSizeCounter()
-            .record(outboundWireSize, attributes);
+            .record(outboundWireSize, attributes, otelContext);
       }
       if (module.resource.serverTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalReceivedCompressedMessageSizeCounter()
-            .record(inboundWireSize, attributes);
+            .record(inboundWireSize, attributes, otelContext);
       }
     }
   }
