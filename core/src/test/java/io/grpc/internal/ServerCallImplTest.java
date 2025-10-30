@@ -524,14 +524,14 @@ public class ServerCallImplTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
-    verify(stream).close(statusCaptor.capture(),metadataCaptor.capture());
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.RESOURCE_EXHAUSTED.getCode(), status.getCode());
     assertEquals("Decompressed gRPC message exceeds maximum size", status.getDescription());
 
     streamListener.halfClosed();
     verify(callListener, never()).onHalfClose();
-    verify(callListener,never()).onMessage(any());
+    verify(callListener, never()).onMessage(any());
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
