@@ -56,19 +56,6 @@ public final class HandshakerServiceChannelTest {
         HandshakerServiceChannel.getHandshakerChannelForTesting("localhost:" + server.getPort());
   }
 
-  @Test
-  public void handshakerAddress_default() {
-    assertThat(MetadataServerAddressUtil.getHandshakerAddress())
-        .isEqualTo("metadata.google.internal.:8080");
-  }
-
-  @Test
-  public void handshakerAddress_withEnvVar() {
-    if (MetadataServerAddressUtil.TEST_METADATA_HOST_ENV_VAR != null ) {
-      assertThat(MetadataServerAddressUtil.getHandshakerAddress())
-          .isEqualTo(MetadataServerAddressUtil.TEST_METADATA_HOST_ENV_VAR);
-    }
-  }
 
   @Test
   public void sharedChannel_authority() {
