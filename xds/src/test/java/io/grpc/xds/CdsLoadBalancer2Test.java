@@ -315,8 +315,10 @@ public class CdsLoadBalancer2Test {
     startXdsDepManager();
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: " + NODE_ID);
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + CLUSTER
+        + " from xDS server nodeID: " + NODE_ID;
+    Status unavailable = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPickerStatus(pickerCaptor.getValue(), unavailable);
     assertThat(childBalancers).isEmpty();
   }
@@ -372,8 +374,9 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
 
     assertThat(childBalancer.shutdown).isTrue();
-    Status unavailable = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: " + NODE_ID);
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Resource " + CLUSTER + " does not exist nodeID: " + NODE_ID;
+    Status unavailable = Status.UNAVAILABLE.withDescription(expectedDescription);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     assertPickerStatus(pickerCaptor.getValue(), unavailable);
@@ -583,8 +586,10 @@ public class CdsLoadBalancer2Test {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status status = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + cluster1 + " does not exist nodeID: " + NODE_ID);
+    String expectedDescription = "Error retrieving CDS resource " + cluster1 + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + cluster1 + " from xDS server nodeID: "
+        + NODE_ID;
+    Status status = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPickerStatus(pickerCaptor.getValue(), status);
     assertThat(childBalancers).isEmpty();
   }
