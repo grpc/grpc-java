@@ -101,11 +101,21 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @GuardedBy("GrpcBootstrapperImpl.class")
+  private static Map<String, ?> defaultBootstrapOverride;
+  @GuardedBy("GrpcBootstrapperImpl.class")
   private static BootstrapInfo defaultBootstrap;
+
+  static synchronized void setDefaultBootstrapOverride(Map<String, ?> rawBootstrap) {
+    defaultBootstrapOverride = rawBootstrap;
+  }
 
   static synchronized BootstrapInfo defaultBootstrap() throws XdsInitializationException {
     if (defaultBootstrap == null) {
-      defaultBootstrap = new GrpcBootstrapperImpl().bootstrap();
+      if (defaultBootstrapOverride == null) {
+        defaultBootstrap = new GrpcBootstrapperImpl().bootstrap();
+      } else {
+        defaultBootstrap = new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride);
+      }
     }
     return defaultBootstrap;
   }

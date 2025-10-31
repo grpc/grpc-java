@@ -37,7 +37,6 @@ import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -55,27 +54,22 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private static final ExponentialBackoffPolicy.Provider BACKOFF_POLICY_PROVIDER =
       new ExponentialBackoffPolicy.Provider();
 
+  @Nullable
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
-  private final AtomicReference<Map<String, ?>> bootstrapOverride = new AtomicReference<>();
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {
-    this(new GrpcBootstrapperImpl());
+    this(null);
   }
 
   @VisibleForTesting
-  SharedXdsClientPoolProvider(Bootstrapper bootstrapper) {
-    this.bootstrapper = checkNotNull(bootstrapper, "bootstrapper");
+  SharedXdsClientPoolProvider(@Nullable Bootstrapper bootstrapper) {
+    this.bootstrapper = bootstrapper;
   }
 
   static SharedXdsClientPoolProvider getDefaultProvider() {
     return SharedXdsClientPoolProviderHolder.instance;
-  }
-
-  @Deprecated
-  public void setBootstrapOverride(Map<String, ?> bootstrap) {
-    bootstrapOverride.set(bootstrap);
   }
 
   @Override
@@ -89,11 +83,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       String target, MetricRecorder metricRecorder, CallCredentials transportCallCredentials)
       throws XdsInitializationException {
     BootstrapInfo bootstrapInfo;
-    Map<String, ?> rawBootstrap = bootstrapOverride.get();
-    if (rawBootstrap != null) {
-      bootstrapInfo = bootstrapper.bootstrap(rawBootstrap);
-    } else {
+    if (bootstrapper != null) {
       bootstrapInfo = bootstrapper.bootstrap();
+    } else {
+      bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
     }
     return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials);
   }
