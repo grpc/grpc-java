@@ -97,6 +97,7 @@ public final class BinderChannelSmokeTest {
           .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
           .build();
 
+  AndroidComponentAddress serverAddress;
   ManagedChannel channel;
   AtomicReference<Metadata> headersCapture = new AtomicReference<>();
   AtomicReference<PeerUid> clientUidCapture = new AtomicReference<>();
@@ -134,7 +135,7 @@ public final class BinderChannelSmokeTest {
             TestUtils.recordRequestHeadersInterceptor(headersCapture),
             PeerUids.newPeerIdentifyingServerInterceptor());
 
-    AndroidComponentAddress serverAddress = HostServices.allocateService(appContext);
+    serverAddress = HostServices.allocateService(appContext);
     HostServices.configureService(
         serverAddress,
         HostServices.serviceParamsBuilder()
@@ -149,13 +150,15 @@ public final class BinderChannelSmokeTest {
                         .build())
             .build());
 
-    channel =
-        BinderChannelBuilder.forAddress(serverAddress, appContext)
+    channel = newBinderChannelBuilder().build();
+  }
+
+  BinderChannelBuilder newBinderChannelBuilder() {
+    return BinderChannelBuilder.forAddress(serverAddress, appContext)
             .inboundParcelablePolicy(
-                InboundParcelablePolicy.newBuilder()
-                    .setAcceptParcelableMetadataValues(true)
-                    .build())
-            .build();
+                    InboundParcelablePolicy.newBuilder()
+                            .setAcceptParcelableMetadataValues(true)
+                            .build());
   }
 
   @After
@@ -182,6 +185,18 @@ public final class BinderChannelSmokeTest {
 
   @Test
   public void testBasicCall() throws Exception {
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testBasicCallWithLegacyAuthStrategy() throws Exception {
+    channel = newBinderChannelBuilder().useLegacyAuthStrategy().build();
+    assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testBasicCallWithV2AuthStrategy() throws Exception {
+    channel = newBinderChannelBuilder().useV2AuthStrategy().build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
   }
 

@@ -102,6 +102,9 @@ final class ServiceBinding implements Bindable, ServiceConnection {
 
   private State reportedState; // Only used on the main thread.
 
+  @GuardedBy("this")
+  private ComponentName connectedServiceName;
+
   @AnyThread
   ServiceBinding(
       Executor mainThreadExecutor,
@@ -305,6 +308,26 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     sourceContext = null;
   }
 
+  @AnyThread
+  @Override
+  public ServiceInfo getConnectedServiceInfo() throws StatusException {
+    try {
+      return getContextForTargetUser("cross-user v2 handshake")
+          .getPackageManager()
+          .getServiceInfo(getConnectedServiceName(), /* flags= */ 0);
+    } catch (PackageManager.NameNotFoundException e) {
+      throw Status.UNIMPLEMENTED
+          .withCause(e)
+          .withDescription("connected remote service was uninstalled/disabled during handshake")
+          .asException();
+    }
+  }
+
+  private synchronized ComponentName getConnectedServiceName() {
+    checkState(connectedServiceName != null, "onBound() not yet called!");
+    return connectedServiceName;
+  }
+
   @Override
   @MainThread
   public void onServiceConnected(ComponentName className, IBinder binder) {
@@ -312,6 +335,7 @@ final class ServiceBinding implements Bindable, ServiceConnection {
     synchronized (this) {
       if (state == State.BINDING) {
         state = State.BOUND;
+        connectedServiceName = className;
         bound = true;
       }
     }
