@@ -133,6 +133,9 @@ final class CachingRlsLbClient {
   private final RefCountedChildPolicyWrapperFactory refCountedChildPolicyWrapperFactory;
   private final ChannelLogger logger;
   private final ChildPolicyWrapper fallbackChildPolicyWrapper;
+  private ConnectivityState lastRlsServerConnectivityState;
+  private boolean wasReady;
+  private boolean wasInTransientFailure;
 
   static {
     MetricInstrumentRegistry metricInstrumentRegistry
@@ -216,6 +219,9 @@ final class CachingRlsLbClient {
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
+    lastRlsServerConnectivityState = rlsChannel.getState(false);
+    rlsChannel.notifyWhenStateChanged(
+        lastRlsServerConnectivityState, () -> rlsServerConnectionStateChanged());
     rlsStub = RouteLookupServiceGrpc.newStub(rlsChannel);
     childLbResolvedAddressFactory =
         checkNotNull(builder.resolvedAddressFactory, "resolvedAddressFactory");
@@ -225,8 +231,7 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
-            childLbHelperProvider,
-            new BackoffRefreshListener());
+            childLbHelperProvider);
     // TODO(creamsoup) wait until lb is ready
     String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
     if (defaultTarget != null && !defaultTarget.isEmpty()) {
@@ -255,6 +260,26 @@ final class CachingRlsLbClient {
         }, CACHE_ENTRIES_GAUGE, CACHE_SIZE_GAUGE);
 
     logger.log(ChannelLogLevel.DEBUG, "CachingRlsLbClient created");
+  }
+
+  private void rlsServerConnectionStateChanged() {
+    ConnectivityState currentState = rlsChannel.getState(false);
+    if (!wasInTransientFailure && currentState == ConnectivityState.READY) {
+      wasReady = true;
+    } else if (wasReady && currentState == ConnectivityState.TRANSIENT_FAILURE) {
+      wasInTransientFailure = true;
+    } else if (wasInTransientFailure && currentState == ConnectivityState.READY) {
+      wasInTransientFailure = false;
+      synchronized (lock) {
+        for (CacheEntry value : linkedHashLruCache.values()) {
+          if (value instanceof BackoffCacheEntry) {
+            refreshBackoffEntry((BackoffCacheEntry) value);
+          }
+        }
+      }
+    }
+    rlsChannel.notifyWhenStateChanged(currentState, () -> rlsServerConnectionStateChanged());
+    lastRlsServerConnectivityState = currentState;
   }
 
   void init() {
@@ -439,7 +464,7 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         request, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
+    BackoffCacheEntry entry = new BackoffCacheEntry(request, status);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
@@ -457,7 +482,8 @@ final class CachingRlsLbClient {
       logger.log(ChannelLogLevel.DEBUG,
           "[RLS Entry {0}] Calling RLS for transition to pending", entry.request);
       linkedHashLruCache.invalidate(entry.request);
-      asyncRlsCall(entry.request, entry.backoffPolicy);
+      // Cache updated. updateBalancingState() to reattempt picks
+      helper.triggerPendingRpcProcessing();
     }
   }
 
@@ -761,13 +787,11 @@ final class CachingRlsLbClient {
   private static final class BackoffCacheEntry extends CacheEntry {
 
     private final Status status;
-    private final BackoffPolicy backoffPolicy;
     private Future<?> scheduledFuture;
 
-    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
+    BackoffCacheEntry(RouteLookupRequest request, Status status) {
       super(request);
       this.status = checkNotNull(status, "status");
-      this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
     }
 
     Status getStatus() {
@@ -941,32 +965,6 @@ final class CachingRlsLbClient {
         helper.triggerPendingRpcProcessing();
       }
       return newEntry;
-    }
-  }
-
-  /**
-   * LbStatusListener refreshes {@link BackoffCacheEntry} when lb state is changed to {@link
-   * ConnectivityState#READY} from {@link ConnectivityState#TRANSIENT_FAILURE}.
-   */
-  private final class BackoffRefreshListener implements ChildLbStatusListener {
-
-    @Nullable
-    private ConnectivityState prevState = null;
-
-    @Override
-    public void onStatusChanged(ConnectivityState newState) {
-      if (prevState == ConnectivityState.TRANSIENT_FAILURE
-          && newState == ConnectivityState.READY) {
-        logger.log(ChannelLogLevel.DEBUG, "Transitioning from TRANSIENT_FAILURE to READY");
-        synchronized (lock) {
-          for (CacheEntry value : linkedHashLruCache.values()) {
-            if (value instanceof BackoffCacheEntry) {
-              refreshBackoffEntry((BackoffCacheEntry) value);
-            }
-          }
-        }
-      }
-      prevState = newState;
     }
   }
 
