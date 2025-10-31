@@ -186,8 +186,8 @@ public class XdsClientFallbackTest {
 
   @After
   public void cleanUp() {
-    if (xdsClientPool != null) {
-      xdsClientPool.returnObject(xdsClient);
+    if (xdsClient != null) {
+      xdsClient = xdsClientPool.returnObject(xdsClient);
     }
     CommonBootstrapperTestUtils.setEnableXdsFallback(originalEnableXdsFallback);
   }
