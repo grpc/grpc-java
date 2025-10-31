@@ -465,7 +465,8 @@ final class CachingRlsLbClient {
       logger.log(ChannelLogLevel.DEBUG,
           "[RLS Entry {0}] Calling RLS for transition to pending", entry.routeLookupRequestKey);
       linkedHashLruCache.invalidate(entry.routeLookupRequestKey);
-      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy, RouteLookupRequest.Reason.REASON_MISS);
+      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy,
+          RouteLookupRequest.Reason.REASON_MISS);
     }
   }
 

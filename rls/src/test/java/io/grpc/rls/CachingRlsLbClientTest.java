@@ -251,7 +251,8 @@ public class CachingRlsLbClientTest {
 
     resp = getInSyncContext(routeLookupRequestKey);
 
-    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_STALE);
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_STALE);
     assertThat(resp.hasData()).isTrue();
 
     // existing cache expired
@@ -310,7 +311,8 @@ public class CachingRlsLbClientTest {
 
     resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.hasData()).isTrue();
-    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
 
     assertThat(rlsChannelOverriddenAuthority).isEqualTo("bigtable.googleapis.com:443");
     assertThat(rlsChannelServiceConfig).isEqualTo(routeLookupChannelServiceConfig);
@@ -355,7 +357,8 @@ public class CachingRlsLbClientTest {
     rlsServerImpl.routeLookupReason = null;
     // server responses
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
-    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
 
     resp = getInSyncContext(routeLookupRequestKey);
 

@@ -27,7 +27,6 @@ import io.grpc.rls.RlsProtoData.GrpcKeyBuilder;
 import io.grpc.rls.RlsProtoData.GrpcKeyBuilder.Name;
 import io.grpc.rls.RlsProtoData.NameMatcher;
 import io.grpc.rls.RlsProtoData.RouteLookupConfig;
-import io.grpc.rls.RlsProtoData.RouteLookupRequest;
 import io.grpc.rls.RlsProtoData.RouteLookupRequestKey;
 import java.util.HashMap;
 import java.util.List;

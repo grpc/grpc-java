@@ -45,13 +45,13 @@ final class RlsProtoData {
   @Immutable
   abstract static class RouteLookupRequest {
 
-    /** Names should match those in {@link io.grpc.lookup.v1.RouteLookupRequest.Reason} */
+    /** Names should match those in {@link io.grpc.lookup.v1.RouteLookupRequest.Reason}. */
     enum Reason {
-      /** Unused */
+      /** Unused. */
       REASON_UNKNOWN,
-      /** No data available in local cache */
+      /** No data available in local cache. */
       REASON_MISS,
-      /** Data in local cache is stale */
+      /** Data in local cache is stale. */
       REASON_STALE;
     }
 
