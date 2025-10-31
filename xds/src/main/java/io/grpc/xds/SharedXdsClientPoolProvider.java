@@ -202,6 +202,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           metricReporter = null;
           targetToXdsClientMap.remove(target);
           scheduler = SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, scheduler);
+        } else if (refCount < 0) {
+          assert false; // We want our tests to fail
+          log.log(Level.SEVERE, "Negative reference count. File a bug", new Exception());
+          refCount = 0;
         }
         return null;
       }
