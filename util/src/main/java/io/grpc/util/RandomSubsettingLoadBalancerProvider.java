@@ -71,7 +71,7 @@ public final class RandomSubsettingLoadBalancerProvider extends LoadBalancerProv
     ConfigOrError childConfig = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
         JsonUtil.getListOfObjects(rawConfig, "childPolicy"));
     if (childConfig.getError() != null) {
-      return ConfigOrError.fromError(Status.INTERNAL
+      return ConfigOrError.fromError(Status.UNAVAILABLE
           .withDescription(
               "Failed to parse child in " + getPolicyName() + ", LB policy config=" + rawConfig)
           .withCause(childConfig.getError().asRuntimeException()));

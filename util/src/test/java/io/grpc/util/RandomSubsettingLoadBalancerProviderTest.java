@@ -80,11 +80,12 @@ public class RandomSubsettingLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
 
     Status error = configOrError.getError();
-    assertThat(error.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(error.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo(
         "Failed to parse child in random_subsetting"
         + ", LB policy config={subsetSize=3.0}");
-    assertThat(error.getCause().getMessage()).isEqualTo("INTERNAL: No child LB config specified");
+    assertThat(error.getCause().getMessage()).isEqualTo(
+        "UNAVAILABLE: No child LB config specified");
   }
 
   @Test
@@ -100,12 +101,12 @@ public class RandomSubsettingLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
 
     Status error = configOrError.getError();
-    assertThat(error.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(error.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo(
         "Failed to parse child in random_subsetting, LB policy config="
         + "{subsetSize=3.0, childPolicy=[{random_policy={}}]}");
     assertThat(error.getCause().getMessage()).contains(
-        "INTERNAL: None of [random_policy] specified by Service Config are available.");
+        "UNAVAILABLE: None of [random_policy] specified by Service Config are available.");
   }
 
   @Test
