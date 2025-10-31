@@ -16,6 +16,7 @@
 
 package io.grpc.alts;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -39,7 +40,10 @@ import java.util.concurrent.TimeUnit;
 final class HandshakerServiceChannel {
 
   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
-      new ChannelResource("metadata.google.internal.:8080");
+      new ChannelResource(
+          MoreObjects.firstNonNull(
+              System.getenv("GCE_METADATA_HOST"), "metadata.google.internal.:8080"));
+
 
   /** Returns a resource of handshaker service channel for testing only. */
   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {
