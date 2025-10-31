@@ -60,7 +60,7 @@ import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.atomic.AtomicInteger;
+
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -79,7 +79,12 @@ public final class BinderClientTransport extends BinderTransport
   private final ClientHandshake handshake;
 
   /** Number of ongoing calls which keep this transport "in-use". */
-  private final AtomicInteger numInUseStreams;
+  @GuardedBy("this")
+  private int numInUseStreams;
+
+  /** Last in-use state that was reported to the listener */
+  @GuardedBy("this")
+  private boolean listenerInUse;
 
   private final long readyTimeoutMillis;
   private final PingTracker pingTracker;
@@ -120,9 +125,11 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+
     this.handshake =
         factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new V2ClientHandshake();
-    numInUseStreams = new AtomicInteger();
+    numInUseStreams = 0;
+    listenerInUse = false;
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
     serviceBinding =
         new ServiceBinding(
@@ -266,9 +273,7 @@ public final class BinderClientTransport extends BinderTransport
       return newFailingClientStream(failure, attributes, headers, tracers);
     }
 
-    if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-      clientTransportListener.transportInUse(true);
-    }
+    updateInUseStreamsIfNeed(inbound.countsForInUse(), 1);
     Outbound.ClientOutbound outbound =
         new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
     if (method.getType().clientSendsOneMessage()) {
@@ -280,9 +285,7 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   protected void unregisterInbound(Inbound<?> inbound) {
-    if (inbound.countsForInUse() && numInUseStreams.decrementAndGet() == 0) {
-      clientTransportListener.transportInUse(false);
-    }
+    updateInUseStreamsIfNeed(inbound.countsForInUse(), -1);
     super.unregisterInbound(inbound);
   }
 
@@ -312,7 +315,9 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   void notifyTerminated() {
-    if (numInUseStreams.getAndSet(0) > 0) {
+    if(numInUseStreams > 0) {
+      numInUseStreams = 0;
+      listenerInUse = false;
       clientTransportListener.transportInUse(false);
     }
     if (readyTimeoutFuture != null) {
@@ -451,6 +456,25 @@ public final class BinderClientTransport extends BinderTransport
   private synchronized void handleAuthResult(Throwable t) {
     shutdownInternal(
         Status.INTERNAL.withDescription("Could not evaluate SecurityPolicy").withCause(t), true);
+  }
+
+  /** Updates in-use-stream count and notifies listener only on transitions between 0 and >0 */
+  private synchronized void updateInUseStreamsIfNeed(boolean countsForInUse, int delta) {
+    if(!countsForInUse) {
+      return;
+    }
+
+    numInUseStreams += delta;
+    if(numInUseStreams < 0) {
+      // Defensive: prevent negative due to unexpected double-decrement
+      numInUseStreams = 0;
+    }
+
+    boolean nowInUseStream = numInUseStreams > 0;
+    if(nowInUseStream != listenerInUse) {
+      listenerInUse = nowInUseStream;
+      clientTransportListener.transportInUse(nowInUseStream);
+    }
   }
 
   @GuardedBy("this")
