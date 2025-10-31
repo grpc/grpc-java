@@ -17,13 +17,10 @@ dependencies {
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
             project(':grpc-inprocess'),
-            project(':grpc-stub'),
-            project(':grpc-protobuf'),
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
             libraries.opentelemetry.sdk.testing,
             libraries.assertj.core // opentelemetry.sdk.testing uses compileOnly for assertj
-            libraries.protobuf.java
 
     annotationProcessor libraries.auto.value
 

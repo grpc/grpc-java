@@ -339,7 +339,7 @@ final class OpenTelemetryTracingModule {
       }
       Context serverCallContext = Context.current();
       serverCallContext = serverCallContext.with(span);
-      Baggage baggage = BAGGAGE_KEY.get(io.grpc.Context.current());
+      Baggage baggage = BAGGAGE_KEY.get();
       if (baggage != null) {
         serverCallContext = serverCallContext.with(baggage);
       }

@@ -132,7 +132,7 @@ final class OpenTelemetryMetricsModule {
   }
 
   private static Context otelContextWithBaggage() {
-    Baggage baggage = BAGGAGE_KEY.get(io.grpc.Context.current());
+    Baggage baggage = BAGGAGE_KEY.get();
     if (baggage == null) {
       return Context.current();
     }
