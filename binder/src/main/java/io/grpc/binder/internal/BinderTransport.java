@@ -159,6 +159,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ScheduledExecutorService scheduledExecutorService;
   private final InternalLogId logId;
+
   @GuardedBy("this")
   private final LeakSafeOneWayBinder incomingBinder;
 
@@ -277,6 +278,14 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     transportState = newState;
   }
 
+  /**
+   * Sets the binder to use for sending subsequent transactions to our peer.
+   *
+   * <p>Subclasses should call this as early as possible but not from a constructor.
+   *
+   * <p>Returns true for success, false if the process hosting 'binder' is already dead. Callers are
+   * responsible for handling this.
+   */
   @GuardedBy("this")
   protected boolean setOutgoingBinder(OneWayBinderProxy binder) {
     binder = binderDecorator.decorate(binder);

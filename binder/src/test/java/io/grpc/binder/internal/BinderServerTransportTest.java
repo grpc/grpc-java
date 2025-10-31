@@ -21,10 +21,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 
-import android.os.DeadObjectException;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
@@ -97,6 +95,17 @@ public final class BinderServerTransportTest {
   }
 
   @Test
+  public void testClientBinderIsDeadOnArrival() throws Exception {
+    transport = newBinderServerTransportBuilder()
+        .setCallbackBinder(new FakeDeadBinder())
+        .build();
+    transport.start(transportListener);
+    shadowOf(Looper.getMainLooper()).idle();
+
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  @Test
   public void testStartAfterShutdownAndIdle() throws Exception {
     transport = newBinderServerTransportBuilder().build();
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
@@ -125,7 +134,7 @@ public final class BinderServerTransportTest {
     IBinder callbackBinder;
 
     public BinderServerTransport build() {
-      return new BinderServerTransport(
+      return BinderServerTransport.create(
           executorServicePool, attributes, streamTracerFactories, binderDecorator, callbackBinder);
     }
 

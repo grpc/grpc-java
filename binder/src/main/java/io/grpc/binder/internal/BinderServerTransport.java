@@ -42,21 +42,35 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   @GuardedBy("this")
   private final SimplePromise<ServerTransportListener> listenerPromise = new SimplePromise<>();
 
+  private BinderServerTransport(
+      ObjectPool<ScheduledExecutorService> executorServicePool,
+      Attributes attributes,
+      List<ServerStreamTracer.Factory> streamTracerFactories,
+      OneWayBinderProxy.Decorator binderDecorator) {
+    super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
+    this.streamTracerFactories = streamTracerFactories;
+  }
+
   /**
    * Constructs a new transport instance.
    *
    * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
    */
-  public BinderServerTransport(
+  public static BinderServerTransport create(
       ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
       List<ServerStreamTracer.Factory> streamTracerFactories,
       OneWayBinderProxy.Decorator binderDecorator,
       IBinder callbackBinder) {
-    super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
-    this.streamTracerFactories = streamTracerFactories;
+    BinderServerTransport transport =
+        new BinderServerTransport(
+            executorServicePool, attributes, streamTracerFactories, binderDecorator);
     // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
-    setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
+    // No need to handle failure here because if 'callbackBinder' is already dead, we'll notice it
+    // again in start() when we send the first transaction.
+    transport.setOutgoingBinder(
+        OneWayBinderProxy.wrap(callbackBinder, transport.getScheduledExecutorService()));
+    return transport;
   }
 
   /**
