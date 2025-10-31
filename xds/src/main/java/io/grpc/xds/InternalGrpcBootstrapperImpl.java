@@ -17,8 +17,10 @@
 package io.grpc.xds;
 
 import io.grpc.Internal;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.XdsInitializationException;
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * Internal accessors for GrpcBootstrapperImpl.
@@ -29,5 +31,10 @@ public final class InternalGrpcBootstrapperImpl {
 
   public static String getJsonContent() throws XdsInitializationException, IOException {
     return new GrpcBootstrapperImpl().getJsonContent();
+  }
+
+  public static BootstrapInfo parseBootstrap(Map<String, ?> bootstrap)
+      throws XdsInitializationException {
+    return new GrpcBootstrapperImpl().bootstrap(bootstrap);
   }
 }

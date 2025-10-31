@@ -36,6 +36,7 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -463,19 +464,11 @@ final class OpenTelemetryTracingModule {
     span.addEvent("Inbound message", attributesBuilder.build());
   }
 
-  private String generateErrorStatusDescription(io.grpc.Status status) {
-    if (status.getDescription() != null) {
-      return status.getCode() + ": " + status.getDescription();
-    } else {
-      return status.getCode().toString();
-    }
-  }
-
   private void endSpanWithStatus(Span span, io.grpc.Status status) {
     if (status.isOk()) {
       span.setStatus(StatusCode.OK);
     } else {
-      span.setStatus(StatusCode.ERROR, generateErrorStatusDescription(status));
+      span.setStatus(StatusCode.ERROR, GrpcUtil.statusToPrettyString(status));
     }
     span.end();
   }

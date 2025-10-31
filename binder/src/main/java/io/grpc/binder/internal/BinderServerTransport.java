@@ -69,15 +69,22 @@ public final class BinderServerTransport extends BinderTransport implements Serv
    */
   public synchronized void start(ServerTransportListener serverTransportListener) {
     this.listenerPromise.set(serverTransportListener);
-    if (!isShutdown()) {
-      sendSetupTransaction();
-      // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
-      // it triggers), could have shut us down.
-      if (!isShutdown()) {
-        setState(TransportState.READY);
-        attributes = serverTransportListener.transportReady(attributes);
-      }
+    if (isShutdown()) {
+      // It's unlikely, but we could be shutdown externally between construction and start(). One
+      // possible cause is an extremely short handshake timeout.
+      return;
     }
+
+    sendSetupTransaction();
+
+    // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
+    // it triggers), could have shut us down.
+    if (isShutdown()) {
+      return;
+    }
+
+    setState(TransportState.READY);
+    attributes = serverTransportListener.transportReady(attributes);
   }
 
   StatsTraceContext createStatsTraceContext(String methodName, Metadata headers) {
@@ -92,10 +99,10 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   synchronized Status startStream(ServerStream stream, String methodName, Metadata headers) {
     if (isShutdown()) {
       return Status.UNAVAILABLE.withDescription("transport is shutdown");
-    } else {
-      listenerPromise.get().streamCreated(stream, methodName, headers);
-      return Status.OK;
     }
+
+    listenerPromise.get().streamCreated(stream, methodName, headers);
+    return Status.OK;
   }
 
   @Override
