@@ -48,9 +48,11 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCall;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import org.junit.Before;
@@ -69,6 +71,8 @@ public class ServerCallImplTest {
 
   @Mock private ServerStream stream;
   @Mock private ServerCall.Listener<Long> callListener;
+  @Mock private StreamListener.MessageProducer messageProducer;
+  @Mock private InputStream message;
 
   private final CallTracer serverCallTracer = CallTracer.getDefaultFactory().create();
   private ServerCallImpl<Long, Long> call;
@@ -491,6 +495,43 @@ public class ServerCallImplTest {
     RuntimeException e = assertThrows(RuntimeException.class,
         () -> streamListener.messagesAvailable(producer));
     assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
+  }
+
+  @Test
+  public void streamListener_statusRuntimeException() throws IOException {
+    MethodDescriptor<Long, Long> failingParseMethod = MethodDescriptor.<Long, Long>newBuilder()
+        .setType(MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(new LongMarshaller() {
+            @Override
+            public Long parse(InputStream stream) {
+              throw new StatusRuntimeException(Status.RESOURCE_EXHAUSTED
+                  .withDescription("Decompressed gRPC message exceeds maximum size"));
+            }
+        })
+        .setResponseMarshaller(new LongMarshaller())
+        .build();
+
+    call =  new ServerCallImpl<>(stream, failingParseMethod, requestHeaders, context,
+            DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
+            serverCallTracer, PerfMark.createTag());
+
+    ServerStreamListenerImpl<Long> streamListener =
+            new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    when(messageProducer.next()).thenReturn(message, (InputStream) null);
+    streamListener.messagesAvailable(messageProducer);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
+
+    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.RESOURCE_EXHAUSTED.getCode(), status.getCode());
+    assertEquals("Decompressed gRPC message exceeds maximum size", status.getDescription());
+
+    streamListener.halfClosed();
+    verify(callListener, never()).onHalfClose();
+    verify(callListener, never()).onMessage(any());
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
