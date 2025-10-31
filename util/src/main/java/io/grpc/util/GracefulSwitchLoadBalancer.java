@@ -207,14 +207,14 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
         ServiceConfigUtil.unwrapLoadBalancingConfigList(loadBalancingConfigs);
     if (childConfigCandidates == null || childConfigCandidates.isEmpty()) {
       return ConfigOrError.fromError(
-          Status.INTERNAL.withDescription("No child LB config specified"));
+          Status.UNAVAILABLE.withDescription("No child LB config specified"));
     }
     ConfigOrError selectedConfig =
         ServiceConfigUtil.selectLbPolicyFromList(childConfigCandidates, lbRegistry);
     if (selectedConfig.getError() != null) {
       Status error = selectedConfig.getError();
       return ConfigOrError.fromError(
-          Status.INTERNAL
+          Status.UNAVAILABLE
               .withCause(error.getCause())
               .withDescription(error.getDescription())
               .augmentDescription("Failed to select child config"));
