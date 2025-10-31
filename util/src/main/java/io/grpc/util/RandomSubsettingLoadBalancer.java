@@ -47,9 +47,7 @@ final class RandomSubsettingLoadBalancer extends LoadBalancer {
   private final HashFunction hashFunc;
 
   public RandomSubsettingLoadBalancer(Helper helper) {
-    switchLb = new GracefulSwitchLoadBalancer(checkNotNull(helper, "helper"));
-    int seed = new Random().nextInt();
-    hashFunc = Hashing.murmur3_128(seed);
+    this(helper, new Random().nextInt());
   }
 
   @VisibleForTesting
