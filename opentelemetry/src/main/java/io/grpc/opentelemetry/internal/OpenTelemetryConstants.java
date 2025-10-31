@@ -16,7 +16,9 @@
 
 package io.grpc.opentelemetry.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributeKey;
 import java.util.List;
 
@@ -41,6 +43,10 @@ public final class OpenTelemetryConstants {
 
   public static final AttributeKey<String> SECURITY_LEVEL_KEY =
       AttributeKey.stringKey("grpc.security_level");
+
+  @VisibleForTesting
+  public static final io.grpc.Context.Key<Baggage> BAGGAGE_KEY =
+      io.grpc.Context.key("opentelemetry-baggage-key");
 
   public static final List<Double> LATENCY_BUCKETS =
       ImmutableList.of(

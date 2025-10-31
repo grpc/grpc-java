@@ -27,6 +27,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
@@ -47,11 +48,21 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
+import io.grpc.stub.MetadataUtils;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.metrics.data.MetricData;
@@ -65,6 +76,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -161,6 +173,14 @@ public class OpenTelemetryMetricsModuleTest {
   private ServerCall.Listener<String> mockServerCallListener;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
+  @Mock
+  private DoubleHistogram mockServerCallDurationHistogram;
+  @Captor
+  private ArgumentCaptor<io.opentelemetry.context.Context> contextCaptor;
+  private io.grpc.Server server;
+  private io.grpc.ManagedChannel channel;
+  private OpenTelemetryMetricsResource resource;
+  private final String serverName = "E2ETestServer-" + Math.random();
 
   private final FakeClock fakeClock = new FakeClock();
   private final MethodDescriptor<String, String> method =
@@ -180,6 +200,19 @@ public class OpenTelemetryMetricsModuleTest {
   public void setUp() throws Exception {
     testMeter = openTelemetryTesting.getOpenTelemetry()
         .getMeter(OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
+    resource = OpenTelemetryMetricsResource.builder()
+        .serverCallDurationCounter(mockServerCallDurationHistogram)
+        .build();
+  }
+
+  @After
+  public void tearDown() {
+    if (channel != null) {
+      channel.shutdownNow();
+    }
+    if (server != null) {
+      server.shutdownNow();
+    }
   }
 
   @Test
@@ -1595,6 +1628,45 @@ public class OpenTelemetryMetricsModuleTest {
 
   }
 
+  @Test
+  public void serverBaggagePropagationToMetrics() {
+    // 1. Create module and tracer factory using the mock resource
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
+
+    // 2. Define the test baggage and gRPC context
+    Baggage testBaggage = Baggage.builder()
+        .put("user-id", "67")
+        .build();
+
+    // This simulates the context that the Tracing module would have created
+    io.grpc.Context grpcContext = io.grpc.Context.current()
+        .withValue(OpenTelemetryConstants.BAGGAGE_KEY, testBaggage);
+
+    // 3. Attach the gRPC context, trigger metric recording, and detach
+    io.grpc.Context previousContext = grpcContext.attach();
+    try {
+      tracer.streamClosed(Status.OK);
+    } finally {
+      grpcContext.detach(previousContext);
+    }
+
+    // 4. Verify the record call and capture the OTel Context
+    verify(mockServerCallDurationHistogram).record(
+        anyDouble(),
+        any(io.opentelemetry.api.common.Attributes.class),
+        contextCaptor.capture());
+
+    // 5. Assert on the captured OTel Context
+    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
+    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
+
+    assertEquals("67", capturedBaggage.getEntryValue("user-id"));
+  }
+
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource) {
     return new OpenTelemetryMetricsModule(
@@ -1629,6 +1701,66 @@ public class OpenTelemetryMetricsModuleTest {
     @Override
     public String getAuthority() {
       return authority;
+    }
+  }
+
+  @Test
+  public void serverBaggagePropagation_EndToEnd() throws Exception {
+    // 1. Create Both Modules
+    OpenTelemetry otel = openTelemetryTesting.getOpenTelemetry();
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(otel);
+    OpenTelemetryMetricsModule metricsModule = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+
+    // 2. Create Server with *both* tracer factories
+    server = InProcessServerBuilder.forName(serverName)
+        .addService(new SimpleServiceImpl()) // <-- Uses the helper class below
+        .addStreamTracerFactory(tracingModule.getServerTracerFactory())
+        .addStreamTracerFactory(metricsModule.getServerTracerFactory())
+        .build()
+        .start();
+
+    // 3. Create Client Channel
+    channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+
+    // 4. Manually create baggage headers
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("baggage", Metadata.ASCII_STRING_MARSHALLER),
+        "choice=red_pill_or_blue_pill");
+
+    // 5. Make the gRPC call with these headers
+    ClientInterceptor headerAttachingInterceptor =
+        MetadataUtils.newAttachHeadersInterceptor(headers);
+
+    // Now, create the stub and apply that interceptor
+    SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+        SimpleServiceGrpc.newBlockingStub(channel)
+            .withInterceptors(headerAttachingInterceptor);
+
+    // Use the imported SimpleRequest
+    stub.unaryRpc(SimpleRequest.getDefaultInstance());
+
+    // 6. Verify the Mock
+    verify(mockServerCallDurationHistogram).record(
+        anyDouble(),
+        any(io.opentelemetry.api.common.Attributes.class),
+        contextCaptor.capture());
+
+    // 7. Assert on the captured Context
+    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
+    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
+
+    assertEquals("red_pill_or_blue_pill", capturedBaggage.getEntryValue("choice"));
+  }
+
+  /**
+   * A simple service implementation for the E2E test.
+   */
+  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
+    @Override
+    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
+      responseObserver.onNext(SimpleResponse.getDefaultInstance());
+      responseObserver.onCompleted();
     }
   }
 }

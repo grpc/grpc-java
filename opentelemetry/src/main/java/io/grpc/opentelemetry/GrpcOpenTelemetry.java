@@ -179,12 +179,14 @@ public final class GrpcOpenTelemetry {
    * @param serverBuilder the server builder to configure
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
-    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    /* To ensure baggage propagation to metrics, we need the tracing
+    tracers to be initialised before metrics */
     if (ENABLE_OTEL_TRACING) {
       serverBuilder.addStreamTracerFactory(
           openTelemetryTracingModule.getServerTracerFactory());
       serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
     }
+    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
   }
 
   @VisibleForTesting
