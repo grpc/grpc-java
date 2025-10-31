@@ -112,7 +112,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   static synchronized BootstrapInfo defaultBootstrap() throws XdsInitializationException {
     if (defaultBootstrap == null) {
       if (defaultBootstrapOverride == null) {
-      defaultBootstrap = new GrpcBootstrapperImpl().bootstrap();
+        defaultBootstrap = new GrpcBootstrapperImpl().bootstrap();
       } else {
         defaultBootstrap = new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride);
       }
