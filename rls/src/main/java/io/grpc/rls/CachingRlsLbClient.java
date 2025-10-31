@@ -464,7 +464,7 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         request, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
+    BackoffCacheEntry entry = new BackoffCacheEntry(request, status);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
@@ -787,13 +787,11 @@ final class CachingRlsLbClient {
   private static final class BackoffCacheEntry extends CacheEntry {
 
     private final Status status;
-    private final BackoffPolicy backoffPolicy;
     private Future<?> scheduledFuture;
 
-    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
+    BackoffCacheEntry(RouteLookupRequest request, Status status) {
       super(request);
       this.status = checkNotNull(status, "status");
-      this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
     }
 
     Status getStatus() {
@@ -967,32 +965,6 @@ final class CachingRlsLbClient {
         helper.triggerPendingRpcProcessing();
       }
       return newEntry;
-    }
-  }
-
-  /**
-   * LbStatusListener refreshes {@link BackoffCacheEntry} when lb state is changed to {@link
-   * ConnectivityState#READY} from {@link ConnectivityState#TRANSIENT_FAILURE}.
-   */
-  private final class BackoffRefreshListener implements ChildLbStatusListener {
-
-    @Nullable
-    private ConnectivityState prevState = null;
-
-    @Override
-    public void onStatusChanged(ConnectivityState newState) {
-      if (prevState == ConnectivityState.TRANSIENT_FAILURE
-          && newState == ConnectivityState.READY) {
-        logger.log(ChannelLogLevel.DEBUG, "Transitioning from TRANSIENT_FAILURE to READY");
-        synchronized (lock) {
-          for (CacheEntry value : linkedHashLruCache.values()) {
-            if (value instanceof BackoffCacheEntry) {
-              refreshBackoffEntry((BackoffCacheEntry) value);
-            }
-          }
-        }
-      }
-      prevState = newState;
     }
   }
 
