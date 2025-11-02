@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -125,8 +126,10 @@ public final class NameResolverRegistry {
     if (instance == null) {
       List<NameResolverProvider> providerList = ServiceProviders.loadAll(
           NameResolverProvider.class,
+          ServiceLoader
+            .load(NameResolverProvider.class, NameResolverProvider.class.getClassLoader())
+            .iterator(),
           getHardCodedClasses(),
-          NameResolverProvider.class.getClassLoader(),
           new NameResolverPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
