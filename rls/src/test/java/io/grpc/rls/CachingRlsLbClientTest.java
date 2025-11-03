@@ -336,11 +336,47 @@ public class CachingRlsLbClientTest {
     // let it pass throttler
     fakeThrottler.nextResult = false;
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
-    // Backoff entry evicted from cache.
-    verify(evictionListener)
-        .onEviction(eq(routeLookupRequest), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
     // Assert that Rls LB policy picker was updated.
     assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
+    // Backoff entry present but marked as not active anymore in cache, so next rpc should not be
+    // backed off.
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+  }
+
+  @Test
+  public void get_throttled_backoffBehavior() throws Exception {
+    setUpRlsLbClient();
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequest,
+            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
+
+    fakeThrottler.nextResult = true;
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasError()).isTrue();
+
+    // let it be throttled again
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasError()).isTrue();
+
+    // Assert that the backoff policy is still in effect for the cache entry.
+    fakeClock.forwardTime(9, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.hasError()).isTrue();
+
+    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+    // Assert that Rls LB policy picker was updated.
+    assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
+    // Backoff entry marked as not active anymore in cache, so next rpc should not be backed off.
+    fakeThrottler.nextResult = false;
+    resp = getInSyncContext(routeLookupRequest);
+    assertThat(resp.isPending()).isTrue();
   }
 
   @Test
@@ -360,19 +396,6 @@ public class CachingRlsLbClientTest {
     };
     fakeHelper.oobChannel.notifyWhenStateChanged(fakeHelper.oobChannel.getState(false),
         channelStateListener);
-    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
-        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
-    rlsServerImpl.setLookupTable(
-        ImmutableMap.of(
-            routeLookupRequest,
-            RouteLookupResponse.create(ImmutableList.of("target"), "header")));
-
-    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
-    assertThat(resp.isPending()).isTrue();
-    // server response
-    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
-    resp = getInSyncContext(routeLookupRequest);
-    assertThat(resp.hasData()).isTrue();
 
     fakeHelper.server.shutdown();
     // Channel goes to IDLE state from the shutdown listener handling.
@@ -383,22 +406,19 @@ public class CachingRlsLbClientTest {
     } catch (InterruptedException e) {
       fakeHelper.server.shutdownNow();
     }
-    // Use a different key to cause a cache miss and trigger a RPC.
-    RouteLookupRequest routeLookupRequest2 = RouteLookupRequest.create(ImmutableMap.of(
-        "server", "bigtable.googleapis.com", "service-key", "foo2", "method-key", "bar"));
-    // Rls channel will go to TRANSIENT_FAILURE (back-off) because the picker notices the
-    // subchannel state IDLE and the server transport listener is null.
-    resp = getInSyncContext(routeLookupRequest2);
+    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+        "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    // Rls channel will go to TRANSIENT_FAILURE (connection back-off).
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.isPending()).isTrue();
     assertThat(rlsChannelState[0]).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
     // Throttle the next rpc call.
     fakeThrottler.nextResult = true;
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
 
-    // Cause another cache miss by using a new request key. This will create a back-off Rls
-    // cache entry.
+    // Cause a cache miss by using a new request key. This will create a back-off Rls cache entry.
     RouteLookupRequest routeLookupRequest3 = RouteLookupRequest.create(ImmutableMap.of(
-        "server", "bigtable.googleapis.com", "service-key", "foo3", "method-key", "bar"));
+        "server", "bigtable.googleapis.com", "service-key", "foo2", "method-key", "bar"));
     resp = getInSyncContext(routeLookupRequest3);
 
     assertThat(resp.hasError()).isTrue();
@@ -413,9 +433,6 @@ public class CachingRlsLbClientTest {
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
     AtomicBoolean isSuccess = new AtomicBoolean(false);
     ((ExecutorService) defaultExecutorPool.getObject()).submit(() -> {
-      // Backoff entry evicted from cache.
-      verify(evictionListener)
-          .onEviction(eq(routeLookupRequest3), any(CacheEntry.class), eq(EvictionType.EXPLICIT));
       // Assert that Rls LB policy picker was updated.
       assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
       isSuccess.set(true);
