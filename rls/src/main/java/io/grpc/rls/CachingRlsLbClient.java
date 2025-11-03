@@ -363,13 +363,13 @@ final class CachingRlsLbClient {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
       if (cacheEntry == null
-          || cacheEntry instanceof BackoffCacheEntry
-          && (((BackoffCacheEntry) cacheEntry).isBackoffTimeEnded)) {
+          || cacheEntry instanceof BackoffCacheEntry && cacheEntry.isExpired(ticker.read())) {
         PendingCacheEntry pendingEntry = pendingCallCache.get(request);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
         }
-        return asyncRlsCall(request, /* backoffPolicy= */ null);
+        return asyncRlsCall(request, cacheEntry instanceof BackoffCacheEntry
+            ? ((BackoffCacheEntry) cacheEntry).backoffPolicy : null);
       }
 
       if (cacheEntry instanceof DataCacheEntry) {
@@ -463,7 +463,9 @@ final class CachingRlsLbClient {
         request, status, delayNanos);
     BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
     // Lock is held, so the task can't execute before the assignment
-    entry.scheduledFuture = scheduledExecutorService.schedule(
+    entry.backoffTimer = scheduledExecutorService.schedule(
+        () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
+    entry.backoffTimer = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
     linkedHashLruCache.cacheAndClean(request, entry);
     return entry;
@@ -472,13 +474,12 @@ final class CachingRlsLbClient {
   private void refreshBackoffEntry(BackoffCacheEntry entry) {
     synchronized (lock) {
       // This checks whether the task has been cancelled and prevents a second execution.
-      if (!entry.scheduledFuture.cancel(false)) {
+      if (!entry.backoffTimer.cancel(false)) {
         // Future was previously cancelled
         return;
       }
       logger.log(ChannelLogLevel.DEBUG,
           "[RLS Entry {0}] Calling RLS for transition to pending", entry.request);
-      entry.isBackoffTimeEnded = true;
       // Cache updated. updateBalancingState() to reattempt picks
       helper.triggerPendingRpcProcessing();
     }
@@ -785,8 +786,7 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
-    private Future<?> scheduledFuture;
-    private boolean isBackoffTimeEnded;
+    private Future<?> backoffTimer;
 
     BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
       super(request);
@@ -805,12 +805,12 @@ final class CachingRlsLbClient {
 
     @Override
     boolean isExpired(long now) {
-      return scheduledFuture.isDone();
+      return backoffTimer.isDone();
     }
 
     @Override
     void cleanup() {
-      scheduledFuture.cancel(false);
+      backoffTimer.cancel(false);
     }
 
     @Override

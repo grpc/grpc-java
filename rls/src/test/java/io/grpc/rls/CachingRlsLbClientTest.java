@@ -360,12 +360,14 @@ public class CachingRlsLbClientTest {
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasError()).isTrue();
 
-    // let it be throttled again
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    // Assert that the same backoff policy is still in effect for the cache entry.
+    // The below provider should not get used, so the back off time will still be set to 10ms.
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(20, TimeUnit.MILLISECONDS);
+    // let it be throttled again
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasError()).isTrue();
 
-    // Assert that the backoff policy is still in effect for the cache entry.
     fakeClock.forwardTime(9, TimeUnit.MILLISECONDS);
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasError()).isTrue();
