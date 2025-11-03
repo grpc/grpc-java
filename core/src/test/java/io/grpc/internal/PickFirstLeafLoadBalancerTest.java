@@ -1873,6 +1873,45 @@ public class PickFirstLeafLoadBalancerTest {
   }
 
   @Test
+  public void updateAddresses_identicalSingleAddress_connecting() {
+    // Creating first set of endpoints/addresses
+    List<EquivalentAddressGroup> oldServers = Lists.newArrayList(servers.get(0));
+
+    // Accept Addresses and verify proper connection flow
+    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    verify(mockSubchannel1).start(stateListenerCaptor.capture());
+    SubchannelStateListener stateListener = stateListenerCaptor.getValue();
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    // First connection attempt is successful
+    stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+    fakeClock.forwardTime(CONNECTION_DELAY_INTERVAL_MS, TimeUnit.MILLISECONDS);
+
+    // verify that picker returns no subchannel
+    verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getValue();
+    assertEquals(PickResult.withNoResult(), picker.pickSubchannel(mockArgs));
+
+    // Accept same resolved addresses to update
+    reset(mockHelper);
+    loadBalancer.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
+    fakeClock.forwardTime(CONNECTION_DELAY_INTERVAL_MS, TimeUnit.MILLISECONDS);
+
+    // Verify that no new subchannels were created or started
+    verify(mockSubchannel2, never()).start(any());
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
+
+    // verify that picker hasn't changed via checking mock helper's interactions
+    verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
+    verify(mockHelper, atLeast(0)).getScheduledExecutorService();
+    verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
   public void twoAddressesSeriallyConnect() {
     // Starting first connection attempt
     InOrder inOrder = inOrder(mockHelper, mockSubchannel1, mockSubchannel2, mockSubchannel3);
