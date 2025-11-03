@@ -342,6 +342,9 @@ final class OpenTelemetryTracingModule {
       Baggage baggage = BAGGAGE_KEY.get();
       if (baggage != null) {
         serverCallContext = serverCallContext.with(baggage);
+      } else {
+        logger.log(Level.WARNING, "Server baggage not found which is unexpected, "
+            + "as it is being added unconditionally in filterContext().");
       }
       try (Scope scope = serverCallContext.makeCurrent()) {
         return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
