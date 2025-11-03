@@ -137,9 +137,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
         ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
 
-    if (rawConnectivityState == READY || rawConnectivityState == CONNECTING) {
+    if (rawConnectivityState == READY
+        || (rawConnectivityState == CONNECTING
+          && (!enableHappyEyeballs || addressIndex.isValid()))) {
       // If the previous ready (or connecting) subchannel exists in new address list,
-      // keep this connection and don't create new subchannels
+      // keep this connection and don't create new subchannels. Happy Eyeballs is excluded when
+      // connecting, because it allows multiple attempts simultaneously, thus is fine to start at
+      // the beginning.
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
