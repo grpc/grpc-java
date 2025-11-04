@@ -53,6 +53,7 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
+import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -461,11 +462,10 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         request, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
+    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy,
+        ticker.read() + delayNanos * 2);
     // Lock is held, so the task can't execute before the assignment
-    entry.backoffTimer = scheduledExecutorService.schedule(
-        () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
-    entry.backoffTimer = scheduledExecutorService.schedule(
+    entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
     linkedHashLruCache.cacheAndClean(request, entry);
     return entry;
@@ -474,12 +474,10 @@ final class CachingRlsLbClient {
   private void refreshBackoffEntry(BackoffCacheEntry entry) {
     synchronized (lock) {
       // This checks whether the task has been cancelled and prevents a second execution.
-      if (!entry.backoffTimer.cancel(false)) {
+      if (!entry.scheduledFuture.cancel(false)) {
         // Future was previously cancelled
         return;
       }
-      logger.log(ChannelLogLevel.DEBUG,
-          "[RLS Entry {0}] Calling RLS for transition to pending", entry.request);
       // Cache updated. updateBalancingState() to reattempt picks
       helper.triggerPendingRpcProcessing();
     }
@@ -786,12 +784,15 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
-    private Future<?> backoffTimer;
+    private final long expiryTimeNanos;
+    private Future<?> scheduledFuture;
 
-    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
+    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy,
+        long expiryTimeNanos) {
       super(request);
       this.status = checkNotNull(status, "status");
-      this.backoffPolicy = backoffPolicy;
+      this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
+      this.expiryTimeNanos = expiryTimeNanos;
     }
 
     Status getStatus() {
@@ -804,13 +805,13 @@ final class CachingRlsLbClient {
     }
 
     @Override
-    boolean isExpired(long now) {
-      return backoffTimer.isDone();
+    boolean isExpired(long nowNanos) {
+      return nowNanos > expiryTimeNanos;
     }
 
     @Override
     void cleanup() {
-      backoffTimer.cancel(false);
+      scheduledFuture.cancel(false);
     }
 
     @Override
