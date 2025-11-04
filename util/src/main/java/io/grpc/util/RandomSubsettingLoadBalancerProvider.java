@@ -26,7 +26,7 @@ import java.util.Map;
 
 @Internal
 public final class RandomSubsettingLoadBalancerProvider extends LoadBalancerProvider {
-  private static final String POLICY_NAME = "random_subsetting";
+  private static final String POLICY_NAME = "random_subsetting_experimental";
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
