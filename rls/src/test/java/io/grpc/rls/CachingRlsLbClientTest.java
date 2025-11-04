@@ -167,8 +167,9 @@ public class CachingRlsLbClientTest {
           fakeClock.getScheduledExecutorService());
   private final ChildLoadBalancingPolicy childLbPolicy =
       new ChildLoadBalancingPolicy("target", Collections.<String, Object>emptyMap(), lbProvider);
+  private final FakeHelper fakeHelper = new FakeHelper();
   private final Helper helper =
-      mock(Helper.class, delegatesTo(new FakeHelper()));
+      mock(Helper.class, delegatesTo(fakeHelper));
   private final FakeThrottler fakeThrottler = new FakeThrottler();
   private final LbPolicyConfiguration lbPolicyConfiguration =
       new LbPolicyConfiguration(ROUTE_LOOKUP_CONFIG, null, childLbPolicy);
@@ -341,7 +342,7 @@ public class CachingRlsLbClientTest {
     fakeThrottler.nextResult = true;
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
 
-    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.hasError()).isTrue();
 
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
@@ -407,21 +408,21 @@ public class CachingRlsLbClientTest {
   @Test
   public void get_errorResponseTwice_usesSameBackoffPolicy() throws Exception {
     setUpRlsLbClient();
-    RouteLookupRequest invalidRouteLookupRequest =
-        RouteLookupRequest.create(ImmutableMap.<String, String>of());
-    CachedRouteLookupResponse resp = getInSyncContext(invalidRouteLookupRequest);
+    RlsProtoData.RouteLookupRequestKey invalidRouteLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(ImmutableMap.of());
+    CachedRouteLookupResponse resp = getInSyncContext(invalidRouteLookupRequestKey);
     assertThat(resp.isPending()).isTrue();
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
     assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
         io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
 
-    resp = getInSyncContext(invalidRouteLookupRequest);
+    resp = getInSyncContext(invalidRouteLookupRequestKey);
     assertThat(resp.hasError()).isTrue();
 
     // Backoff time expiry
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
-    resp = getInSyncContext(invalidRouteLookupRequest);
+    resp = getInSyncContext(invalidRouteLookupRequestKey);
     assertThat(resp.isPending()).isTrue();
     // Assert that the same backoff policy is still in effect for the cache entry.
     // The below provider should not get used, so the back off time will still be set to 10ms.
@@ -429,12 +430,12 @@ public class CachingRlsLbClientTest {
     // Gets error again and backed off again
     fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
 
-    resp = getInSyncContext(invalidRouteLookupRequest);
+    resp = getInSyncContext(invalidRouteLookupRequestKey);
     assertThat(resp.hasError()).isTrue();
 
     // Backoff time expiry
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
-    resp = getInSyncContext(invalidRouteLookupRequest);
+    resp = getInSyncContext(invalidRouteLookupRequestKey);
     assertThat(resp.isPending()).isTrue();
 
     rlsServerImpl.routeLookupReason = null;
@@ -472,10 +473,11 @@ public class CachingRlsLbClientTest {
     } catch (InterruptedException e) {
       fakeHelper.server.shutdownNow();
     }
-    RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     // Rls channel will go to TRANSIENT_FAILURE (connection back-off).
-    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
     assertThat(resp.isPending()).isTrue();
     assertThat(rlsChannelState[0]).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
     // Throttle the next rpc call.
@@ -483,9 +485,10 @@ public class CachingRlsLbClientTest {
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
 
     // Cause a cache miss by using a new request key. This will create a back-off Rls cache entry.
-    RouteLookupRequest routeLookupRequest3 = RouteLookupRequest.create(ImmutableMap.of(
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey2 =
+        RlsProtoData.RouteLookupRequestKey.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo2", "method-key", "bar"));
-    resp = getInSyncContext(routeLookupRequest3);
+    resp = getInSyncContext(routeLookupRequestKey2);
 
     assertThat(resp.hasError()).isTrue();
 

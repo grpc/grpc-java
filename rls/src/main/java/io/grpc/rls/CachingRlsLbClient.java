@@ -375,7 +375,8 @@ final class CachingRlsLbClient {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
         }
         return asyncRlsCall(routeLookupRequestKey, cacheEntry instanceof BackoffCacheEntry
-            ? ((BackoffCacheEntry) cacheEntry).backoffPolicy : null);
+            ? ((BackoffCacheEntry) cacheEntry).backoffPolicy : null,
+            RouteLookupRequest.Reason.REASON_MISS);
       }
 
       if (cacheEntry instanceof DataCacheEntry) {
