@@ -69,7 +69,8 @@ public final class HandshakerServiceChannelTest {
 
   @Test
   public void getHandshakerTarget_nullEnvVar() {
-    assertThat(HandshakerServiceChannel.getHandshakerTarget(null)).isEqualTo("metadata.google.internal.:8080");
+    assertThat(HandshakerServiceChannel.getHandshakerTarget(null))
+        .isEqualTo("metadata.google.internal.:8080");
   }
 
   @Test

@@ -16,7 +16,6 @@
 
 package io.grpc.alts;
 
-import com.google.common.base.MoreObjects;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -57,6 +56,7 @@ final class HandshakerServiceChannel {
       return envValue + ":" + ALTS_PORT;
     }
   }
+  
   /** Returns a resource of handshaker service channel for testing only. */
   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {
     return new ChannelResource(handshakerAddress);
