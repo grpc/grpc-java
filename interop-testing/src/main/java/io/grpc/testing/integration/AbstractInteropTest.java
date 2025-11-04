@@ -1625,7 +1625,6 @@ public abstract class AbstractInteropTest {
   }
 
   /** Start a fullDuplexCall which the server will not respond, and verify the deadline expires. */
-  @SuppressWarnings("MissingFail")
   @Test
   public void timeoutOnSleepingServer() throws Exception {
     TestServiceGrpc.TestServiceStub stub =
@@ -1635,15 +1634,10 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = stub.fullDuplexCall(responseObserver);
 
-    StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
+    requestObserver.onNext(StreamingOutputCallRequest.newBuilder()
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[27182])))
-        .build();
-    try {
-      requestObserver.onNext(request);
-    } catch (IllegalStateException expected) {
-      // This can happen if the stream has already been terminated due to deadline exceeded.
-    }
+        .build());
 
     assertTrue(responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     assertEquals(0, responseObserver.getValues().size());
