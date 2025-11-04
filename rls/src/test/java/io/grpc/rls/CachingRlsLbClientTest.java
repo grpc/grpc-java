@@ -317,8 +317,9 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
-  public void get_throttledAndRecover() throws Exception {
+  public void backoffTimerEnd_updatesPicker() throws Exception {
     setUpRlsLbClient();
+    InOrder inOrder = inOrder(helper);
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
     rlsServerImpl.setLookupTable(
@@ -330,22 +331,28 @@ public class CachingRlsLbClientTest {
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
 
     CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequest);
-
     assertThat(resp.hasError()).isTrue();
 
-    // let it pass throttler
-    fakeThrottler.nextResult = false;
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
-    // Assert that Rls LB policy picker was updated.
-    assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
-    // Backoff entry present but marked as not active anymore in cache, so next rpc should not be
-    // backed off.
-    resp = getInSyncContext(routeLookupRequest);
-    assertThat(resp.isPending()).isTrue();
+    // Assert that Rls LB policy picker was updated which picks the fallback target
+    ArgumentCaptor<SubchannelPicker> pickerCaptor = ArgumentCaptor.forClass(SubchannelPicker.class);
+    ArgumentCaptor<ConnectivityState> stateCaptor =
+        ArgumentCaptor.forClass(ConnectivityState.class);
+
+    inOrder.verify(helper, times(3))
+        .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
+    assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
+    assertThat(stateCaptor.getAllValues())
+        .containsExactly(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING,
+            ConnectivityState.CONNECTING);
+    Metadata headers = new Metadata();
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
+    assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(pickResult.getStatus().getDescription()).isEqualTo("fallback not available");
   }
 
   @Test
-  public void get_throttled_backoffBehavior() throws Exception {
+  public void get_throttledTwice_usesSameBackoffpolicy() throws Exception {
     setUpRlsLbClient();
     RouteLookupRequest routeLookupRequest = RouteLookupRequest.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
@@ -361,6 +368,7 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasError()).isTrue();
 
     fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+
     // Assert that the same backoff policy is still in effect for the cache entry.
     // The below provider should not get used, so the back off time will still be set to 10ms.
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(20, TimeUnit.MILLISECONDS);
@@ -368,16 +376,44 @@ public class CachingRlsLbClientTest {
     resp = getInSyncContext(routeLookupRequest);
     assertThat(resp.hasError()).isTrue();
 
-    fakeClock.forwardTime(9, TimeUnit.MILLISECONDS);
-    resp = getInSyncContext(routeLookupRequest);
-    assertThat(resp.hasError()).isTrue();
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
 
-    fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
-    // Assert that Rls LB policy picker was updated.
-    assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
-    // Backoff entry marked as not active anymore in cache, so next rpc should not be backed off.
+    // Backoff entry's backoff timer has gone off, so next rpc should not be backed off.
     fakeThrottler.nextResult = false;
     resp = getInSyncContext(routeLookupRequest);
+
+    assertThat(resp.isPending()).isTrue();
+  }
+
+  @Test
+  public void get_errorResponseTwice_usesSameBackoffPolicy() throws Exception {
+    setUpRlsLbClient();
+    RouteLookupRequest invalidRouteLookupRequest =
+        RouteLookupRequest.create(ImmutableMap.<String, String>of());
+    CachedRouteLookupResponse resp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(resp.hasError()).isTrue();
+
+    // Backoff time expiry
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(resp.isPending()).isTrue();
+    // Assert that the same backoff policy is still in effect for the cache entry.
+    // The below provider should not get used, so the back off time will still be set to 10ms.
+    fakeBackoffProvider.nextPolicy = createBackoffPolicy(20, TimeUnit.MILLISECONDS);
+    // Gets error again and backed off again
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(invalidRouteLookupRequest);
+    assertThat(resp.hasError()).isTrue();
+
+    // Backoff time expiry
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(invalidRouteLookupRequest);
     assertThat(resp.isPending()).isTrue();
   }
 
@@ -385,6 +421,7 @@ public class CachingRlsLbClientTest {
   public void controlPlaneTransientToReady_backOffEntriesRemovedAndPickerUpdated()
       throws Exception {
     setUpRlsLbClient();
+    InOrder inOrder = inOrder(helper);
     final ConnectivityState[] rlsChannelState = new ConnectivityState[1];
     Runnable channelStateListener = new Runnable() {
       @Override
@@ -426,17 +463,32 @@ public class CachingRlsLbClientTest {
     assertThat(resp.hasError()).isTrue();
 
     fakeHelper.createServerAndRegister("service1");
-    // Wait for Rls subchannel back-off expiry and its moving to READY
+    // Wait for Rls control plane channel back-off expiry and its moving to READY
     synchronized (channelStateListener) {
-      channelStateListener.wait(5000);
+      channelStateListener.wait(2000);
     }
     assertThat(rlsChannelState[0]).isEqualTo(ConnectivityState.READY);
     final ObjectPool<? extends Executor> defaultExecutorPool =
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
     AtomicBoolean isSuccess = new AtomicBoolean(false);
     ((ExecutorService) defaultExecutorPool.getObject()).submit(() -> {
-      // Assert that Rls LB policy picker was updated.
-      assertThat(fakeHelper.lastPicker.toString()).isEqualTo("RlsPicker{target=service1}");
+      // Assert that Rls LB policy picker was updated which picks the fallback target
+      ArgumentCaptor<SubchannelPicker> pickerCaptor =
+          ArgumentCaptor.forClass(SubchannelPicker.class);
+      ArgumentCaptor<ConnectivityState> stateCaptor =
+          ArgumentCaptor.forClass(ConnectivityState.class);
+
+      inOrder.verify(helper, times(5))
+          .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
+      assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
+      assertThat(stateCaptor.getAllValues())
+          .containsExactly(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING,
+              ConnectivityState.CONNECTING, ConnectivityState.CONNECTING,
+              ConnectivityState.CONNECTING);
+      Metadata headers = new Metadata();
+      PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
+      assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+      assertThat(pickResult.getStatus().getDescription()).isEqualTo("fallback not available");
       isSuccess.set(true);
     }).get();
     assertThat(isSuccess.get()).isTrue();
@@ -986,7 +1038,6 @@ public class CachingRlsLbClientTest {
 
   private final class FakeHelper extends Helper {
 
-    SubchannelPicker lastPicker;
     Server server;
     ManagedChannel oobChannel;
 
@@ -1049,7 +1100,6 @@ public class CachingRlsLbClientTest {
     @Override
     public void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
-      lastPicker = newPicker;
     }
 
     @Override

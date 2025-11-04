@@ -53,7 +53,6 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -364,7 +363,8 @@ final class CachingRlsLbClient {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(request);
       if (cacheEntry == null
-          || cacheEntry instanceof BackoffCacheEntry && cacheEntry.isExpired(ticker.read())) {
+          || (cacheEntry instanceof BackoffCacheEntry
+              && !((BackoffCacheEntry) cacheEntry).isInBackoffPeriod())) {
         PendingCacheEntry pendingEntry = pendingCallCache.get(request);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
@@ -802,6 +802,10 @@ final class CachingRlsLbClient {
     @Override
     int getSizeBytes() {
       return OBJ_OVERHEAD_B * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
+    }
+
+    boolean isInBackoffPeriod() {
+      return !scheduledFuture.isDone();
     }
 
     @Override
