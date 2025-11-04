@@ -439,7 +439,8 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         request, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy);
+    BackoffCacheEntry entry = new BackoffCacheEntry(request, status, backoffPolicy,
+        ticker.read() + delayNanos * 2);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
@@ -762,12 +763,15 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
+    private final long expiryTimeNanos;
     private Future<?> scheduledFuture;
 
-    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy) {
+    BackoffCacheEntry(RouteLookupRequest request, Status status, BackoffPolicy backoffPolicy,
+        long expiryTimeNanos) {
       super(request);
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
+      this.expiryTimeNanos = expiryTimeNanos;
     }
 
     Status getStatus() {
@@ -780,8 +784,8 @@ final class CachingRlsLbClient {
     }
 
     @Override
-    boolean isExpired(long now) {
-      return scheduledFuture.isDone();
+    boolean isExpired(long nowNanos) {
+      return nowNanos > expiryTimeNanos;
     }
 
     @Override
