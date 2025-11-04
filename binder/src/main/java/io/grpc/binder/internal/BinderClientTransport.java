@@ -25,6 +25,8 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Process;
+import androidx.annotation.BinderThread;
+import androidx.annotation.MainThread;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -72,6 +74,9 @@ public final class BinderClientTransport extends BinderTransport
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
 
+  @GuardedBy("this")
+  private final ClientHandshake handshake;
+
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
 
@@ -114,9 +119,10 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+    this.handshake =
+        factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new V2ClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
@@ -136,7 +142,7 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   public synchronized void onBound(IBinder binder) {
-    sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+    handshake.onBound(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
   }
 
   @Override
@@ -340,10 +346,11 @@ public final class BinderClientTransport extends BinderTransport
           Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
       return;
     }
+    handshake.handleSetupTransport();
+  }
 
-    int remoteUid = Binder.getCallingUid();
-    restrictIncomingBinderToCallsFrom(remoteUid);
-    attributes = setSecurityAttrs(attributes, remoteUid);
+  @GuardedBy("this")
+  private void checkServerAuthorization(int remoteUid) {
     ListenableFuture<Status> authResultFuture = register(checkServerAuthorizationAsync(remoteUid));
     Futures.addCallback(
         authResultFuture,
@@ -376,7 +383,61 @@ public final class BinderClientTransport extends BinderTransport
       shutdownInternal(authorization, true);
       return;
     }
+    handshake.onServerAuthorizationOk();
+  }
 
+  private final class V2ClientHandshake implements ClientHandshake {
+
+    private OneWayBinderProxy endpointBinder;
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy endpointBinder) {
+      this.endpointBinder = endpointBinder;
+      Futures.addCallback(
+          Futures.submit(serviceBinding::getConnectedServiceInfo, offloadExecutor),
+          new FutureCallback<ServiceInfo>() {
+            @Override
+            public void onSuccess(ServiceInfo result) {
+              synchronized (BinderClientTransport.this) {
+                onConnectedServiceInfo(result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (BinderClientTransport.this) {
+                shutdownInternal(Status.fromThrowable(t), true);
+              }
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void onConnectedServiceInfo(ServiceInfo serviceInfo) {
+      if (!inState(TransportState.SETUP)) {
+        return;
+      }
+      attributes = setSecurityAttrs(attributes, serviceInfo.applicationInfo.uid);
+      checkServerAuthorization(serviceInfo.applicationInfo.uid);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this")
+    public void onServerAuthorizationOk() {
+      sendSetupTransaction(endpointBinder);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport() {
+      onHandshakeComplete();
+    }
+  }
+
+  @GuardedBy("this")
+  private void onHandshakeComplete() {
     setState(TransportState.READY);
     attributes = clientTransportListener.filterTransport(attributes);
     clientTransportListener.transportReady();
@@ -395,6 +456,52 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   protected void handlePingResponse(Parcel parcel) {
     pingTracker.onPingResponse(parcel.readInt());
+  }
+
+  /**
+   * An abstract implementation of the client's connection handshake.
+   *
+   * <p>Supports a clean migration away from the legacy approach, one client at a time.
+   */
+  private interface ClientHandshake {
+    /**
+     * Notifies the implementation that the binding has succeeded and we are now connected to the
+     * server's "endpoint" which can be reached at 'endpointBinder'.
+     */
+    @MainThread
+    void onBound(OneWayBinderProxy endpointBinder);
+
+    /** Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction. */
+    @BinderThread
+    void handleSetupTransport();
+
+    /** Notifies the implementation that the SecurityPolicy check of the server succeeded. */
+    void onServerAuthorizationOk();
+  }
+
+  private final class LegacyClientHandshake implements ClientHandshake {
+    @Override
+    @MainThread
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy binder) {
+      sendSetupTransaction(binder);
+    }
+
+    @Override
+    @BinderThread
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport() {
+      int remoteUid = Binder.getCallingUid();
+      restrictIncomingBinderToCallsFrom(remoteUid);
+      attributes = setSecurityAttrs(attributes, remoteUid);
+      checkServerAuthorization(remoteUid);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onServerAuthorizationOk() {
+      onHandshakeComplete();
+    }
   }
 
   private static ClientStream newFailingClientStream(
