@@ -68,8 +68,10 @@ public final class BinderServerTransport extends BinderTransport implements Serv
     // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
     // No need to handle failure here because if 'callbackBinder' is already dead, we'll notice it
     // again in start() when we send the first transaction.
-    transport.setOutgoingBinder(
-        OneWayBinderProxy.wrap(callbackBinder, transport.getScheduledExecutorService()));
+    synchronized (transport) {
+      transport.setOutgoingBinder(
+          OneWayBinderProxy.wrap(callbackBinder, transport.getScheduledExecutorService()));
+    }
     return transport;
   }
 
