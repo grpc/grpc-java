@@ -57,7 +57,8 @@ public class LoadBalancerRegistryTest {
         "io.grpc.util.OutlierDetectionLoadBalancerProvider");
     assertThat(roundRobin.getPriority()).isEqualTo(5);
 
-    LoadBalancerProvider randomSubsetting = defaultRegistry.getProvider("random_subsetting");
+    LoadBalancerProvider randomSubsetting = defaultRegistry.getProvider(
+        "random_subsetting_experimental");
     assertThat(randomSubsetting.getClass().getName()).isEqualTo(
         "io.grpc.util.RandomSubsettingLoadBalancerProvider");
     assertThat(randomSubsetting.getPriority()).isEqualTo(5);
