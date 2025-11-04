@@ -61,12 +61,14 @@ public class RlsProtoConvertersTest {
     Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
         new RouteLookupRequestConverter().reverse();
     RlsProtoData.RouteLookupRequest requestObject =
-        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"));
+        RlsProtoData.RouteLookupRequest.create(ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_MISS);
 
     RouteLookupRequest proto = converter.convert(requestObject);
 
     assertThat(proto.getTargetType()).isEqualTo("grpc");
     assertThat(proto.getKeyMapMap()).containsExactly("key1", "val1");
+    assertThat(proto.getReason()).isEqualTo(RouteLookupRequest.Reason.REASON_MISS);
   }
 
   @Test
