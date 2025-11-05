@@ -25,8 +25,11 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Process;
+
 import androidx.annotation.BinderThread;
 import androidx.annotation.MainThread;
+
+import com.google.common.base.Preconditions;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -60,6 +63,8 @@ import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
@@ -79,12 +84,13 @@ public final class BinderClientTransport extends BinderTransport
   private final ClientHandshake handshake;
 
   /** Number of ongoing calls which keep this transport "in-use". */
-  @GuardedBy("this")
-  private int numInUseStreams;
+  private final AtomicInteger numInUseStreams;
 
   /** Last in-use state that was reported to the listener */
-  @GuardedBy("this")
-  private boolean listenerInUse;
+  private final AtomicBoolean listenerInUse;
+
+  /** Synchronizes transport listener callbacks */
+  private final Object listenerNotifyLock;
 
   private final long readyTimeoutMillis;
   private final PingTracker pingTracker;
@@ -125,11 +131,11 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
-
     this.handshake =
         factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new V2ClientHandshake();
-    numInUseStreams = 0;
-    listenerInUse = false;
+    this.numInUseStreams = new AtomicInteger();
+    this.listenerInUse = new AtomicBoolean();
+    this.listenerNotifyLock = new Object();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
     serviceBinding =
         new ServiceBinding(
@@ -273,7 +279,7 @@ public final class BinderClientTransport extends BinderTransport
       return newFailingClientStream(failure, attributes, headers, tracers);
     }
 
-    updateInUseStreamsIfNeed(inbound.countsForInUse(), 1);
+    updateInUseStreamsCountIfNeeded(inbound.countsForInUse(), 1);
     Outbound.ClientOutbound outbound =
         new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
     if (method.getType().clientSendsOneMessage()) {
@@ -285,7 +291,7 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   protected void unregisterInbound(Inbound<?> inbound) {
-    updateInUseStreamsIfNeed(inbound.countsForInUse(), -1);
+    updateInUseStreamsCountIfNeeded(inbound.countsForInUse(), -1);
     super.unregisterInbound(inbound);
   }
 
@@ -315,9 +321,8 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   void notifyTerminated() {
-    if(numInUseStreams > 0) {
-      numInUseStreams = 0;
-      listenerInUse = false;
+    if (numInUseStreams.getAndSet(0) > 0) {
+      listenerInUse.set(false);
       clientTransportListener.transportInUse(false);
     }
     if (readyTimeoutFuture != null) {
@@ -458,23 +463,61 @@ public final class BinderClientTransport extends BinderTransport
         Status.INTERNAL.withDescription("Could not evaluate SecurityPolicy").withCause(t), true);
   }
 
-  /** Updates in-use-stream count and notifies listener only on transitions between 0 and >0 */
-  private synchronized void updateInUseStreamsIfNeed(boolean countsForInUse, int delta) {
-    if(!countsForInUse) {
+  /**
+   * Updates in-use stream count and notifies listener only on transitions between 0 and >0, without
+   * acquiring the transport lock.
+   */
+  private void updateInUseStreamsCountIfNeeded(boolean countsForInUse, int delta) {
+    Preconditions.checkArgument(delta == -1 || delta == 1, "stream count delta must be -1 or +1");
+    if (!countsForInUse) {
       return;
     }
+    int prev, next;
 
-    numInUseStreams += delta;
-    if(numInUseStreams < 0) {
-      // Defensive: prevent negative due to unexpected double-decrement
-      numInUseStreams = 0;
+    if (delta > 0) {
+      next = numInUseStreams.incrementAndGet();
+      prev = next - 1;
+    } else {
+      prev = numInUseStreams.get();
+      int updated;
+
+      while (true) {
+        int current = prev;
+        int newValue = current > 0 ? current - 1 : 0;
+        if (numInUseStreams.compareAndSet(current, newValue)) {
+          updated = newValue;
+          break;
+        }
+        prev = numInUseStreams.get();
+      }
+      next = updated;
     }
 
-    boolean nowInUseStream = numInUseStreams > 0;
-    if(nowInUseStream != listenerInUse) {
-      listenerInUse = nowInUseStream;
-      clientTransportListener.transportInUse(nowInUseStream);
+    boolean prevInUse = prev > 0;
+    boolean nextInUse = next > 0;
+
+    if (prevInUse != nextInUse) {
+      if (listenerInUse.compareAndSet(prevInUse, nextInUse)) {
+        scheduleTransportInUseNotification(nextInUse);
+      }
     }
+  }
+
+  private void scheduleTransportInUseNotification(final boolean inUse) {
+    getScheduledExecutorService()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                // Provide external synchronization as required by Listener contract,
+                // without taking the transport lock to avoid potential deadlocks.
+                synchronized (listenerNotifyLock) {
+                  if (listenerInUse.get() == inUse) {
+                    clientTransportListener.transportInUse(inUse);
+                  }
+                }
+              }
+            });
   }
 
   @GuardedBy("this")
