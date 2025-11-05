@@ -530,7 +530,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseRouteAction_withCluster_autoHostRewriteEnabled() {
+  public void parseRouteAction_withCluster_autoHostRewrite() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setCluster("cluster-foo")
@@ -543,22 +543,6 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
     assertThat(struct.getStruct().autoHostRewrite()).isTrue();
-  }
-
-  @Test
-  public void parseRouteAction_withCluster_flagDisabled_autoHostRewriteNotEnabled() {
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setCluster("cluster-foo")
-            .setAutoHostRewrite(BoolValue.of(true))
-            .build();
-    StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-            ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
-    assertThat(struct.getErrorDetail()).isNull();
-    assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
-    assertThat(struct.getStruct().weightedClusters()).isNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
   }
 
   @Test
@@ -589,7 +573,7 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void parseRouteAction_withWeightedCluster_autoHostRewriteEnabled() {
+  public void parseRouteAction_withWeightedCluster_autoHostRewrite() {
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
             .setWeightedClusters(
@@ -614,34 +598,6 @@ public class GrpcXdsClientImplDataTest {
         ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
         ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
     assertThat(struct.getStruct().autoHostRewrite()).isTrue();
-  }
-
-  @Test
-  public void parseRouteAction_withWeightedCluster_flagDisabled_autoHostRewriteDisabled() {
-    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-            .setWeightedClusters(
-                WeightedCluster.newBuilder()
-                    .addClusters(
-                        WeightedCluster.ClusterWeight
-                            .newBuilder()
-                            .setName("cluster-foo")
-                            .setWeight(UInt32Value.newBuilder().setValue(30)))
-                    .addClusters(WeightedCluster.ClusterWeight
-                        .newBuilder()
-                        .setName("cluster-bar")
-                        .setWeight(UInt32Value.newBuilder().setValue(70))))
-            .setAutoHostRewrite(BoolValue.of(true))
-            .build();
-    StructOrError<RouteAction> struct =
-        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-            ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
-    assertThat(struct.getErrorDetail()).isNull();
-    assertThat(struct.getStruct().cluster()).isNull();
-    assertThat(struct.getStruct().weightedClusters()).containsExactly(
-        ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
-        ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
   }
 
   @Test

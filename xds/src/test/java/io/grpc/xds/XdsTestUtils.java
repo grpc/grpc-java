@@ -86,6 +86,33 @@ public class XdsTestUtils {
           + ".HttpConnectionManager";
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
+  static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
+      new Bootstrapper.ServerInfo() {
+    @Override
+    public String target() {
+      return null;
+    }
+
+    @Override
+    public Object implSpecificConfig() {
+      return null;
+    }
+
+    @Override
+    public boolean ignoreResourceDeletion() {
+      return false;
+    }
+
+    @Override
+    public boolean isTrustedXdsServer() {
+      return false;
+    }
+
+    @Override
+    public boolean resourceTimerIsTransientError() {
+      return false;
+    }
+  };
 
   static BindableService createLrsService(AtomicBoolean lrsEnded,
                                           Queue<LrsRpcCall> loadReportCalls) {
@@ -247,8 +274,8 @@ public class XdsTestUtils {
 
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
-    Bootstrapper.ServerInfo serverInfo = null;
-    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
+    XdsResourceType.Args args = new XdsResourceType.Args(
+        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
@@ -268,7 +295,7 @@ public class XdsTestUtils {
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false, null)
+        CLUSTER_NAME, EDS_NAME, EMPTY_BOOTSTRAPPER_SERVER_INFO, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));

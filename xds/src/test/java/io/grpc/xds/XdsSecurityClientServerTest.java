@@ -77,7 +77,6 @@ import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
-import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;

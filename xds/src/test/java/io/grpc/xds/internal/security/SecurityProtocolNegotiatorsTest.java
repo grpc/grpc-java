@@ -54,7 +54,6 @@ import io.grpc.xds.internal.XdsInternalAttributes;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityHandler;
 import io.grpc.xds.internal.security.SecurityProtocolNegotiators.ClientSecurityProtocolNegotiator;
 import io.grpc.xds.internal.security.certprovider.CommonCertProviderTestUtils;
-import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
