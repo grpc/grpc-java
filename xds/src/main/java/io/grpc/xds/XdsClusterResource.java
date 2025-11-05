@@ -64,9 +64,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           ? Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_ENABLE_LEAST_REQUEST"))
           : Boolean.parseBoolean(
               System.getProperty("io.grpc.xds.experimentalEnableLeastRequest", "true"));
-  @VisibleForTesting
-  public static boolean enableSystemRootCerts =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
   static boolean isEnabledXdsHttpConnect =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_HTTP_CONNECT", false);
 
@@ -486,8 +483,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     }
     String rootCaInstanceName = getRootCertInstanceName(commonTlsContext);
     if (rootCaInstanceName == null) {
-      if (!server && (!enableSystemRootCerts
-          || !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext))) {
+      if (!server && !CommonTlsContextUtil.isUsingSystemRootCerts(commonTlsContext)) {
         throw new ResourceInvalidException(
             "ca_certificate_provider_instance or system_root_certs is required in "
                 + "upstream-tls-context");

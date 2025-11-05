@@ -475,8 +475,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
       case CLUSTER:
         return StructOrError.fromStruct(RouteAction.forCluster(
             proto.getCluster(), hashPolicies, timeoutNano, retryPolicy,
-            GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-            && args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
+            args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
       case CLUSTER_HEADER:
         return null;
       case WEIGHTED_CLUSTERS:
@@ -510,8 +509,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy,
-            GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-            && args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
+            args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
       case CLUSTER_SPECIFIER_PLUGIN:
         if (enableRouteLookup) {
           String pluginName = proto.getClusterSpecifierPlugin();
@@ -527,8 +525,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           NamedPluginConfig namedPluginConfig = NamedPluginConfig.create(pluginName, pluginConfig);
           return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forClusterSpecifierPlugin(
               namedPluginConfig, hashPolicies, timeoutNano, retryPolicy,
-              GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-              && args.getServerInfo().isTrustedXdsServer()
+              args.getServerInfo().isTrustedXdsServer()
                   && proto.getAutoHostRewrite().getValue()));
         } else {
           return null;

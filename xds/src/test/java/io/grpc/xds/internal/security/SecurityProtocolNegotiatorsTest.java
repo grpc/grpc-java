@@ -151,32 +151,27 @@ public class SecurityProtocolNegotiatorsTest {
 
   @Test
   public void clientSecurityProtocolNegotiator_autoHostSni_hostnamePassedToClientSecurityHandlr() {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-              CommonTlsContext.newBuilder().build(), "", true, false);
-      ClientSecurityProtocolNegotiator pn =
-          new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
-      GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
-      ChannelLogger logger = mock(ChannelLogger.class);
-      doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
-      when(mockHandler.getNegotiationLogger()).thenReturn(logger);
-      TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
-      when(mockHandler.getEagAttributes())
-          .thenReturn(
-              Attributes.newBuilder()
-                  .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
-                      new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
-                  .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
-                  .build());
-      ChannelHandler newHandler = pn.newHandler(mockHandler);
-      assertThat(newHandler).isNotNull();
-      assertThat(newHandler).isInstanceOf(ClientSecurityHandler.class);
-      assertThat(((ClientSecurityHandler) newHandler).getSni()).isEqualTo(FAKE_AUTHORITY);
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+            CommonTlsContext.newBuilder().build(), "", true, false);
+    ClientSecurityProtocolNegotiator pn =
+        new ClientSecurityProtocolNegotiator(InternalProtocolNegotiators.plaintext());
+    GrpcHttp2ConnectionHandler mockHandler = mock(GrpcHttp2ConnectionHandler.class);
+    ChannelLogger logger = mock(ChannelLogger.class);
+    doNothing().when(logger).log(any(ChannelLogLevel.class), anyString());
+    when(mockHandler.getNegotiationLogger()).thenReturn(logger);
+    TlsContextManager mockTlsContextManager = mock(TlsContextManager.class);
+    when(mockHandler.getEagAttributes())
+        .thenReturn(
+            Attributes.newBuilder()
+                .set(SecurityProtocolNegotiators.ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER,
+                    new SslContextProviderSupplier(upstreamTlsContext, mockTlsContextManager))
+                .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, FAKE_AUTHORITY)
+                .build());
+    ChannelHandler newHandler = pn.newHandler(mockHandler);
+    assertThat(newHandler).isNotNull();
+    assertThat(newHandler).isInstanceOf(ClientSecurityHandler.class);
+    assertThat(((ClientSecurityHandler) newHandler).getSni()).isEqualTo(FAKE_AUTHORITY);
   }
 
   @Test
@@ -235,110 +230,71 @@ public class SecurityProtocolNegotiatorsTest {
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsTrue_usesEndpointHostname() {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
-      SslContextProviderSupplier sslContextProviderSupplier =
-          new SslContextProviderSupplier(upstreamTlsContext,
-              new TlsContextManagerImpl(bootstrapInfoForClient));
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true, "", true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
 
-      ClientSecurityHandler clientSecurityHandler =
-          new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
-      assertThat(clientSecurityHandler.getSni()).isEqualTo(HOSTNAME);
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(HOSTNAME);
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSni_endpointHostnameIsEmpty_usesSniFromUtc() {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
-      SslContextProviderSupplier sslContextProviderSupplier =
-          new SslContextProviderSupplier(upstreamTlsContext,
-              new TlsContextManagerImpl(bootstrapInfoForClient));
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
 
-      ClientSecurityHandler clientSecurityHandler =
-          new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, "");
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, "");
 
-      assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSni_endpointHostnameIsNull_usesSniFromUtc() {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
-      SslContextProviderSupplier sslContextProviderSupplier =
-          new SslContextProviderSupplier(upstreamTlsContext,
-              new TlsContextManagerImpl(bootstrapInfoForClient));
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        "google_cloud_private_spiffe-client", true, SNI_IN_UTC, true);
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
 
-      ClientSecurityHandler clientSecurityHandler =
-          new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, null);
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, null);
 
-      assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
   }
 
   @Test
   public void sniInClientSecurityHandler_autoHostSniIsFalse_usesSniFromUpstreamTlsContext() {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-          "google_cloud_private_spiffe-client", true, SNI_IN_UTC, false);
-      SslContextProviderSupplier sslContextProviderSupplier =
-          new SslContextProviderSupplier(upstreamTlsContext,
-              new TlsContextManagerImpl(bootstrapInfoForClient));
-
-      ClientSecurityHandler clientSecurityHandler =
-          new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
-
-      assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
-  }
-
-  @Test
-  public void sniFeatureNotEnabled_usesChannelAuthorityForSni() {
-    CertificateUtils.isXdsSniEnabled = false;
     Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-            .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-                    CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-    UpstreamTlsContext upstreamTlsContext =
-            CommonTlsContextTestsUtil
-                .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
+        "google_cloud_private_spiffe-client", true, SNI_IN_UTC, false);
     SslContextProviderSupplier sslContextProviderSupplier =
-            new SslContextProviderSupplier(upstreamTlsContext,
-                    new TlsContextManagerImpl(bootstrapInfoForClient));
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
 
     ClientSecurityHandler clientSecurityHandler =
-            new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
-    assertThat(clientSecurityHandler.getSni()).isEqualTo(FAKE_AUTHORITY);
+    assertThat(clientSecurityHandler.getSni()).isEqualTo(SNI_IN_UTC);
   }
 
   @Test
@@ -504,59 +460,54 @@ public class SecurityProtocolNegotiatorsTest {
   @Test
   public void clientSecurityProtocolNegotiatorNewHandler_fireProtocolNegotiationEvent()
           throws InterruptedException, TimeoutException, ExecutionException {
-    CertificateUtils.isXdsSniEnabled = true;
-    try {
-      FakeClock executor = new FakeClock();
-      CommonCertProviderTestUtils.register(executor);
-      Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-          .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-              CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-      UpstreamTlsContext upstreamTlsContext =
-          CommonTlsContextTestsUtil
-              .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
+    FakeClock executor = new FakeClock();
+    CommonCertProviderTestUtils.register(executor);
+    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
+        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
+            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
+    UpstreamTlsContext upstreamTlsContext =
+        CommonTlsContextTestsUtil
+            .buildUpstreamTlsContext("google_cloud_private_spiffe-client", true);
 
-      SslContextProviderSupplier sslContextProviderSupplier =
-          new SslContextProviderSupplier(upstreamTlsContext,
-              new TlsContextManagerImpl(bootstrapInfoForClient));
-      ClientSecurityHandler clientSecurityHandler =
-          new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
+    SslContextProviderSupplier sslContextProviderSupplier =
+        new SslContextProviderSupplier(upstreamTlsContext,
+            new TlsContextManagerImpl(bootstrapInfoForClient));
+    ClientSecurityHandler clientSecurityHandler =
+        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
 
-      pipeline.addLast(clientSecurityHandler);
-      channelHandlerCtx = pipeline.context(clientSecurityHandler);
-      assertNotNull(channelHandlerCtx); // non-null since we just added it
+    pipeline.addLast(clientSecurityHandler);
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
+    assertNotNull(channelHandlerCtx); // non-null since we just added it
 
-      // kick off protocol negotiation.
-      pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
-      final SettableFuture<Object> future = SettableFuture.create();
-      sslContextProviderSupplier
-          .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
-            @Override
-            public void updateSslContextAndExtendedX509TrustManager(
-                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
-              future.set(sslContextAndTm);
-            }
+    // kick off protocol negotiation.
+    pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
+    final SettableFuture<Object> future = SettableFuture.create();
+    sslContextProviderSupplier
+        .updateSslContext(new SslContextProvider.Callback(MoreExecutors.directExecutor()) {
+          @Override
+          public void updateSslContextAndExtendedX509TrustManager(
+              AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
+            future.set(sslContextAndTm);
+          }
 
-            @Override
-            protected void onException(Throwable throwable) {
-              future.set(throwable);
-            }
-          }, false);
-      executor.runDueTasks();
-      channel.runPendingTasks(); // need this for tasks to execute on eventLoop
-      Object fromFuture = future.get(5, TimeUnit.SECONDS);
-      assertThat(fromFuture).isInstanceOf(AbstractMap.SimpleImmutableEntry.class);
-      channel.runPendingTasks();
-      channelHandlerCtx = pipeline.context(clientSecurityHandler);
-      assertThat(channelHandlerCtx).isNull();
-      Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
+          @Override
+          protected void onException(Throwable throwable) {
+            future.set(throwable);
+          }
+        }, false);
+    executor.runDueTasks();
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    Object fromFuture = future.get(5, TimeUnit.SECONDS);
+    assertThat(fromFuture).isInstanceOf(AbstractMap.SimpleImmutableEntry.class);
+    channel.runPendingTasks();
+    channelHandlerCtx = pipeline.context(clientSecurityHandler);
+    assertThat(channelHandlerCtx).isNull();
+    Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
 
-      pipeline.fireUserEventTriggered(sslEvent);
-      channel.runPendingTasks(); // need this for tasks to execute on eventLoop
-      assertTrue(channel.isOpen());
-      CommonCertProviderTestUtils.register0();
-    } finally {
-      CertificateUtils.isXdsSniEnabled = false;
-    }
+    pipeline.fireUserEventTriggered(sslEvent);
+    channel.runPendingTasks(); // need this for tasks to execute on eventLoop
+    assertTrue(channel.isOpen());
+    CommonCertProviderTestUtils.register0();
   }
 
   @Test

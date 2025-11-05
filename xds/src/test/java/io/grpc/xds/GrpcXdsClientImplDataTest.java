@@ -172,26 +172,21 @@ public class GrpcXdsClientImplDataTest {
 
   private static final ServerInfo LRS_SERVER_INFO =
       ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
-  private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
-      "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
 
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private boolean originalEnableRouteLookup;
   private boolean originalEnableLeastRequest;
-  private boolean originalEnableUseSystemRootCerts;
 
   @Before
   public void setUp() {
     originalEnableRouteLookup = XdsRouteConfigureResource.enableRouteLookup;
     originalEnableLeastRequest = XdsClusterResource.enableLeastRequest;
-    originalEnableUseSystemRootCerts = XdsClusterResource.enableSystemRootCerts;
   }
 
   @After
   public void tearDown() {
     XdsRouteConfigureResource.enableRouteLookup = originalEnableRouteLookup;
     XdsClusterResource.enableLeastRequest = originalEnableLeastRequest;
-    XdsClusterResource.enableSystemRootCerts = originalEnableUseSystemRootCerts;
   }
 
   @Test
@@ -536,23 +531,18 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseRouteAction_withCluster_autoHostRewriteEnabled() {
-    System.setProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, "true");
-    try {
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-          io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-              .setCluster("cluster-foo")
-              .setAutoHostRewrite(BoolValue.of(true))
-              .build();
-      StructOrError<RouteAction> struct =
-          XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-              ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
-      assertThat(struct.getErrorDetail()).isNull();
-      assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
-      assertThat(struct.getStruct().weightedClusters()).isNull();
-      assertThat(struct.getStruct().autoHostRewrite()).isTrue();
-    } finally {
-      System.clearProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE);
-    }
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setCluster("cluster-foo")
+            .setAutoHostRewrite(BoolValue.of(true))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
+    assertThat(struct.getStruct().weightedClusters()).isNull();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -600,35 +590,30 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseRouteAction_withWeightedCluster_autoHostRewriteEnabled() {
-    System.setProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, "true");
-    try {
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-          io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-              .setWeightedClusters(
-                  WeightedCluster.newBuilder()
-                      .addClusters(
-                          WeightedCluster.ClusterWeight
-                              .newBuilder()
-                              .setName("cluster-foo")
-                              .setWeight(UInt32Value.newBuilder().setValue(30)))
-                      .addClusters(WeightedCluster.ClusterWeight
-                          .newBuilder()
-                          .setName("cluster-bar")
-                          .setWeight(UInt32Value.newBuilder().setValue(70))))
-              .setAutoHostRewrite(BoolValue.of(true))
-              .build();
-      StructOrError<RouteAction> struct =
-          XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-              ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
-      assertThat(struct.getErrorDetail()).isNull();
-      assertThat(struct.getStruct().cluster()).isNull();
-      assertThat(struct.getStruct().weightedClusters()).containsExactly(
-          ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
-          ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
-      assertThat(struct.getStruct().autoHostRewrite()).isTrue();
-    } finally {
-      System.clearProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE);
-    }
+    io.envoyproxy.envoy.config.route.v3.RouteAction proto =
+        io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
+            .setWeightedClusters(
+                WeightedCluster.newBuilder()
+                    .addClusters(
+                        WeightedCluster.ClusterWeight
+                            .newBuilder()
+                            .setName("cluster-foo")
+                            .setWeight(UInt32Value.newBuilder().setValue(30)))
+                    .addClusters(WeightedCluster.ClusterWeight
+                        .newBuilder()
+                        .setName("cluster-bar")
+                        .setWeight(UInt32Value.newBuilder().setValue(70))))
+            .setAutoHostRewrite(BoolValue.of(true))
+            .build();
+    StructOrError<RouteAction> struct =
+        XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
+            ImmutableMap.of(), ImmutableSet.of(), getXdsResourceTypeArgs(true));
+    assertThat(struct.getErrorDetail()).isNull();
+    assertThat(struct.getStruct().cluster()).isNull();
+    assertThat(struct.getStruct().weightedClusters()).containsExactly(
+        ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
+        ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -1004,28 +989,6 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void parseRouteAction_clusterSpecifier_autoHostRewriteEnabled() {
-    System.setProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, "true");
-    try {
-      XdsRouteConfigureResource.enableRouteLookup = true;
-      io.envoyproxy.envoy.config.route.v3.RouteAction proto =
-          io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
-              .setClusterSpecifierPlugin(CLUSTER_SPECIFIER_PLUGIN.name())
-              .setAutoHostRewrite(BoolValue.of(true))
-              .build();
-      StructOrError<RouteAction> struct =
-          XdsRouteConfigureResource.parseRouteAction(proto, filterRegistry,
-              ImmutableMap.of(CLUSTER_SPECIFIER_PLUGIN.name(), RlsPluginConfig.create(
-                  ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of(),
-              getXdsResourceTypeArgs(true));
-      assertThat(struct.getStruct()).isNotNull();
-      assertThat(struct.getStruct().autoHostRewrite()).isTrue();
-    } finally {
-      System.clearProperty(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE);
-    }
-  }
-
-  @Test
-  public void parseRouteAction_clusterSpecifier_flagDisabled_autoHostRewriteDisabled() {
     XdsRouteConfigureResource.enableRouteLookup = true;
     io.envoyproxy.envoy.config.route.v3.RouteAction proto =
         io.envoyproxy.envoy.config.route.v3.RouteAction.newBuilder()
@@ -1038,7 +1001,7 @@ public class GrpcXdsClientImplDataTest {
                 ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of(),
             getXdsResourceTypeArgs(true));
     assertThat(struct.getStruct()).isNotNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -2447,7 +2410,6 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesAudienceMetadata() throws Exception {
-    FilterRegistry.isEnabledGcpAuthnFilter = true;
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2491,14 +2453,10 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    try {
-      assertThat(update.parsedMetadata().get("FILTER_METADATA"))
-          .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
-      assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
-          .isInstanceOf(AudienceWrapper.class);
-    } finally {
-      FilterRegistry.isEnabledGcpAuthnFilter = false;
-    }
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test
@@ -3178,35 +3136,8 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void
-      validateCommonTlsContext_combinedValidationContextSystemRootCerts_envVarNotSet_throws() {
-    XdsClusterResource.enableSystemRootCerts = false;
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setCombinedValidationContext(
-            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
-                .setDefaultValidationContext(
-                    CertificateValidationContext.newBuilder()
-                        .setSystemRootCerts(
-                            CertificateValidationContext.SystemRootCerts.newBuilder().build())
-                        .build()
-                )
-                .build())
-        .build();
-    try {
-      XdsClusterResource
-          .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
-      fail("Expected exception");
-    } catch (ResourceInvalidException ex) {
-      assertThat(ex.getMessage()).isEqualTo(
-          "ca_certificate_provider_instance or system_root_certs is required in"
-              + " upstream-tls-context");
-    }
-  }
-
-  @Test
   public void validateCommonTlsContext_combinedValidationContextSystemRootCerts()
       throws ResourceInvalidException {
-    XdsClusterResource.enableSystemRootCerts = true;
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setCombinedValidationContext(
             CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
@@ -3223,30 +3154,8 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
-  public void validateCommonTlsContext_validationContextSystemRootCerts_envVarNotSet_throws() {
-    XdsClusterResource.enableSystemRootCerts = false;
-    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
-        .setValidationContext(
-            CertificateValidationContext.newBuilder()
-                .setSystemRootCerts(
-                    CertificateValidationContext.SystemRootCerts.newBuilder().build())
-                .build())
-        .build();
-    try {
-      XdsClusterResource
-          .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
-      fail("Expected exception");
-    } catch (ResourceInvalidException ex) {
-      assertThat(ex.getMessage()).isEqualTo(
-          "ca_certificate_provider_instance or system_root_certs is required in "
-              + "upstream-tls-context");
-    }
-  }
-
-  @Test
   public void validateCommonTlsContext_validationContextSystemRootCerts()
       throws ResourceInvalidException {
-    XdsClusterResource.enableSystemRootCerts = true;
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
         .setValidationContext(
             CertificateValidationContext.newBuilder()

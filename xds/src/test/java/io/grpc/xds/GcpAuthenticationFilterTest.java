@@ -88,11 +88,6 @@ public class GcpAuthenticationFilterTest {
   private static final RdsUpdate rdsUpdate = getRdsUpdate();
   private static final CdsUpdate cdsUpdate = getCdsUpdate();
 
-  @Before
-  public void setUp() {
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", "true");
-  }
-
   @Test
   public void testNewFilterInstancesPerFilterName() {
     assertThat(new GcpAuthenticationFilter("FILTER_INSTANCE_NAME1", 10))
