@@ -972,6 +972,7 @@ public final class GrpcUtil {
     }
   }
 
+
   /**
    * Marker to be used in {@link Status#withCause(Throwable)} to signal that stream should be closed
    * by sending headers.

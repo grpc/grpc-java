@@ -341,6 +341,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
                 e.getStatus().withCause(GrpcUtil.CLOSE_WITH_HEADERS), null));
             return;
           }
+          message.close();
           listener.onMessage(parsed);
         }
       } catch (Throwable t) {
