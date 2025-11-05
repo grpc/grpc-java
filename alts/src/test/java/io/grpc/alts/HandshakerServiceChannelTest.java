@@ -76,7 +76,7 @@ public final class HandshakerServiceChannelTest {
   @Test
   public void getHandshakerTarget_envVarWithPort() {
     assertThat(HandshakerServiceChannel.getHandshakerTarget("169.254.169.254:80"))
-        .isEqualTo("169.254.169.254:80");
+        .isEqualTo("169.254.169.254:8080");
   }
 
   @Test

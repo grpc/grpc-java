@@ -48,12 +48,12 @@ final class HandshakerServiceChannel {
     if (envValue == null || envValue.isEmpty()) {
       return DEFAULT_TARGET;
     }
-    int colonIndex = envValue.lastIndexOf(':');
-    if (colonIndex != -1) {
-      return envValue;
-    } else {
-      return envValue + ":" + ALTS_PORT;
+    String host = envValue;
+    int portIndex = host.lastIndexOf(':');
+    if (portIndex != -1) {
+      host = host.substring(0, portIndex);
     }
+    return host + ":" + ALTS_PORT;
   }
   
   /** Returns a resource of handshaker service channel for testing only. */
