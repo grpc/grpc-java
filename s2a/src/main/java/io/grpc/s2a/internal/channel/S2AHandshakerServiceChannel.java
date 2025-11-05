@@ -50,7 +50,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
-  private static final Duration CHANNEL_SHUTDOWN_TIMEOUT = Duration.ofSeconds(10);
   private static final Logger logger =
           Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
 
