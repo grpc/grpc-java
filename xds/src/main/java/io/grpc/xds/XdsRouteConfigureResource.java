@@ -69,8 +69,6 @@ import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
-  private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
-      "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
   @VisibleForTesting
   static boolean enableRouteLookup = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
 
