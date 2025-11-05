@@ -327,22 +327,24 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
+      InputStream message = null;
       try {
-        InputStream message;
         while ((message = producer.next()) != null) {
-          ReqT parsedMessage;
-          try (InputStream ignored = message) {
-            parsedMessage = call.method.parseRequest(message);
+          ReqT parsed;
+          try {
+            parsed = call.method.parseRequest(message);
           } catch (StatusRuntimeException e) {
             GrpcUtil.closeQuietly(message);
             GrpcUtil.closeQuietly(producer);
             call.cancelled = true;
-            call.close(e.getStatus(), new Metadata());
+            call.handleInternalError(InternalStatus.asRuntimeExceptionWithoutStacktrace(
+                e.getStatus().withCause(GrpcUtil.CLOSE_WITH_HEADERS), null));
             return;
           }
-          listener.onMessage(parsedMessage);
+          listener.onMessage(parsed);
         }
       } catch (Throwable t) {
+        GrpcUtil.closeQuietly(message);
         GrpcUtil.closeQuietly(producer);
         Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);

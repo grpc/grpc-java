@@ -23,6 +23,7 @@ import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
@@ -130,7 +131,11 @@ class NettyServerStream extends AbstractServerStream {
     @Override
     public void cancel(Status status) {
       try (TaskCloseable ignore = PerfMark.traceTask("NettyServerStream$Sink.cancel")) {
-        writeQueue.enqueue(CancelServerStreamCommand.withReset(transportState(), status), true);
+        CancelServerStreamCommand cmd =
+            status.getCause() == GrpcUtil.CLOSE_WITH_HEADERS
+                ? CancelServerStreamCommand.withReason(transportState(), status)
+                : CancelServerStreamCommand.withReset(transportState(), status);
+        writeQueue.enqueue(cmd, true);
       }
     }
   }

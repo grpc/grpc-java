@@ -888,7 +888,7 @@ public final class GrpcUtil {
    *       byte is then represented by the 3-character string "%XY", where "XY" is the two-digit,
    *       uppercase, hexadecimal representation of the byte value.
    * </ul>
-   * 
+   *
    * <p>This section does not use URLEscapers from Guava Net as its not Android-friendly thus core
    *    can't depend on it.
    */
@@ -972,7 +972,16 @@ public final class GrpcUtil {
     }
   }
 
-
+  /**
+   * Marker to be used in {@link Status#withCause(Throwable)} to signal that stream should be closed
+   * by sending headers.
+   */
+  public static final Throwable CLOSE_WITH_HEADERS = new Throwable("CLOSE_WITH_HEADERS") {
+    @Override
+    public synchronized Throwable fillInStackTrace() {
+      return this;
+    }
+  };
 
   private GrpcUtil() {}
 }
