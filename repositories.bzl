@@ -22,6 +22,8 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.errorprone:error_prone_annotations:2.36.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.4.8-android",
+    "com.google.http-client:google-http-client:1.44.2",
+    "com.google.http-client:google-http-client-gson:1.44.2",
     "com.google.re2j:re2j:1.8",
     "com.google.s2a.proto.v2:s2a-proto:0.1.2",
     "com.google.truth:truth:1.4.2",
