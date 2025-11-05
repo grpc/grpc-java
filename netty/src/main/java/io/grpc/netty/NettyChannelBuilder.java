@@ -818,6 +818,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         serverAddress = proxiedAddr.getTargetAddress();
         localNegotiator = ProtocolNegotiators.httpProxy(
             proxiedAddr.getProxyAddress(),
+            proxiedAddr.getHeaders(),
             proxiedAddr.getUsername(),
             proxiedAddr.getPassword(),
             protocolNegotiator);

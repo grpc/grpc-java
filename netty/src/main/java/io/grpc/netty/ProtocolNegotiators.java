@@ -51,10 +51,12 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpClientUpgradeHandler;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
@@ -77,6 +79,7 @@ import java.security.KeyStore;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -484,7 +487,8 @@ final class ProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} that does HTTP CONNECT proxy negotiation.
    */
   public static ProtocolNegotiator httpProxy(final SocketAddress proxyAddress,
-      final @Nullable String proxyUsername, final @Nullable String proxyPassword,
+      final @Nullable Map<String, String> headers, final @Nullable String proxyUsername,
+      final @Nullable String proxyPassword,
       final ProtocolNegotiator negotiator) {
     Preconditions.checkNotNull(negotiator, "negotiator");
     Preconditions.checkNotNull(proxyAddress, "proxyAddress");
@@ -494,8 +498,9 @@ final class ProtocolNegotiators {
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
         ChannelHandler protocolNegotiationHandler = negotiator.newHandler(http2Handler);
         ChannelLogger negotiationLogger = http2Handler.getNegotiationLogger();
+        HttpHeaders httpHeaders = toHttpHeaders(headers);
         return new ProxyProtocolNegotiationHandler(
-            proxyAddress, proxyUsername, proxyPassword, protocolNegotiationHandler,
+            proxyAddress, httpHeaders, proxyUsername, proxyPassword, protocolNegotiationHandler,
             negotiationLogger);
       }
 
@@ -516,6 +521,22 @@ final class ProtocolNegotiators {
   }
 
   /**
+   * Converts generic Map of headers to Netty's HttpHeaders.
+   * Returns null if the map is null or empty.
+   */
+  @Nullable
+  private static HttpHeaders toHttpHeaders(@Nullable Map<String, String> headers) {
+    if (headers == null || headers.isEmpty()) {
+      return null;
+    }
+    HttpHeaders httpHeaders = new DefaultHttpHeaders();
+    for (Map.Entry<String, String> entry : headers.entrySet()) {
+      httpHeaders.add(entry.getKey(), entry.getValue());
+    }
+    return httpHeaders;
+  }
+
+  /**
    * A Proxy handler follows {@link ProtocolNegotiationHandler} pattern. Upon successful proxy
    * connection, this handler will install {@code next} handler which should be a handler from
    * other type of {@link ProtocolNegotiator} to continue negotiating protocol using proxy.
@@ -523,17 +544,20 @@ final class ProtocolNegotiators {
   static final class ProxyProtocolNegotiationHandler extends ProtocolNegotiationHandler {
 
     private final SocketAddress address;
+    @Nullable private final HttpHeaders httpHeaders;
     @Nullable private final String userName;
     @Nullable private final String password;
 
     public ProxyProtocolNegotiationHandler(
         SocketAddress address,
+        @Nullable HttpHeaders httpHeaders,
         @Nullable String userName,
         @Nullable String password,
         ChannelHandler next,
         ChannelLogger negotiationLogger) {
       super(next, negotiationLogger);
       this.address = Preconditions.checkNotNull(address, "address");
+      this.httpHeaders = httpHeaders;
       this.userName = userName;
       this.password = password;
     }
@@ -542,9 +566,9 @@ final class ProtocolNegotiators {
     protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
       HttpProxyHandler nettyProxyHandler;
       if (userName == null || password == null) {
-        nettyProxyHandler = new HttpProxyHandler(address);
+        nettyProxyHandler = new HttpProxyHandler(address, httpHeaders);
       } else {
-        nettyProxyHandler = new HttpProxyHandler(address, userName, password);
+        nettyProxyHandler = new HttpProxyHandler(address, userName, password, httpHeaders);
       }
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, nettyProxyHandler);
     }
