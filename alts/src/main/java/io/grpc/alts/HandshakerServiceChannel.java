@@ -40,10 +40,9 @@ final class HandshakerServiceChannel {
   
   private static final int ALTS_PORT = 8080;
   private static final String DEFAULT_TARGET = "metadata.google.internal.:8080";
-  private static final String METADATA_HOST_ENV_VAR = System.getenv("GCE_METADATA_HOST");
 
   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
-      new ChannelResource(getHandshakerTarget(METADATA_HOST_ENV_VAR));
+      new ChannelResource(getHandshakerTarget(System.getenv("GCE_METADATA_HOST")));
  
   static String getHandshakerTarget(String envValue) {
     if (envValue == null || envValue.isEmpty()) {
