@@ -226,10 +226,17 @@ final class CachingRlsLbClient {
         } else if (wasInTransientFailure && currentState == ConnectivityState.READY) {
           wasInTransientFailure = false;
           synchronized (lock) {
+            boolean anyBackoffsCanceled = false;
             for (CacheEntry value : linkedHashLruCache.values()) {
               if (value instanceof BackoffCacheEntry) {
-                refreshBackoffEntry((BackoffCacheEntry) value);
+                if (((BackoffCacheEntry) value).scheduledFuture.cancel(false)) {
+                  anyBackoffsCanceled = true;
+                }
               }
+            }
+            if (anyBackoffsCanceled) {
+              // Cache updated. updateBalancingState() to reattempt picks
+              helper.triggerPendingRpcProcessing();
             }
           }
         }

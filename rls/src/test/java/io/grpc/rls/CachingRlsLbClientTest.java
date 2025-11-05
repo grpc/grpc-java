@@ -484,12 +484,18 @@ public class CachingRlsLbClientTest {
     fakeThrottler.nextResult = true;
     fakeBackoffProvider.nextPolicy = createBackoffPolicy(10, TimeUnit.MILLISECONDS);
 
-    // Cause a cache miss by using a new request key. This will create a back-off Rls cache entry.
+    // Cause two cache misses by using new request keys. This will create back-off Rls cache
+    // entries. RLS control plane state transitioning to READY should reset both back-offs but
+    // update picker only once.
     RlsProtoData.RouteLookupRequestKey routeLookupRequestKey2 =
         RlsProtoData.RouteLookupRequestKey.create(ImmutableMap.of(
         "server", "bigtable.googleapis.com", "service-key", "foo2", "method-key", "bar"));
     resp = getInSyncContext(routeLookupRequestKey2);
-
+    assertThat(resp.hasError()).isTrue();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey3 =
+        RlsProtoData.RouteLookupRequestKey.create(ImmutableMap.of(
+            "server", "bigtable.googleapis.com", "service-key", "foo3", "method-key", "bar"));
+    resp = getInSyncContext(routeLookupRequestKey3);
     assertThat(resp.hasError()).isTrue();
 
     fakeHelper.createServerAndRegister("service1");
@@ -508,13 +514,12 @@ public class CachingRlsLbClientTest {
       ArgumentCaptor<ConnectivityState> stateCaptor =
           ArgumentCaptor.forClass(ConnectivityState.class);
 
-      inOrder.verify(helper, times(5))
+      inOrder.verify(helper, times(4))
           .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
       assertThat(new HashSet<>(pickerCaptor.getAllValues())).hasSize(1);
       assertThat(stateCaptor.getAllValues())
           .containsExactly(ConnectivityState.TRANSIENT_FAILURE, ConnectivityState.CONNECTING,
-              ConnectivityState.CONNECTING, ConnectivityState.CONNECTING,
-              ConnectivityState.CONNECTING);
+              ConnectivityState.CONNECTING, ConnectivityState.CONNECTING);
       Metadata headers = new Metadata();
       PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
       assertThat(pickResult.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
@@ -522,6 +527,11 @@ public class CachingRlsLbClientTest {
       isSuccess.set(true);
     }).get();
     assertThat(isSuccess.get()).isTrue();
+
+    fakeThrottler.nextResult = false;
+    // Rpcs are not backed off now.
+    assertThat(getInSyncContext(routeLookupRequestKey2).isPending()).isTrue();
+    assertThat(getInSyncContext(routeLookupRequestKey3).isPending()).isTrue();
   }
 
   @Test
