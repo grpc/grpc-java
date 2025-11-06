@@ -522,9 +522,8 @@ public class ServerCallImplTest {
     when(messageProducer.next()).thenReturn(message, (InputStream) null);
     streamListener.messagesAvailable(messageProducer);
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
-    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
-    verify(stream).close(statusCaptor.capture(), metadataCaptor.capture());
+    verify(stream).cancel(statusCaptor.capture());
     Status status = statusCaptor.getValue();
     assertEquals(Status.RESOURCE_EXHAUSTED.getCode(), status.getCode());
     assertEquals("Decompressed gRPC message exceeds maximum size", status.getDescription());
