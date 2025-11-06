@@ -279,6 +279,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     serverCallTracer.reportCallEnded(false); // error so always false
   }
 
+  private void handleParseError(StatusRuntimeException parseError) {
+    log.log(Level.WARNING, "Cancelling the stream because of parse error", parseError);
+    stream.cancel(parseError.getStatus().withCause(new CloseWithHeadersMarker()));
+    serverCallTracer.reportCallEnded(false); // error so always false
+  }
+
   /**
    * All of these callbacks are assumed to called on an application thread, and the caller is
    * responsible for handling thrown exceptions.
@@ -337,7 +343,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
             GrpcUtil.closeQuietly(message);
             GrpcUtil.closeQuietly(producer);
             call.cancelled = true;
-            call.handleInternalError(e);
+            call.handleParseError(e);
             return;
           }
           message.close();

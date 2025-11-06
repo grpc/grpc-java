@@ -521,7 +521,6 @@ public class MessageDeframer implements Closeable, Deframer {
       if (count > maxMessageSize) {
         throw Status.RESOURCE_EXHAUSTED
             .withDescription("Decompressed gRPC message exceeds maximum size " + maxMessageSize)
-            .withCause(new CloseWithHeadersMarker())
             .asRuntimeException();
       }
     }
