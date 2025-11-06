@@ -280,6 +280,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   /**
+   * Close the {@link ServerStream} because parsing request message failed.
+   * Similar to {@link #handleInternalError(Throwable)}.
+   */
+  private void handleParseError(StatusRuntimeException parseError) {
+    cancelled = true;
+    log.log(Level.WARNING, "Cancelling the stream because of parse error", parseError);
+    stream.cancel(parseError.getStatus().withCause(new CloseWithHeadersMarker()));
+    serverCallTracer.reportCallEnded(false); // error so always false
+  }
+
+  /**
    * All of these callbacks are assumed to called on an application thread, and the caller is
    * responsible for handling thrown exceptions.
    */
@@ -327,18 +338,23 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
-      InputStream message;
+      InputStream message = null;
       try {
         while ((message = producer.next()) != null) {
+          ReqT parsed;
           try {
-            listener.onMessage(call.method.parseRequest(message));
-          } catch (Throwable t) {
+            parsed = call.method.parseRequest(message);
+          } catch (StatusRuntimeException e) {
             GrpcUtil.closeQuietly(message);
-            throw t;
+            GrpcUtil.closeQuietly(producer);
+            call.handleParseError(e);
+            return;
           }
           message.close();
+          listener.onMessage(parsed);
         }
       } catch (Throwable t) {
+        GrpcUtil.closeQuietly(message);
         GrpcUtil.closeQuietly(producer);
         Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);
