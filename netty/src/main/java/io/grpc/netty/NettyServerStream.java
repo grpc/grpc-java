@@ -24,7 +24,6 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.CloseWithHeadersMarker;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
