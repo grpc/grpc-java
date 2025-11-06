@@ -530,6 +530,9 @@ public class ServerCallImplTest {
 
     streamListener.halfClosed();
     verify(callListener, never()).onHalfClose();
+
+    when(messageProducer.next()).thenReturn(message, (InputStream) null);
+    streamListener.messagesAvailable(messageProducer);
     verify(callListener, never()).onMessage(any());
   }
 
