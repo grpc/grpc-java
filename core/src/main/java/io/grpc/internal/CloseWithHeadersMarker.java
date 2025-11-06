@@ -7,6 +7,7 @@ import io.grpc.Status;
  * by sending headers.
  */
 public class CloseWithHeadersMarker extends RuntimeException {
+  private static final long serialVersionUID = 0L;
 
   @Override
   public synchronized Throwable fillInStackTrace() {
