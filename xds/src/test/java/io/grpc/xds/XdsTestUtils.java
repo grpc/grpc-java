@@ -88,31 +88,31 @@ public class XdsTestUtils {
   public static final int ENDPOINT_PORT = 1234;
   static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
       new Bootstrapper.ServerInfo() {
-    @Override
-    public String target() {
-      return null;
-    }
+        @Override
+        public String target() {
+          return null;
+        }
 
-    @Override
-    public Object implSpecificConfig() {
-      return null;
-    }
+        @Override
+        public Object implSpecificConfig() {
+          return null;
+        }
 
-    @Override
-    public boolean ignoreResourceDeletion() {
-      return false;
-    }
+        @Override
+        public boolean ignoreResourceDeletion() {
+          return false;
+        }
 
-    @Override
-    public boolean isTrustedXdsServer() {
-      return true;
-    }
+        @Override
+        public boolean isTrustedXdsServer() {
+          return true;
+        }
 
-    @Override
-    public boolean resourceTimerIsTransientError() {
-      return false;
-    }
-  };
+        @Override
+        public boolean resourceTimerIsTransientError() {
+          return false;
+        }
+      };
 
   static BindableService createLrsService(AtomicBoolean lrsEnded,
                                           Queue<LrsRpcCall> loadReportCalls) {
