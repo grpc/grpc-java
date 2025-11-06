@@ -22,7 +22,7 @@ import io.grpc.Status;
  * Marker to be used in {@link Status#withCause(Throwable)} to signal that stream should be closed
  * by sending headers.
  */
-public class CloseWithHeadersMarker extends RuntimeException {
+public class CloseWithHeadersMarker extends Throwable {
   private static final long serialVersionUID = 0L;
 
   @Override

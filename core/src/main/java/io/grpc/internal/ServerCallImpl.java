@@ -279,7 +279,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     serverCallTracer.reportCallEnded(false); // error so always false
   }
 
+  /**
+   * Close the {@link ServerStream} because parsing request message failed.
+   * Similar to {@link #handleInternalError(Throwable)}.
+   */
   private void handleParseError(StatusRuntimeException parseError) {
+    cancelled = true;
     log.log(Level.WARNING, "Cancelling the stream because of parse error", parseError);
     stream.cancel(parseError.getStatus().withCause(new CloseWithHeadersMarker()));
     serverCallTracer.reportCallEnded(false); // error so always false
@@ -342,7 +347,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           } catch (StatusRuntimeException e) {
             GrpcUtil.closeQuietly(message);
             GrpcUtil.closeQuietly(producer);
-            call.cancelled = true;
             call.handleParseError(e);
             return;
           }
