@@ -53,7 +53,6 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc;
 import io.grpc.lookup.v1.RouteLookupServiceGrpc.RouteLookupServiceStub;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
 import io.grpc.rls.LruCache.EvictionListener;
@@ -217,6 +216,35 @@ final class CachingRlsLbClient {
       rlsChannelBuilder.disableServiceConfigLookUp();
     }
     rlsChannel = rlsChannelBuilder.build();
+    Runnable rlsServerConnectivityStateChangeHandler = new Runnable() {
+      private boolean wasInTransientFailure;
+      @Override
+      public void run() {
+        ConnectivityState currentState = rlsChannel.getState(false);
+        if (currentState == ConnectivityState.TRANSIENT_FAILURE) {
+          wasInTransientFailure = true;
+        } else if (wasInTransientFailure && currentState == ConnectivityState.READY) {
+          wasInTransientFailure = false;
+          synchronized (lock) {
+            boolean anyBackoffsCanceled = false;
+            for (CacheEntry value : linkedHashLruCache.values()) {
+              if (value instanceof BackoffCacheEntry) {
+                if (((BackoffCacheEntry) value).scheduledFuture.cancel(false)) {
+                  anyBackoffsCanceled = true;
+                }
+              }
+            }
+            if (anyBackoffsCanceled) {
+              // Cache updated. updateBalancingState() to reattempt picks
+              helper.triggerPendingRpcProcessing();
+            }
+          }
+        }
+        rlsChannel.notifyWhenStateChanged(currentState, this);
+      }
+    };
+    rlsChannel.notifyWhenStateChanged(
+        ConnectivityState.IDLE, rlsServerConnectivityStateChangeHandler);
     rlsStub = RouteLookupServiceGrpc.newStub(rlsChannel);
     childLbResolvedAddressFactory =
         checkNotNull(builder.resolvedAddressFactory, "resolvedAddressFactory");
@@ -226,8 +254,7 @@ final class CachingRlsLbClient {
     refCountedChildPolicyWrapperFactory =
         new RefCountedChildPolicyWrapperFactory(
             lbPolicyConfig.getLoadBalancingPolicy(), childLbResolvedAddressFactory,
-            childLbHelperProvider,
-            new BackoffRefreshListener());
+            childLbHelperProvider);
     // TODO(creamsoup) wait until lb is ready
     String defaultTarget = lbPolicyConfig.getRouteLookupConfig().defaultTarget();
     if (defaultTarget != null && !defaultTarget.isEmpty()) {
@@ -347,12 +374,15 @@ final class CachingRlsLbClient {
     synchronized (lock) {
       final CacheEntry cacheEntry;
       cacheEntry = linkedHashLruCache.read(routeLookupRequestKey);
-      if (cacheEntry == null) {
+      if (cacheEntry == null
+          || (cacheEntry instanceof BackoffCacheEntry
+          && !((BackoffCacheEntry) cacheEntry).isInBackoffPeriod())) {
         PendingCacheEntry pendingEntry = pendingCallCache.get(routeLookupRequestKey);
         if (pendingEntry != null) {
           return CachedRouteLookupResponse.pendingResponse(pendingEntry);
         }
-        return asyncRlsCall(routeLookupRequestKey, /* backoffPolicy= */ null,
+        return asyncRlsCall(routeLookupRequestKey, cacheEntry instanceof BackoffCacheEntry
+            ? ((BackoffCacheEntry) cacheEntry).backoffPolicy : null,
             RouteLookupRequest.Reason.REASON_MISS);
       }
 
@@ -447,7 +477,8 @@ final class CachingRlsLbClient {
         ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Transition to back off: status={1}, delayNanos={2}",
         routeLookupRequestKey, status, delayNanos);
-    BackoffCacheEntry entry = new BackoffCacheEntry(routeLookupRequestKey, status, backoffPolicy);
+    BackoffCacheEntry entry = new BackoffCacheEntry(routeLookupRequestKey, status, backoffPolicy,
+        ticker.read() + delayNanos * 2);
     // Lock is held, so the task can't execute before the assignment
     entry.scheduledFuture = scheduledExecutorService.schedule(
         () -> refreshBackoffEntry(entry), delayNanos, TimeUnit.NANOSECONDS);
@@ -462,11 +493,8 @@ final class CachingRlsLbClient {
         // Future was previously cancelled
         return;
       }
-      logger.log(ChannelLogLevel.DEBUG,
-          "[RLS Entry {0}] Calling RLS for transition to pending", entry.routeLookupRequestKey);
-      linkedHashLruCache.invalidate(entry.routeLookupRequestKey);
-      asyncRlsCall(entry.routeLookupRequestKey, entry.backoffPolicy,
-          RouteLookupRequest.Reason.REASON_MISS);
+      // Cache updated. updateBalancingState() to reattempt picks
+      helper.triggerPendingRpcProcessing();
     }
   }
 
@@ -773,13 +801,15 @@ final class CachingRlsLbClient {
 
     private final Status status;
     private final BackoffPolicy backoffPolicy;
+    private final long expiryTimeNanos;
     private Future<?> scheduledFuture;
 
     BackoffCacheEntry(RouteLookupRequestKey routeLookupRequestKey, Status status,
-        BackoffPolicy backoffPolicy) {
+        BackoffPolicy backoffPolicy, long expiryTimeNanos) {
       super(routeLookupRequestKey);
       this.status = checkNotNull(status, "status");
       this.backoffPolicy = checkNotNull(backoffPolicy, "backoffPolicy");
+      this.expiryTimeNanos = expiryTimeNanos;
     }
 
     Status getStatus() {
@@ -791,9 +821,13 @@ final class CachingRlsLbClient {
       return OBJ_OVERHEAD_B * 3 + Long.SIZE + 8; // 3 java objects, 1 long and a boolean
     }
 
+    boolean isInBackoffPeriod() {
+      return !scheduledFuture.isDone();
+    }
+
     @Override
-    boolean isExpired(long now) {
-      return scheduledFuture.isDone();
+    boolean isExpired(long nowNanos) {
+      return nowNanos > expiryTimeNanos;
     }
 
     @Override
@@ -953,32 +987,6 @@ final class CachingRlsLbClient {
         helper.triggerPendingRpcProcessing();
       }
       return newEntry;
-    }
-  }
-
-  /**
-   * LbStatusListener refreshes {@link BackoffCacheEntry} when lb state is changed to {@link
-   * ConnectivityState#READY} from {@link ConnectivityState#TRANSIENT_FAILURE}.
-   */
-  private final class BackoffRefreshListener implements ChildLbStatusListener {
-
-    @Nullable
-    private ConnectivityState prevState = null;
-
-    @Override
-    public void onStatusChanged(ConnectivityState newState) {
-      if (prevState == ConnectivityState.TRANSIENT_FAILURE
-          && newState == ConnectivityState.READY) {
-        logger.log(ChannelLogLevel.DEBUG, "Transitioning from TRANSIENT_FAILURE to READY");
-        synchronized (lock) {
-          for (CacheEntry value : linkedHashLruCache.values()) {
-            if (value instanceof BackoffCacheEntry) {
-              refreshBackoffEntry((BackoffCacheEntry) value);
-            }
-          }
-        }
-      }
-      prevState = newState;
     }
   }
 
