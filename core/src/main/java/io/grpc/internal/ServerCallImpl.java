@@ -338,7 +338,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
             GrpcUtil.closeQuietly(producer);
             call.cancelled = true;
             call.handleInternalError(InternalStatus.asRuntimeExceptionWithoutStacktrace(
-                e.getStatus().withCause(GrpcUtil.CLOSE_WITH_HEADERS), null));
+                e.getStatus().withCause(new CloseWithHeadersMarker()), null));
             return;
           }
           message.close();
