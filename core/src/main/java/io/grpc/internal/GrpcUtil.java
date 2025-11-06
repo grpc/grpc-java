@@ -888,7 +888,7 @@ public final class GrpcUtil {
    *       byte is then represented by the 3-character string "%XY", where "XY" is the two-digit,
    *       uppercase, hexadecimal representation of the byte value.
    * </ul>
-   *
+   * 
    * <p>This section does not use URLEscapers from Guava Net as its not Android-friendly thus core
    *    can't depend on it.
    */
