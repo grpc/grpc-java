@@ -401,13 +401,6 @@ final class LbPolicyConfiguration {
     }
   }
 
-  /** Listener for child lb status change events. */
-  interface ChildLbStatusListener {
-
-    /** Notifies when child lb status changes. */
-    void onStatusChanged(ConnectivityState newState);
-  }
-
   private static final class RefCountedChildPolicyWrapper
       implements ObjectPool<ChildPolicyWrapper> {
 

@@ -456,8 +456,7 @@ public class RlsLoadBalancerTest {
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(searchSubchannel).isNotNull();
     assertThat(searchSubchannel).isNotSameInstanceAs(fallbackSubchannel);
-    times = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", times, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // create rescue subchannel
     picker.pickSubchannel(rescueSubchannelArgs);
