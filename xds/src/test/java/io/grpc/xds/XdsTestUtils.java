@@ -105,7 +105,7 @@ public class XdsTestUtils {
 
     @Override
     public boolean isTrustedXdsServer() {
-      return false;
+      return true;
     }
 
     @Override
@@ -295,7 +295,7 @@ public class XdsTestUtils {
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, EMPTY_BOOTSTRAPPER_SERVER_INFO, null, null, null, false, null)
+        CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));

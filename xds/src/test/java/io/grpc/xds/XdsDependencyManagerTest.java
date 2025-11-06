@@ -105,8 +105,6 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class XdsDependencyManagerTest {
   private static final Logger log = Logger.getLogger(XdsDependencyManagerTest.class.getName());
-  public static final String CLUSTER_TYPE_NAME = XdsClusterResource.getInstance().typeName();
-  public static final String ENDPOINT_TYPE_NAME = XdsEndpointResource.getInstance().typeName();
 
   private final SynchronizationContext syncContext =
       new SynchronizationContext((t, e) -> {
