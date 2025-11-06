@@ -58,7 +58,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     return protobuf::Edition::EDITION_PROTO2;
   }
   protobuf::Edition GetMaximumEdition() const override {
-    return protobuf::Edition::EDITION_2023;
+    return protobuf::Edition::EDITION_2024;
   }
   std::vector<const protobuf::FieldDescriptor*> GetFeatureExtensions()
       const override {
