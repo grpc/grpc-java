@@ -15,6 +15,7 @@ dependencies {
             libraries.auto.value.annotations
 
     testImplementation project(':grpc-testing'),
+            project(':grpc-testing-proto'),
             project(':grpc-inprocess'),
             testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
