@@ -24,9 +24,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
-import java.time.Duration;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
