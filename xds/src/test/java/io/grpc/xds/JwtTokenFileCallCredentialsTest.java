@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;

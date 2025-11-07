@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds;
 
 import com.google.common.io.BaseEncoding;
 import java.io.File;

@@ -21,7 +21,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.when;
 
-import io.grpc.xds.internal.JwtTokenFileXdsCallCredentialsProvider;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;

@@ -48,8 +48,6 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.client.XdsInitializationException;
-import io.grpc.xds.internal.JwtTokenFileCallCredentials;
-import io.grpc.xds.internal.JwtTokenFileTestUtils;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal;
+package io.grpc.xds;
 
 import io.grpc.CallCredentials;
 import io.grpc.internal.JsonUtil;
-import io.grpc.xds.XdsCallCredentialsProvider;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
