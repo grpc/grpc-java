@@ -50,8 +50,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class S2AHandshakerServiceChannel {
-  private static final Logger logger =
-          Logger.getLogger(S2AHandshakerServiceChannel.class.getName());
 
   /**
    * Returns a {@link SharedResourceHolder.Resource} instance for managing channels to an S2A server
