@@ -30,7 +30,9 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.util.LinkedList;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Delayed;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -199,6 +201,45 @@ public class SharedResourceHolderTest {
 
     // Future resource fetches should not get the partially-closed one.
     assertNotSame(instance, holder.getInternal(resource));
+  }
+
+  @Test(timeout=5000) public void closeRunsConcurrently() throws Exception {
+    CyclicBarrier barrier = new CyclicBarrier(2);
+    class SlowResource implements Resource<ResourceInstance> {
+      @Override
+      public ResourceInstance create() {
+        return new ResourceInstance();
+      }
+
+      @Override
+      public void close(ResourceInstance instance) {
+        instance.closed = true;
+        try {
+          barrier.await();
+          barrier.await();
+        } catch (Exception ex) {
+          throw new AssertionError(ex);
+        }
+      }
+    }
+
+    Resource<ResourceInstance> resource = new SlowResource();
+    ResourceInstance instance = holder.getInternal(resource);
+    holder.releaseInternal(resource, instance);
+    MockScheduledFuture<?> scheduledDestroyTask = scheduledDestroyTasks.poll();
+    FutureTask<Void> runTask = new FutureTask<>(scheduledDestroyTask::runTask, null);
+    Thread t = new Thread(runTask);
+    t.start();
+
+    barrier.await(); // Ensure the other thread has blocked
+    assertTrue(instance.closed);
+    instance = holder.getInternal(resource);
+    assertFalse(instance.closed);
+    holder.releaseInternal(resource, instance);
+
+    barrier.await(); // Resume the other thread
+    t.join();
+    runTask.get(); // Check for exception
   }
 
   private class MockExecutorFactory implements
