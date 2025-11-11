@@ -66,7 +66,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
               System.getProperty("io.grpc.xds.experimentalEnableLeastRequest", "true"));
   @VisibleForTesting
   public static boolean enableSystemRootCerts =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", true);
   static boolean isEnabledXdsHttpConnect =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_HTTP_CONNECT", false);
 
