@@ -47,6 +47,7 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.StatusOr;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
@@ -84,6 +85,9 @@ public class XdsTestUtils {
   static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
+  static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
+      Bootstrapper.ServerInfo.create(
+      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false);
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -247,8 +251,8 @@ public class XdsTestUtils {
 
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
-    Bootstrapper.ServerInfo serverInfo = null;
-    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
+    XdsResourceType.Args args = new XdsResourceType.Args(
+        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
@@ -268,7 +272,7 @@ public class XdsTestUtils {
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false, null)
+        CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
