@@ -203,7 +203,8 @@ public class SharedResourceHolderTest {
     assertNotSame(instance, holder.getInternal(resource));
   }
 
-  @Test(timeout=5000) public void closeRunsConcurrently() throws Exception {
+  @Test(timeout = 5000)
+  public void closeRunsConcurrently() throws Exception {
     CyclicBarrier barrier = new CyclicBarrier(2);
     class SlowResource implements Resource<ResourceInstance> {
       @Override
