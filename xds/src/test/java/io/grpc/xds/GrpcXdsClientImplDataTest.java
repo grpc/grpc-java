@@ -568,7 +568,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -656,7 +656,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
         ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
         ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -1038,7 +1038,7 @@ public class GrpcXdsClientImplDataTest {
                 ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of(),
             getXdsResourceTypeArgs(true));
     assertThat(struct.getStruct()).isNotNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -2447,7 +2447,6 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesAudienceMetadata() throws Exception {
-    FilterRegistry.isEnabledGcpAuthnFilter = true;
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2491,14 +2490,11 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    try {
-      assertThat(update.parsedMetadata().get("FILTER_METADATA"))
-          .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
-      assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
-          .isInstanceOf(AudienceWrapper.class);
-    } finally {
-      FilterRegistry.isEnabledGcpAuthnFilter = false;
-    }
+
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test

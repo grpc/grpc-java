@@ -468,7 +468,8 @@ public class GcpAuthenticationFilterTest {
   private static RdsUpdate getRdsUpdate() {
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration("my-server", RDS_NAME, CLUSTER_NAME);
-    XdsResourceType.Args args = new XdsResourceType.Args(null, "0", "0", null, null, null);
+    XdsResourceType.Args args = new XdsResourceType.Args(
+        XdsTestUtils.EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
     try {
       return XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
     } catch (ResourceInvalidException ex) {
