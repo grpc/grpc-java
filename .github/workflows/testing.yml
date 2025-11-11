@@ -1,13 +1,8 @@
 name: GitHub Actions Linux Testing
 
 on:
-  push:
-    branches:
-    - master
-    - 'v1.*'
   pull_request:
-  schedule:
-  - cron: '54 19 * * SUN' # weekly at a "random" time
+  workflow_dispatch:
 
 permissions:
   contents: read
