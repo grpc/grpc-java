@@ -1269,6 +1269,31 @@ public class OkHttpServerTransportTest {
   }
 
   @Test
+  public void keepAliveEnforcer_doesNotEnforcePingAcks() throws Exception {
+    serverBuilder.permitKeepAliveTime(1, TimeUnit.HOURS)
+        .permitKeepAliveWithoutCalls(true);
+    initTransport();
+    handshake();
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES + 2; i++) {
+      int serverPingId = 0xDEAD + i;
+      clientFrameWriter.ping(true, serverPingId, 0);
+      clientFrameWriter.flush();
+    }
+
+    for (int i = 0; i < KeepAliveEnforcer.MAX_PING_STRIKES; i++) {
+      pingPong();
+    }
+
+    pingPongId++;
+    clientFrameWriter.ping(false, pingPongId, 0);
+    clientFrameWriter.flush();
+    assertThat(clientFrameReader.nextFrame(clientFramesRead)).isTrue();
+    verify(clientFramesRead).goAway(0, ErrorCode.ENHANCE_YOUR_CALM,
+        ByteString.encodeString("too_many_pings", GrpcUtil.US_ASCII));
+  }
+
+  @Test
   public void maxConcurrentCallsPerConnection_failsWithRst() throws Exception {
     int maxConcurrentCallsPerConnection = 1;
     serverBuilder.maxConcurrentCallsPerConnection(maxConcurrentCallsPerConnection);
