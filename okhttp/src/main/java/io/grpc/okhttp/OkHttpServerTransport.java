@@ -951,13 +951,13 @@ final class OkHttpServerTransport implements ServerTransport,
 
     @Override
     public void ping(boolean ack, int payload1, int payload2) {
-      if (!keepAliveEnforcer.pingAcceptable()) {
-        abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
-            Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
-        return;
-      }
       long payload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
       if (!ack) {
+        if (!keepAliveEnforcer.pingAcceptable()) {
+          abruptShutdown(ErrorCode.ENHANCE_YOUR_CALM, "too_many_pings",
+              Status.RESOURCE_EXHAUSTED.withDescription("Too many pings from client"), false);
+          return;
+        }
         frameLogger.logPing(OkHttpFrameLogger.Direction.INBOUND, payload);
         synchronized (lock) {
           frameWriter.ping(true, payload1, payload2);
