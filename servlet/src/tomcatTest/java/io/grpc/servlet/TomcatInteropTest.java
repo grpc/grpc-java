@@ -113,27 +113,28 @@ public class TomcatInteropTest extends AbstractInteropTest {
   @Test
   public void gracefulShutdown() {}
 
-  // FIXME
   @Override
   @Ignore("Tomcat is not able to send trailer only")
   @Test
   public void specialStatusMessage() {}
 
-  // FIXME
   @Override
   @Ignore("Tomcat is not able to send trailer only")
   @Test
   public void unimplementedMethod() {}
 
-  // FIXME
   @Override
   @Ignore("Tomcat is not able to send trailer only")
   @Test
   public void statusCodeAndMessage() {}
 
-  // FIXME
   @Override
   @Ignore("Tomcat is not able to send trailer only")
   @Test
   public void emptyStream() {}
+
+  @Override
+  @Ignore("Tomcat is not able to send trailer only")
+  @Test
+  public void timeoutOnSleepingServer() {}
 }
