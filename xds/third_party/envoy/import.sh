@@ -16,7 +16,7 @@
 # Update VERSION then execute this script
 
 set -e
-# import VERSION from internal go/envoy-import-status
+# import VERSION from the google internal go/envoy-import-status
 VERSION=b6df993feef0340391e6dbf6ad957ab42884ad05
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
