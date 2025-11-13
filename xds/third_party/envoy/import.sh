@@ -16,7 +16,7 @@
 # Update VERSION then execute this script
 
 set -e
-# import VERSION from the google internal copybara_version.txt for Envoy
+# import VERSION from internal go/envoy-import-status
 VERSION=b6df993feef0340391e6dbf6ad957ab42884ad05
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
@@ -80,7 +80,6 @@ envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/gcp_authn/v3/gcp_authn.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
-envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
 envoy/extensions/grpc_service/call_credentials/access_token/v3/access_token_credentials.proto
