@@ -2024,7 +2024,7 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  protected static void assertCodeEquals(Status.Code expected, Status actual) {
+  private static void assertCodeEquals(Status.Code expected, Status actual) {
     assertWithMessage("Unexpected status: %s", actual).that(actual.getCode()).isEqualTo(expected);
   }
 
