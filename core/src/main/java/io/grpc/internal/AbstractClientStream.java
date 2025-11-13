@@ -43,9 +43,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * The abstract base class for {@link ClientStream} implementations. Extending classes only need to
- * implement {@link #transportState()} and {@link #abstractClientStreamSink()}. Must only be called
- * from the sending application thread.
+ * The abstract base class for {@link ClientStream} implementations.
+ *
+ * <p>Must only be called from the sending application thread.
  */
 public abstract class AbstractClientStream extends AbstractStream
     implements ClientStream, MessageFramer.Sink {
