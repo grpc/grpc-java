@@ -16,36 +16,34 @@
 
 package io.grpc.xds;
 
-import java.util.concurrent.ThreadLocalRandom;
 import javax.annotation.concurrent.ThreadSafe;
 
-@ThreadSafe // Except for impls/mocks in tests
-interface ThreadSafeRandom {
-  int nextInt(int bound);
-
-  long nextLong();
-
-  long nextLong(long bound);
+// TODO(sauravzg): Remove this class once all usages within xds are migrated to
+// the internal version.
+@ThreadSafe
+interface ThreadSafeRandom extends io.grpc.xds.internal.ThreadSafeRandom {
 
   final class ThreadSafeRandomImpl implements ThreadSafeRandom {
 
     static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();
+    private final io.grpc.xds.internal.ThreadSafeRandom delegate =
+        io.grpc.xds.internal.ThreadSafeRandom.ThreadSafeRandomImpl.INSTANCE;
 
     private ThreadSafeRandomImpl() {}
 
     @Override
     public int nextInt(int bound) {
-      return ThreadLocalRandom.current().nextInt(bound);
+      return delegate.nextInt(bound);
     }
 
     @Override
     public long nextLong() {
-      return ThreadLocalRandom.current().nextLong();
+      return delegate.nextLong();
     }
 
     @Override
     public long nextLong(long bound) {
-      return ThreadLocalRandom.current().nextLong(bound);
+      return delegate.nextLong(bound);
     }
   }
 }
