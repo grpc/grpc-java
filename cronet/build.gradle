@@ -58,7 +58,7 @@ dependencies {
 
 task javadocs(type: Javadoc) {
     source = android.sourceSets.main.java.srcDirs
-    classpath += files(android.getBootClasspath())
+    // classpath += files(android.getBootClasspath())
     classpath += files({
         android.libraryVariants.collect { variant ->
             variant.javaCompileProvider.get().classpath

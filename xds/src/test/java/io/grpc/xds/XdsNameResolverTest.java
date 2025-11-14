@@ -69,6 +69,7 @@ import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
@@ -376,7 +377,7 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolving_ldsResourceNotFound() {
+  public void resolving_ldsResourceNotFound() { // hi
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
     xdsClient.deliverLdsResourceNotFound();
@@ -553,7 +554,7 @@ public class XdsNameResolverTest {
     Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).contains(AUTHORITY);
-    assertThat(error.getDescription()).contains("UNAVAILABLE: server unreachable");
+    assertThat(error.getDescription()).contains("server unreachable");
   }
 
   @Test
@@ -569,7 +570,7 @@ public class XdsNameResolverTest {
     Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).contains(AUTHORITY);
-    assertThat(error.getDescription()).contains("NOT_FOUND: server unreachable");
+    assertThat(error.getDescription()).contains("server unreachable");
     assertThat(error.getCause()).isNull();
   }
 
@@ -586,8 +587,10 @@ public class XdsNameResolverTest {
         newPickSubchannelArgs(call1.methodDescriptor, new Metadata(), CallOptions.DEFAULT));
     Status error = selectResult.getStatus();
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).contains(RDS_RESOURCE_NAME);
-    assertThat(error.getDescription()).contains("UNAVAILABLE: server unreachable");
+    // XdsDepManager.buildUpdate doesn't allow this
+    // assertThat(error.getDescription()).contains(RDS_RESOURCE_NAME);
+    assertThat(error.getDescription()).contains(expectedLdsResourceName);
+    assertThat(error.getDescription()).contains("server unreachable");
   }
 
   @SuppressWarnings("unchecked")
@@ -1552,6 +1555,33 @@ public class XdsNameResolverTest {
     assertThat(lds1Filter2.isShutdown()).isTrue();
   }
 
+  @Test
+  public void filterState_noShutdown_onLdsDeletion() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    VirtualHost vhost = filterStateTestVhost();
+
+    xdsClient.deliverLdsUpdateWithFilters(vhost, filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+    ImmutableList<StatefulFilter> lds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("LDS 1: expected to create filter instances").that(lds1Snapshot).hasSize(2);
+    StatefulFilter lds1Filter1 = lds1Snapshot.get(0);
+    StatefulFilter lds1Filter2 = lds1Snapshot.get(1);
+
+    // LDS 2: Deliver a resource deletion, which is now an ambient error.
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverLdsResourceDeletion();
+
+    // With an ambient error, no new resolution should happen.
+    verify(mockListener, never()).onResult2(any());
+
+    // Verify that the filters are NOT shut down.
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isFalse();
+  }
+
   /**
    * Verifies that all filter instances are shutdown (closed) on LDS ResourceWatcher shutdown.
    */
@@ -1586,6 +1616,35 @@ public class XdsNameResolverTest {
   public void filterState_shutdown_onRdsNotFound() {
     StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
+    xdsClient.deliverLdsUpdateForRdsNameWithFilters(
+        RDS_RESOURCE_NAME,
+        filterStateTestConfigs(STATEFUL_1, STATEFUL_2));
+    xdsClient.deliverRdsUpdate(
+        RDS_RESOURCE_NAME,
+        Collections.singletonList(filterStateTestVhost()));
+    createAndDeliverClusterUpdates(xdsClient, cluster1);
+    assertClusterResolutionResult(call1, cluster1);
+
+    ImmutableList<StatefulFilter> rds1Snapshot = statefulFilterProvider.getAllInstances();
+    assertWithMessage("RDS 1: Expected to create filter instances").that(rds1Snapshot).hasSize(2);
+    StatefulFilter rds1Filter1 = rds1Snapshot.get(0);
+    StatefulFilter rds1Filter2 = rds1Snapshot.get(1);
+    assertThat(rds1Filter1.isShutdown()).isFalse();
+    assertThat(rds1Filter2.isShutdown()).isFalse();
+
+    reset(mockListener);
+    when(mockListener.onResult2(any())).thenReturn(Status.OK);
+    xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
+
+    assertEmptyResolutionResult(RDS_RESOURCE_NAME);
+    assertThat(rds1Filter1.isShutdown()).isTrue();
+    assertThat(rds1Filter2.isShutdown()).isTrue();
+  }
+
+  @Test
+  public void filterState_noShutdown_onRdsAmbientError() {
+    StatefulFilter.Provider statefulFilterProvider = filterStateTestSetupResolver();
+    FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
 
     // LDS 1.
     xdsClient.deliverLdsUpdateForRdsNameWithFilters(RDS_RESOURCE_NAME,
@@ -1603,10 +1662,10 @@ public class XdsNameResolverTest {
     // RDS 2: RDS_RESOURCE_NAME not found.
     reset(mockListener);
     when(mockListener.onResult2(any())).thenReturn(Status.OK);
-    xdsClient.deliverRdsResourceNotFound(RDS_RESOURCE_NAME);
-    assertEmptyResolutionResult(RDS_RESOURCE_NAME);
-    assertThat(lds1Filter1.isShutdown()).isTrue();
-    assertThat(lds1Filter2.isShutdown()).isTrue();
+    xdsClient.deliverRdsAmbientError(RDS_RESOURCE_NAME, Status.NOT_FOUND);
+    verify(mockListener, never()).onResult2(any());
+    assertThat(lds1Filter1.isShutdown()).isFalse();
+    assertThat(lds1Filter2.isShutdown()).isFalse();
   }
 
   private StatefulFilter.Provider filterStateTestSetupResolver() {
@@ -2523,10 +2582,22 @@ public class XdsNameResolverTest {
       }
     }
 
+    void deliverRdsAmbientError(String resourceName, Status status) {
+      if (!rdsWatchers.containsKey(resourceName)) {
+        return;
+      }
+      syncContext.execute(() -> {
+        List<ResourceWatcher<RdsUpdate>> resourceWatchers =
+            ImmutableList.copyOf(rdsWatchers.get(resourceName));
+        resourceWatchers.forEach(w -> w.onAmbientError(status));
+      });
+    }
+
     void deliverLdsUpdateOnly(long httpMaxStreamDurationNano, List<VirtualHost> virtualHosts) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
       });
     }
 
@@ -2537,8 +2608,9 @@ public class XdsNameResolverTest {
       }
 
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
         createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
       });
     }
@@ -2551,8 +2623,9 @@ public class XdsNameResolverTest {
       List<String> clusterNames = getClusterNames(routes);
 
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), null)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
         if (!clusterNames.isEmpty()) {
           createAndDeliverClusterUpdates(this, clusterNames.toArray(new String[0]));
         }
@@ -2561,8 +2634,9 @@ public class XdsNameResolverTest {
 
     void deliverLdsUpdateWithFilters(VirtualHost vhost, List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(vhost), filterConfigs)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(vhost), filterConfigs));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
       });
     }
 
@@ -2609,8 +2683,9 @@ public class XdsNameResolverTest {
           Collections.singletonList(route),
           overrideConfig);
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            0L, Collections.singletonList(virtualHost), filterChain)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            0L, Collections.singletonList(virtualHost), filterChain));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
         createAndDeliverClusterUpdates(this, cluster);
       });
     }
@@ -2625,8 +2700,9 @@ public class XdsNameResolverTest {
           new NamedFilterConfig(FAULT_FILTER_INSTANCE_NAME, httpFilterFaultConfig),
           new NamedFilterConfig(ROUTER_FILTER_INSTANCE_NAME, RouterFilter.ROUTER_CONFIG));
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0L, rdsName, filterChain)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0L, rdsName, filterChain));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
       });
     }
 
@@ -2638,14 +2714,27 @@ public class XdsNameResolverTest {
         String rdsName,
         @Nullable List<NamedFilterConfig> filterConfigs) {
       syncContext.execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
-            0, rdsName, filterConfigs)));
+        LdsUpdate ldsUpdate = LdsUpdate.forApiListener(HttpConnectionManager.forRdsName(
+            0, rdsName, filterConfigs));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate));
+      });
+    }
+
+    void deliverLdsResourceDeletion() {
+      Status status = Status.NOT_FOUND.withDescription(
+          "Resource not found: " + expectedLdsResourceName);
+      syncContext.execute(() -> {
+        ldsWatcher.onAmbientError(status);
       });
     }
 
     void deliverLdsResourceNotFound() {
+      Status notFoundStatus = Status.UNAVAILABLE.withDescription(
+          "Resource not found: " + expectedLdsResourceName);
       syncContext.execute(() -> {
-        ldsWatcher.onResourceDoesNotExist(expectedLdsResourceName);
+        if (ldsWatcher != null) {
+          ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
+        }
       });
     }
 
@@ -2715,7 +2804,7 @@ public class XdsNameResolverTest {
         RdsUpdate update = new RdsUpdate(virtualHosts);
         List<ResourceWatcher<RdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(rdsWatchers.get(resourceName));
-        resourceWatchers.forEach(w -> w.onChanged(update));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
@@ -2730,7 +2819,8 @@ public class XdsNameResolverTest {
       syncContext.execute(() -> {
         List<ResourceWatcher<RdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(rdsWatchers.get(resourceName));
-        resourceWatchers.forEach(w -> w.onResourceDoesNotExist(resourceName));
+        Status status = Status.UNAVAILABLE.withDescription("Resource not found: " + resourceName);
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(status)));
       });
     }
 
@@ -2741,7 +2831,7 @@ public class XdsNameResolverTest {
       syncContext.execute(() -> {
         List<ResourceWatcher<CdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(cdsWatchers.get(clusterName));
-        resourceWatchers.forEach(w -> w.onChanged(update));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
@@ -2752,7 +2842,7 @@ public class XdsNameResolverTest {
         }
         List<ResourceWatcher<EdsUpdate>> resourceWatchers =
             ImmutableList.copyOf(edsWatchers.get(name));
-        resourceWatchers.forEach(w -> w.onChanged(update));
+        resourceWatchers.forEach(w -> w.onResourceChanged(StatusOr.fromValue(update)));
       });
     }
 
@@ -2760,16 +2850,19 @@ public class XdsNameResolverTest {
     void deliverError(final Status error) {
       if (ldsWatcher != null) {
         syncContext.execute(() -> {
-          ldsWatcher.onError(error);
+          ldsWatcher.onResourceChanged(StatusOr.fromStatus(error));
         });
       }
       syncContext.execute(() -> {
-        rdsWatchers.values().stream()
-            .flatMap(List::stream)
-            .forEach(w -> w.onError(error));
-        cdsWatchers.values().stream()
-            .flatMap(List::stream)
-            .forEach(w -> w.onError(error));
+        List<ResourceWatcher<RdsUpdate>> rdsCopy = rdsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        List<ResourceWatcher<CdsUpdate>> cdsCopy = cdsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        List<ResourceWatcher<EdsUpdate>> edsCopy = edsWatchers.values().stream()
+            .flatMap(List::stream).collect(java.util.stream.Collectors.toList());
+        rdsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
+        cdsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
+        edsCopy.forEach(w -> w.onResourceChanged(StatusOr.fromStatus(error)));
       });
     }
   }

@@ -688,11 +688,10 @@ public class ClusterResolverLoadBalancerTest {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(
-        pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription(
-            "CDS resource " + CLUSTER + " does not exist nodeID: node-id"),
-        null);
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
   @Test
@@ -712,8 +711,10 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).hasSize(0);  // no child LB policy created
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -741,8 +742,9 @@ public class ClusterResolverLoadBalancerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Resource " + CLUSTER + " does not exist nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancer.shutdown).isTrue();
   }
@@ -756,8 +758,10 @@ public class ClusterResolverLoadBalancerTest {
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
     assertThat(childBalancer.upstreamError).isNotNull();
     assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription())
-        .isEqualTo("EDS resource " + EDS_SERVICE_NAME + " does not exist nodeID: node-id");
+    String expectedDescription = "Error retrieving EDS resource " + EDS_SERVICE_NAME
+        + ": NOT_FOUND. Details: Timed out waiting for resource " + EDS_SERVICE_NAME
+        + " from xDS server nodeID: node-id";
+    assertThat(childBalancer.upstreamError.getDescription()).isEqualTo(expectedDescription);
     assertThat(childBalancer.shutdown).isFalse();
   }
 
