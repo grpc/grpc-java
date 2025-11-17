@@ -86,10 +86,10 @@ public final class BinderClientTransport extends BinderTransport
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
 
-  /** Last in-use state that was reported to the listener */
+  /** Last in-use state reported to the transport listener */
   private final AtomicBoolean listenerInUse;
 
-  /** Synchronizes transport listener callbacks */
+  /** Serializes transport listener callbacks */
   private final Object listenerNotifyLock;
 
   private final long readyTimeoutMillis;
@@ -315,22 +315,39 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   void notifyShutdown(Status status) {
-    clientTransportListener.transportShutdown(status, SimpleDisconnectError.UNKNOWN);
+    // Defer listener invocation to the listener executor to avoid calling
+    // external code while holding the transport lock.
+    scheduleOnListener(
+        new Runnable() {
+          @Override
+          public void run() {
+            clientTransportListener.transportShutdown(status, SimpleDisconnectError.UNKNOWN);
+          }
+        });
   }
 
   @Override
   @GuardedBy("this")
   void notifyTerminated() {
     if (numInUseStreams.getAndSet(0) > 0) {
-      listenerInUse.set(false);
-      clientTransportListener.transportInUse(false);
+      if (listenerInUse.compareAndSet(true, false)) {
+        scheduleTransportInUseNotification(false);
+      } else {
+        listenerInUse.set(false);
+      }
     }
     if (readyTimeoutFuture != null) {
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
     serviceBinding.unbind();
-    clientTransportListener.transportTerminated();
+    scheduleOnListener(
+        new Runnable() {
+          @Override
+          public void run() {
+            clientTransportListener.transportTerminated();
+          }
+        });
   }
 
   @Override
@@ -450,8 +467,11 @@ public final class BinderClientTransport extends BinderTransport
   @GuardedBy("this")
   private void onHandshakeComplete() {
     setState(TransportState.READY);
-    attributes = clientTransportListener.filterTransport(attributes);
-    clientTransportListener.transportReady();
+    final Attributes currentAttrs = attributes;
+    // Defer listener callbacks (filterTransport and transportReady) to the listener executor
+    // to avoid invoking listener code while holding the transport lock.
+    scheduleFilterTransportAndReady(currentAttrs);
+
     if (readyTimeoutFuture != null) {
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
@@ -464,42 +484,40 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   /**
-   * Updates in-use stream count and notifies listener only on transitions between 0 and >0, without
-   * acquiring the transport lock.
+   * Updates the in-use stream count and triggers reconciliation of the listener in-use state,
+   * without acquiring the transport lock.
    */
   private void updateInUseStreamsCountIfNeeded(boolean countsForInUse, int delta) {
     Preconditions.checkArgument(delta == -1 || delta == 1, "stream count delta must be -1 or +1");
     if (!countsForInUse) {
       return;
     }
-    int prev, next;
 
     if (delta > 0) {
-      next = numInUseStreams.incrementAndGet();
-      prev = next - 1;
+      numInUseStreams.incrementAndGet();
     } else {
-      prev = numInUseStreams.get();
-      int updated;
+      // Decrement with floor at 0
+      int prev = numInUseStreams.get();
 
       while (true) {
         int current = prev;
         int newValue = current > 0 ? current - 1 : 0;
         if (numInUseStreams.compareAndSet(current, newValue)) {
-          updated = newValue;
           break;
         }
         prev = numInUseStreams.get();
       }
-      next = updated;
     }
+    reconcileInUseState();
+  }
 
-    boolean prevInUse = prev > 0;
-    boolean nextInUse = next > 0;
+  /** Reconcile listenerInUse with the current stream count to avoid stale toggles under races. */
+  private void reconcileInUseState() {
+    boolean nowInUse = numInUseStreams.get() > 0;
+    boolean prev = listenerInUse.get();
 
-    if (prevInUse != nextInUse) {
-      if (listenerInUse.compareAndSet(prevInUse, nextInUse)) {
-        scheduleTransportInUseNotification(nextInUse);
-      }
+    if(prev != nowInUse && listenerInUse.compareAndSet(prev, nowInUse)) {
+      scheduleTransportInUseNotification(nowInUse);
     }
   }
 
@@ -515,6 +533,45 @@ public final class BinderClientTransport extends BinderTransport
                   if (listenerInUse.get() == inUse) {
                     clientTransportListener.transportInUse(inUse);
                   }
+                }
+              }
+            });
+  }
+
+  private void scheduleFilterTransportAndReady(final Attributes attrsSnapshot) {
+    getScheduledExecutorService()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                final Attributes filtered;
+                synchronized (listenerNotifyLock) {
+                  filtered = clientTransportListener.filterTransport(attrsSnapshot);
+                }
+
+                synchronized (BinderClientTransport.class) {
+                  attributes = filtered;
+                }
+
+                scheduleOnListener(
+                    new Runnable() {
+                      @Override
+                      public void run() {
+                        clientTransportListener.transportReady();
+                      }
+                    });
+              }
+            });
+  }
+
+  private void scheduleOnListener(final Runnable task) {
+    getScheduledExecutorService()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                synchronized (listenerNotifyLock) {
+                  task.run();
                 }
               }
             });
