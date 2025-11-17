@@ -9,6 +9,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         curl \
         g++-aarch64-linux-gnu \
         g++-powerpc64le-linux-gnu \
+        g++-riscv64-linux-gnu \
         openjdk-8-jdk \
         pkg-config \
         && \
