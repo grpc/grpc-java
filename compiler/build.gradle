@@ -76,6 +76,7 @@ model {
         aarch_64 { architecture "aarch_64" }
         s390_64 { architecture "s390_64" }
         loongarch_64 { architecture "loongarch_64" }
+        riscv_64 { architecture "riscv_64" }
     }
 
     components {
@@ -84,6 +85,7 @@ model {
                 'x86_32',
                 'x86_64',
                 'ppcle_64',
+                'riscv_64',
                 'aarch_64',
                 's390_64',
                 'loongarch_64'
