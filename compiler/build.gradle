@@ -58,6 +58,10 @@ model {
                 cppCompiler.executable = 'aarch64-linux-gnu-g++'
                 linker.executable = 'aarch64-linux-gnu-g++'
             }
+            target("riscv64") {
+                cppCompiler.executable = 'riscv64-openEuler-linux-g++'
+                linker.executable = 'riscv64-openEuler-linux-g++'
+            }
             target("s390_64") {
                 cppCompiler.executable = 's390x-linux-gnu-g++'
                 linker.executable = 's390x-linux-gnu-g++'
@@ -74,6 +78,7 @@ model {
         x86_64 { architecture "x86_64" }
         ppcle_64 { architecture "ppcle_64" }
         aarch_64 { architecture "aarch_64" }
+        riscv64 { architecture "riscv64" }
         s390_64 { architecture "s390_64" }
         loongarch_64 { architecture "loongarch_64" }
         riscv_64 { architecture "riscv_64" }
@@ -87,6 +92,7 @@ model {
                 'ppcle_64',
                 'riscv_64',
                 'aarch_64',
+                'riscv64',
                 's390_64',
                 'loongarch_64'
             ]) {
