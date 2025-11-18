@@ -79,7 +79,7 @@ public class CallOptionsBenchmark {
   }
 
   /**
-   * Adding custom call options, overwritting existing keys.
+   * Adding custom call options, overwriting existing keys.
    */
   @Benchmark
   @BenchmarkMode(Mode.SampleTime)
