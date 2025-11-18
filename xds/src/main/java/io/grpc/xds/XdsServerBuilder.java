@@ -55,6 +55,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private final FilterRegistry filterRegistry = FilterRegistry.getDefaultRegistry();
   private XdsClientPoolFactory xdsClientPoolFactory =
           SharedXdsClientPoolProvider.getDefaultProvider();
+  private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
 
@@ -127,7 +128,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     }
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorManager, xdsClientPoolFactory, filterRegistry);
+            filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry);
   }
 
   @VisibleForTesting
@@ -140,11 +141,10 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * Allows providing bootstrap override, useful for testing.
    */
   public XdsServerBuilder overrideBootstrapForTest(Map<String, ?> bootstrapOverride) {
-    checkNotNull(bootstrapOverride, "bootstrapOverride");
+    this.bootstrapOverride = checkNotNull(bootstrapOverride, "bootstrapOverride");
     if (this.xdsClientPoolFactory == SharedXdsClientPoolProvider.getDefaultProvider()) {
       this.xdsClientPoolFactory = new SharedXdsClientPoolProvider();
     }
-    this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
     return this;
   }
 

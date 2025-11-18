@@ -37,10 +37,29 @@ import java.util.concurrent.TimeUnit;
  * application will have at most one connection to the handshaker service.
  */
 final class HandshakerServiceChannel {
+  // Port 8080 is necessary for ALTS handshake.
+  private static final int ALTS_PORT = 8080;
+  private static final String DEFAULT_TARGET = "metadata.google.internal.:8080";
 
   static final Resource<Channel> SHARED_HANDSHAKER_CHANNEL =
-      new ChannelResource("metadata.google.internal.:8080");
-
+      new ChannelResource(getHandshakerTarget(System.getenv("GCE_METADATA_HOST")));
+  
+  /**
+   * Returns handshaker target. When GCE_METADATA_HOST is provided, it might contain port which we
+   * will discard and use ALTS_PORT instead.
+   */
+  static String getHandshakerTarget(String envValue) {
+    if (envValue == null || envValue.isEmpty()) {
+      return DEFAULT_TARGET;
+    }
+    String host = envValue;
+    int portIndex = host.lastIndexOf(':');
+    if (portIndex != -1) {
+      host = host.substring(0, portIndex); // Discard port if specified
+    }
+    return host + ":" + ALTS_PORT; // Utilize ALTS port in all cases
+  }
+  
   /** Returns a resource of handshaker service channel for testing only. */
   static Resource<Channel> getHandshakerChannelForTesting(String handshakerAddress) {
     return new ChannelResource(handshakerAddress);

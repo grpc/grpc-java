@@ -31,6 +31,9 @@ MODULE.bazel.lock
 .gitignore
 bin
 
+# VsCode
+.vscode
+
 # OS X
 .DS_Store
 

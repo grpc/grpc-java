@@ -29,7 +29,6 @@ import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ManagedChannel;
-import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -94,13 +93,6 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
     @Nullable
     abstract Attributes.Key<String> getClusterNameAttrKey();
-
-    @Test
-    public void altsHandler_lbProvidedBackend() {
-      Attributes attrs =
-          Attributes.newBuilder().set(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND, true).build();
-      subtest_altsHandler(attrs);
-    }
 
     @Test
     public void tlsHandler_emptyAttributes() {

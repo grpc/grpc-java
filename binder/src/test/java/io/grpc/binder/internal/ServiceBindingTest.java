@@ -52,7 +52,6 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
-import org.robolectric.shadows.ShadowDevicePolicyManager;
 
 @RunWith(RobolectricTestRunner.class)
 public final class ServiceBindingTest {
@@ -114,6 +113,32 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+  }
+
+  @Test
+  public void testGetConnectedServiceInfo() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
+  }
+
+  @Test
+  public void testGetConnectedServiceInfoThrows() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+    shadowOf(appContext.getPackageManager()).removeService(serviceComponent);
+
+    StatusException se = assertThrows(StatusException.class, binding::getConnectedServiceInfo);
+    assertThat(se.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
   }
 
   @Test
@@ -365,12 +390,12 @@ public final class ServiceBindingTest {
   @Test
   @Config(sdk = 28)
   public void testDevicePolicyBlind_returnsErrorWhenSdkBelowR() {
-    String deviceAdminClassName = "DevicePolicyAdmin";
-    ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
-    allowBindDeviceAdminForUser(appContext, adminComponent, 10);
+    ComponentName adminComponent = new ComponentName(appContext, "DevicePolicyAdmin");
+    UserHandle user10 = generateUserHandle(/* userId= */ 10);
+    allowBindDeviceAdminForUser(appContext, adminComponent, user10);
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(10))
+            .setTargetUserHandle(user10)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     binding.bind();
@@ -384,13 +409,13 @@ public final class ServiceBindingTest {
   @Test
   @Config(sdk = 30)
   public void testBindWithDeviceAdmin() throws Exception {
-    String deviceAdminClassName = "DevicePolicyAdmin";
-    ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
-    allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
+    ComponentName adminComponent = new ComponentName(appContext, "DevicePolicyAdmin");
+    UserHandle user0 = generateUserHandle(/* userId= */ 0);
+    allowBindDeviceAdminForUser(appContext, adminComponent, user0);
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* uid= */ 0))
-            .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
+            .setTargetUserHandle(user0)
+            .setTargetComponent(serviceComponent)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
@@ -403,6 +428,10 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
   }
 
   private void assertNoLockHeld() {
@@ -418,15 +447,10 @@ public final class ServiceBindingTest {
   }
 
   private static void allowBindDeviceAdminForUser(
-      Context context, ComponentName admin, int userId) {
-    ShadowDevicePolicyManager devicePolicyManager =
-        shadowOf(context.getSystemService(DevicePolicyManager.class));
-    devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(
-        Arrays.asList(UserHandle.getUserHandleForUid(userId)));
-    shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
-    devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(Arrays.asList(generateUserHandle(userId)));
+      Context context, ComponentName admin, UserHandle user) {
+    DevicePolicyManager devicePolicyManager = context.getSystemService(DevicePolicyManager.class);
+    shadowOf(devicePolicyManager).setBindDeviceAdminTargetUsers(Arrays.asList(user));
+    shadowOf(devicePolicyManager).setDeviceOwner(admin);
   }
 
   /** Generate UserHandles the hard way. */

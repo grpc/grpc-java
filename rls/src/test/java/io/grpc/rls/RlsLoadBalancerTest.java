@@ -166,15 +166,19 @@ public class RlsLoadBalancerTest {
             .build();
     fakeRlsServerImpl.setLookupTable(
         ImmutableMap.of(
-            RouteLookupRequest.create(ImmutableMap.of(
+            RouteLookupRequest.create(
+                ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
-                "method-key", "Search")),
+                "method-key", "Search"),
+                RouteLookupRequest.Reason.REASON_MISS),
             RouteLookupResponse.create(ImmutableList.of("wilderness"), "where are you?"),
-            RouteLookupRequest.create(ImmutableMap.of(
+            RouteLookupRequest.create(
+                ImmutableMap.of(
                 "server", "fake-bigtable.googleapis.com",
                 "service-key", "com.google",
-                "method-key", "Rescue")),
+                "method-key", "Rescue"),
+                RouteLookupRequest.Reason.REASON_MISS),
             RouteLookupResponse.create(ImmutableList.of("civilization"), "you are safe")));
 
     rlsLb = (RlsLoadBalancer) provider.newLoadBalancer(helper);
@@ -452,8 +456,7 @@ public class RlsLoadBalancerTest {
         (FakeSubchannel) markReadyAndGetPickResult(inOrder, searchSubchannelArgs).getSubchannel();
     assertThat(searchSubchannel).isNotNull();
     assertThat(searchSubchannel).isNotSameInstanceAs(fallbackSubchannel);
-    times = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 1 : 2;
-    verifyLongCounterAdd("grpc.lb.rls.target_picks", times, 1, "wilderness", "complete");
+    verifyLongCounterAdd("grpc.lb.rls.target_picks", 1, 1, "wilderness", "complete");
 
     // create rescue subchannel
     picker.pickSubchannel(rescueSubchannelArgs);

@@ -79,8 +79,10 @@ public class XdsClientFederationTest {
   @Before
   public void setUp() throws XdsInitializationException {
     SharedXdsClientPoolProvider clientPoolProvider = new SharedXdsClientPoolProvider();
-    clientPoolProvider.setBootstrapOverride(defaultBootstrapOverride());
-    xdsClientPool = clientPoolProvider.getOrCreate(DUMMY_TARGET, metricRecorder);
+    xdsClientPool = clientPoolProvider.getOrCreate(
+        DUMMY_TARGET,
+        new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride()),
+        metricRecorder);
     xdsClient = xdsClientPool.getObject();
   }
 
@@ -153,7 +155,6 @@ public class XdsClientFederationTest {
       assertThat(entry.getValue().lrsStreamIsNull()).isFalse();
     }
   }
-
 
   /**
    * Assures that when an {@link XdsClient} is asked to add cluster locality stats it appropriately

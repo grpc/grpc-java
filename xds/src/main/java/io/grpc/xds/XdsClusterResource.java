@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.client.Bootstrapper.ServerInfo;
+import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
@@ -47,6 +48,7 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.internal.security.CommonTlsContextUtil;
@@ -64,7 +66,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
               System.getProperty("io.grpc.xds.experimentalEnableLeastRequest", "true"));
   @VisibleForTesting
   public static boolean enableSystemRootCerts =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", false);
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_SYSTEM_ROOT_CERTS", true);
   static boolean isEnabledXdsHttpConnect =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_HTTP_CONNECT", false);
 
@@ -227,6 +229,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     UpstreamTlsContext upstreamTlsContext = null;
     OutlierDetection outlierDetection = null;
     boolean isHttp11ProxyAvailable = false;
+    BackendMetricPropagation backendMetricPropagation = null;
+
+    if (isEnabledOrcaLrsPropagation) {
+      backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
+          cluster.getLrsReportEndpointMetricsList());
+    }
     if (cluster.hasLrsServer()) {
       if (!cluster.getLrsServer().hasSelf()) {
         return StructOrError.fromError(
@@ -326,7 +334,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
       return StructOrError.fromStruct(CdsUpdate.forEds(
           clusterName, edsServiceName, lrsServerInfo, maxConcurrentRequests, upstreamTlsContext,
-          outlierDetection, isHttp11ProxyAvailable));
+          outlierDetection, isHttp11ProxyAvailable, backendMetricPropagation));
     } else if (type.equals(Cluster.DiscoveryType.LOGICAL_DNS)) {
       if (!cluster.hasLoadAssignment()) {
         return StructOrError.fromError(
@@ -362,7 +370,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           Locale.US, "%s:%d", socketAddress.getAddress(), socketAddress.getPortValue());
       return StructOrError.fromStruct(CdsUpdate.forLogicalDns(
           clusterName, dnsHostName, lrsServerInfo, maxConcurrentRequests,
-          upstreamTlsContext, isHttp11ProxyAvailable));
+          upstreamTlsContext, isHttp11ProxyAvailable, backendMetricPropagation));
     }
     return StructOrError.fromError(
         "Cluster " + clusterName + ": unsupported built-in discovery type: " + type);
@@ -533,7 +541,12 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     if (commonTlsContext.hasTlsCertificateProviderInstance()) {
       return commonTlsContext.getTlsCertificateProviderInstance().getInstanceName();
     }
-    return null;
+    // Fall back to deprecated field (field 11) for backward compatibility with Istio
+    @SuppressWarnings("deprecation")
+    String instanceName = commonTlsContext.hasTlsCertificateCertificateProviderInstance()
+        ? commonTlsContext.getTlsCertificateCertificateProviderInstance().getInstanceName()
+        : null;
+    return instanceName;
   }
 
   private static String getRootCertInstanceName(CommonTlsContext commonTlsContext) {
@@ -550,6 +563,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .hasCaCertificateProviderInstance()) {
         return combinedCertificateValidationContext.getDefaultValidationContext()
             .getCaCertificateProviderInstance().getInstanceName();
+      }
+      // Fall back to deprecated field (field 4) in CombinedValidationContext
+      @SuppressWarnings("deprecation")
+      String instanceName = combinedCertificateValidationContext
+          .hasValidationContextCertificateProviderInstance()
+          ? combinedCertificateValidationContext.getValidationContextCertificateProviderInstance()
+              .getInstanceName()
+          : null;
+      if (instanceName != null) {
+        return instanceName;
       }
     }
     return null;
@@ -614,6 +637,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ImmutableMap<String, Object> parsedMetadata();
 
+    @Nullable
+    abstract BackendMetricPropagation backendMetricPropagation();
+
     private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
@@ -622,7 +648,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .choiceCount(0)
           .filterMetadata(ImmutableMap.of())
           .parsedMetadata(ImmutableMap.of())
-          .isHttp11ProxyAvailable(false);
+          .isHttp11ProxyAvailable(false)
+          .backendMetricPropagation(null);
     }
 
     static Builder forAggregate(String clusterName, List<String> prioritizedClusterNames) {
@@ -636,7 +663,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
                           @Nullable ServerInfo lrsServerInfo, @Nullable Long maxConcurrentRequests,
                           @Nullable UpstreamTlsContext upstreamTlsContext,
                           @Nullable OutlierDetection outlierDetection,
-                          boolean isHttp11ProxyAvailable) {
+                          boolean isHttp11ProxyAvailable,
+                          BackendMetricPropagation backendMetricPropagation) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.EDS)
           .edsServiceName(edsServiceName)
@@ -644,21 +672,24 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext)
           .outlierDetection(outlierDetection)
-          .isHttp11ProxyAvailable(isHttp11ProxyAvailable);
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable)
+          .backendMetricPropagation(backendMetricPropagation);
     }
 
     static Builder forLogicalDns(String clusterName, String dnsHostName,
                                  @Nullable ServerInfo lrsServerInfo,
                                  @Nullable Long maxConcurrentRequests,
                                  @Nullable UpstreamTlsContext upstreamTlsContext,
-                                 boolean isHttp11ProxyAvailable) {
+                                 boolean isHttp11ProxyAvailable,
+                                 BackendMetricPropagation backendMetricPropagation) {
       return newBuilder(clusterName)
           .clusterType(ClusterType.LOGICAL_DNS)
           .dnsHostName(dnsHostName)
           .lrsServerInfo(lrsServerInfo)
           .maxConcurrentRequests(maxConcurrentRequests)
           .upstreamTlsContext(upstreamTlsContext)
-          .isHttp11ProxyAvailable(isHttp11ProxyAvailable);
+          .isHttp11ProxyAvailable(isHttp11ProxyAvailable)
+          .backendMetricPropagation(backendMetricPropagation);
     }
 
     enum ClusterType {
@@ -748,6 +779,9 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       protected abstract Builder filterMetadata(ImmutableMap<String, Struct> filterMetadata);
 
       protected abstract Builder parsedMetadata(ImmutableMap<String, Object> parsedMetadata);
+
+      protected abstract Builder backendMetricPropagation(
+          BackendMetricPropagation backendMetricPropagation);
 
       abstract CdsUpdate build();
     }

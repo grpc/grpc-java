@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
@@ -36,8 +37,10 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -58,6 +61,7 @@ final class OpenTelemetryTracingModule {
 
   @VisibleForTesting
   final io.grpc.Context.Key<Span> otelSpan = io.grpc.Context.key("opentelemetry-span-key");
+
   @Nullable
   private static final AtomicIntegerFieldUpdater<CallAttemptsTracerFactory> callEndedUpdater;
   @Nullable
@@ -242,13 +246,15 @@ final class OpenTelemetryTracingModule {
     private final Span span;
     volatile int streamClosed;
     private int seqNo;
+    private Baggage baggage;
 
-    ServerTracer(String fullMethodName, @Nullable Span remoteSpan) {
+    ServerTracer(String fullMethodName, @Nullable Span remoteSpan, Baggage baggage) {
       checkNotNull(fullMethodName, "fullMethodName");
       this.span =
           otelTracer.spanBuilder(generateTraceSpanName(true, fullMethodName))
               .setParent(remoteSpan == null ? null : Context.current().with(remoteSpan))
               .startSpan();
+      this.baggage = baggage;
     }
 
     /**
@@ -274,7 +280,9 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public io.grpc.Context filterContext(io.grpc.Context context) {
-      return context.withValue(otelSpan, span);
+      return context
+          .withValue(otelSpan, span)
+          .withValue(BAGGAGE_KEY, baggage);
     }
 
     @Override
@@ -314,7 +322,8 @@ final class OpenTelemetryTracingModule {
       if (remoteSpan == Span.getInvalid()) {
         remoteSpan = null;
       }
-      return new ServerTracer(fullMethodName, remoteSpan);
+      Baggage baggage = Baggage.fromContext(context);
+      return new ServerTracer(fullMethodName, remoteSpan, baggage);
     }
   }
 
@@ -329,7 +338,15 @@ final class OpenTelemetryTracingModule {
             + "tracing must be set.");
         return next.startCall(call, headers);
       }
-      Context serverCallContext = Context.current().with(span);
+      Context serverCallContext = Context.current();
+      serverCallContext = serverCallContext.with(span);
+      Baggage baggage = BAGGAGE_KEY.get();
+      if (baggage != null) {
+        serverCallContext = serverCallContext.with(baggage);
+      } else {
+        logger.log(Level.WARNING, "Server baggage not found which is unexpected, "
+            + "as it is being added unconditionally in filterContext().");
+      }
       try (Scope scope = serverCallContext.makeCurrent()) {
         return new ContextServerCallListener<>(next.startCall(call, headers), serverCallContext);
       }
@@ -463,19 +480,11 @@ final class OpenTelemetryTracingModule {
     span.addEvent("Inbound message", attributesBuilder.build());
   }
 
-  private String generateErrorStatusDescription(io.grpc.Status status) {
-    if (status.getDescription() != null) {
-      return status.getCode() + ": " + status.getDescription();
-    } else {
-      return status.getCode().toString();
-    }
-  }
-
   private void endSpanWithStatus(Span span, io.grpc.Status status) {
     if (status.isOk()) {
       span.setStatus(StatusCode.OK);
     } else {
-      span.setStatus(StatusCode.ERROR, generateErrorStatusDescription(status));
+      span.setStatus(StatusCode.ERROR, GrpcUtil.statusToPrettyString(status));
     }
     span.end();
   }

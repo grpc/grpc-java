@@ -19,6 +19,7 @@ package io.grpc.xds.internal.security;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Strings;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.internal.GrpcUtil;
@@ -29,6 +30,10 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.ProtocolNegotiationEvent;
+import io.grpc.xds.EnvoyServerProtoData;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.internal.XdsInternalAttributes;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
@@ -36,12 +41,14 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.security.cert.CertStoreException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s to provide the SSL
@@ -60,14 +67,14 @@ public final class SecurityProtocolNegotiators {
   private static final AsciiString SCHEME = AsciiString.of("http");
 
   public static final Attributes.Key<SslContextProviderSupplier>
-          ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
+      ATTR_SERVER_SSL_CONTEXT_PROVIDER_SUPPLIER =
+      Attributes.Key.create("io.grpc.xds.internal.security.server.sslContextProviderSupplier");
 
   /** Attribute key for SslContextProviderSupplier (used from client) for a subchannel. */
   @Grpc.TransportAttr
   public static final Attributes.Key<SslContextProviderSupplier>
       ATTR_SSL_CONTEXT_PROVIDER_SUPPLIER =
-          Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
+      Attributes.Key.create("io.grpc.xds.internal.security.SslContextProviderSupplier");
 
   /**
    * Returns a {@link InternalProtocolNegotiator.ClientFactory}.
@@ -142,7 +149,8 @@ public final class SecurityProtocolNegotiators {
             fallbackProtocolNegotiator, "No TLS config and no fallbackProtocolNegotiator!");
         return fallbackProtocolNegotiator.newHandler(grpcHandler);
       }
-      return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier);
+      return new ClientSecurityHandler(grpcHandler, localSslContextProviderSupplier,
+          grpcHandler.getEagAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME));
     }
 
     @Override
@@ -185,10 +193,13 @@ public final class SecurityProtocolNegotiators {
       extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
     private final GrpcHttp2ConnectionHandler grpcHandler;
     private final SslContextProviderSupplier sslContextProviderSupplier;
+    private final String sni;
+    private final boolean autoSniSanValidationDoesNotApply;
 
     ClientSecurityHandler(
         GrpcHttp2ConnectionHandler grpcHandler,
-        SslContextProviderSupplier sslContextProviderSupplier) {
+        SslContextProviderSupplier sslContextProviderSupplier,
+        String endpointHostname) {
       super(
           // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
           // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
@@ -202,6 +213,28 @@ public final class SecurityProtocolNegotiators {
       checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.sslContextProviderSupplier = sslContextProviderSupplier;
+      EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
+      UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
+      if (CertificateUtils.isXdsSniEnabled) {
+        String sniToUse = upstreamTlsContext.getAutoHostSni()
+            && !Strings.isNullOrEmpty(endpointHostname)
+            ? endpointHostname : upstreamTlsContext.getSni();
+        if (sniToUse.isEmpty() && CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
+          sniToUse = grpcHandler.getAuthority();
+          autoSniSanValidationDoesNotApply = true;
+        } else {
+          autoSniSanValidationDoesNotApply = false;
+        }
+        sni = sniToUse;
+      } else {
+        sni = grpcHandler.getAuthority();
+        autoSniSanValidationDoesNotApply = false;
+      }
+    }
+
+    @VisibleForTesting
+    String getSni() {
+      return sni;
     }
 
     @Override
@@ -213,7 +246,8 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
               if (ctx.isRemoved()) {
                 return;
               }
@@ -222,7 +256,9 @@ public final class SecurityProtocolNegotiators {
                   "ClientSecurityHandler.updateSslContext authority={0}, ctx.name={1}",
                   new Object[]{grpcHandler.getAuthority(), ctx.name()});
               ChannelHandler handler =
-                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
+                  InternalProtocolNegotiators.tls(
+                      sslContextAndTm.getKey(), sni, sslContextAndTm.getValue())
+                      .newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
@@ -234,8 +270,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+          autoSniSanValidationDoesNotApply);
     }
 
     @Override
@@ -356,9 +392,10 @@ public final class SecurityProtocolNegotiators {
           new SslContextProvider.Callback(ctx.executor()) {
 
             @Override
-            public void updateSslContext(SslContext sslContext) {
-              ChannelHandler handler =
-                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
+            public void updateSslContextAndExtendedX509TrustManager(
+                AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm) {
+              ChannelHandler handler = InternalProtocolNegotiators.serverTls(
+                  sslContextAndTm.getKey()).newHandler(grpcHandler);
 
               // Delegate rest of handshake to TLS handler
               if (!ctx.isRemoved()) {
@@ -372,8 +409,8 @@ public final class SecurityProtocolNegotiators {
             public void onException(Throwable throwable) {
               ctx.fireExceptionCaught(throwable);
             }
-          }
-      );
+          },
+          false);
     }
   }
 }

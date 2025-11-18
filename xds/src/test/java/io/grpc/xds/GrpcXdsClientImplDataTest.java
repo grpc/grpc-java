@@ -24,6 +24,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
@@ -140,7 +141,9 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
@@ -565,7 +568,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getErrorDetail()).isNull();
     assertThat(struct.getStruct().cluster()).isEqualTo("cluster-foo");
     assertThat(struct.getStruct().weightedClusters()).isNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -653,7 +656,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(struct.getStruct().weightedClusters()).containsExactly(
         ClusterWeight.create("cluster-foo", 30, ImmutableMap.<String, FilterConfig>of()),
         ClusterWeight.create("cluster-bar", 70, ImmutableMap.<String, FilterConfig>of()));
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -1035,7 +1038,7 @@ public class GrpcXdsClientImplDataTest {
                 ImmutableMap.of("lookupService", "rls-cbt.googleapis.com"))), ImmutableSet.of(),
             getXdsResourceTypeArgs(true));
     assertThat(struct.getStruct()).isNotNull();
-    assertThat(struct.getStruct().autoHostRewrite()).isFalse();
+    assertThat(struct.getStruct().autoHostRewrite()).isTrue();
   }
 
   @Test
@@ -2444,7 +2447,6 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesAudienceMetadata() throws Exception {
-    FilterRegistry.isEnabledGcpAuthnFilter = true;
     MetadataRegistry.getInstance();
 
     Audience audience = Audience.newBuilder()
@@ -2488,14 +2490,11 @@ public class GrpcXdsClientImplDataTest {
         "FILTER_METADATA", ImmutableMap.of(
             "key1", "value1",
             "key2", 42.0));
-    try {
-      assertThat(update.parsedMetadata().get("FILTER_METADATA"))
-          .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
-      assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
-          .isInstanceOf(AudienceWrapper.class);
-    } finally {
-      FilterRegistry.isEnabledGcpAuthnFilter = false;
-    }
+
+    assertThat(update.parsedMetadata().get("FILTER_METADATA"))
+        .isEqualTo(expectedParsedMetadata.get("FILTER_METADATA"));
+    assertThat(update.parsedMetadata().get("AUDIENCE_METADATA"))
+        .isInstanceOf(AudienceWrapper.class);
   }
 
   @Test
@@ -2638,6 +2637,42 @@ public class GrpcXdsClientImplDataTest {
 
     assertThat(result).isNotNull();
     assertThat(result.isHttp11ProxyAvailable()).isTrue();
+  }
+
+  @Test
+  public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+
+    ImmutableList<String> metricSpecs = ImmutableList.of(
+        "cpu_utilization",
+        "named_metrics.foo",
+        "unknown_metric_spec"
+    );
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-orca.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-orca.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .addAllLrsReportEndpointMetrics(metricSpecs)
+        .build();
+
+    CdsUpdate update = XdsClusterResource.processCluster(
+        cluster, null, LRS_SERVER_INFO, LoadBalancerRegistry.getDefaultRegistry());
+
+    BackendMetricPropagation propagationConfig = update.backendMetricPropagation();
+    assertThat(propagationConfig).isNotNull();
+    assertThat(propagationConfig.propagateCpuUtilization).isTrue();
+    assertThat(propagationConfig.propagateMemUtilization).isFalse();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("foo")).isTrue();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("bar")).isFalse();
+    assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
+        .isFalse();
+
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
   }
 
   @Test
@@ -3100,6 +3135,18 @@ public class GrpcXdsClientImplDataTest {
   }
 
   @Test
+  @SuppressWarnings("deprecation")
+  public void validateCommonTlsContext_tlsDeprecatedCertificateProviderInstance()
+      throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateCertificateProviderInstance(
+            CommonTlsContext.CertificateProviderInstance.newBuilder().setInstanceName("name1"))
+        .build();
+    XdsClusterResource
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("name1", "name2"), true);
+  }
+
+  @Test
   public void validateCommonTlsContext_tlsCertificateProviderInstance()
       throws ResourceInvalidException {
     CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
@@ -3181,6 +3228,24 @@ public class GrpcXdsClientImplDataTest {
         .build();
     XdsClusterResource
         .validateCommonTlsContext(commonTlsContext, ImmutableSet.of(), false);
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void validateCommonTlsContext_combinedValidationContextDeprecatedCertProvider()
+      throws ResourceInvalidException {
+    CommonTlsContext commonTlsContext = CommonTlsContext.newBuilder()
+        .setTlsCertificateProviderInstance(
+            CertificateProviderPluginInstance.newBuilder().setInstanceName("cert1"))
+        .setCombinedValidationContext(
+            CommonTlsContext.CombinedCertificateValidationContext.newBuilder()
+                .setValidationContextCertificateProviderInstance(
+                    CommonTlsContext.CertificateProviderInstance.newBuilder()
+                        .setInstanceName("root1"))
+                .build())
+        .build();
+    XdsClusterResource
+        .validateCommonTlsContext(commonTlsContext, ImmutableSet.of("cert1", "root1"), true);
   }
 
   @Test

@@ -39,7 +39,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.rls.ChildLoadBalancerHelper.ChildLoadBalancerHelperProvider;
-import io.grpc.rls.LbPolicyConfiguration.ChildLbStatusListener;
 import io.grpc.rls.LbPolicyConfiguration.ChildLoadBalancingPolicy;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReportingHelper;
@@ -61,7 +60,6 @@ public class LbPolicyConfigurationTest {
   private final LoadBalancer lb = mock(LoadBalancer.class);
   private final SubchannelStateManager subchannelStateManager = new SubchannelStateManagerImpl();
   private final SubchannelPicker picker = mock(SubchannelPicker.class);
-  private final ChildLbStatusListener childLbStatusListener = mock(ChildLbStatusListener.class);
   private final ResolvedAddressFactory resolvedAddressFactory =
       new ResolvedAddressFactory() {
         @Override
@@ -78,8 +76,7 @@ public class LbPolicyConfigurationTest {
               ImmutableMap.<String, Object>of("foo", "bar"),
               lbProvider),
           resolvedAddressFactory,
-          new ChildLoadBalancerHelperProvider(helper, subchannelStateManager, picker),
-          childLbStatusListener);
+          new ChildLoadBalancerHelperProvider(helper, subchannelStateManager, picker));
 
   @Before
   public void setUp() {
@@ -185,7 +182,6 @@ public class LbPolicyConfigurationTest {
 
     childPolicyReportingHelper.updateBalancingState(ConnectivityState.READY, childPicker);
 
-    verify(childLbStatusListener).onStatusChanged(ConnectivityState.READY);
     assertThat(childPolicyWrapper.getPicker()).isEqualTo(childPicker);
     // picker governs childPickers will be reported to parent LB
     verify(helper).updateBalancingState(ConnectivityState.READY, picker);

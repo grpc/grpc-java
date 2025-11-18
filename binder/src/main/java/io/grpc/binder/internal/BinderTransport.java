@@ -45,9 +45,11 @@ import io.grpc.internal.ObjectPool;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -157,6 +159,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   private final ObjectPool<ScheduledExecutorService> executorServicePool;
   private final ScheduledExecutorService scheduledExecutorService;
   private final InternalLogId logId;
+
   @GuardedBy("this")
   private final LeakSafeOneWayBinder incomingBinder;
 
@@ -165,6 +168,9 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   @GuardedBy("this")
   private final LinkedHashSet<Integer> callIdsToNotifyWhenReady = new LinkedHashSet<>();
+
+  @GuardedBy("this")
+  private final List<Future<?>> ownedFutures = new ArrayList<>(); // To cancel upon terminate.
 
   @GuardedBy("this")
   protected Attributes attributes;
@@ -249,6 +255,13 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     executorServicePool.returnObject(scheduledExecutorService);
   }
 
+  // Registers the specified future for eventual safe cancellation upon shutdown/terminate.
+  @GuardedBy("this")
+  protected final <T extends Future<?>> T register(T future) {
+    ownedFutures.add(future);
+    return future;
+  }
+
   @GuardedBy("this")
   boolean inState(TransportState transportState) {
     return this.transportState == transportState;
@@ -265,6 +278,14 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     transportState = newState;
   }
 
+  /**
+   * Sets the binder to use for sending subsequent transactions to our peer.
+   *
+   * <p>Subclasses should call this as early as possible but not from a constructor.
+   *
+   * <p>Returns true for success, false if the process hosting 'binder' is already dead. Callers are
+   * responsible for handling this.
+   */
   @GuardedBy("this")
   protected boolean setOutgoingBinder(OneWayBinderProxy binder) {
     binder = binderDecorator.decorate(binder);
@@ -299,6 +320,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       sendShutdownTransaction();
       ArrayList<Inbound<?>> calls = new ArrayList<>(ongoingCalls.values());
       ongoingCalls.clear();
+      ArrayList<Future<?>> futuresToCancel = new ArrayList<>(ownedFutures);
+      ownedFutures.clear();
       scheduledExecutorService.execute(
           () -> {
             for (Inbound<?> inbound : calls) {
@@ -306,6 +329,12 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
                 inbound.closeAbnormal(shutdownStatus);
               }
             }
+
+            for (Future<?> future : futuresToCancel) {
+              // Not holding any locks here just in case some listener runs on a direct Executor.
+              future.cancel(false); // No effect if already isDone().
+            }
+
             synchronized (this) {
               notifyTerminated();
             }

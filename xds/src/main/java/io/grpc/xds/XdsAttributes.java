@@ -20,7 +20,6 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
 import io.grpc.NameResolver;
-import io.grpc.internal.ObjectPool;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
@@ -33,8 +32,8 @@ final class XdsAttributes {
    * Attribute key for passing around the XdsClient object pool across NameResolver/LoadBalancers.
    */
   @NameResolver.ResolutionResultAttr
-  static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_POOL =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientPool");
+  static final Attributes.Key<XdsClient> XDS_CLIENT =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClient");
 
   /**
    * Attribute key for passing around the latest XdsConfig across NameResolver/LoadBalancers.
@@ -87,11 +86,6 @@ final class XdsAttributes {
   @EquivalentAddressGroup.Attr
   static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.serverWeight");
-
-  /** Name associated with individual address, if available (e.g., DNS name). */
-  @EquivalentAddressGroup.Attr
-  static final Attributes.Key<String> ATTR_ADDRESS_NAME =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.addressName");
 
   /**
    * Filter chain match for network filters.

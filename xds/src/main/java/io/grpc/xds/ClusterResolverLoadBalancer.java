@@ -47,6 +47,7 @@ import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import io.grpc.xds.internal.XdsInternalAttributes;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -97,7 +98,8 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
     logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
     ClusterResolverConfig config =
         (ClusterResolverConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CONFIG);
+    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(
+        io.grpc.xds.XdsAttributes.XDS_CONFIG);
 
     DiscoveryMechanism instance = config.discoveryMechanism;
     String cluster = instance.cluster;
@@ -189,12 +191,12 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
             String localityName = localityName(locality);
             Attributes attr =
                 endpoint.eag().getAttributes().toBuilder()
-                    .set(XdsAttributes.ATTR_LOCALITY, locality)
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
                     .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
-                    .set(XdsAttributes.ATTR_LOCALITY_WEIGHT,
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
-                    .set(XdsAttributes.ATTR_SERVER_WEIGHT, weight)
-                    .set(XdsAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                    .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
                     .build();
             EquivalentAddressGroup eag;
             if (config.isHttp11ProxyAvailable()) {
@@ -334,7 +336,7 @@ final class ClusterResolverLoadBalancer extends LoadBalancer {
           new ClusterImplConfig(
               discovery.cluster, discovery.edsServiceName, discovery.lrsServerInfo,
               discovery.maxConcurrentRequests, dropOverloads, endpointLbConfig,
-              discovery.tlsContext, discovery.filterMetadata);
+              discovery.tlsContext, discovery.filterMetadata, discovery.backendMetricPropagation);
       LoadBalancerProvider clusterImplLbProvider =
           lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
       Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(

@@ -41,6 +41,7 @@ import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.BinderServerBuilder;
 import io.grpc.binder.HostServices;
 import io.grpc.binder.SecurityPolicy;
+import io.grpc.binder.internal.FakeDeadBinder;
 import io.grpc.binder.internal.OneWayBinderProxies.BlackHoleOneWayBinderProxy;
 import io.grpc.binder.internal.OneWayBinderProxies.BlockingBinderDecorator;
 import io.grpc.binder.internal.OneWayBinderProxies.ThrowingOneWayBinderProxy;
@@ -357,6 +358,20 @@ public final class BinderClientTransportTest {
     Status streamStatus = streamListener.awaitClose();
     assertThat(streamStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(streamStatus.getCause()).isSameInstanceAs(doe);
+  }
+
+  @Test
+  public void testServerBinderDeadOnArrival() throws Exception {
+    BlockingBinderDecorator<OneWayBinderProxy> decorator = new BlockingBinderDecorator<>();
+    transport = new BinderClientTransportBuilder().setBinderDecorator(decorator).build();
+    transport.start(transportListener).run();
+    decorator.putNextResult(decorator.takeNextRequest());  // Server's "Endpoint" Binder.
+    OneWayBinderProxy unusedServerBinder = decorator.takeNextRequest();
+    decorator.putNextResult(
+        OneWayBinderProxy.wrap(new FakeDeadBinder(), offloadServicePool.getObject()));
+    Status clientStatus = transportListener.awaitShutdown();
+    assertThat(clientStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(clientStatus.getDescription()).contains("Failed to observe outgoing binder");
   }
 
   @Test

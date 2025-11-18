@@ -134,18 +134,16 @@ public final class SharedResourceHolder {
         public void run() {
           synchronized (SharedResourceHolder.this) {
             // Refcount may have gone up since the task was scheduled. Re-check it.
-            if (cached.refcount == 0) {
-              try {
-                resource.close(instance);
-              } finally {
-                instances.remove(resource);
-                if (instances.isEmpty()) {
-                  destroyer.shutdown();
-                  destroyer = null;
-                }
-              }
+            if (cached.refcount != 0) {
+              return;
+            }
+            instances.remove(resource);
+            if (instances.isEmpty()) {
+              destroyer.shutdown();
+              destroyer = null;
             }
           }
+          resource.close(instance);
         }
       }), DESTROY_DELAY_SECONDS, TimeUnit.SECONDS);
     }

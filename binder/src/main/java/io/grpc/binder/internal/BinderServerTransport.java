@@ -38,54 +38,87 @@ import javax.annotation.Nullable;
 public final class BinderServerTransport extends BinderTransport implements ServerTransport {
 
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
-  @Nullable private ServerTransportListener serverTransportListener;
+
+  @GuardedBy("this")
+  private final SimplePromise<ServerTransportListener> listenerPromise = new SimplePromise<>();
+
+  private BinderServerTransport(
+      ObjectPool<ScheduledExecutorService> executorServicePool,
+      Attributes attributes,
+      List<ServerStreamTracer.Factory> streamTracerFactories,
+      OneWayBinderProxy.Decorator binderDecorator) {
+    super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
+    this.streamTracerFactories = streamTracerFactories;
+  }
 
   /**
    * Constructs a new transport instance.
    *
    * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
    */
-  public BinderServerTransport(
+  public static BinderServerTransport create(
       ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
       List<ServerStreamTracer.Factory> streamTracerFactories,
       OneWayBinderProxy.Decorator binderDecorator,
       IBinder callbackBinder) {
-    super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
-    this.streamTracerFactories = streamTracerFactories;
+    BinderServerTransport transport =
+        new BinderServerTransport(
+            executorServicePool, attributes, streamTracerFactories, binderDecorator);
     // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
-    setOutgoingBinder(OneWayBinderProxy.wrap(callbackBinder, getScheduledExecutorService()));
+    // No need to handle failure here because if 'callbackBinder' is already dead, we'll notice it
+    // again in start() when we send the first transaction.
+    synchronized (transport) {
+      transport.setOutgoingBinder(
+          OneWayBinderProxy.wrap(callbackBinder, transport.getScheduledExecutorService()));
+    }
+    return transport;
   }
 
-  public synchronized void setServerTransportListener(
-      ServerTransportListener serverTransportListener) {
-    this.serverTransportListener = serverTransportListener;
+  /**
+   * Initializes this transport instance.
+   *
+   * <p>Must be called exactly once, even if {@link #shutdown} or {@link #shutdownNow} was called
+   * first.
+   *
+   * @param serverTransportListener where this transport will report events
+   */
+  public synchronized void start(ServerTransportListener serverTransportListener) {
+    this.listenerPromise.set(serverTransportListener);
     if (isShutdown()) {
-      setState(TransportState.SHUTDOWN_TERMINATED);
-      notifyTerminated();
-      releaseExecutors();
-    } else {
-      sendSetupTransaction();
-      // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
-      // it triggers), could have shut us down.
-      if (!isShutdown()) {
-        setState(TransportState.READY);
-        attributes = serverTransportListener.transportReady(attributes);
-      }
+      // It's unlikely, but we could be shutdown externally between construction and start(). One
+      // possible cause is an extremely short handshake timeout.
+      return;
     }
+
+    sendSetupTransaction();
+
+    // Check we're not shutdown again, since a failure inside sendSetupTransaction (or a callback
+    // it triggers), could have shut us down.
+    if (isShutdown()) {
+      return;
+    }
+
+    setState(TransportState.READY);
+    attributes = serverTransportListener.transportReady(attributes);
   }
 
   StatsTraceContext createStatsTraceContext(String methodName, Metadata headers) {
     return StatsTraceContext.newServerContext(streamTracerFactories, methodName, headers);
   }
 
+  /**
+   * Reports a new ServerStream requested by the remote client.
+   *
+   * <p>Precondition: {@link #start(ServerTransportListener)} must already have been called.
+   */
   synchronized Status startStream(ServerStream stream, String methodName, Metadata headers) {
     if (isShutdown()) {
       return Status.UNAVAILABLE.withDescription("transport is shutdown");
-    } else {
-      serverTransportListener.streamCreated(stream, methodName, headers);
-      return Status.OK;
     }
+
+    listenerPromise.get().streamCreated(stream, methodName, headers);
+    return Status.OK;
   }
 
   @Override
@@ -97,9 +130,7 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   @Override
   @GuardedBy("this")
   void notifyTerminated() {
-    if (serverTransportListener != null) {
-      serverTransportListener.transportTerminated();
-    }
+    listenerPromise.runWhenSet(ServerTransportListener::transportTerminated);
   }
 
   @Override

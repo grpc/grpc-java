@@ -25,6 +25,8 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Process;
+import androidx.annotation.BinderThread;
+import androidx.annotation.MainThread;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -73,6 +75,9 @@ public final class BinderClientTransport extends BinderTransport
   private final SecurityPolicy securityPolicy;
   private final Bindable serviceBinding;
 
+  @GuardedBy("this")
+  private final ClientHandshake handshake;
+
   /** Number of ongoing calls which keep this transport "in-use". */
   private final AtomicInteger numInUseStreams;
 
@@ -87,14 +92,6 @@ public final class BinderClientTransport extends BinderTransport
 
   @GuardedBy("this")
   private ScheduledFuture<?> readyTimeoutFuture; // != null iff timeout scheduled.
-
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> authResultFuture; // null before we check auth.
-
-  @GuardedBy("this")
-  @Nullable
-  private ListenableFuture<Status> preAuthResultFuture; // null before we pre-auth.
 
   /**
    * Constructs a new transport instance.
@@ -123,18 +120,17 @@ public final class BinderClientTransport extends BinderTransport
     Boolean preAuthServerOverride = options.getEagAttributes().get(PRE_AUTH_SERVER_OVERRIDE);
     this.preAuthorizeServer =
         preAuthServerOverride != null ? preAuthServerOverride : factory.preAuthorizeServers;
+    this.handshake =
+        factory.useLegacyAuthStrategy ? new LegacyClientHandshake() : new V2ClientHandshake();
     numInUseStreams = new AtomicInteger();
     pingTracker = new PingTracker(Ticker.systemTicker(), (id) -> sendPing(id));
-
     serviceBinding =
         new ServiceBinding(
             factory.mainThreadExecutor,
             factory.sourceContext,
             factory.channelCredentials,
             targetAddress.asBindIntent(),
-            targetAddress.getTargetUser() != null
-                ? targetAddress.getTargetUser()
-                : factory.defaultTargetUserHandle,
+            targetAddress.getTargetUser(),
             factory.bindServiceFlags.toInteger(),
             this);
   }
@@ -147,7 +143,7 @@ public final class BinderClientTransport extends BinderTransport
 
   @Override
   public synchronized void onBound(IBinder binder) {
-    sendSetupTransaction(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
+    handshake.onBound(binderDecorator.decorate(OneWayBinderProxy.wrap(binder, offloadExecutor)));
   }
 
   @Override
@@ -159,31 +155,33 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   public synchronized Runnable start(Listener clientTransportListener) {
     this.clientTransportListener = checkNotNull(clientTransportListener);
-    return () -> {
-      synchronized (BinderClientTransport.this) {
-        if (inState(TransportState.NOT_STARTED)) {
-          setState(TransportState.SETUP);
-          try {
-            if (preAuthorizeServer) {
-              preAuthorize(serviceBinding.resolve());
-            } else {
-              serviceBinding.bind();
-            }
-          } catch (StatusException e) {
-            shutdownInternal(e.getStatus(), true);
-            return;
-          }
-          if (readyTimeoutMillis >= 0) {
-            readyTimeoutFuture =
-                getScheduledExecutorService()
-                    .schedule(
-                        BinderClientTransport.this::onReadyTimeout,
-                        readyTimeoutMillis,
-                        MILLISECONDS);
-          }
-        }
+    return this::postStartRunnable;
+  }
+
+  private synchronized void postStartRunnable() {
+    if (!inState(TransportState.NOT_STARTED)) {
+      return;
+    }
+
+    setState(TransportState.SETUP);
+
+    try {
+      if (preAuthorizeServer) {
+        preAuthorize(serviceBinding.resolve());
+      } else {
+        serviceBinding.bind();
       }
-    };
+    } catch (StatusException e) {
+      shutdownInternal(e.getStatus(), true);
+      return;
+    }
+
+    if (readyTimeoutMillis >= 0) {
+      readyTimeoutFuture =
+          getScheduledExecutorService()
+              .schedule(
+                  BinderClientTransport.this::onReadyTimeout, readyTimeoutMillis, MILLISECONDS);
+    }
   }
 
   @GuardedBy("this")
@@ -196,7 +194,8 @@ public final class BinderClientTransport extends BinderTransport
     // unauthorized server a chance to run, but the connection will still fail by SecurityPolicy
     // check later in handshake. Pre-auth remains effective at mitigating abuse because malware
     // can't typically control the exact timing of its installation.
-    preAuthResultFuture = checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid);
+    ListenableFuture<Status> preAuthResultFuture =
+        register(checkServerAuthorizationAsync(serviceInfo.applicationInfo.uid));
     Futures.addCallback(
         preAuthResultFuture,
         new FutureCallback<Status>() {
@@ -214,13 +213,16 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   private synchronized void handlePreAuthResult(Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else {
-        serviceBinding.bind();
-      }
+    if (!inState(TransportState.SETUP)) {
+      return;
     }
+
+    if (!authorization.isOk()) {
+      shutdownInternal(authorization, true);
+      return;
+    }
+
+    serviceBinding.bind();
   }
 
   private synchronized void onReadyTimeout() {
@@ -262,17 +264,17 @@ public final class BinderClientTransport extends BinderTransport
       Status failure = Status.INTERNAL.withDescription("Clashing call IDs");
       shutdownInternal(failure, true);
       return newFailingClientStream(failure, attributes, headers, tracers);
+    }
+
+    if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
+      clientTransportListener.transportInUse(true);
+    }
+    Outbound.ClientOutbound outbound =
+        new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
+    if (method.getType().clientSendsOneMessage()) {
+      return new SingleMessageClientStream(inbound, outbound, attributes);
     } else {
-      if (inbound.countsForInUse() && numInUseStreams.getAndIncrement() == 0) {
-        clientTransportListener.transportInUse(true);
-      }
-      Outbound.ClientOutbound outbound =
-          new Outbound.ClientOutbound(this, callId, method, headers, statsTraceContext);
-      if (method.getType().clientSendsOneMessage()) {
-        return new SingleMessageClientStream(inbound, outbound, attributes);
-      } else {
-        return new MultiMessageClientStream(inbound, outbound, attributes);
-      }
+      return new MultiMessageClientStream(inbound, outbound, attributes);
     }
   }
 
@@ -317,12 +319,6 @@ public final class BinderClientTransport extends BinderTransport
       readyTimeoutFuture.cancel(false);
       readyTimeoutFuture = null;
     }
-    if (preAuthResultFuture != null) {
-      preAuthResultFuture.cancel(false); // No effect if already complete.
-    }
-    if (authResultFuture != null) {
-      authResultFuture.cancel(false); // No effect if already complete.
-    }
     serviceBinding.unbind();
     clientTransportListener.transportTerminated();
   }
@@ -330,35 +326,47 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   protected void handleSetupTransport(Parcel parcel) {
-    int remoteUid = Binder.getCallingUid();
-    if (inState(TransportState.SETUP)) {
-      int version = parcel.readInt();
-      IBinder binder = parcel.readStrongBinder();
-      if (version != WIRE_FORMAT_VERSION) {
-        shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
-      } else if (binder == null) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
-      } else {
-        restrictIncomingBinderToCallsFrom(remoteUid);
-        attributes = setSecurityAttrs(attributes, remoteUid);
-        authResultFuture = checkServerAuthorizationAsync(remoteUid);
-        Futures.addCallback(
-            authResultFuture,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {
-                handleAuthResult(binder, result);
-              }
-
-              @Override
-              public void onFailure(Throwable t) {
-                handleAuthResult(t);
-              }
-            },
-            offloadExecutor);
-      }
+    if (!inState(TransportState.SETUP)) {
+      return;
     }
+
+    int version = parcel.readInt();
+    if (version != WIRE_FORMAT_VERSION) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Wire format version mismatch"), true);
+      return;
+    }
+
+    IBinder binder = parcel.readStrongBinder();
+    if (binder == null) {
+      shutdownInternal(Status.UNAVAILABLE.withDescription("Malformed SETUP_TRANSPORT data"), true);
+      return;
+    }
+
+    if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
+      shutdownInternal(
+          Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
+      return;
+    }
+    handshake.handleSetupTransport();
+  }
+
+  @GuardedBy("this")
+  private void checkServerAuthorization(int remoteUid) {
+    ListenableFuture<Status> authResultFuture = register(checkServerAuthorizationAsync(remoteUid));
+    Futures.addCallback(
+        authResultFuture,
+        new FutureCallback<Status>() {
+          @Override
+          public void onSuccess(Status result) {
+            handleAuthResult(result);
+          }
+
+          @Override
+          public void onFailure(Throwable t) {
+            handleAuthResult(t);
+          }
+        },
+        offloadExecutor);
   }
 
   private ListenableFuture<Status> checkServerAuthorizationAsync(int remoteUid) {
@@ -367,26 +375,76 @@ public final class BinderClientTransport extends BinderTransport
         : Futures.submit(() -> securityPolicy.checkAuthorization(remoteUid), offloadExecutor);
   }
 
-  private synchronized void handleAuthResult(IBinder binder, Status authorization) {
-    if (inState(TransportState.SETUP)) {
-      if (!authorization.isOk()) {
-        shutdownInternal(authorization, true);
-      } else if (!setOutgoingBinder(OneWayBinderProxy.wrap(binder, offloadExecutor))) {
-        shutdownInternal(
-            Status.UNAVAILABLE.withDescription("Failed to observe outgoing binder"), true);
-      } else {
-        // Check state again, since a failure inside setOutgoingBinder (or a callback it
-        // triggers), could have shut us down.
-        if (!isShutdown()) {
-          setState(TransportState.READY);
-          attributes = clientTransportListener.filterTransport(attributes);
-          clientTransportListener.transportReady();
-          if (readyTimeoutFuture != null) {
-            readyTimeoutFuture.cancel(false);
-            readyTimeoutFuture = null;
-          }
-        }
+  private synchronized void handleAuthResult(Status authorization) {
+    if (!inState(TransportState.SETUP)) {
+      return;
+    }
+
+    if (!authorization.isOk()) {
+      shutdownInternal(authorization, true);
+      return;
+    }
+    handshake.onServerAuthorizationOk();
+  }
+
+  private final class V2ClientHandshake implements ClientHandshake {
+
+    private OneWayBinderProxy endpointBinder;
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy endpointBinder) {
+      this.endpointBinder = endpointBinder;
+      Futures.addCallback(
+          Futures.submit(serviceBinding::getConnectedServiceInfo, offloadExecutor),
+          new FutureCallback<ServiceInfo>() {
+            @Override
+            public void onSuccess(ServiceInfo result) {
+              synchronized (BinderClientTransport.this) {
+                onConnectedServiceInfo(result);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              synchronized (BinderClientTransport.this) {
+                shutdownInternal(Status.fromThrowable(t), true);
+              }
+            }
+          },
+          offloadExecutor);
+    }
+
+    @GuardedBy("BinderClientTransport.this")
+    private void onConnectedServiceInfo(ServiceInfo serviceInfo) {
+      if (!inState(TransportState.SETUP)) {
+        return;
       }
+      attributes = setSecurityAttrs(attributes, serviceInfo.applicationInfo.uid);
+      checkServerAuthorization(serviceInfo.applicationInfo.uid);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this")
+    public void onServerAuthorizationOk() {
+      sendSetupTransaction(endpointBinder);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport() {
+      onHandshakeComplete();
+    }
+  }
+
+  @GuardedBy("this")
+  private void onHandshakeComplete() {
+    setState(TransportState.READY);
+    attributes = clientTransportListener.filterTransport(attributes);
+    clientTransportListener.transportReady();
+    if (readyTimeoutFuture != null) {
+      readyTimeoutFuture.cancel(false);
+      readyTimeoutFuture = null;
     }
   }
 
@@ -399,6 +457,52 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   protected void handlePingResponse(Parcel parcel) {
     pingTracker.onPingResponse(parcel.readInt());
+  }
+
+  /**
+   * An abstract implementation of the client's connection handshake.
+   *
+   * <p>Supports a clean migration away from the legacy approach, one client at a time.
+   */
+  private interface ClientHandshake {
+    /**
+     * Notifies the implementation that the binding has succeeded and we are now connected to the
+     * server's "endpoint" which can be reached at 'endpointBinder'.
+     */
+    @MainThread
+    void onBound(OneWayBinderProxy endpointBinder);
+
+    /** Notifies the implementation that we've received a valid SETUP_TRANSPORT transaction. */
+    @BinderThread
+    void handleSetupTransport();
+
+    /** Notifies the implementation that the SecurityPolicy check of the server succeeded. */
+    void onServerAuthorizationOk();
+  }
+
+  private final class LegacyClientHandshake implements ClientHandshake {
+    @Override
+    @MainThread
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onBound(OneWayBinderProxy binder) {
+      sendSetupTransaction(binder);
+    }
+
+    @Override
+    @BinderThread
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void handleSetupTransport() {
+      int remoteUid = Binder.getCallingUid();
+      restrictIncomingBinderToCallsFrom(remoteUid);
+      attributes = setSecurityAttrs(attributes, remoteUid);
+      checkServerAuthorization(remoteUid);
+    }
+
+    @Override
+    @GuardedBy("BinderClientTransport.this") // By way of @GuardedBy("this") `handshake` member.
+    public void onServerAuthorizationOk() {
+      onHandshakeComplete();
+    }
   }
 
   private static ClientStream newFailingClientStream(

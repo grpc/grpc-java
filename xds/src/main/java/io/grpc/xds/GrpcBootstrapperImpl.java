@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
@@ -48,7 +49,11 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
 
   @Override
   public BootstrapInfo bootstrap(Map<String, ?> rawData) throws XdsInitializationException {
-    return super.bootstrap(rawData);
+    BootstrapInfo info = super.bootstrap(rawData);
+    if (info.servers().isEmpty()) {
+      throw new XdsInitializationException("Invalid bootstrap: 'xds_servers' is empty");
+    }
+    return info;
   }
 
   /**
@@ -93,6 +98,26 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
     return getChannelCredentials(serverConfig, serverUri);
+  }
+
+  @GuardedBy("GrpcBootstrapperImpl.class")
+  private static Map<String, ?> defaultBootstrapOverride;
+  @GuardedBy("GrpcBootstrapperImpl.class")
+  private static BootstrapInfo defaultBootstrap;
+
+  static synchronized void setDefaultBootstrapOverride(Map<String, ?> rawBootstrap) {
+    defaultBootstrapOverride = rawBootstrap;
+  }
+
+  static synchronized BootstrapInfo defaultBootstrap() throws XdsInitializationException {
+    if (defaultBootstrap == null) {
+      if (defaultBootstrapOverride == null) {
+        defaultBootstrap = new GrpcBootstrapperImpl().bootstrap();
+      } else {
+        defaultBootstrap = new GrpcBootstrapperImpl().bootstrap(defaultBootstrapOverride);
+      }
+    }
+    return defaultBootstrap;
   }
 
   private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
