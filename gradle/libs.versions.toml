@@ -11,9 +11,11 @@ protobuf = "3.25.8"
 [libraries]
 android-annotations = "com.google.android:annotations:4.1.1.4"
 # androidx-annotation 1.9.1+ uses Kotlin and requires Android Gradle Plugin 9+
+# checkForUpdates: androidx-annotation:1.9.0
 androidx-annotation = "androidx.annotation:annotation:1.9.0"
 # 1.15.0 requires libraries and applications that depend on it to compile against
 # version 35 or later of the Android APIs.
+# checkForUpdates: androidx-core:1.13.+
 androidx-core = "androidx.core:core:1.13.1"
 # androidx-lifecycle 2.9+ requires Java 17
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.7"
@@ -33,15 +35,19 @@ cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.36.0"
 # error-prone 2.32.0+ require Java 17+
+# checkForUpdates: errorprone-core:2.31.+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.59.2"
 # google-auth-library 1.25.0+ requires error_prone_annotations 2.31.0+, which
 # breaks the Android build
+# checkForUpdates: google-auth-credentials:1.24.+
 google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.24.1"
+# checkForUpdates: google-auth-oauth2Http:1.24.+
 google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.24.1"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.1"
 # 2.13.0 requires error_prone_annotations:2.37.0, but we are stuck with 2.36.0
+# checkForUpdates: gson:2.12.+
 gson = "com.google.code.gson:gson:2.12.1"
 # 33.4.8 requires com.google.errorprone:error_prone_annotations:2.36.0
 guava = "com.google.guava:guava:33.4.8-android"
@@ -52,9 +58,11 @@ guava-testlib = "com.google.guava:guava-testlib:33.4.8-android"
 guava-jre = "com.google.guava:guava:33.4.8-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
+# checkForUpdates: jakarta-servlet-api:5.+
 jakarta-servlet-api = "jakarta.servlet:jakarta.servlet-api:5.0.0"
 javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
+# checkForUpdates: jetty-client:11.+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.24"
 jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.0.23"
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.20"
@@ -79,6 +87,7 @@ netty-transport-epoll = { module = "io.netty:netty-transport-native-epoll", vers
 netty-unix-common = { module = "io.netty:netty-transport-native-unix-common", version.ref = "netty" }
 okhttp = "com.squareup.okhttp:okhttp:2.7.5"
 # okio 3.5+ uses Kotlin 1.9+ which requires Android Gradle Plugin 9+
+# checkForUpdates: okio:3.4.+
 okio = "com.squareup.okio:okio:3.4.0"
 opencensus-api = { module = "io.opencensus:opencensus-api", version.ref = "opencensus" }
 opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-grpc-metrics", version.ref = "opencensus" }
@@ -101,14 +110,19 @@ s2a-proto = "com.google.s2a.proto.v2:s2a-proto:0.1.2"
 signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r2"
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+
+# checkForUpdates: tomcat-embed-core:10.+
 tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.31"
+# checkForUpdates: tomcat-embed-core9:9.+
 tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.89"
 truth = "com.google.truth:truth:1.4.4"
+# checkForUpdates: undertow-servlet22:2.2.+
 undertow-servlet22 = "io.undertow:undertow-servlet:2.2.37.Final"
 undertow-servlet = "io.undertow:undertow-servlet:2.3.18.Final"
 
-# Do not update: Pinned to the last version supporting Java 8.
-# See https://checkstyle.sourceforge.io/releasenotes.html#Release_10.1
+# checkstyle 10.0+ requires Java 11+
+# See https://checkstyle.sourceforge.io/releasenotes_old_8-35_10-26.html#Release_10.0
+# checkForUpdates: checkstylejava8:9.+
 checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
 # 2.11.0+ requires JDK 11+ (See https://github.com/google/error-prone/releases/tag/v2.11.0)
+# checkForUpdates: errorprone-corejava8:2.10.+
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"

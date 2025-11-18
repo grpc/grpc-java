@@ -16,11 +16,15 @@
 
 package io.grpc.gradle;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.artifacts.Configuration;
@@ -32,6 +36,7 @@ import org.gradle.api.artifacts.result.DependencyResult;
 import org.gradle.api.artifacts.result.ResolvedComponentResult;
 import org.gradle.api.artifacts.result.ResolvedDependencyResult;
 import org.gradle.api.artifacts.result.UnresolvedDependencyResult;
+import org.gradle.api.file.RegularFile;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Nested;
@@ -45,7 +50,23 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
   private final Set<Library> libraries;
 
   @Inject
-  public CheckForUpdatesTask(Configuration updateConf, String catalog) {
+  public CheckForUpdatesTask(Configuration updateConf, String catalog, RegularFile commentFile)
+      throws IOException {
+    // Check for overrides to the default version selection ('+'), using comments of the form:
+    // # checkForUpdates: library-name:1.2.+
+    List<String> fileComments = Files.lines(commentFile.getAsFile().toPath())
+        .filter(l -> l.matches("# *checkForUpdates:.*"))
+        .map(l -> l.replaceFirst("# *checkForUpdates:", "").strip())
+        .collect(Collectors.toList());
+    Map<String, String> aliasToVersionSelector = new HashMap<>(2*fileComments.size());
+    for (String comment : fileComments) {
+      String[] parts = comment.split(":", 2);
+      String name = parts[0].replaceAll("[_-]", ".");
+      if (aliasToVersionSelector.put(name, parts[1]) != null) {
+        throw new RuntimeException("Duplicate checkForUpdates comment for library: " + name);
+      }
+    }
+
     updateConf.setVisible(false);
     updateConf.setTransitive(false);
     VersionCatalog versionCatalog = getProject().getExtensions().getByType(VersionCatalogsExtension.class).named(catalog);
@@ -59,14 +80,22 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
       oldConf.getDependencies().add(oldDep);
 
       Configuration newConf = updateConf.copy();
+      String versionSelector = aliasToVersionSelector.remove(name);
+      if (versionSelector == null) {
+        versionSelector = "+";
+      }
       Dependency newDep = getProject().getDependencies().create(
-          depMap(dep.getGroup(), dep.getName(), "+", "pom"));
+          depMap(dep.getGroup(), dep.getName(), versionSelector, "pom"));
       newConf.getDependencies().add(newDep);
 
       libraries.add(new Library(
           name,
           oldConf.getIncoming().getResolutionResult().getRootComponent(),
           newConf.getIncoming().getResolutionResult().getRootComponent()));
+    }
+    if (!aliasToVersionSelector.isEmpty()) {
+      throw new RuntimeException(
+          "Unused checkForUpdates comments: " + aliasToVersionSelector.keySet());
     }
     this.libraries = Collections.unmodifiableSet(libraries);
   }
@@ -96,10 +125,16 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
             "- Current version of libs.%s not resolved", name));
         continue;
       }
+      DependencyResult newResult = lib.getNewResult().get().getDependencies().iterator().next();
+      if (newResult instanceof UnresolvedDependencyResult) {
+        System.out.println(String.format(
+            "- New version of libs.%s not resolved", name));
+        continue;
+      }
       ModuleVersionIdentifier oldId =
           ((ResolvedDependencyResult) oldResult).getSelected().getModuleVersion();
-      ModuleVersionIdentifier newId = ((ResolvedDependencyResult) lib.getNewResult().get()
-          .getDependencies().iterator().next()).getSelected().getModuleVersion();
+      ModuleVersionIdentifier newId =
+          ((ResolvedDependencyResult) newResult).getSelected().getModuleVersion();
       if (oldId != newId) {
         System.out.println(String.format(
             "libs.%s = %s %s -> %s",
