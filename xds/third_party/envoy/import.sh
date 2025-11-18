@@ -16,8 +16,8 @@
 # Update VERSION then execute this script
 
 set -e
-# import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=1128a52d227efb8c798478d293fdc05e8075ebcd
+# import VERSION from the google internal go/envoy-import-status
+VERSION=b6df993feef0340391e6dbf6ad957ab42884ad05
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -33,6 +33,7 @@ envoy/config/cluster/v3/circuit_breaker.proto
 envoy/config/cluster/v3/cluster.proto
 envoy/config/cluster/v3/filter.proto
 envoy/config/cluster/v3/outlier_detection.proto
+envoy/config/common/mutation_rules/v3/mutation_rules.proto
 envoy/config/core/v3/address.proto
 envoy/config/core/v3/backoff.proto
 envoy/config/core/v3/base.proto
@@ -74,12 +75,19 @@ envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/ext_authz/v3/ext_authz.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/gcp_authn/v3/gcp_authn.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
+envoy/extensions/grpc_service/call_credentials/access_token/v3/access_token_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/google_default/v3/google_default_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/insecure/v3/insecure_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/local/v3/local_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/tls/v3/tls_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/xds/v3/xds_credentials.proto
 envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.proto
 envoy/extensions/load_balancing_policies/common/v3/common.proto
 envoy/extensions/load_balancing_policies/least_request/v3/least_request.proto
@@ -92,6 +100,8 @@ envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
 envoy/extensions/transport_sockets/tls/v3/secret.proto
 envoy/extensions/transport_sockets/tls/v3/tls.proto
+envoy/service/auth/v3/attribute_context.proto
+envoy/service/auth/v3/external_auth.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v3/lrs.proto
