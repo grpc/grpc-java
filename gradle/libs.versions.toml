@@ -31,7 +31,7 @@ commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.36.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.44.0"
 # error-prone 2.32.0+ require Java 17+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.59.2"
