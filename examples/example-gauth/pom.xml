@@ -57,7 +57,7 @@
     <dependency>
       <groupId>com.google.auth</groupId>
       <artifactId>google-auth-library-oauth2-http</artifactId>
-      <version>1.23.0</version>
+      <version>1.40.0</version>
     </dependency>
     <dependency>
       <groupId>com.google.api.grpc</groupId>
