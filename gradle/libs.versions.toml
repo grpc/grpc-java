@@ -22,8 +22,11 @@ androidx-test-rules = "androidx.test:rules:1.6.1"
 animalsniffer = "org.codehaus.mojo:animal-sniffer:1.26"
 animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.26"
 assertj-core = "org.assertj:assertj-core:3.27.6"
-auto-value = "com.google.auto.value:auto-value:1.11.1"
-auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.11.1"
+# 1.11.1 started converting jsr305 @Nullable to jspecify
+# checkForUpdates: auto-value:1.11.0
+auto-value = "com.google.auto.value:auto-value:1.11.0"
+# checkForUpdates: auto-value-annotations:1.11.0
+auto-value-annotations = "com.google.auto.value:auto-value-annotations:1.11.0"
 # 11.0+ requires Java 17+
 # https://checkstyle.sourceforge.io/releasenotes.html
 # checkForUpdates: checkstyle:10.+
