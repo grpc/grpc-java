@@ -19,17 +19,15 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
@@ -110,7 +108,8 @@ public final class AutoConfiguredLoadBalancerFactory {
           defaultProvider = getProviderOrThrow(defaultPolicy, "using default policy");
         } catch (PolicyException e) {
           Status s = Status.INTERNAL.withDescription(e.getMessage());
-          helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
+          helper.updateBalancingState(
+              ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(s)));
           delegate.shutdown();
           delegateProvider = null;
           delegate = new NoopLoadBalancer();
@@ -122,7 +121,8 @@ public final class AutoConfiguredLoadBalancerFactory {
 
       if (delegateProvider == null
           || !policySelection.provider.getPolicyName().equals(delegateProvider.getPolicyName())) {
-        helper.updateBalancingState(ConnectivityState.CONNECTING, new EmptyPicker());
+        helper.updateBalancingState(
+            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         delegate.shutdown();
         delegateProvider = policySelection.provider;
         LoadBalancer old = delegate;
@@ -234,32 +234,6 @@ public final class AutoConfiguredLoadBalancerFactory {
 
     private PolicyException(String msg) {
       super(msg);
-    }
-  }
-
-  private static final class EmptyPicker extends SubchannelPicker {
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(EmptyPicker.class).toString();
-    }
-  }
-
-  private static final class FailingPicker extends SubchannelPicker {
-    private final Status failure;
-
-    FailingPicker(Status failure) {
-      this.failure = failure;
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withError(failure);
     }
   }
 }
