@@ -361,7 +361,8 @@ public class JsonUtil {
   /**
    * Copy of {@link com.google.protobuf.util.Durations#normalizedDuration}.
    */
-  @SuppressWarnings("NarrowingCompoundAssignment")
+  // Math.addExact() requires Android API level 24
+  @SuppressWarnings({"NarrowingCompoundAssignment", "InlineMeInliner"})
   private static long normalizedDuration(long seconds, int nanos) {
     if (nanos <= -NANOS_PER_SECOND || nanos >= NANOS_PER_SECOND) {
       seconds = checkedAdd(seconds, nanos / NANOS_PER_SECOND);

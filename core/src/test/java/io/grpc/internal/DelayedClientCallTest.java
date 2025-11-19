@@ -204,7 +204,7 @@ public class DelayedClientCallTest {
     Object goldenValue = new Object();
     DelayedClientCall<String, Integer> delayedClientCall =
         Context.current().withValue(contextKey, goldenValue).call(() ->
-          new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
+            new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
     AtomicReference<Context> readyContext = new AtomicReference<>();
     delayedClientCall.start(new ClientCall.Listener<Integer>() {
       @Override public void onReady() {

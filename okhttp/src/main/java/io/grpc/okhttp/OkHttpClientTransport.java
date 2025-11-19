@@ -337,7 +337,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         ? SocketFactory.getDefault() : transportFactory.socketFactory;
     this.sslSocketFactory = transportFactory.sslSocketFactory;
     this.hostnameVerifier = transportFactory.hostnameVerifier != null
-      ? transportFactory.hostnameVerifier : OkHostnameVerifier.INSTANCE;
+        ? transportFactory.hostnameVerifier : OkHostnameVerifier.INSTANCE;
     this.connectionSpec = Preconditions.checkNotNull(
         transportFactory.connectionSpec, "connectionSpec");
     this.stopwatchFactory = Preconditions.checkNotNull(stopwatchFactory, "stopwatchFactory");

@@ -478,7 +478,7 @@ public class DnsNameResolver extends NameResolver {
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md">
-   *   Service Config in DNS</a>
+   *     Service Config in DNS</a>
    * @param choice The service config choice.
    * @return The service config object or {@code null} if this choice does not apply.
    */
