@@ -1025,14 +1025,9 @@ public class CachingRlsLbClientTest {
 
         @Override
         public void handleNameResolutionError(final Status error) {
-          class ErrorPicker extends SubchannelPicker {
-            @Override
-            public PickResult pickSubchannel(PickSubchannelArgs args) {
-              return PickResult.withError(error);
-            }
-          }
-
-          helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker());
+          helper.updateBalancingState(
+              ConnectivityState.TRANSIENT_FAILURE,
+              new FixedResultPicker(PickResult.withError(error)));
         }
 
         @Override

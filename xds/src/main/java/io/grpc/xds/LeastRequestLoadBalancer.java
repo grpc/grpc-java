@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
   private final ThreadSafeRandom random;
 
-  private SubchannelPicker currentPicker = new EmptyPicker();
+  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
   private int choiceCount = DEFAULT_CHOICE_COUNT;
 
   LeastRequestLoadBalancer(Helper helper) {
@@ -113,7 +113,7 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
         }
       }
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new EmptyPicker());
+        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       } else {
         // Give it all the failing children and let it randomly pick among them
         updateBalancingState(TRANSIENT_FAILURE,
