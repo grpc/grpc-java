@@ -92,7 +92,7 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
       });
       this.subchannel = subchannel;
 
-      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      helper.updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -107,7 +107,8 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
       subchannel.shutdown();
       subchannel = null;
     }
-    helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    helper.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
@@ -125,13 +126,13 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
         picker = new RequestConnectionPicker();
         break;
       case CONNECTING:
-        picker = new Picker(PickResult.withNoResult());
+        picker = new FixedResultPicker(PickResult.withNoResult());
         break;
       case READY:
-        picker = new Picker(PickResult.withSubchannel(subchannel));
+        picker = new FixedResultPicker(PickResult.withSubchannel(subchannel));
         break;
       case TRANSIENT_FAILURE:
-        picker = new Picker(PickResult.withError(stateInfo.getStatus()));
+        picker = new FixedResultPicker(PickResult.withError(stateInfo.getStatus()));
         break;
       default:
         throw new IllegalArgumentException("Unsupported state:" + currentState);
@@ -151,29 +152,6 @@ class ShufflingPickFirstLoadBalancer extends LoadBalancer {
   public void requestConnection() {
     if (subchannel != null) {
       subchannel.requestConnection();
-    }
-  }
-
-  /**
-   * No-op picker which doesn't add any custom picking logic. It just passes already known result
-   * received in constructor.
-   */
-  private static final class Picker extends SubchannelPicker {
-
-    private final PickResult result;
-
-    Picker(PickResult result) {
-      this.result = checkNotNull(result, "result");
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
     }
   }
 
