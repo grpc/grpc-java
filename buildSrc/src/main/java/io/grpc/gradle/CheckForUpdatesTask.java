@@ -56,7 +56,7 @@ public abstract class CheckForUpdatesTask extends DefaultTask {
     // # checkForUpdates: library-name:1.2.+
     List<String> fileComments = Files.lines(commentFile.getAsFile().toPath())
         .filter(l -> l.matches("# *checkForUpdates:.*"))
-        .map(l -> l.replaceFirst("# *checkForUpdates:", "").strip())
+        .map(l -> l.replaceFirst("# *checkForUpdates:", "").trim())
         .collect(Collectors.toList());
     Map<String, String> aliasToVersionSelector = new HashMap<>(2*fileComments.size());
     for (String comment : fileComments) {
