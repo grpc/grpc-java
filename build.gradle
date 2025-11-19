@@ -533,5 +533,5 @@ configurations {
     }
 }
 
-tasks.register('checkForUpdates', CheckForUpdatesTask, project.configurations.checkForUpdates, "libs")
+tasks.register('checkForUpdates', CheckForUpdatesTask, project.configurations.checkForUpdates, "libs", layout.projectDirectory.file("gradle/libs.versions.toml"))
 
