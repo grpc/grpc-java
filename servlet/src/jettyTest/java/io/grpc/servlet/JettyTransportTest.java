@@ -77,9 +77,7 @@ public class JettyTransportTest extends AbstractTransportTest {
         ServerConnector sc = (ServerConnector) jettyServer.getConnectors()[0];
         HttpConfiguration httpConfiguration = new HttpConfiguration();
 
-        // Must be set for several tests to pass, so that the request handling can begin before
-        // content arrives.
-        httpConfiguration.setDelayDispatchUntilContent(false);
+        setDelayDispatchUntilContent(httpConfiguration);
 
         HTTP2CServerConnectionFactory factory =
                 new HTTP2CServerConnectionFactory(httpConfiguration);
@@ -127,6 +125,16 @@ public class JettyTransportTest extends AbstractTransportTest {
         return delegate.getListenSocketStatsList();
       }
     };
+  }
+
+  // The future default appears to be false as people are supposed to be migrate to
+  // EagerContentHandler, but the default is still true. Seems they messed up the migration
+  // process here by not flipping the default.
+  @SuppressWarnings("removal")
+  private static void setDelayDispatchUntilContent(HttpConfiguration httpConfiguration) {
+    // Must be set for several tests to pass, so that the request handling can begin before
+    // content arrives.
+    httpConfiguration.setDelayDispatchUntilContent(false);
   }
 
   @Override
