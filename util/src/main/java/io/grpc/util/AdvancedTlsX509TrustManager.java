@@ -464,7 +464,7 @@ public final class AdvancedTlsX509TrustManager extends X509ExtendedTrustManager 
       return this;
     }
 
-    public AdvancedTlsX509TrustManager build() throws CertificateException {
+    public AdvancedTlsX509TrustManager build() {
       return new AdvancedTlsX509TrustManager(this.verification, this.socketAndEnginePeerVerifier);
     }
   }

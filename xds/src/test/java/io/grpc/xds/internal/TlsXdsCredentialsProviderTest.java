@@ -16,13 +16,30 @@
 
 package io.grpc.xds.internal;
 
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_KEY_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import io.grpc.ChannelCredentials;
 import io.grpc.InternalServiceProviders;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.internal.testing.TestUtils;
+import io.grpc.util.AdvancedTlsX509KeyManager;
+import io.grpc.util.AdvancedTlsX509TrustManager;
+import io.grpc.xds.ResourceAllocatingChannelCredentials;
 import io.grpc.xds.XdsCredentialsProvider;
+import java.util.Map;
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.TrustManager;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -50,8 +67,95 @@ public class TlsXdsCredentialsProviderTest {
   }
 
   @Test
-  public void channelCredentials() {
+  public void channelCredentialsWhenNullConfig() {
     assertSame(TlsChannelCredentials.class,
         provider.newChannelCredentials(null).getClass());
+  }
+
+  @Test
+  public void channelCredentialsWhenInvalidRefreshInterval() {
+    Map<String, ?> jsonConfig = ImmutableMap.of(
+        "refresh_interval", "invalid-duration-format");
+    assertNull(provider.newChannelCredentials(jsonConfig));
+  }
+
+  @Test
+  public void channelCredentialsWhenNotExistingTrustFileConfig() {
+    Map<String, ?> jsonConfig = ImmutableMap.of(
+        "ca_certificate_file", "/tmp/not-exisiting-file.txt");
+
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    Exception ex = assertThrows(RuntimeException.class, () -> {
+      resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    });
+
+    String expectedMsg = "Unable to read root certificates";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
+  }
+
+  @Test
+  public void channelCredentialsWhenNotExistingCertificateFileConfig() {
+    Map<String, ?> jsonConfig = ImmutableMap.of(
+        "certificate_file", "/tmp/not-exisiting-file.txt",
+        "private_key_file", "/tmp/not-exisiting-file-2.txt");
+
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    Exception ex = assertThrows(RuntimeException.class, () -> {
+      resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    });
+
+    String expectedMsg = "Unable to read certificate chain or private key";
+    String actualMsg = ex.getMessage();
+
+    assertEquals(expectedMsg, actualMsg);
+  }
+
+  @Test
+  public void channelCredentialsWhenInvalidConfig() throws Exception {
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    Map<String, ?> jsonConfig = ImmutableMap.of("certificate_file", certChainPath.toString());
+    assertNull(provider.newChannelCredentials(jsonConfig));
+  }
+
+  @Test
+  public void channelCredentialsWhenValidConfig() throws Exception {
+    String rootCertPath = TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath();
+    String certChainPath = TestUtils.loadCert(CLIENT_PEM_FILE).getAbsolutePath();
+    String privateKeyPath = TestUtils.loadCert(CLIENT_KEY_FILE).getAbsolutePath();
+
+    Map<String, ?> jsonConfig = ImmutableMap.of(
+        "ca_certificate_file", rootCertPath,
+        "certificate_file", certChainPath,
+        "private_key_file", privateKeyPath,
+        "refresh_interval", "440s");
+
+    ChannelCredentials channelCredentials = provider.newChannelCredentials(jsonConfig);
+    assertSame(ResourceAllocatingChannelCredentials.class, channelCredentials.getClass());
+
+    ResourceAllocatingChannelCredentials resourceAllocatingChannelCredentials =
+        (ResourceAllocatingChannelCredentials) channelCredentials;
+    ChannelCredentials acquiredChannelCredentials =
+        resourceAllocatingChannelCredentials.acquireChannelCredentials();
+    assertSame(TlsChannelCredentials.class, acquiredChannelCredentials.getClass());
+
+    TlsChannelCredentials tlsChannelCredentials =
+        (TlsChannelCredentials) acquiredChannelCredentials;
+    assertThat(tlsChannelCredentials.getKeyManagers()).hasSize(1);
+    KeyManager keyManager = Iterables.getOnlyElement(tlsChannelCredentials.getKeyManagers());
+    assertThat(keyManager).isInstanceOf(AdvancedTlsX509KeyManager.class);
+    assertThat(tlsChannelCredentials.getTrustManagers()).hasSize(1);
+    TrustManager trustManager = Iterables.getOnlyElement(tlsChannelCredentials.getTrustManagers());
+    assertThat(trustManager).isInstanceOf(AdvancedTlsX509TrustManager.class);
+    resourceAllocatingChannelCredentials.releaseChannelCredentials();
   }
 }
