@@ -431,6 +431,76 @@ public class TlsTest {
   }
 
   @Test
+  public void perRpcAuthorityOverride_multipleAuthorities_verifiedIndependently()
+      throws Exception {
+    OkHttpClientTransport.enablePerRpcAuthorityCheck = true;
+    try {
+      // Setup server with TLS certificate
+      ServerCredentials serverCreds;
+      try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
+           InputStream serverPrivateKey = TlsTesting.loadCert("server1.key")) {
+        serverCreds = TlsServerCredentials.newBuilder()
+            .keyManager(serverCert, serverPrivateKey)
+            .build();
+      }
+      
+      // Setup client with CA certificate for trust
+      ChannelCredentials channelCreds;
+      try (InputStream caCert = TlsTesting.loadCert("ca.pem")) {
+        channelCreds = TlsChannelCredentials.newBuilder()
+            .trustManager(caCert)
+            .build();
+      }
+      
+      Server server = grpcCleanupRule.register(server(serverCreds));
+      ManagedChannel channel = grpcCleanupRule.register(clientChannel(server, channelCreds));
+
+      // First RPC: Use a valid authority that matches the certificate SAN
+      // This should succeed and the result should be cached
+      ClientCalls.blockingUnaryCall(
+          channel,
+          SimpleServiceGrpc.getUnaryRpcMethod(),
+          CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+          SimpleRequest.getDefaultInstance());
+
+      // Second RPC: Use another valid authority on the same channel
+      // This should also succeed and be cached separately
+      ClientCalls.blockingUnaryCall(
+          channel,
+          SimpleServiceGrpc.getUnaryRpcMethod(),
+          CallOptions.DEFAULT.withAuthority("good.test.google.fr"),
+          SimpleRequest.getDefaultInstance());
+
+      // Third RPC: Use an invalid authority that does NOT match the certificate
+      // This should fail with UNAVAILABLE status, proving Issue #67 is working
+      try {
+        ClientCalls.blockingUnaryCall(
+            channel,
+            SimpleServiceGrpc.getUnaryRpcMethod(),
+            CallOptions.DEFAULT.withAuthority("invalid.authority.com"),
+            SimpleRequest.getDefaultInstance());
+        fail("Expected exception for hostname verifier failure with invalid authority.");
+      } catch (StatusRuntimeException ex) {
+        // Verify the failure matches expected behavior for Issue #67
+        assertThat(ex.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+        assertThat(ex.getStatus().getDescription()).isEqualTo(
+            "HostNameVerifier verification failed for authority 'invalid.authority.com'");
+      }
+
+      // Fourth RPC: Reuse the first valid authority again
+      // This should succeed using the cached verification result
+      ClientCalls.blockingUnaryCall(
+          channel,
+          SimpleServiceGrpc.getUnaryRpcMethod(),
+          CallOptions.DEFAULT.withAuthority("foo.test.google.fr"),
+          SimpleRequest.getDefaultInstance());
+
+    } finally {
+      OkHttpClientTransport.enablePerRpcAuthorityCheck = false;
+    }
+  }
+
+  @Test
   public void mtls_succeeds() throws Exception {
     ServerCredentials serverCreds;
     try (InputStream serverCert = TlsTesting.loadCert("server1.pem");
