@@ -74,3 +74,19 @@ When you are ready to begin processing the next value from the stream call
 Also see [gRPC Flow Control Users Guide][user guide]
 
  [user guide]: https://grpc.io/docs/guides/flow-control
+
+### Batch Write Optimization Example
+
+The `BatchWriteOptimizationExample.java` demonstrates how to optimize streaming writes
+by batching multiple messages before flushing. This addresses the pull/batch write
+optimization pattern.
+
+**Key Pattern:**
+```java
+requestStream.setOnReadyHandler(() -> {
+    // Write multiple messages in a batch while isReady() is true
+    while (requestStream.isReady() && hasMoreData()) {
+        requestStream.onNext(nextMessage());
+    }
+    // When isReady() becomes false, this handler will be called again
+});
