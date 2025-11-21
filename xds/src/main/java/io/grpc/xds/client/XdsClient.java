@@ -161,13 +161,6 @@ public abstract class XdsClient {
     /**
      * Called to deliver a transient error that should not affect the watcher's use of any
      * previously received resource.
-     *
-     * <p>Note that we expect that the implementer to:
-     * - Comply with the guarantee to not generate certain statuses by the library:
-     *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
-     *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
-     * - Keep {@link Status} description in one form or another, as it contains valuable debugging
-     *   information.
      *   */
     void onAmbientError(Status error);
   }

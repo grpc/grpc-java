@@ -841,11 +841,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       }
       if (!Objects.equals(oldData, data)) {
         StatusOr<T> update = StatusOr.fromValue(data);
-        for (Map.Entry<ResourceWatcher<T>, Executor> entry : watchers.entrySet()) {
-          ResourceWatcher<T> watcher = entry.getKey();
-          Executor executor = entry.getValue();
+        for (ResourceWatcher<T> watcher : watchers.keySet()) {
           processingTracker.startTask();
-          executor.execute(() -> {
+          watchers.get(watcher).execute(() -> {
             try {
               watcher.onResourceChanged(update);
             } finally {

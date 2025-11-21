@@ -417,6 +417,7 @@ final class XdsServerWrapper extends Server {
       }
 
       if (!pendingRds.isEmpty()) {
+        // filter chain state has not yet been applied to filterChainSelectorManager and there
         releaseSuppliersInFlight();
         pendingRds.clear();
       }
