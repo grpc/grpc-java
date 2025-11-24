@@ -42,13 +42,13 @@ else
   # install here so we don't need sudo
   if [[ "$(uname -s)" == "Darwin" ]]; then
     cmake .. \
-      -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
       -B. || exit 1
   elif [[ "$ARCH" == x86* ]]; then
     CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} cmake .. \
-      -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
       -B. || exit 1
   else
@@ -65,7 +65,7 @@ else
       exit 1
     fi
     cmake .. \
-      -DCMAKE_CXX_STANDARD=14 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
+      -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
       -Dcrosscompile_ARCH="$GCC_ARCH" \
       -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake \

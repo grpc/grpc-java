@@ -50,7 +50,7 @@ for /f "tokens=4 delims=\" %%a in ("%VCINSTALLDIR%") do (
 for /f "tokens=1 delims=." %%a in ("%VisualStudioVersion%") do (
   SET visual_studio_major_version=%%a
 )
-cmake -DABSL_MSVC_STATIC_RUNTIME=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% .. || exit /b 1
+cmake -DCMAKE_CXX_STANDARD=17 -DABSL_MSVC_STATIC_RUNTIME=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% .. || exit /b 1
 cmake --build . --config Release --target install || exit /b 1
 popd
 goto :eof
