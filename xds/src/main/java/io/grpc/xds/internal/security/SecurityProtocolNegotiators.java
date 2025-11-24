@@ -219,8 +219,10 @@ public final class SecurityProtocolNegotiators {
         String sniToUse = upstreamTlsContext.getAutoHostSni()
             && !Strings.isNullOrEmpty(endpointHostname)
             ? endpointHostname : upstreamTlsContext.getSni();
-        if (sniToUse.isEmpty() && CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
-          sniToUse = grpcHandler.getAuthority();
+        if (sniToUse.isEmpty()) {
+          if (CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
+            sniToUse = grpcHandler.getAuthority();
+          }
           autoSniSanValidationDoesNotApply = true;
         } else {
           autoSniSanValidationDoesNotApply = false;
