@@ -314,7 +314,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
     ControlPlaneClient activeCpClient = getActiveCpc(subscriber.authority);
     if (cpcToUse != activeCpClient) {
-      addCpcToAuthority(subscriber.authority, cpcToUse);
+      addCpcToAuthority(subscriber.authority, cpcToUse); // makes it active
       if (activeCpClient != null) {
         didFallback = cpcToUse != null && !cpcToUse.isInError();
         if (didFallback) {
@@ -1007,6 +1007,9 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
     @Override
     public void handleStreamClosed(Status status, boolean shouldTryFallback) {
+      System.out.println("DEBUG: handleStreamClosed called with status: " + status
+          + ", shouldTryFallback: " + shouldTryFallback);
+
       syncContext.throwIfNotInThisSynchronizationContext();
 
       ControlPlaneClient cpcClosed = serverCpClientMap.get(serverInfo);

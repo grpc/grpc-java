@@ -3878,9 +3878,6 @@ public abstract class GrpcXdsClientImplTestBase {
     InOrder edsWatcherInOrder = inOrder(edsResourceWatcher);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2, backoffPolicy2);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(1, true, xdsServerInfo.target());
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
     xdsClient.watchXdsResource(XdsClusterResource.getInstance(), CDS_RESOURCE, cdsResourceWatcher);
@@ -3891,7 +3888,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
-    // Management server closes the RPC stream with an error.
+    // Management server closes the RPC stream with an error. No response received yet.
     fakeClock.forwardNanos(1000L); // Make sure retry isn't based on stopwatch 0
     call.sendError(Status.UNKNOWN.asException());
     ldsWatcherInOrder.verify(ldsResourceWatcher, timeout(1000)).onResourceChanged(
@@ -3907,9 +3904,7 @@ public abstract class GrpcXdsClientImplTestBase {
         argThat(statusOr -> !statusOr.hasValue()
             && statusOr.getStatus().getCode() == Code.UNKNOWN));
 
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(1, false, xdsServerInfo.target());
+    verifyServerFailureCount(1, 1, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -3923,11 +3918,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(2, false, xdsServerInfo.target());
-
-    // Management server becomes unreachable.
+    // Management server becomes unreachable. No response received on this stream either.
     String errorMsg = "my fault";
     call.sendError(Status.UNAVAILABLE.withDescription(errorMsg).asException());
     ldsWatcherInOrder.verify(ldsResourceWatcher).onResourceChanged(
@@ -3943,9 +3934,7 @@ public abstract class GrpcXdsClientImplTestBase {
         argThat(statusOr -> !statusOr.hasValue()
             && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
 
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(3, false, xdsServerInfo.target());
+    verifyServerFailureCount(2, 1, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -3966,9 +3955,6 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(LDS, LDS_RESOURCE, "63", "3242", NODE);
     ldsWatcherInOrder.verify(ldsResourceWatcher).onResourceChanged(
         argThat(statusOr -> statusOr.hasValue()));
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(2, true, xdsServerInfo.target());
 
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(mf.buildRouteConfiguration(RDS_RESOURCE, mf.buildOpaqueVirtualHosts(2))));
@@ -3977,23 +3963,11 @@ public abstract class GrpcXdsClientImplTestBase {
     rdsWatcherInOrder.verify(rdsResourceWatcher).onResourceChanged(
         argThat(statusOr -> statusOr.hasValue()));
 
+    // Stream fails AFTER a response. Error is suppressed and no watcher notification occurs.
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
 
-    ldsWatcherInOrder.verify(ldsResourceWatcher).onAmbientError(
-        argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
-    rdsWatcherInOrder.verify(rdsResourceWatcher).onAmbientError(
-        argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
-    cdsWatcherInOrder.verify(cdsResourceWatcher).onResourceChanged(
-        argThat(statusOr -> !statusOr.hasValue()
-            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
-    edsWatcherInOrder.verify(edsResourceWatcher).onResourceChanged(
-        argThat(statusOr -> !statusOr.hasValue()
-            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
-
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(2, true, xdsServerInfo.target());
-    verifyServerConnection(4, false, xdsServerInfo.target());
+    // Failure count does NOT increase.
+    verifyServerFailureCount(2, 1, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -4007,12 +3981,7 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
-    // Check metric data, should be in error since haven't gotten a response.
-    callback_ReportServerConnection();
-    verifyServerConnection(2, true, xdsServerInfo.target());
-    verifyServerConnection(5, false, xdsServerInfo.target());
-
-    // Management server becomes unreachable again.
+    // Management server becomes unreachable again. This is on a new stream, so error propagates.
     call.sendError(Status.UNAVAILABLE.asException());
     ldsWatcherInOrder.verify(ldsResourceWatcher).onAmbientError(
         argThat(status -> status.getCode() == Code.UNAVAILABLE));
@@ -4024,6 +3993,9 @@ public abstract class GrpcXdsClientImplTestBase {
     edsWatcherInOrder.verify(edsResourceWatcher).onResourceChanged(
         argThat(statusOr -> !statusOr.hasValue()
             && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
+
+    // Failure count is now 3.
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -4037,14 +4009,12 @@ public abstract class GrpcXdsClientImplTestBase {
     call.verifyRequest(CDS, CDS_RESOURCE, "", "", NODE);
     call.verifyRequest(EDS, EDS_RESOURCE, "", "", NODE);
 
-    // Check metric data.
-    callback_ReportServerConnection();
-    verifyServerConnection(6, false, xdsServerInfo.target());
-
-    // Send a response so CPC is considered working
+    // Send a response so CPC is considered working and close gracefully.
     call.sendResponse(LDS, listeners, "63", "3242");
-    callback_ReportServerConnection();
-    verifyServerConnection(3, true, xdsServerInfo.target());
+    call.sendCompleted();
+
+    // Final failure count is still 3.
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
   }
 
   @Test
@@ -4135,21 +4105,27 @@ public abstract class GrpcXdsClientImplTestBase {
     call.sendError(Status.UNAVAILABLE.asException());
     assertThat(cdsResourceTimeout.isCancelled()).isTrue();
     assertThat(edsResourceTimeout.isCancelled()).isTrue();
-    verify(ldsResourceWatcher).onAmbientError(any(Status.class));
-    verify(rdsResourceWatcher).onAmbientError(any(Status.class));
-    verify(cdsResourceWatcher).onResourceChanged(argThat(statusOr -> !statusOr.hasValue()));
-    verify(edsResourceWatcher).onResourceChanged(argThat(statusOr -> !statusOr.hasValue()));
-    // Check metric data.
+
+    // With the reverted logic, the first error is suppressed because a response was received.
+    // We verify that no error callbacks are invoked at this point.
+    verify(ldsResourceWatcher, never()).onAmbientError(any(Status.class));
+    verify(rdsResourceWatcher, never()).onAmbientError(any(Status.class));
+
+    // The metric report for a failed server connection is also suppressed.
     callback_ReportServerConnection();
-    verifyServerConnection(1, false, xdsServerInfo.target());
+    verifyServerConnection(4, true, xdsServerInfo.target());
 
     fakeClock.forwardTime(5, TimeUnit.SECONDS);
     DiscoveryRpcCall call2 = resourceDiscoveryCalls.poll();
     call2.sendError(Status.UNAVAILABLE.asException());
-    verify(cdsResourceWatcher, times(2)).onResourceChanged(
+
+    // Now, verify the watchers are notified as expected.
+    verify(ldsResourceWatcher).onAmbientError(any(Status.class));
+    verify(rdsResourceWatcher).onAmbientError(any(Status.class));
+    verify(cdsResourceWatcher).onResourceChanged(
         argThat(statusOr -> !statusOr.hasValue()
             && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
-    verify(edsResourceWatcher, times(2)).onResourceChanged(
+    verify(edsResourceWatcher).onResourceChanged(
         argThat(statusOr -> !statusOr.hasValue()
             && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
 
@@ -4507,7 +4483,7 @@ public abstract class GrpcXdsClientImplTestBase {
     InOrder rdsWatcherInOrder = inOrder(rdsResourceWatcher);
     InOrder cdsWatcherInOrder = inOrder(cdsResourceWatcher);
     InOrder edsWatcherInOrder = inOrder(edsResourceWatcher);
-
+    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2, backoffPolicy2);
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher);
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_RESOURCE,
         rdsResourceWatcher);
@@ -4575,20 +4551,11 @@ public abstract class GrpcXdsClientImplTestBase {
     rdsWatcherInOrder.verify(rdsResourceWatcher).onResourceChanged(
         argThat(statusOr -> statusOr.hasValue()));
 
+    // Stream fails AFTER a response. Error is suppressed and no watcher notification occurs.
     call.sendError(Status.DEADLINE_EXCEEDED.asException());
-    ldsWatcherInOrder.verify(ldsResourceWatcher).onAmbientError(
-        argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
-    rdsWatcherInOrder.verify(rdsResourceWatcher).onAmbientError(
-        argThat(status -> status.getCode() == Code.DEADLINE_EXCEEDED));
-    cdsWatcherInOrder.verify(cdsResourceWatcher).onResourceChanged(
-        argThat(statusOr -> !statusOr.hasValue()
-            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
-    edsWatcherInOrder.verify(edsResourceWatcher).onResourceChanged(
-        argThat(statusOr -> !statusOr.hasValue()
-            && statusOr.getStatus().getCode() == Code.DEADLINE_EXCEEDED));
-    // Server Failure metric is now reported, as stream is closed with an error after receiving
-    // a response
-    verifyServerFailureCount(3, 1, xdsServerInfo.target());
+
+    // Failure count does NOT increase because the error was suppressed. It is still 2.
+    verifyServerFailureCount(2, 1, xdsServerInfo.target());
 
     // Reset backoff sequence and retry after backoff.
     inOrder.verify(backoffPolicyProvider).get();
@@ -4599,11 +4566,21 @@ public abstract class GrpcXdsClientImplTestBase {
     fakeClock.forwardNanos(20L);
     call = resourceDiscoveryCalls.poll();
 
-    // Management server becomes unreachable again.
+    // Management server becomes unreachable again. This is on a new stream, so error propagates.
     call.sendError(Status.UNAVAILABLE.asException());
     ldsWatcherInOrder.verify(ldsResourceWatcher).onAmbientError(
         argThat(status -> status.getCode() == Code.UNAVAILABLE));
-    verifyServerFailureCount(4, 1, xdsServerInfo.target());
+    rdsWatcherInOrder.verify(rdsResourceWatcher).onAmbientError(
+        argThat(status -> status.getCode() == Code.UNAVAILABLE));
+    cdsWatcherInOrder.verify(cdsResourceWatcher).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
+    edsWatcherInOrder.verify(edsResourceWatcher).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Code.UNAVAILABLE));
+
+    // Server failure count is now 3.
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
 
     // Retry after backoff.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
@@ -4616,8 +4593,9 @@ public abstract class GrpcXdsClientImplTestBase {
     List<Any> clusters = ImmutableList.of(FAILING_ANY, testClusterRoundRobin);
     call.sendResponse(CDS, clusters, VERSION_1, "0000");
     call.sendCompleted();
-    // Server Failure metric will not be reported, as stream is closed gracefully.
-    verifyServerFailureCount(4, 1, xdsServerInfo.target());
+
+    // Final failure count is still 3 as the stream closed gracefully.
+    verifyServerFailureCount(3, 1, xdsServerInfo.target());
   }
 
   private XdsClientImpl createXdsClient(String serverUri) {

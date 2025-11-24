@@ -264,6 +264,7 @@ final class ControlPlaneClient {
   }
 
   void sendDiscoveryRequests() {
+    System.out.println("DEBUG: sendDiscoveryRequests called for resources: ");
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       return;
     }
@@ -453,29 +454,44 @@ final class ControlPlaneClient {
         stopwatch.reset();
       }
 
-      Status statusToPropagate = status;
-      if (!responseReceived && status.isOk()) {
-        // If the ADS stream is closed with OK without ever having received a response,
-        // it is a connectivity error (see gRFC A57).
-        statusToPropagate = Status.UNAVAILABLE.withDescription(
-            "ADS stream closed with OK before receiving a response");
-      }
-      if (!statusToPropagate.isOk()) {
+      Status newStatus = status;
+      if (responseReceived) {
+        // A closed ADS stream after a successful response is not considered an error. Servers may
+        // close streams for various reasons during normal operation, such as load balancing or
+        // underlying connection hitting its max connection age limit (see gRFC A9).
+        if (!status.isOk()) {
+          newStatus = Status.OK;
+          logger.log(XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
+              + "response was received, so this will not be treated as an error. Cause: {2}",
+              status.getCode(), status.getDescription(), status.getCause());
+        } else {
+          logger.log(XdsLogLevel.DEBUG,
+              "ADS stream closed by server after a response was received");
+        }
+      } else {
+        // If the ADS stream is closed without ever having received a response from the server, then
+        // the XdsClient should consider that a connectivity error (see gRFC A57).
         inError = true;
-        logger.log(XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
-            statusToPropagate.getCode(), statusToPropagate.getDescription(),
-            statusToPropagate.getCause());
+        if (status.isOk()) {
+          newStatus = Status.UNAVAILABLE.withDescription(
+              "ADS stream closed with OK before receiving a response");
+        }
+        logger.log(
+            XdsLogLevel.ERROR, "ADS stream failed with status {0}: {1}. Cause: {2}",
+            newStatus.getCode(), newStatus.getDescription(), newStatus.getCause());
       }
+
+      close(newStatus.asException());
 
       // FakeClock in tests isn't thread-safe. Schedule the retry timer before notifying callbacks
       // to avoid TSAN races, since tests may wait until callbacks are called but then would run
       // concurrently with the stopwatch and schedule.
       long elapsed = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       long delayNanos = Math.max(0, retryBackoffPolicy.nextBackoffNanos() - elapsed);
-      close(status.asException());
       rpcRetryTimer =
           syncContext.schedule(new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-      xdsResponseHandler.handleStreamClosed(statusToPropagate, !responseReceived);
+
+      xdsResponseHandler.handleStreamClosed(newStatus, !responseReceived);
     }
 
     private void close(Exception error) {
