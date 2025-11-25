@@ -264,7 +264,6 @@ final class ControlPlaneClient {
   }
 
   void sendDiscoveryRequests() {
-    System.out.println("DEBUG: sendDiscoveryRequests called for resources: ");
     if (rpcRetryTimer != null && rpcRetryTimer.isPending()) {
       return;
     }

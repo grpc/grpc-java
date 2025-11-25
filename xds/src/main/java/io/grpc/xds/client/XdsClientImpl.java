@@ -1007,9 +1007,6 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
 
     @Override
     public void handleStreamClosed(Status status, boolean shouldTryFallback) {
-      System.out.println("DEBUG: handleStreamClosed called with status: " + status
-          + ", shouldTryFallback: " + shouldTryFallback);
-
       syncContext.throwIfNotInThisSynchronizationContext();
 
       ControlPlaneClient cpcClosed = serverCpClientMap.get(serverInfo);

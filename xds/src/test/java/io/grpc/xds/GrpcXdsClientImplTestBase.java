@@ -4018,6 +4018,35 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void newWatcher_receivesCachedDataAndAmbientError() throws Exception {
+    InOrder inOrder = inOrder(ldsResourceWatcher);
+    DiscoveryRpcCall call1 = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    call1.sendResponse(LDS, testListenerRds, VERSION_1, "0000");
+    inOrder.verify(ldsResourceWatcher, timeout(5000))
+        .onResourceChanged(argThat(statusOr -> statusOr.hasValue()));
+
+    call1.sendError(Status.DEADLINE_EXCEEDED.asException());
+    ScheduledTask retryTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER));
+    fakeClock.forwardNanos(retryTask.getDelay(TimeUnit.NANOSECONDS));
+    DiscoveryRpcCall call2 = resourceDiscoveryCalls.poll();
+    Status propagatedError = Status.UNAVAILABLE.withDescription("real failure");
+    call2.sendError(propagatedError.asException());
+    inOrder.verify(ldsResourceWatcher, timeout(5000)).onAmbientError(
+        argThat(status -> status.getCode() == Code.UNAVAILABLE));
+    @SuppressWarnings("unchecked")
+    ResourceWatcher<LdsUpdate> ldsResourceWatcher2 = mock(ResourceWatcher.class);
+    xdsClient.watchXdsResource(
+        XdsListenerResource.getInstance(), LDS_RESOURCE, ldsResourceWatcher2);
+
+    verify(ldsResourceWatcher2, timeout(5000)).onResourceChanged(
+        argThat(statusOr -> statusOr.hasValue()));
+    verify(ldsResourceWatcher2, timeout(5000)).onAmbientError(
+        argThat(status -> status.getCode() == Code.UNAVAILABLE));
+  }
+
+  @Test
   public void streamClosedAndRetryRaceWithAddRemoveWatchers() {
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(),
         LDS_RESOURCE, ldsResourceWatcher);
