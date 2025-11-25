@@ -67,6 +67,7 @@ fi
 if [[ $(uname) == 'Darwin' ]]; then
     NUM_CPU=$(sysctl -n hw.ncpu)
 fi
+export CMAKE_BUILD_PARALLEL_LEVEL="$NUM_CPU"
 
 # Make protoc
 # Can't check for presence of directory as cache auto-creates it.
