@@ -748,7 +748,8 @@ public class OutlierDetectionLoadBalancerTest {
     forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.of(servers.get(0).getAddresses().get(0))));
+    assertEjectedSubchannels(ImmutableSet.of(
+            ImmutableSet.copyOf(servers.get(0).getAddresses())));
 
     // Two endpoints are failing
     generateLoad(ImmutableMap.of(
@@ -759,8 +760,9 @@ public class OutlierDetectionLoadBalancerTest {
     forwardTime(config);
 
     // Both subchannels that were returning errors should be ejected.
-    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.of(servers.get(0).getAddresses().get(0)),
-            ImmutableSet.of(servers.get(1).getAddresses().get(0))));
+    assertEjectedSubchannels(ImmutableSet.of(
+            ImmutableSet.copyOf(servers.get(0).getAddresses()),
+            ImmutableSet.copyOf(servers.get(1).getAddresses())));
   }
 
   /**
