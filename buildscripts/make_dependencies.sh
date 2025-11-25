@@ -23,12 +23,14 @@ function build_and_install() {
     cmake .. \
       -DCMAKE_CXX_STANDARD=17 -D${TESTS_OFF_ARG}=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
       -B. || exit 1
   elif [[ "$ARCH" == x86* ]]; then
     CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} cmake .. \
       -DCMAKE_CXX_STANDARD=17 -D${TESTS_OFF_ARG}=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
       -B. || exit 1
   else
     if [[ "$ARCH" == aarch_64 ]]; then
@@ -46,6 +48,7 @@ function build_and_install() {
     cmake .. \
       -DCMAKE_CXX_STANDARD=17 -D${TESTS_OFF_ARG}=OFF -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
+      -DCMAKE_PREFIX_PATH="$INSTALL_DIR" \
       -Dcrosscompile_ARCH="$GCC_ARCH" \
       -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake \
       -B. || exit 1
