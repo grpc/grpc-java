@@ -45,6 +45,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeoutException;
 import java.util.logging.Logger;
 import org.junit.After;
 import org.junit.Before;
@@ -77,7 +78,10 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_getTlsConfiguration_returnsValidResult()
-      throws InterruptedException, IOException, java.util.concurrent.ExecutionException {
+      throws InterruptedException,
+          IOException,
+          java.util.concurrent.ExecutionException,
+          TimeoutException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
@@ -121,6 +125,7 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      respFuture.get(5, SECONDS);
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
@@ -165,7 +170,7 @@ public final class FakeS2AServerTest {
 
   @Test
   public void callS2AServerOnce_validatePeerCertifiate_returnsValidResult()
-      throws InterruptedException, java.util.concurrent.ExecutionException {
+      throws InterruptedException, java.util.concurrent.ExecutionException, TimeoutException {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     logger.info("Client connecting to: " + serverAddress);
     ManagedChannel channel =
@@ -212,6 +217,7 @@ public final class FakeS2AServerTest {
       // Mark the end of requests.
       requestObserver.onCompleted();
       // Wait for receiving to happen.
+      respFuture.get(5, SECONDS);
     } finally {
       channel.shutdown();
       channel.awaitTermination(1, SECONDS);
