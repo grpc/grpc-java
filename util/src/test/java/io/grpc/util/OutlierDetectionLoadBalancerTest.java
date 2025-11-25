@@ -725,10 +725,10 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
-   * Two outliers get ejected with default stdevFactor.
+   * One then two outliers get ejected with default stdevFactor.
    */
   @Test
-  public void successRateTwoOutliersWithDefaultStdevFactor() {
+  public void successRateOneThenTwoOutliersWithDefaultStdevFactor() {
     OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
             .setMaxEjectionPercent(50)
             .setSuccessRateEjection(
@@ -741,14 +741,24 @@ public class OutlierDetectionLoadBalancerTest {
 
     loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
 
-    generateLoad(ImmutableMap.of(
-            subchannel1, Status.DEADLINE_EXCEEDED,
-            subchannel2, Status.DEADLINE_EXCEEDED), 7);
+    // One endpoint is failing
+    generateLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
 
     // Move forward in time to a point where the detection timer has fired.
     forwardTime(config);
 
     // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.of(servers.get(0).getAddresses().get(0))));
+
+    // Two endpoints are failing
+    generateLoad(ImmutableMap.of(
+            subchannel1, Status.DEADLINE_EXCEEDED,
+            subchannel2, Status.DEADLINE_EXCEEDED), 12);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Both subchannels that were returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.of(servers.get(0).getAddresses().get(0)),
             ImmutableSet.of(servers.get(1).getAddresses().get(0))));
   }

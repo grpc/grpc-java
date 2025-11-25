@@ -834,8 +834,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           return;
         }
 
-        // If success rate is zero or below the threshold, eject the address.
-        if (tracker.inactiveSuccessCount() == 0L || tracker.successRate() < requiredSuccessRate) {
+        // If success rate is below the threshold or is zero, eject the address.
+        if (tracker.successRate() < requiredSuccessRate || tracker.inactiveSuccessCount() == 0L) {
           logger.log(ChannelLogLevel.DEBUG,
                   "SuccessRate algorithm detected outlier: {0}. "
                           + "Parameters: successRate={1}, mean={2}, stdev={3}, "
