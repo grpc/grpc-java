@@ -569,8 +569,12 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       return inactiveCallCounter.successCount.get() + inactiveCallCounter.failureCount.get();
     }
 
+    long inactiveSuccessCount() {
+      return inactiveCallCounter.successCount.get();
+    }
+
     double successRate() {
-      return ((double) inactiveCallCounter.successCount.get()) / inactiveVolume();
+      return ((double) inactiveSuccessCount()) / inactiveVolume();
     }
 
     double failureRate() {
@@ -817,6 +821,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       double mean = mean(successRates);
       double stdev = standardDeviation(successRates, mean);
 
+      // Might be non-positive.
       double requiredSuccessRate =
           mean - stdev * (config.successRateEjection.stdevFactor / 1000f);
 
@@ -829,8 +834,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
           return;
         }
 
-        // If success rate is below the threshold, eject the address.
-        if (tracker.successRate() < requiredSuccessRate) {
+        // If success rate is zero or below the threshold, eject the address.
+        if (tracker.inactiveSuccessCount() == 0L || tracker.successRate() < requiredSuccessRate) {
           logger.log(ChannelLogLevel.DEBUG,
                   "SuccessRate algorithm detected outlier: {0}. "
                           + "Parameters: successRate={1}, mean={2}, stdev={3}, "

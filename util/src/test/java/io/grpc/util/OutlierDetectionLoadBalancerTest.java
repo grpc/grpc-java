@@ -725,6 +725,35 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
+   * Two outliers get ejected with default stdevFactor.
+   */
+  @Test
+  public void successRateTwoOutliersWithDefaultStdevFactor() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+            .setMaxEjectionPercent(50)
+            .setSuccessRateEjection(
+                    // Default stdevFactor results in negative requiredSuccessRate,
+                    // but always failing endpoints still get ejected.
+                    new SuccessRateEjection.Builder()
+                            .setMinimumHosts(3)
+                            .setRequestVolume(10).build())
+            .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    generateLoad(ImmutableMap.of(
+            subchannel1, Status.DEADLINE_EXCEEDED,
+            subchannel2, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // The one subchannel that was returning errors should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.of(servers.get(0).getAddresses().get(0)),
+            ImmutableSet.of(servers.get(1).getAddresses().get(0))));
+  }
+
+  /**
    * Three outliers, second one ejected even if ejecting it goes above the max ejection percentage,
    * as this matches Envoy behavior. The third one should not get ejected.
    */
