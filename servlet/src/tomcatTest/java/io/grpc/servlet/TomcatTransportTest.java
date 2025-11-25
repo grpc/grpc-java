@@ -93,6 +93,7 @@ public class TomcatTransportTest extends AbstractTransportTest {
             .setAsyncSupported(true);
         ctx.addServletMappingDecoded("/*", "TomcatTransportTest");
         tomcatServer.getConnector().addUpgradeProtocol(new Http2Protocol());
+        tomcatServer.getConnector().setDiscardFacades(false);
         try {
           tomcatServer.start();
         } catch (LifecycleException e) {
