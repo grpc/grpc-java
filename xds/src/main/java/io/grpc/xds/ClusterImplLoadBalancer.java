@@ -87,6 +87,9 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
   private static final Attributes.Key<AtomicReference<ClusterLocality>> ATTR_CLUSTER_LOCALITY =
       Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.clusterLocality");
+  @VisibleForTesting
+  static final Attributes.Key<String> ATTR_SUBCHANNEL_ADDRESS_NAME =
+      Attributes.Key.create("io.grpc.xds.ClusterImplLoadBalancer.addressName");
 
   private final XdsLogger logger;
   private final Helper helper;
@@ -243,7 +246,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
         String hostname = args.getAddresses().get(0).getAttributes()
             .get(XdsInternalAttributes.ATTR_ADDRESS_NAME);
         if (hostname != null) {
-          attrsBuilder.set(XdsInternalAttributes.ATTR_ADDRESS_NAME, hostname);
+          attrsBuilder.set(ATTR_SUBCHANNEL_ADDRESS_NAME, hostname);
         }
       }
       args = args.toBuilder().setAddresses(addresses).setAttributes(attrsBuilder.build()).build();
@@ -442,8 +445,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
               && args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY)) {
             result = PickResult.withSubchannel(result.getSubchannel(),
                 result.getStreamTracerFactory(),
-                result.getSubchannel().getAttributes().get(
-                    XdsInternalAttributes.ATTR_ADDRESS_NAME));
+                result.getSubchannel().getAttributes().get(ATTR_SUBCHANNEL_ADDRESS_NAME));
           }
         }
         return result;

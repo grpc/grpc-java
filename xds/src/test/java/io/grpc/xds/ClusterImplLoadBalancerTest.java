@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.xds.ClusterImplLoadBalancer.ATTR_SUBCHANNEL_ADDRESS_NAME;
 import static io.grpc.xds.XdsNameResolver.AUTO_HOST_REWRITE_KEY;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -909,7 +910,7 @@ public class ClusterImplLoadBalancerTest {
               new FixedResultPicker(PickResult.withSubchannel(subchannel)));
         }
       });
-      assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(
+      assertThat(subchannel.getAttributes().get(ATTR_SUBCHANNEL_ADDRESS_NAME)).isEqualTo(
           "authority-host-name");
       for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
         assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
@@ -961,7 +962,7 @@ public class ClusterImplLoadBalancerTest {
       }
     });
     // Sub Channel wrapper args won't have the address name although addresses will.
-    assertThat(subchannel.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isNull();
+    assertThat(subchannel.getAttributes().get(ATTR_SUBCHANNEL_ADDRESS_NAME)).isNull();
     for (EquivalentAddressGroup eag : subchannel.getAllAddresses()) {
       assertThat(eag.getAttributes().get(XdsInternalAttributes.ATTR_ADDRESS_NAME))
           .isEqualTo("authority-host-name");
