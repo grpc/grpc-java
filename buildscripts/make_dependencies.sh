@@ -43,15 +43,13 @@ else
   if [[ "$(uname -s)" == "Darwin" ]]; then
     cmake .. \
       -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-      -Dprotobuf_FORCE_FETCH_DEPENDENCIES=ON \
       -B. || exit 1
   elif [[ "$ARCH" == x86* ]]; then
     CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} cmake .. \
       -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
-      -Dprotobuf_FORCE_FETCH_DEPENDENCIES=ON \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
       -B. || exit 1
   else
     if [[ "$ARCH" == aarch_64 ]]; then
@@ -68,7 +66,7 @@ else
     fi
     cmake .. \
       -DCMAKE_CXX_STANDARD=17 -Dprotobuf_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF \
-      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" -DABSL_INTERNAL_AT_LEAST_CXX17=0 \
+      -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
       -Dcrosscompile_ARCH="$GCC_ARCH" \
       -DCMAKE_TOOLCHAIN_FILE=$BUILDSCRIPTS_DIR/toolchain.cmake \
       -B. || exit 1

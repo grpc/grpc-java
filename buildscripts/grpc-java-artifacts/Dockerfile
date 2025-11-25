@@ -5,6 +5,7 @@ RUN yum install -y \
             automake \
             diffutils \
             gcc-c++ \
+            git \
             glibc-devel \
             glibc-devel.i686 \
             java-11-openjdk-devel \
