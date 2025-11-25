@@ -1343,7 +1343,7 @@ public class ManagedChannelImplTest {
         PickResult.withSubchannel(subchannel));
 
     updateBalancingStateSafely(helper, READY, mockPicker);
-    assertEquals(2, executor.runDueTasks());
+    assertEquals(3, executor.runDueTasks());
 
     verify(mockPicker).pickSubchannel(any(PickSubchannelArgs.class));
     verify(mockTransport).newStream(
