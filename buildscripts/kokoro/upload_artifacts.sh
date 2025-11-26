@@ -41,9 +41,9 @@ LOCAL_OTHER_ARTIFACTS="$KOKORO_GFILE_DIR"/github/grpc-java/artifacts/
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-linux-s390_64.exe' | wc -l)" != '0' ]]
 
 # from macos job:
-[[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-x86_64.exe' | wc -l)" != '0' ]]
+[[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-aarch_64.exe' | wc -l)" != '0' ]]
 # copy all x86 artifacts to aarch until native artifacts are built
-find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-x86_64.exe*' -exec bash -c 'cp "${0}" "${0/x86/aarch}"' {} \;
+find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-osx-aarch_64.exe*' -exec bash -c 'cp "${0}" "${0/aarch/x86}"' {} \;
 
 # from windows job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-windows-x86_64.exe' | wc -l)" != '0' ]]
