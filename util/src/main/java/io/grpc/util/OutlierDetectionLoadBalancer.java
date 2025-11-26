@@ -569,12 +569,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       return inactiveCallCounter.successCount.get() + inactiveCallCounter.failureCount.get();
     }
 
-    long inactiveSuccessCount() {
-      return inactiveCallCounter.successCount.get();
-    }
-
     double successRate() {
-      return ((double) inactiveSuccessCount()) / inactiveVolume();
+      return ((double) inactiveCallCounter.successCount.get()) / inactiveVolume();
     }
 
     double failureRate() {
@@ -835,12 +831,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         }
 
         // If success rate is below the threshold or is zero, eject the address.
-        if (tracker.successRate() < requiredSuccessRate || tracker.inactiveSuccessCount() == 0L) {
+        double successRate = tracker.successRate();
+        if (successRate < requiredSuccessRate || successRate == 0.0) {
           logger.log(ChannelLogLevel.DEBUG,
                   "SuccessRate algorithm detected outlier: {0}. "
                           + "Parameters: successRate={1}, mean={2}, stdev={3}, "
                           + "requiredSuccessRate={4}",
-                  tracker, tracker.successRate(),  mean, stdev, requiredSuccessRate);
+                  tracker, successRate,  mean, stdev, requiredSuccessRate);
           // Only eject some endpoints based on the enforcement percentage.
           if (new Random().nextInt(100) < config.successRateEjection.enforcementPercentage) {
             tracker.ejectSubchannels(ejectionTimeNanos);
