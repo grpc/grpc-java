@@ -5,7 +5,6 @@ set -evux -o pipefail
 
 PROTOBUF_VERSION=33.1
 ABSL_VERSION=20250127.1
-CMAKE_VERSION=3.26.3
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"

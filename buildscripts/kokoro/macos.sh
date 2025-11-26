@@ -1,5 +1,6 @@
 #!/bin/bash
 set -veux -o pipefail
+CMAKE_VERSION=3.26.3
 
 if [[ -f /VERSION ]]; then
   cat /VERSION
@@ -7,6 +8,7 @@ fi
 
 readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 
+brew install cmake@${CMAKE_VERSION}
 # We had problems with random tests timing out because it took seconds to do
 # trivial (ns) operations. The Kokoro Mac machines have 2 cores with 4 logical
 # threads, so Gradle should be using 4 workers by default.
