@@ -20,9 +20,9 @@ export GRADLE_FLAGS="${GRADLE_FLAGS:-} --max-workers=2"
 . "$GRPC_JAVA_DIR"/buildscripts/kokoro/kokoro.sh
 trap spongify_logs EXIT
 
-export -n JAVA_HOME
 brew install --cask temurin@8
 export PATH="$(/usr/libexec/java_home -v"1.8.0")/bin:${DOWNLOAD_DIR}/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin:${PATH}"
+export JAVA_HOME="$(/usr/libexec/java_home -v"1.8.0")"
 brew install maven
 export ARCH=aarch_64
 
