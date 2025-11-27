@@ -401,12 +401,53 @@ public class XdsClientFallbackTest {
     xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher);
     verify(rdsWatcher, timeout(5000)).onResourceChanged(argThat(StatusOr::hasValue));
 
-    // TODO: The remainder of this test, which verifies fallback behavior, is currently
-    // disabled. The test environment consistently reports Status.OK on stream termination
-    // instead of a failure status, which prevents the client's fallback logic from
-    // being triggered. This environmental issue should be investigated and the test
-    // should be re-enabled.
+    mainXdsServer.getServer().shutdownNow();
+    // Sleep for the ADS stream disconnect to be processed and for the retry to fail. Between those
+    // two sleeps we need the fakeClock to progress by 1 second to restart the ADS stream.
+    for (int i = 0; i < 5; i++) {
+      // FakeClock is not thread-safe, and the retry scheduling is concurrent to this test thread
+      executor.submit(() -> fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS)).get();
+      TimeUnit.SECONDS.sleep(1);
+    }
 
+    // Shouldn't do fallback since all watchers are loaded
+    verify(ldsWatcher, never()).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+
+    // Should just get from cache
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), MAIN_SERVER, ldsWatcher2);
+    xdsClient.watchXdsResource(XdsRouteConfigureResource.getInstance(), RDS_NAME, rdsWatcher2);
+    verify(ldsWatcher2, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(MAIN_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher, never()).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    // Make sure that rdsWatcher wasn't called again
+    verify(rdsWatcher, times(1)).onResourceChanged(any());
+    verify(rdsWatcher2, timeout(5000)).onResourceChanged(argThat(StatusOr::hasValue));
+
+    // Asking for something not in cache should force a fallback
+    xdsClient.watchXdsResource(XdsClusterResource.getInstance(), FALLBACK_CLUSTER_NAME, cdsWatcher);
+    verify(ldsWatcher, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    verify(ldsWatcher2, timeout(5000)).onResourceChanged(StatusOr.fromValue(
+        XdsListenerResource.LdsUpdate.forApiListener(FALLBACK_HTTP_CONNECTION_MANAGER)));
+    verify(cdsWatcher, timeout(5000)).onResourceChanged(argThat(StatusOr::hasValue));
+
+    xdsClient.watchXdsResource(
+        XdsRouteConfigureResource.getInstance(), FALLBACK_RDS_NAME, rdsWatcher3);
+    verify(rdsWatcher3, timeout(5000)).onResourceChanged(argThat(StatusOr::hasValue));
+
+    // Test that resource defined in main but not fallback is handled correctly
+    xdsClient.watchXdsResource(
+        XdsClusterResource.getInstance(), CLUSTER_NAME, cdsWatcher2);
+    verify(cdsWatcher2, never()).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND));
+    fakeClock.forwardTime(15000, TimeUnit.MILLISECONDS); // Does not exist timer
+    verify(cdsWatcher2, timeout(5000)).onResourceChanged(
+        argThat(statusOr -> !statusOr.hasValue()
+            && statusOr.getStatus().getCode() == Status.Code.NOT_FOUND
+            && statusOr.getStatus().getDescription().contains(CLUSTER_NAME)));
     xdsClient.shutdown();
     executor.shutdown();
   }
