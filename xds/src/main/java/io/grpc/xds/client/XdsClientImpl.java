@@ -1028,7 +1028,11 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       for (Map<String, ResourceSubscriber<? extends ResourceUpdate>> subscriberMap :
           resourceSubscribers.values()) {
         for (ResourceSubscriber<? extends ResourceUpdate> subscriber : subscriberMap.values()) {
-          if (subscriber.hasResult() || !authoritiesForClosedCpc.contains(subscriber.authority)) {
+          if (!authoritiesForClosedCpc.contains(subscriber.authority)) {
+            continue;
+          }
+          // If subscriber already has data, this is an ambient error.
+          if (subscriber.hasResult()) {
             subscriber.onError(status, null);
             continue;
           }
