@@ -24,6 +24,8 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -301,13 +303,14 @@ public class XdsServerTestHelper {
     void deliverLdsUpdateWithApiListener(long httpMaxStreamDurationNano,
         List<VirtualHost> virtualHosts) {
       execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        LdsUpdate update = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(update));
       });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      execute(() -> ldsWatcher.onChanged(ldsUpdate));
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate)));
     }
 
     void deliverLdsUpdate(
@@ -322,11 +325,14 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsResourceNotFound() {
-      execute(() -> ldsWatcher.onResourceDoesNotExist(awaitLdsResource(DEFAULT_TIMEOUT)));
+      String resourceName = awaitLdsResource(DEFAULT_TIMEOUT);
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromStatus(status)));
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
-      execute(() -> rdsWatchers.get(resourceName).onChanged(new RdsUpdate(virtualHosts)));
+      RdsUpdate update = new RdsUpdate(virtualHosts);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromValue(update)));
     }
 
     void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
@@ -334,7 +340,8 @@ public class XdsServerTestHelper {
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
-      execute(() -> rdsWatchers.get(resourceName).onResourceDoesNotExist(resourceName));
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromStatus(status)));
     }
   }
 }

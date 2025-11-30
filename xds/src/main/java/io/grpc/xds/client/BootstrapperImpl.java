@@ -262,7 +262,9 @@ public abstract class BootstrapperImpl extends Bootstrapper {
       List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
       if (serverFeatures != null) {
         logger.log(XdsLogLevel.INFO, "Server features: {0}", serverFeatures);
-        ignoreResourceDeletion = serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION);
+        if (serverFeatures.contains(SERVER_FEATURE_IGNORE_RESOURCE_DELETION)) {
+          ignoreResourceDeletion = true;
+        }
         resourceTimerIsTransientError = xdsDataErrorHandlingEnabled
             && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
       }
