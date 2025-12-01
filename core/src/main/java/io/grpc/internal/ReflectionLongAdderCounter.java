@@ -46,6 +46,8 @@ public final class ReflectionLongAdderCounter implements LongCounter {
 
       addMethodLookup = klass.getMethod("add", Long.TYPE);
       sumMethodLookup = klass.getMethod("sum");
+      addMethodLookup.setAccessible(true);
+      sumMethodLookup.setAccessible(true);
 
       Constructor<?>[] constructors = klass.getConstructors();
       for (Constructor<?> ctor : constructors) {
