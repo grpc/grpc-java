@@ -3220,6 +3220,55 @@ public abstract class GrpcXdsClientImplTestBase {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
   }
 
+  /**
+   * Tests that a NACKed LDS resource update drops the cached resource when fail_on_data_errors
+   * is enabled.
+   */
+  @Test
+  public void ldsResourceNacked_withFailOnDataErrors_dropsResource() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
+    BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(xdsServerInfo))
+            .node(NODE)
+            .build();
+    xdsClient = new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+
+    InOrder inOrder = inOrder(ldsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    inOrder.verify(ldsResourceWatcher).onResourceChanged(ldsUpdateCaptor.capture());
+    StatusOr<LdsUpdate> initialUpdate = ldsUpdateCaptor.getValue();
+    assertThat(initialUpdate.hasValue()).isTrue();
+    verifyGoldenListenerVhosts(initialUpdate.getValue());
+    Message invalidListener = mf.buildListenerWithApiListenerInvalid(LDS_RESOURCE);
+    call.sendResponse(LDS, Collections.singletonList(Any.pack(invalidListener)), VERSION_2, "0001");
+    String expectedError = "LDS response Listener '" + LDS_RESOURCE + "' validation error";
+    call.verifyRequestNack(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE,
+        Collections.singletonList(expectedError));
+
+    inOrder.verify(ldsResourceWatcher).onResourceChanged(ldsUpdateCaptor.capture());
+    StatusOr<LdsUpdate> finalUpdate = ldsUpdateCaptor.getValue();
+    assertThat(finalUpdate.hasValue()).isFalse();
+    assertThat(finalUpdate.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(finalUpdate.getStatus().getDescription()).contains(expectedError);
+
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
   @Test
   @SuppressWarnings("unchecked")
   public void multipleCdsWatchers() {
