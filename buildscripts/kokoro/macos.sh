@@ -24,6 +24,5 @@ brew install --cask temurin@8
 export PATH="$(/usr/libexec/java_home -v"1.8.0")/bin:${DOWNLOAD_DIR}/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin:${PATH}"
 export JAVA_HOME="$(/usr/libexec/java_home -v"1.8.0")"
 brew install maven
-export ARCH=aarch_64
 
 "$GRPC_JAVA_DIR"/buildscripts/kokoro/unix.sh
