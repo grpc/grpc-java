@@ -610,9 +610,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
         // When xdsDataErrorHandlingEnabled is true and fail_on_data_errors is present,
         // delete cached data so onError will call onResourceChanged instead of onAmbientError.
         // When xdsDataErrorHandlingEnabled is false, use old behavior (always keep cached data).
-        boolean xdsDataErrorHandlingEnabled =
-            io.grpc.xds.client.BootstrapperImpl.xdsDataErrorHandlingEnabled;
-        if (xdsDataErrorHandlingEnabled && subscriber.data != null
+        if (BootstrapperImpl.xdsDataErrorHandlingEnabled && subscriber.data != null
             && args.serverInfo.failOnDataErrors()) {
           subscriber.data = null;
         }
@@ -879,8 +877,7 @@ public final class XdsClientImpl extends XdsClient implements ResourceStore {
       // When xdsDataErrorHandlingEnabled is false, use the old behavior (ignore_resource_deletion).
       boolean ignoreResourceDeletionEnabled = serverInfo.ignoreResourceDeletion();
       boolean failOnDataErrors = serverInfo.failOnDataErrors();
-      boolean xdsDataErrorHandlingEnabled =
-          io.grpc.xds.client.BootstrapperImpl.xdsDataErrorHandlingEnabled;
+      boolean xdsDataErrorHandlingEnabled = BootstrapperImpl.xdsDataErrorHandlingEnabled;
 
       if (type.isFullStateOfTheWorld() && data != null) {
         // New behavior (per gRFC A88): Default is to treat deletions as ambient errors
