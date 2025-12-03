@@ -127,6 +127,12 @@ public class JettyTransportTest extends AbstractTransportTest {
     };
   }
 
+  @Override
+  protected InternalServer newServer(int port,
+                                     List<ServerStreamTracer.Factory> streamTracerFactories) {
+    return newServer(streamTracerFactories);
+  }
+
   // The future default appears to be false as people are supposed to be migrate to
   // EagerContentHandler, but the default is still true. Seems they messed up the migration
   // process here by not flipping the default.
@@ -135,12 +141,6 @@ public class JettyTransportTest extends AbstractTransportTest {
     // Must be set for several tests to pass, so that the request handling can begin before
     // content arrives.
     httpConfiguration.setDelayDispatchUntilContent(false);
-  }
-
-  @Override
-  protected InternalServer newServer(int port,
-                                     List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return newServer(streamTracerFactories);
   }
 
   @Override
