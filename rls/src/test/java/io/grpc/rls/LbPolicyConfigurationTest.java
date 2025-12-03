@@ -21,6 +21,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -45,8 +46,8 @@ import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper;
 import io.grpc.rls.LbPolicyConfiguration.ChildPolicyWrapper.ChildPolicyReportingHelper;
 import io.grpc.rls.LbPolicyConfiguration.InvalidChildPolicyConfigException;
 import io.grpc.rls.LbPolicyConfiguration.RefCountedChildPolicyWrapperFactory;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,6 +62,9 @@ public class LbPolicyConfigurationTest {
   private final LoadBalancer lb = mock(LoadBalancer.class);
   private final SubchannelStateManager subchannelStateManager = new SubchannelStateManagerImpl();
   private final SubchannelPicker picker = mock(SubchannelPicker.class);
+  private final SynchronizationContext syncContext = new SynchronizationContext((t, e) -> {
+    throw new AssertionError(e);
+  });
   private final ChildLbStatusListener childLbStatusListener = mock(ChildLbStatusListener.class);
   private final ResolvedAddressFactory resolvedAddressFactory =
       new ResolvedAddressFactory() {
@@ -84,15 +88,7 @@ public class LbPolicyConfigurationTest {
   @Before
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(
-        new SynchronizationContext(
-            new UncaughtExceptionHandler() {
-              @Override
-              public void uncaughtException(Thread t, Throwable e) {
-                throw new AssertionError(e);
-              }
-            }))
-        .when(helper).getSynchronizationContext();
+    doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(lb).when(lbProvider).newLoadBalancer(any(Helper.class));
     doReturn(ConfigOrError.fromConfig(new Object()))
         .when(lbProvider).parseLoadBalancingPolicyConfig(ArgumentMatchers.<Map<String, ?>>any());
@@ -189,5 +185,23 @@ public class LbPolicyConfigurationTest {
     assertThat(childPolicyWrapper.getPicker()).isEqualTo(childPicker);
     // picker governs childPickers will be reported to parent LB
     verify(helper).updateBalancingState(ConnectivityState.READY, picker);
+  }
+
+  @Test
+  public void refCountedGetOrCreate_addsChildBeforeConfiguringChild() {
+    AtomicBoolean calledAlready = new AtomicBoolean();
+    when(lb.acceptResolvedAddresses(any(ResolvedAddresses.class))).thenAnswer(i -> {
+      if (!calledAlready.get()) {
+        calledAlready.set(true);
+        // Should end up calling this function again, as this child should already be added to the
+        // list of children. In practice, this can be caused by CDS is_dynamic=true starting a watch
+        // when XdsClient already has the cluster cached (e.g., from another channel).
+        syncContext.execute(() ->
+            factory.acceptResolvedAddressFactory(resolvedAddressFactory));
+      }
+      return Status.OK;
+    });
+    ChildPolicyWrapper unused = factory.createOrGet("foo.google.com");
+    verify(lb, times(2)).acceptResolvedAddresses(any(ResolvedAddresses.class));
   }
 }
