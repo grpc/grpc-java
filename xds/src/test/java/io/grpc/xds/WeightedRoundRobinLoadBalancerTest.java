@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -1303,8 +1304,8 @@ public class WeightedRoundRobinLoadBalancerTest {
     assertThat(recorder.getError()).isNull();
 
     // Make sure at least one metric works. The other tests will make sure other metrics and the
-    // edge cases are working.
-    verify(metrics).addLongCounter(
+    // edge cases are working. Since this is racy, we just care it happened at least once.
+    verify(metrics, atLeast(1)).addLongCounter(
         argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
         eq(1L),
         eq(Arrays.asList("directaddress:///wrr-metrics")),
