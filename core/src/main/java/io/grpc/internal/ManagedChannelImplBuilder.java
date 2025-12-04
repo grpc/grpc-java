@@ -759,7 +759,7 @@ public final class ManagedChannelImplBuilder
       if (GET_CLIENT_INTERCEPTOR_METHOD != null) {
         try {
           statsInterceptor =
-            (ClientInterceptor) GET_CLIENT_INTERCEPTOR_METHOD
+              (ClientInterceptor) GET_CLIENT_INTERCEPTOR_METHOD
               .invoke(
                 null,
                 recordStartedRpcs,

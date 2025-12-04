@@ -49,8 +49,8 @@ public class StressTestClientTest {
   @Test
   public void ipv6AddressesShouldBeSupported() {
     StressTestClient client = new StressTestClient();
-    client.parseArgs(new String[] {"--server_addresses=[0:0:0:0:0:0:0:1]:8080,"
-        + "[1:2:3:4:f:e:a:b]:8083"});
+    client.parseArgs(new String[] {
+        "--server_addresses=[0:0:0:0:0:0:0:1]:8080,[1:2:3:4:f:e:a:b]:8083"});
 
     assertEquals(2, client.addresses().size());
     assertEquals(new InetSocketAddress("0:0:0:0:0:0:0:1", 8080), client.addresses().get(0));
