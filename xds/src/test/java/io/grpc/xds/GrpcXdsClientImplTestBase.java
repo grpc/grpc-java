@@ -3521,7 +3521,7 @@ public abstract class GrpcXdsClientImplTestBase {
         TIME_INCREMENT);
     barrier.await();
     verify(edsResourceWatcher, atLeastOnce()).onResourceChanged(edsUpdateCaptor.capture());
-    StatusOr<EdsUpdate> statusOrUpdate = edsUpdateCaptor.getValue();
+    StatusOr<EdsUpdate> statusOrUpdate = edsUpdateCaptor.getAllValues().get(0);
     assertThat(statusOrUpdate.hasValue()).isTrue();
     EdsUpdate edsUpdate = statusOrUpdate.getValue();
     validateGoldenClusterLoadAssignment(edsUpdate);
