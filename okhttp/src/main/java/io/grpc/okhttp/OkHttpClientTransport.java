@@ -800,13 +800,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (connectingCallback != null) {
           connectingCallback.run();
         }
-        // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
-        // may send goAway immediately.
-        executor.execute(clientFrameHandler);
         synchronized (lock) {
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
         }
+        // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
+        // may send goAway immediately.
+        executor.execute(clientFrameHandler);
         if (connectedFuture != null) {
           connectedFuture.set(null);
         }
