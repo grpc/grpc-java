@@ -388,7 +388,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
             .build();
     runIfNotNull(client.start(mockClientTransportListener));
     verify(mockClientTransportListener, timeout(TIMEOUT_MS))
-        .transportShutdown(statusCaptor.capture());
+        .transportShutdown(statusCaptor.capture(), any(DisconnectError.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.PERMISSION_DENIED);
 
     // Client doesn't tell the server in this case by design -- we don't even want to start it!
