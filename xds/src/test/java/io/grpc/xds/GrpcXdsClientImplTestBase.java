@@ -852,6 +852,52 @@ public abstract class GrpcXdsClientImplTestBase {
   }
 
   @Test
+  public void ldsResponseErrorHandling_subscribedResourceInvalid_withDataErrorHandlingEnabled() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "A", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "B", ldsResourceWatcher);
+    xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "C", ldsResourceWatcher);
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+    assertThat(call).isNotNull();
+    verifyResourceMetadataRequested(LDS, "A");
+    verifyResourceMetadataRequested(LDS, "B");
+    verifyResourceMetadataRequested(LDS, "C");
+    ImmutableMap<String, Any> resourcesV1 = ImmutableMap.of(
+        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.1")),
+        "B", Any.pack(mf.buildListenerWithApiListenerForRds("B", "B.1")),
+        "C", Any.pack(mf.buildListenerWithApiListenerForRds("C", "C.1")));
+    call.sendResponse(LDS, resourcesV1.values().asList(), VERSION_1, "0000");
+    verify(ldsResourceWatcher, times(3)).onResourceChanged(any());
+    ImmutableMap<String, Any> resourcesV2 = ImmutableMap.of(
+        "A", Any.pack(mf.buildListenerWithApiListenerForRds("A", "A.2")),
+        "B", Any.pack(mf.buildListenerWithApiListenerInvalid("B")));
+    call.sendResponse(LDS, resourcesV2.values().asList(), VERSION_2, "0001");
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(ldsResourceWatcher, times(2)).onAmbientError(statusCaptor.capture());
+    List<Status> receivedStatuses = statusCaptor.getAllValues();
+    assertThat(receivedStatuses).hasSize(2);
+
+    assertThat(
+        receivedStatuses.stream().anyMatch(
+            status -> status.getCode() == Status.Code.UNAVAILABLE
+                && status.getDescription().contains("LDS response Listener 'B' validation error")))
+        .isTrue();
+    assertThat(
+        receivedStatuses.stream().anyMatch(
+            status -> status.getCode() == Status.Code.NOT_FOUND
+                && status.getDescription().contains("Resource C deleted from server")))
+        .isTrue();
+    List<String> errorsV2 = ImmutableList.of("LDS response Listener 'B' validation error: ");
+    verifyResourceMetadataAcked(LDS, "A", resourcesV2.get("A"), VERSION_2, TIME_INCREMENT * 2);
+    verifyResourceMetadataNacked(LDS, "B", resourcesV1.get("B"), VERSION_1, TIME_INCREMENT,
+        VERSION_2, TIME_INCREMENT * 2, errorsV2, true);
+    verifyResourceMetadataAcked(LDS, "C", resourcesV1.get("C"), VERSION_1, TIME_INCREMENT);
+
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  @Test
   public void ldsResponseErrorHandling_subscribedResourceInvalid_withRdsSubscription() {
     List<String> subscribedResourceNames = ImmutableList.of("A", "B", "C");
     xdsClient.watchXdsResource(XdsListenerResource.getInstance(), "A", ldsResourceWatcher);
@@ -1515,6 +1561,7 @@ public abstract class GrpcXdsClientImplTestBase {
   @Test
   public void ldsResourceDeleted_failOnDataErrors_false() {
     BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+
     xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
         true, false, false);
     BootstrapInfo bootstrapInfo =
@@ -1568,6 +1615,53 @@ public abstract class GrpcXdsClientImplTestBase {
     verifySubscribedResourcesMetadataSizes(1, 0, 0, 0);
 
     BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  /**
+   * Tests that fail_on_data_errors feature is ignored if the env var is not enabled,
+   * and the old behavior (dropping the resource) is used.
+   */
+  @Test
+  public void ldsResourceDeleted_failOnDataErrorsIgnoredWithoutEnvVar() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, true);
+    BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(xdsServerInfo))
+            .node(NODE)
+            .authorities(ImmutableMap.of(
+                "",
+                AuthorityInfo.create(
+                    "xdstp:///envoy.config.listener.v3.Listener/%s",
+                    ImmutableList.of(Bootstrapper.ServerInfo.create(
+                        SERVER_URI_EMPTY_AUTHORITY, CHANNEL_CREDENTIALS)))))
+            .certProviders(ImmutableMap.of())
+            .build();
+    xdsClient = new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+
+    InOrder inOrder = inOrder(ldsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    inOrder.verify(ldsResourceWatcher).onResourceChanged(ldsUpdateCaptor.capture());
+    assertThat(ldsUpdateCaptor.getValue().hasValue()).isTrue();
+    call.sendResponse(LDS, Collections.<Any>emptyList(), VERSION_2, "0001");
+
+    inOrder.verify(ldsResourceWatcher).onResourceChanged(ldsUpdateCaptor.capture());
+    StatusOr<LdsUpdate> statusOrUpdate = ldsUpdateCaptor.getValue();
+    assertThat(statusOrUpdate.hasValue()).isFalse();
+    assertThat(statusOrUpdate.getStatus().getCode()).isEqualTo(Status.Code.NOT_FOUND);
   }
 
   @Test
@@ -3265,6 +3359,53 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(finalUpdate.hasValue()).isFalse();
     assertThat(finalUpdate.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(finalUpdate.getStatus().getDescription()).contains(expectedError);
+
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  /**
+   * Tests that a NACKed LDS resource update is treated as an ambient error when
+   * fail_on_data_errors is disabled.
+   */
+  @Test
+  public void ldsResourceNacked_withFailOnDataErrorsDisabled_isAmbientError() {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    xdsServerInfo = ServerInfo.create(SERVER_URI, CHANNEL_CREDENTIALS, false,
+        true, false, false);
+    BootstrapInfo bootstrapInfo =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(xdsServerInfo))
+            .node(NODE)
+            .build();
+    xdsClient = new XdsClientImpl(
+        xdsTransportFactory,
+        bootstrapInfo,
+        fakeClock.getScheduledExecutorService(),
+        backoffPolicyProvider,
+        fakeClock.getStopwatchSupplier(),
+        timeProvider,
+        MessagePrinter.INSTANCE,
+        new TlsContextManagerImpl(bootstrapInfo),
+        xdsClientMetricReporter);
+    InOrder inOrder = inOrder(ldsResourceWatcher);
+    DiscoveryRpcCall call = startResourceWatcher(XdsListenerResource.getInstance(), LDS_RESOURCE,
+        ldsResourceWatcher);
+
+    call.sendResponse(LDS, testListenerVhosts, VERSION_1, "0000");
+    call.verifyRequest(LDS, LDS_RESOURCE, VERSION_1, "0000", NODE);
+    inOrder.verify(ldsResourceWatcher).onResourceChanged(any());
+    Message invalidListener = mf.buildListenerWithApiListenerInvalid(LDS_RESOURCE);
+    call.sendResponse(LDS, Collections.singletonList(Any.pack(invalidListener)), VERSION_2, "0001");
+
+    String expectedError = "LDS response Listener '" + LDS_RESOURCE + "' validation error";
+    call.verifyRequestNack(LDS, LDS_RESOURCE, VERSION_1, "0001", NODE,
+        Collections.singletonList(expectedError));
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    inOrder.verify(ldsResourceWatcher).onAmbientError(statusCaptor.capture());
+    Status receivedStatus = statusCaptor.getValue();
+    assertThat(receivedStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(receivedStatus.getDescription()).contains(expectedError);
+    inOrder.verify(ldsResourceWatcher, never()).onResourceChanged(any());
 
     BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
   }
