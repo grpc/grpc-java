@@ -987,18 +987,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   @Override
   public void shutdown(Status reason) {
-    shutdown(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
-  }
-
-  @Override
-  public void shutdown(Status reason, DisconnectError disconnectError) {
     synchronized (lock) {
       if (goAwayStatus != null) {
         return;
       }
 
       goAwayStatus = reason;
-      listener.transportShutdown(goAwayStatus, disconnectError);
+      listener.transportShutdown(goAwayStatus, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
       stopIfNecessary();
     }
   }
@@ -1010,7 +1005,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   @Override
   public void shutdownNow(Status reason, DisconnectError disconnectError) {
-    shutdown(reason, disconnectError);
+    shutdown(reason);
     synchronized (lock) {
       Iterator<Map.Entry<Integer, OkHttpClientStream>> it = streams.entrySet().iterator();
       while (it.hasNext()) {

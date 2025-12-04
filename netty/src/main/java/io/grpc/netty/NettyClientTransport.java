@@ -350,11 +350,6 @@ class NettyClientTransport implements ConnectionClientTransport,
 
   @Override
   public void shutdown(Status reason) {
-    shutdown(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
-  }
-
-  @Override
-  public void shutdown(Status reason, DisconnectError disconnectError) {
     // start() could have failed
     if (channel == null) {
       return;

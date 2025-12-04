@@ -273,15 +273,6 @@ public class KeepAliveManager {
     public interface TransportWithDisconnectReason extends ClientTransport {
 
       /**
-       * Initiates an orderly shutdown of the transport.  Existing streams continue, but the
-       * transport will not own any new streams.  New streams will either fail (once
-       * {@link ManagedClientTransport.Listener#transportShutdown} callback called), or be
-       * transferred off this transport (in which case they may succeed).  This method may only be
-       * called once.
-       */
-      void shutdown(Status reason, DisconnectError disconnectError);
-
-      /**
        * Initiates a forceful shutdown in which preexisting and new calls are closed. Existing calls
        * should be closed with the provided {@code reason} and {@code disconnectError}.
        */
