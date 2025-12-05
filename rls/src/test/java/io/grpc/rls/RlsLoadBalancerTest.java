@@ -382,7 +382,7 @@ public class RlsLoadBalancerTest {
         eq(1L),
         eq(Arrays.asList("directaddress:///fake-bigtable.googleapis.com", "localhost:8972",
             "defaultTarget", "complete")),
-        eq(Arrays.asList()));
+        eq(Arrays.asList("")));
   }
 
   @Test
@@ -687,7 +687,7 @@ public class RlsLoadBalancerTest {
     verify(mockMetricRecorder, times(times)).addLongCounter(
         eqMetricInstrumentName(name), eq(value),
         eq(Lists.newArrayList(channelTarget, "localhost:8972", dataPlaneTargetLabel, pickResult)),
-        eq(Lists.newArrayList()));
+        eq(Lists.newArrayList("")));
   }
 
   // This one is for verifying the failed_pick metric specifically.
@@ -696,7 +696,7 @@ public class RlsLoadBalancerTest {
     verify(mockMetricRecorder, times(times)).addLongCounter(
         eqMetricInstrumentName("grpc.lb.rls.failed_picks"), eq(value),
         eq(Lists.newArrayList(channelTarget, "localhost:8972")),
-        eq(Lists.newArrayList()));
+        eq(Lists.newArrayList("")));
   }
 
   @SuppressWarnings("TypeParameterUnusedInFormals")
