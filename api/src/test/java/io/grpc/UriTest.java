@@ -445,6 +445,29 @@ public final class UriTest {
   }
 
   @Test
+  public void builder_normalizesCaseWhereAppropriate() {
+    Uri uri =
+        new Uri.Builder()
+            .setScheme("hTtP") // #section-3.1 says producers (Builder) should normalize to lower.
+            .setHost("aBc") // #section-3.2.2 says producers (Builder) should normalize to lower.
+            .setPath("/CdE") // #section-6.2.2.1 says the rest are assumed to be case-sensitive
+            .setQuery("fGh")
+            .setFragment("IjK")
+            .build();
+    assertThat(uri.toString()).isEqualTo("http://abc/CdE?fGh#IjK");
+  }
+
+  @Test
+  public void builder_normalizesIpv6Literal() {
+    Uri uri =
+        new Uri.Builder()
+            .setScheme("scheme")
+            .setHost(InetAddresses.forString("ABCD::EFAB"))
+            .build();
+    assertThat(uri.toString()).isEqualTo("scheme://[abcd::efab]");
+  }
+
+  @Test
   public void toString_percentEncodingMultiChar() throws URISyntaxException {
     Uri uri =
         new Uri.Builder()

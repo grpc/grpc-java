@@ -214,7 +214,7 @@ public final class Uri {
     if (schemeColon < 0) {
       throw new IllegalArgumentException("Missing required scheme.");
     }
-    builder.setScheme(s.substring(0, schemeColon));
+    builder.setRawScheme(s.substring(0, schemeColon));
 
     // 3.2. Authority. Look for '//' then keep scanning until '/', '?', or '#'.
     i = schemeColon + 1;
@@ -633,13 +633,16 @@ public final class Uri {
     /**
      * Sets the scheme, e.g. "https", "dns" or "xds".
      *
-     * <p>Note that the scheme is not validated until built.
-     *
      * @return this, for fluent building
      * @throws IllegalArgumentException if the scheme is invalid.
      */
     @CanIgnoreReturnValue
     public Builder setScheme(String scheme) {
+      return setRawScheme(scheme.toLowerCase(Locale.ROOT));
+    }
+
+    @CanIgnoreReturnValue
+    Builder setRawScheme(String scheme) {
       if (scheme.isEmpty() || !ALPHA_CHARS.get(scheme.charAt(0))) {
         throw new IllegalArgumentException("Scheme must start with an alphabetic char");
       }
