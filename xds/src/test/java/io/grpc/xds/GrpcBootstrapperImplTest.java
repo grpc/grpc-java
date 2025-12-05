@@ -724,6 +724,52 @@ public class GrpcBootstrapperImplTest {
   }
 
   @Test
+  public void serverFeature_failOnDataErrors() throws XdsInitializationException {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = true;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"fail_on_data_errors\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    assertThat(serverInfo.target()).isEqualTo(SERVER_URI);
+    assertThat(serverInfo.implSpecificConfig()).isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(serverInfo.failOnDataErrors()).isTrue();
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+  }
+
+  @Test
+  public void serverFeature_failOnDataErrors_requiresEnvVar() throws XdsInitializationException {
+    BootstrapperImpl.xdsDataErrorHandlingEnabled = false;
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"insecure\"}\n"
+        + "      ],\n"
+        + "      \"server_features\": [\"fail_on_data_errors\"]\n"
+        + "    }\n"
+        + "  ]\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+    // Should be false when env var is not enabled
+    assertThat(serverInfo.failOnDataErrors()).isFalse();
+  }
+
+  @Test
   public void notFound() {
     bootstrapper.bootstrapPathFromEnvVar = null;
     bootstrapper.bootstrapPathFromSysProp = null;

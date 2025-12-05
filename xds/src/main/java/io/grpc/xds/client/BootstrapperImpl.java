@@ -58,6 +58,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   private static final String SERVER_FEATURE_TRUSTED_XDS_SERVER = "trusted_xds_server";
   private static final String
       SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR = "resource_timer_is_transient_error";
+  private static final String SERVER_FEATURE_FAIL_ON_DATA_ERRORS = "fail_on_data_errors";
 
   @VisibleForTesting
   static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
@@ -257,6 +258,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
 
       boolean resourceTimerIsTransientError = false;
       boolean ignoreResourceDeletion = false;
+      boolean failOnDataErrors = false;
       // "For forward compatibility reasons, the client will ignore any entry in the list that it
       // does not understand, regardless of type."
       List<?> serverFeatures = JsonUtil.getList(serverConfig, "server_features");
@@ -267,12 +269,14 @@ public abstract class BootstrapperImpl extends Bootstrapper {
         }
         resourceTimerIsTransientError = xdsDataErrorHandlingEnabled
             && serverFeatures.contains(SERVER_FEATURE_RESOURCE_TIMER_IS_TRANSIENT_ERROR);
+        failOnDataErrors = xdsDataErrorHandlingEnabled
+            && serverFeatures.contains(SERVER_FEATURE_FAIL_ON_DATA_ERRORS);
       }
       servers.add(
           ServerInfo.create(serverUri, implSpecificConfig, ignoreResourceDeletion,
               serverFeatures != null
                   && serverFeatures.contains(SERVER_FEATURE_TRUSTED_XDS_SERVER),
-              resourceTimerIsTransientError));
+              resourceTimerIsTransientError, failOnDataErrors));
     }
     return servers.build();
   }

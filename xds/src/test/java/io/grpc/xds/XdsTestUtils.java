@@ -87,7 +87,7 @@ public class XdsTestUtils {
           + ".HttpConnectionManager";
   static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
       Bootstrapper.ServerInfo.create(
-      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false);
+      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false);
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
