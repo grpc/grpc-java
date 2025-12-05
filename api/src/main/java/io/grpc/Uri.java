@@ -106,11 +106,11 @@ import javax.annotation.Nullable;
  * </ul>
  *
  * <p>The uniform syntax always understands what follows a '?' to be a query string. For example,
- * the <code>mailto:me@example.com?subject=foo</code> now has a query component whereas RFC 2396
+ * <code>mailto:me@example.com?subject=foo</code> now has a query component whereas RFC 2396
  * considered everything after the <code>mailto:</code> scheme to be opaque.
  *
- * <p>Same goes for fragment. <code>data:image/png;...#xywh=0,0,10,10</code> now has a <code>
- * xywh</code> fragment whereas RFC 2396 considered everything after the scheme to be opaque.
+ * <p>Same goes for fragment. <code>data:image/png;...#xywh=0,0,10,10</code> now has a fragment
+ * whereas RFC 2396 considered everything after the scheme to be opaque.
  *
  * <h3>Uniform Authority Syntax</h3>
  *
@@ -135,7 +135,7 @@ import javax.annotation.Nullable;
  * transparent when asked to reproduce it via {@link Uri#toString()}. The former policy may be
  * appropriate for parsing user input or web content, but this class is meant for gRPC clients,
  * servers and plugins like name resolvers where human error at runtime is less likely and best
- * detected early. {@link java.net.URI#parse(String)} is similarly strict, which makes migration
+ * detected early. {@link java.net.URI#create(String)} is similarly strict, which makes migration
  * easy, except for the server/registry-based ambiguity addressed by {@link
  * java.net.URI#parseServerAuthority()}.
  *
