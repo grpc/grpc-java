@@ -58,6 +58,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import java.io.ByteArrayInputStream;
@@ -327,7 +328,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       return;
     }
     shutdown = true;
-    clientTransportListener.transportShutdown(s);
+    clientTransportListener.transportShutdown(s, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
   }
 
   private synchronized void notifyTerminated() {

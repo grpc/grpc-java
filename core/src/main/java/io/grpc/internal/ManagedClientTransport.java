@@ -77,8 +77,9 @@ public interface ManagedClientTransport extends ClientTransport {
      * <p>This is called exactly once, and must be called prior to {@link #transportTerminated}.
      *
      * @param s the reason for the shutdown.
+     * @param e the disconnect error.
      */
-    void transportShutdown(Status s);
+    void transportShutdown(Status s, DisconnectError e);
 
     /**
      * The transport completed shutting down. All resources have been released. All streams have
