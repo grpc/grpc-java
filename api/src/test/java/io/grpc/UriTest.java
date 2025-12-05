@@ -516,24 +516,24 @@ public final class UriTest {
 
   @Test
   public void serializedCharacterClasses_matchComputed() {
-    assertThat(Uri.DIGIT_CHARS).isEqualTo(bitSetOfRange('0', '9'));
-    assertThat(Uri.ALPHA_CHARS).isEqualTo(or(bitSetOfRange('A', 'Z'), bitSetOfRange('a', 'z')));
-    assertThat(Uri.SCHEME_CHARS)
-        .isEqualTo(or(Uri.DIGIT_CHARS, Uri.ALPHA_CHARS, bitSetOf('+', '-', '.')));
-    assertThat(Uri.UNRESERVED_CHARS)
-        .isEqualTo(or(Uri.ALPHA_CHARS, Uri.DIGIT_CHARS, bitSetOf('-', '.', '_', '~')));
-    assertThat(Uri.GEN_DELIMS_CHARS).isEqualTo(bitSetOf(':', '/', '?', '#', '[', ']', '@'));
-    assertThat(Uri.SUB_DELIMS_CHARS)
+    assertThat(Uri.digitChars).isEqualTo(bitSetOfRange('0', '9'));
+    assertThat(Uri.alphaChars).isEqualTo(or(bitSetOfRange('A', 'Z'), bitSetOfRange('a', 'z')));
+    assertThat(Uri.schemeChars)
+        .isEqualTo(or(Uri.digitChars, Uri.alphaChars, bitSetOf('+', '-', '.')));
+    assertThat(Uri.unreservedChars)
+        .isEqualTo(or(Uri.alphaChars, Uri.digitChars, bitSetOf('-', '.', '_', '~')));
+    assertThat(Uri.genDelimsChars).isEqualTo(bitSetOf(':', '/', '?', '#', '[', ']', '@'));
+    assertThat(Uri.subDelimsChars)
         .isEqualTo(bitSetOf('!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '='));
-    assertThat(Uri.RESERVED_CHARS).isEqualTo(or(Uri.GEN_DELIMS_CHARS, Uri.SUB_DELIMS_CHARS));
-    assertThat(Uri.REG_NAME_CHARS).isEqualTo(or(Uri.UNRESERVED_CHARS, Uri.SUB_DELIMS_CHARS));
-    assertThat(Uri.USERINFO_CHARS)
-        .isEqualTo(or(Uri.UNRESERVED_CHARS, Uri.SUB_DELIMS_CHARS, bitSetOf(':')));
-    assertThat(Uri.P_CHARS)
-        .isEqualTo(or(Uri.UNRESERVED_CHARS, Uri.SUB_DELIMS_CHARS, bitSetOf(':', '@')));
-    assertThat(Uri.P_CHARS_AND_SLASH).isEqualTo(or(Uri.P_CHARS, bitSetOf('/')));
-    assertThat(Uri.QUERY_CHARS).isEqualTo(or(Uri.P_CHARS, bitSetOf('/', '?')));
-    assertThat(Uri.FRAGMENT_CHARS).isEqualTo(or(Uri.P_CHARS, bitSetOf('/', '?')));
+    assertThat(Uri.reservedChars).isEqualTo(or(Uri.genDelimsChars, Uri.subDelimsChars));
+    assertThat(Uri.regNameChars).isEqualTo(or(Uri.unreservedChars, Uri.subDelimsChars));
+    assertThat(Uri.userInfoChars)
+        .isEqualTo(or(Uri.unreservedChars, Uri.subDelimsChars, bitSetOf(':')));
+    assertThat(Uri.pChars)
+        .isEqualTo(or(Uri.unreservedChars, Uri.subDelimsChars, bitSetOf(':', '@')));
+    assertThat(Uri.pCharsAndSlash).isEqualTo(or(Uri.pChars, bitSetOf('/')));
+    assertThat(Uri.queryChars).isEqualTo(or(Uri.pChars, bitSetOf('/', '?')));
+    assertThat(Uri.fragmentChars).isEqualTo(or(Uri.pChars, bitSetOf('/', '?')));
   }
 
   private static BitSet bitSetOfRange(char from, char to) {

@@ -290,7 +290,7 @@ public final class Uri {
         // Hit the end of IP-literal. Any further colon is inside it and couldn't indicate a port.
         break;
       }
-      if (!DIGIT_CHARS.get(c)) {
+      if (!digitChars.get(c)) {
         // Found a non-digit, non-colon, non-bracket.
         // This means there is no valid port (e.g. host is "example.com")
         break;
@@ -321,7 +321,7 @@ public final class Uri {
       if (out != null) {
         out.add(percentDecodeAssumedUtf8(segment));
       } else {
-        checkPercentEncodedArg(segment, "path segment", P_CHARS);
+        checkPercentEncodedArg(segment, "path segment", pChars);
       }
     }
 
@@ -647,12 +647,12 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawScheme(String scheme) {
-      if (scheme.isEmpty() || !ALPHA_CHARS.get(scheme.charAt(0))) {
+      if (scheme.isEmpty() || !alphaChars.get(scheme.charAt(0))) {
         throw new IllegalArgumentException("Scheme must start with an alphabetic char");
       }
       for (int i = 0; i < scheme.length(); i++) {
         char c = scheme.charAt(i);
-        if (!SCHEME_CHARS.get(c)) {
+        if (!schemeChars.get(c)) {
           throw new IllegalArgumentException("Invalid character in scheme at index " + i);
         }
       }
@@ -682,7 +682,7 @@ public final class Uri {
     @CanIgnoreReturnValue
     public Builder setPath(String path) {
       checkArgument(path != null, "Path can be empty but not null");
-      this.path = percentEncode(path, P_CHARS_AND_SLASH);
+      this.path = percentEncode(path, pCharsAndSlash);
       return this;
     }
 
@@ -720,13 +720,13 @@ public final class Uri {
      */
     @CanIgnoreReturnValue
     public Builder setQuery(String query) {
-      this.query = percentEncode(query, QUERY_CHARS);
+      this.query = percentEncode(query, queryChars);
       return this;
     }
 
     @CanIgnoreReturnValue
     Builder setRawQuery(String query) {
-      checkPercentEncodedArg(query, "query", QUERY_CHARS);
+      checkPercentEncodedArg(query, "query", queryChars);
       this.query = query;
       return this;
     }
@@ -739,13 +739,13 @@ public final class Uri {
      */
     @CanIgnoreReturnValue
     public Builder setFragment(String fragment) {
-      this.fragment = percentEncode(fragment, FRAGMENT_CHARS);
+      this.fragment = percentEncode(fragment, fragmentChars);
       return this;
     }
 
     @CanIgnoreReturnValue
     Builder setRawFragment(String fragment) {
-      checkPercentEncodedArg(fragment, "fragment", FRAGMENT_CHARS);
+      checkPercentEncodedArg(fragment, "fragment", fragmentChars);
       this.fragment = fragment;
       return this;
     }
@@ -759,13 +759,13 @@ public final class Uri {
      */
     @CanIgnoreReturnValue
     public Builder setUserInfo(String userInfo) {
-      this.userInfo = percentEncode(userInfo, USERINFO_CHARS);
+      this.userInfo = percentEncode(userInfo, userInfoChars);
       return this;
     }
 
     @CanIgnoreReturnValue
     Builder setRawUserInfo(String userInfo) {
-      checkPercentEncodedArg(userInfo, "userInfo", USERINFO_CHARS);
+      checkPercentEncodedArg(userInfo, "userInfo", userInfoChars);
       this.userInfo = userInfo;
       return this;
     }
@@ -781,7 +781,7 @@ public final class Uri {
     public Builder setHost(@Nullable String regName) {
       if (regName != null) {
         regName = regName.toLowerCase(Locale.ROOT);
-        regName = percentEncode(regName, REG_NAME_CHARS);
+        regName = percentEncode(regName, regNameChars);
       }
       this.host = regName;
       return this;
@@ -802,7 +802,7 @@ public final class Uri {
       // TODO(jdcormie): IPFuture
       if (!InetAddresses.isUriInetAddress(host)) {
         // Must be a "registered name".
-        checkPercentEncodedArg(host, "host", REG_NAME_CHARS);
+        checkPercentEncodedArg(host, "host", regNameChars);
       }
       this.host = host;
       return this;
@@ -928,8 +928,8 @@ public final class Uri {
         sb.append((char) b);
       } else {
         sb.append('%');
-        sb.append(HEX_DIGITS_BY_VAL[(b & 0xF0) >> 4]);
-        sb.append(HEX_DIGITS_BY_VAL[b & 0x0F]);
+        sb.append(hexDigitsByVal[(b & 0xF0) >> 4]);
+        sb.append(hexDigitsByVal[b & 0x0F]);
       }
     }
     return sb.toString();
@@ -940,38 +940,37 @@ public final class Uri {
   }
 
   // See UriTest for how these were computed from the ABNF constants in RFC 3986.
-  static final BitSet DIGIT_CHARS = BitSet.valueOf(new long[] {0x3ff000000000000L});
-  static final BitSet ALPHA_CHARS = BitSet.valueOf(new long[] {0L, 0x7fffffe07fffffeL});
+  static final BitSet digitChars = BitSet.valueOf(new long[] {0x3ff000000000000L});
+  static final BitSet alphaChars = BitSet.valueOf(new long[] {0L, 0x7fffffe07fffffeL});
   // scheme        = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
-  static final BitSet SCHEME_CHARS =
+  static final BitSet schemeChars =
       BitSet.valueOf(new long[] {0x3ff680000000000L, 0x7fffffe07fffffeL});
   // unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
-  static final BitSet UNRESERVED_CHARS =
+  static final BitSet unreservedChars =
       BitSet.valueOf(new long[] {0x3ff600000000000L, 0x47fffffe87fffffeL});
   // gen-delims    = ":" / "/" / "?" / "#" / "[" / "]" / "@"
-  static final BitSet GEN_DELIMS_CHARS =
+  static final BitSet genDelimsChars =
       BitSet.valueOf(new long[] {0x8400800800000000L, 0x28000001L});
   // sub-delims    = "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
-  static final BitSet SUB_DELIMS_CHARS = BitSet.valueOf(new long[] {0x28001fd200000000L});
+  static final BitSet subDelimsChars = BitSet.valueOf(new long[] {0x28001fd200000000L});
   // reserved      = gen-delims / sub-delims
-  static final BitSet RESERVED_CHARS =
-      BitSet.valueOf(new long[] {0xac009fda00000000L, 0x28000001L});
+  static final BitSet reservedChars = BitSet.valueOf(new long[] {0xac009fda00000000L, 0x28000001L});
   // reg-name      = *( unreserved / pct-encoded / sub-delims )
-  static final BitSet REG_NAME_CHARS =
+  static final BitSet regNameChars =
       BitSet.valueOf(new long[] {0x2bff7fd200000000L, 0x47fffffe87fffffeL});
   // userinfo      = *( unreserved / pct-encoded / sub-delims / ":" )
-  static final BitSet USERINFO_CHARS =
+  static final BitSet userInfoChars =
       BitSet.valueOf(new long[] {0x2fff7fd200000000L, 0x47fffffe87fffffeL});
   // pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
-  static final BitSet P_CHARS =
+  static final BitSet pChars =
       BitSet.valueOf(new long[] {0x2fff7fd200000000L, 0x47fffffe87ffffffL});
-  static final BitSet P_CHARS_AND_SLASH =
+  static final BitSet pCharsAndSlash =
       BitSet.valueOf(new long[] {0x2fffffd200000000L, 0x47fffffe87ffffffL});
   //  query         = *( pchar / "/" / "?" )
-  static final BitSet QUERY_CHARS =
+  static final BitSet queryChars =
       BitSet.valueOf(new long[] {0xafffffd200000000L, 0x47fffffe87ffffffL});
   // fragment      = *( pchar / "/" / "?" )
-  static final BitSet FRAGMENT_CHARS = QUERY_CHARS;
+  static final BitSet fragmentChars = queryChars;
 
-  private static final char[] HEX_DIGITS_BY_VAL = "0123456789ABCDEF".toCharArray();
+  private static final char[] hexDigitsByVal = "0123456789ABCDEF".toCharArray();
 }
