@@ -333,7 +333,7 @@ public final class UriTest {
   @Test
   public void toString_percentEncoding() throws URISyntaxException {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("s")
             .setHost("a b")
             .setPath("/p ath")
@@ -383,14 +383,14 @@ public final class UriTest {
 
   @Test
   public void builder_numericPort() throws URISyntaxException {
-    Uri uri = new Uri.Builder().setScheme("scheme").setHost("host").setPort(80).build();
+    Uri uri = Uri.newBuilder().setScheme("scheme").setHost("host").setPort(80).build();
     assertThat(uri.toString()).isEqualTo("scheme://host:80");
   }
 
   @Test
   public void builder_ipv6Literal() throws URISyntaxException {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("scheme")
             .setHost(InetAddresses.forString("2001:4860:4860::8844"))
             .build();
@@ -400,7 +400,7 @@ public final class UriTest {
   @Test
   public void builder_encodingWithAllowedReservedChars() throws URISyntaxException {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("s")
             .setUserInfo("u@")
             .setHost("a[]")
@@ -413,7 +413,7 @@ public final class UriTest {
 
   @Test
   public void builder_percentEncodingNonAscii() throws URISyntaxException {
-    Uri uri = new Uri.Builder().setScheme("s").setHost("a").setPath("/€").build();
+    Uri uri = Uri.newBuilder().setScheme("s").setHost("a").setPath("/€").build();
     assertThat(uri.toString()).isEqualTo("s://a/%E2%82%AC");
   }
 
@@ -422,7 +422,7 @@ public final class UriTest {
     IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new Uri.Builder().setPath("\uD83D")); // Lone high surrogate.
+            () -> Uri.newBuilder().setPath("\uD83D")); // Lone high surrogate.
     assertThat(e.getMessage()).contains("Malformed input");
   }
 
@@ -431,7 +431,7 @@ public final class UriTest {
     IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new Uri.Builder().setScheme("s").setHost("a").setPath("path").build());
+            () -> Uri.newBuilder().setScheme("s").setHost("a").setPath("path").build());
     assertThat(e.getMessage()).contains("Non-empty path must start with '/'");
   }
 
@@ -440,14 +440,14 @@ public final class UriTest {
     IllegalArgumentException e =
         assertThrows(
             IllegalArgumentException.class,
-            () -> new Uri.Builder().setScheme("s").setPath("//path").build());
+            () -> Uri.newBuilder().setScheme("s").setPath("//path").build());
     assertThat(e.getMessage()).contains("Path cannot start with '//'");
   }
 
   @Test
   public void builder_normalizesCaseWhereAppropriate() {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("hTtP") // #section-3.1 says producers (Builder) should normalize to lower.
             .setHost("aBc") // #section-3.2.2 says producers (Builder) should normalize to lower.
             .setPath("/CdE") // #section-6.2.2.1 says the rest are assumed to be case-sensitive
@@ -460,17 +460,14 @@ public final class UriTest {
   @Test
   public void builder_normalizesIpv6Literal() {
     Uri uri =
-        new Uri.Builder()
-            .setScheme("scheme")
-            .setHost(InetAddresses.forString("ABCD::EFAB"))
-            .build();
+        Uri.newBuilder().setScheme("scheme").setHost(InetAddresses.forString("ABCD::EFAB")).build();
     assertThat(uri.toString()).isEqualTo("scheme://[abcd::efab]");
   }
 
   @Test
   public void toString_percentEncodingMultiChar() throws URISyntaxException {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("s")
             .setHost("a")
             .setPath("/emojis/😊/icon.png") // Smile requires two chars to express in a java String.
@@ -481,7 +478,7 @@ public final class UriTest {
   @Test
   public void toString_percentEncodingLiteralPercent() throws URISyntaxException {
     Uri uri =
-        new Uri.Builder()
+        Uri.newBuilder()
             .setScheme("s")
             .setHost("a")
             .setPath("/p%20ath")

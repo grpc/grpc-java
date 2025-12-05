@@ -607,6 +607,11 @@ public final class Uri {
     return new Builder(this);
   }
 
+  /** Creates a new {@link Builder} with all fields uninitialized or set to their default values. */
+  public static Builder newBuilder() {
+    return new Builder();
+  }
+
   /** Builder for {@link Uri}. */
   public static final class Builder {
     private String scheme;
@@ -617,8 +622,7 @@ public final class Uri {
     private String host;
     private String port;
 
-    /** Creates a new builder with all fields uninitialized or set to their default values. */
-    public Builder() {}
+    private Builder() {}
 
     Builder(Uri prototype) {
       this.scheme = prototype.scheme;
