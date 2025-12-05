@@ -73,6 +73,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/Internal?*.java'
     exclude 'io/grpc/MetricRecorder.java'
     exclude 'io/grpc/MetricSink.java'
+    exclude 'io/grpc/Uri.java'
 }
 
 tasks.named("sourcesJar").configure {
