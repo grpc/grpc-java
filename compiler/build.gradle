@@ -102,7 +102,7 @@ model {
         all {
             if (toolChain in Gcc || toolChain in Clang) {
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "--std=c++14"
+                cppCompiler.args "--std=c++17"
                 addEnvArgs("CXXFLAGS", cppCompiler.args)
                 addEnvArgs("CPPFLAGS", cppCompiler.args)
                 if (project.hasProperty('buildUniversal') &&
@@ -132,7 +132,7 @@ model {
             } else if (toolChain in VisualCpp) {
                 usingVisualCpp = true
                 cppCompiler.define("GRPC_VERSION", version)
-                cppCompiler.args "/EHsc", "/MT"
+                cppCompiler.args "/EHsc", "/MT", "/std:c++17"
                 if (rootProject.hasProperty('vcProtobufInclude')) {
                     cppCompiler.args "/I${rootProject.vcProtobufInclude}"
                 } 
