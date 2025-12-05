@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.VerifyException;
 import com.google.common.collect.ImmutableList;
@@ -637,6 +638,8 @@ public final class Uri {
     /**
      * Sets the scheme, e.g. "https", "dns" or "xds".
      *
+     * <p>This field is required.
+     *
      * @return this, for fluent building
      * @throws IllegalArgumentException if the scheme is invalid.
      */
@@ -676,6 +679,8 @@ public final class Uri {
      * <p>See <a href="https://datatracker.ietf.org/doc/html/rfc3986#section-3.3">RFC 3986 3.3</a>
      * for more.
      *
+     * <p>This field is required but can be empty (its default value).
+     *
      * @param path the new path
      * @return this, for fluent building
      */
@@ -702,11 +707,14 @@ public final class Uri {
      * <p>See <a href="https://datatracker.ietf.org/doc/html/rfc3986#section-3.3">RFC 3986 3.3</a>
      * for more.
      *
+     * <p>This field is required but can be empty (its default value).
+     *
      * @param path the new path, a string consisting of characters from "pchar"
      * @return this, for fluent building
      */
     @CanIgnoreReturnValue
     public Builder setRawPath(String path) {
+      checkArgument(path != null, "Path can be empty but not null");
       parseAssumedUtf8PathIntoSegments(path, null);
       this.path = path;
       return this;
@@ -717,9 +725,14 @@ public final class Uri {
      *
      * <p>Query can contain any string of codepoints. Codepoints that can't be encoded literally
      * will be percent-encoded for you as UTF-8.
+     *
+     * <p>This field is optional.
+     *
+     * @param query the new query component, or null to clear this field
+     * @return this, for fluent building
      */
     @CanIgnoreReturnValue
-    public Builder setQuery(String query) {
+    public Builder setQuery(@Nullable String query) {
       this.query = percentEncode(query, queryChars);
       return this;
     }
@@ -736,9 +749,14 @@ public final class Uri {
      *
      * <p>The fragment can contain any string of codepoints. Codepoints that can't be encoded
      * literally will be percent-encoded for you as UTF-8.
+     *
+     * <p>This field is optional.
+     *
+     * @param fragment the new fragment component, or null to clear this field
+     * @return this, for fluent building
      */
     @CanIgnoreReturnValue
-    public Builder setFragment(String fragment) {
+    public Builder setFragment(@Nullable String fragment) {
       this.fragment = percentEncode(fragment, fragmentChars);
       return this;
     }
@@ -756,9 +774,14 @@ public final class Uri {
      *
      * <p>User info can contain any string of codepoints. Codepoints that can't be encoded literally
      * will be percent-encoded for you as UTF-8.
+     *
+     * <p>This field is optional.
+     *
+     * @param userInfo the new "user info" component, or null to clear this field
+     * @return this, for fluent building
      */
     @CanIgnoreReturnValue
-    public Builder setUserInfo(String userInfo) {
+    public Builder setUserInfo(@Nullable String userInfo) {
       this.userInfo = percentEncode(userInfo, userInfoChars);
       return this;
     }
@@ -776,6 +799,11 @@ public final class Uri {
      *
      * <p>The registered name can contain any string of codepoints. Codepoints that can't be encoded
      * literally will be percent-encoded for you as UTF-8.
+     *
+     * <p>This field is optional.
+     *
+     * @param regName the new host component in "registered name" form, or null to clear this field
+     * @return this, for fluent building
      */
     @CanIgnoreReturnValue
     public Builder setHost(@Nullable String regName) {
@@ -787,10 +815,17 @@ public final class Uri {
       return this;
     }
 
-    /** Specifies the "host" component of the new URI as an IP address. */
+    /**
+     * Specifies the "host" component of the new URI as an IP address.
+     *
+     * <p>This field is optional.
+     *
+     * @param addr the new "host" component in InetAddress form, or null to clear this field
+     * @return this, for fluent building
+     */
     @CanIgnoreReturnValue
-    public Builder setHost(InetAddress addr) {
-      this.host = InetAddresses.toUriString(addr);
+    public Builder setHost(@Nullable InetAddress addr) {
+      this.host = addr != null ? InetAddresses.toUriString(addr) : null;
       return this;
     }
 
@@ -812,6 +847,11 @@ public final class Uri {
      * Specifies the "port" component of the new URI, e.g. "8080".
      *
      * <p>The port can be any non-negative integer. A negative value represents "no port".
+     *
+     * <p>This field is optional.
+     *
+     * @param port the new "port" component, or -1 to clear this field
+     * @return this, for fluent building
      */
     @CanIgnoreReturnValue
     public Builder setPort(int port) {
@@ -832,6 +872,11 @@ public final class Uri {
 
     /** Builds a new instance of {@link Uri} as specified by the setters. */
     public Uri build() {
+      checkState(scheme != null, "Missing required scheme.");
+      if (host == null) {
+        checkState(port == null, "Cannot set port without host.");
+        checkState(userInfo == null, "Cannot set userInfo without host.");
+      }
       return new Uri(this);
     }
   }

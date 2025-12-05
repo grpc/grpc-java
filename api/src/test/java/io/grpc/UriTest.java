@@ -445,6 +445,31 @@ public final class UriTest {
   }
 
   @Test
+  public void builder_noScheme_throws() {
+    IllegalStateException e =
+        assertThrows(IllegalStateException.class, () -> Uri.newBuilder().build());
+    assertThat(e.getMessage()).contains("Missing required scheme");
+  }
+
+  @Test
+  public void builder_noHost_hasUserInfo_throws() {
+    IllegalStateException e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Uri.newBuilder().setScheme("scheme").setUserInfo("user").build());
+    assertThat(e.getMessage()).contains("Cannot set userInfo without host");
+  }
+
+  @Test
+  public void builder_noHost_hasPort_throws() {
+    IllegalStateException e =
+        assertThrows(
+            IllegalStateException.class,
+            () -> Uri.newBuilder().setScheme("scheme").setPort(1234).build());
+    assertThat(e.getMessage()).contains("Cannot set port without host");
+  }
+
+  @Test
   public void builder_normalizesCaseWhereAppropriate() {
     Uri uri =
         Uri.newBuilder()
@@ -462,6 +487,20 @@ public final class UriTest {
     Uri uri =
         Uri.newBuilder().setScheme("scheme").setHost(InetAddresses.forString("ABCD::EFAB")).build();
     assertThat(uri.toString()).isEqualTo("scheme://[abcd::efab]");
+  }
+
+  @Test
+  public void builder_canClearAllOptionalFields() {
+    Uri uri =
+        Uri.create("http://user@host:80/path?query#fragment").toBuilder()
+            .setHost((String) null)
+            .setPath("")
+            .setUserInfo(null)
+            .setPort(-1)
+            .setQuery(null)
+            .setFragment(null)
+            .build();
+    assertThat(uri.toString()).isEqualTo("http:");
   }
 
   @Test
