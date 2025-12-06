@@ -322,7 +322,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -453,7 +453,7 @@ public class OpenTelemetryMetricsModuleTest {
     fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
     tracer.outboundMessage(0);
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes finalAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -827,7 +827,7 @@ public class OpenTelemetryMetricsModuleTest {
     fakeClock.forwardTime(24, MILLISECONDS);
     // RPC succeeded
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes clientAttributes2
         = io.opentelemetry.api.common.Attributes.of(
@@ -995,7 +995,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.streamClosed(Status.OK); // RPC succeeded
 
     // --- The overall call ends ---
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     // Define attributes for assertions
     io.opentelemetry.api.common.Attributes finalAttributes
@@ -1087,7 +1087,7 @@ public class OpenTelemetryMetricsModuleTest {
     hedgeTracer2.streamClosed(Status.OK); // Second hedge succeeds
 
     // --- The overall call ends ---
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     // Define attributes for assertions
     io.opentelemetry.api.common.Attributes finalAttributes
@@ -1141,7 +1141,7 @@ public class OpenTelemetryMetricsModuleTest {
             method.getFullMethodName(), emptyList());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
-    callAttemptsTracerFactory.callEnded(status);
+    callAttemptsTracerFactory.callEnded(status, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes attemptStartedAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -1255,7 +1255,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.addOptionalLabel("grpc.lb.locality", "the-moon");
     tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1319,7 +1319,7 @@ public class OpenTelemetryMetricsModuleTest {
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1388,7 +1388,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.addOptionalLabel("grpc.lb.backend_service", "the-moon");
     tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1453,7 +1453,7 @@ public class OpenTelemetryMetricsModuleTest {
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
