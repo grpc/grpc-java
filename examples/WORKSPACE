@@ -34,10 +34,17 @@ jar_jar_repositories()
 
 # Protobuf now requires C++14 or higher, which requires Bazel configuration
 # outside the WORKSPACE. See .bazelrc in this directory.
-load("@com_google_protobuf//:protobuf_deps.bzl", "PROTOBUF_MAVEN_ARTIFACTS")
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+load("@com_google_protobuf//:protobuf_deps.bzl", "PROTOBUF_MAVEN_ARTIFACTS", "protobuf_deps")
 
 protobuf_deps()
+
+load("@rules_python//python:repositories.bzl", "py_repositories")
+
+py_repositories()
+
+load("@rules_java//java:rules_java_deps.bzl", "compatibility_proxy_repo")
+
+compatibility_proxy_repo()
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
 
