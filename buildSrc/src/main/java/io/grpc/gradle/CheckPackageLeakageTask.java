@@ -31,6 +31,7 @@ import org.gradle.api.tasks.TaskExecutionException;
 
 /** Verifies all class files within jar files are in a specified Java package. */
 public abstract class CheckPackageLeakageTask extends DefaultTask {
+  @SuppressWarnings("this-escape")
   public CheckPackageLeakageTask() {
     // Fake output for UP-TO-DATE checking
     getOutputs().file(getProject().getLayout().getBuildDirectory().file("tmp/" + getName()));

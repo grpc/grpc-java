@@ -46,6 +46,7 @@ public abstract class RequireUpperBoundDepsMatchTask extends DefaultTask {
   private final String projectPath;
   private final String projectVersion;
 
+  @SuppressWarnings("this-escape")
   public RequireUpperBoundDepsMatchTask() {
     projectPath = getProject().getPath();
     projectVersion = getProject().getVersion().toString();

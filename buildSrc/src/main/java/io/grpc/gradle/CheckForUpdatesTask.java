@@ -49,6 +49,7 @@ import org.gradle.api.tasks.TaskAction;
 public abstract class CheckForUpdatesTask extends DefaultTask {
   private final Set<Library> libraries;
 
+  @SuppressWarnings("this-escape", "deprecation")
   @Inject
   public CheckForUpdatesTask(Configuration updateConf, String catalog, RegularFile commentFile)
       throws IOException {
