@@ -79,7 +79,6 @@ dependencies {
             libraries.opencensus.contrib.grpc.metrics
 
     implementation (project(':grpc-services')) {
-        exclude group: 'com.google.protobuf'
         exclude group: 'com.google.guava'
     }
 
