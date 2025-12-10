@@ -3,10 +3,26 @@ workspace(name = "io_grpc_grpc_java")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
-    name = "rules_java",
-    url = "https://github.com/bazelbuild/rules_java/releases/download/5.3.5/rules_java-5.3.5.tar.gz",
-    sha256 = "c73336802d0b4882e40770666ad055212df4ea62cfa6edf9cb0f9d29828a0934",
+    name = "bazel_features",
+    sha256 = "a660027f5a87f13224ab54b8dc6e191693c554f2692fcca46e8e29ee7dabc43b",
+    strip_prefix = "bazel_features-1.30.0",
+    url = "https://github.com/bazel-contrib/bazel_features/releases/download/v1.30.0/bazel_features-v1.30.0.tar.gz",
 )
+
+load("@bazel_features//:deps.bzl", "bazel_features_deps")
+bazel_features_deps()
+
+http_archive(
+    name = "rules_java",
+    urls = [
+        "https://github.com/bazelbuild/rules_java/releases/download/9.1.0/rules_java-9.1.0.tar.gz",
+    ],
+    sha256 = "4e1a28a25c2efa53500c928d22ceffbc505dd95b335a2d025836a293b592212f",
+)
+
+load("@rules_java//java:rules_java_deps.bzl", "compatibility_proxy_repo")
+
+compatibility_proxy_repo()
 
 http_archive(
     name = "rules_jvm_external",
@@ -26,10 +42,13 @@ load("@bazel_jar_jar//:jar_jar.bzl", "jar_jar_repositories")
 
 jar_jar_repositories()
 
-load("@com_google_protobuf//:protobuf_deps.bzl", "PROTOBUF_MAVEN_ARTIFACTS")
-load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+load("@com_google_protobuf//:protobuf_deps.bzl", "PROTOBUF_MAVEN_ARTIFACTS", "protobuf_deps")
 
 protobuf_deps()
+
+load("@rules_python//python:repositories.bzl", "py_repositories")
+
+py_repositories()
 
 load("@com_google_googleapis//:repository_rules.bzl", "switched_rules_by_language")
 
