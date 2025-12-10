@@ -56,8 +56,8 @@ java_library(
         "src/main/java/io/grpc/s2a/internal/handshaker/SslContextFactory.java",
     ],
     deps = [
-        ":token_manager",
         ":s2a_identity",
+        ":token_manager",
         "//api",
         "//core:internal",
         "//netty",
@@ -87,7 +87,7 @@ java_library(
         "//netty",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
-        artifact("com.google.guava:guava"), 
-        artifact("org.checkerframework:checker-qual"), 
+        artifact("com.google.guava:guava"),
+        artifact("org.checkerframework:checker-qual"),
     ],
 )

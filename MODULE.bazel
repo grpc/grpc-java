@@ -1,8 +1,8 @@
 module(
     name = "grpc-java",
+    version = "1.79.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
-    version = "1.79.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
 )
 
 # GRPC_DEPS_START
@@ -63,119 +63,96 @@ maven.install(
     ],
     strict_visibility = True,
 )
-
 use_repo(maven, "maven")
 
 maven.override(
     coordinates = "com.google.protobuf:protobuf-java",
     target = "@com_google_protobuf//:protobuf_java",
 )
-
 maven.override(
     coordinates = "com.google.protobuf:protobuf-java-util",
     target = "@com_google_protobuf//:protobuf_java_util",
 )
-
 maven.override(
     coordinates = "com.google.protobuf:protobuf-javalite",
     target = "@com_google_protobuf//:protobuf_javalite",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-alts",
     target = "@io_grpc_grpc_java//alts",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-api",
     target = "@io_grpc_grpc_java//api",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-auth",
     target = "@io_grpc_grpc_java//auth",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-census",
     target = "@io_grpc_grpc_java//census",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-context",
     target = "@io_grpc_grpc_java//context",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-core",
     target = "@io_grpc_grpc_java//core:core_maven",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-googleapis",
     target = "@io_grpc_grpc_java//googleapis",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-grpclb",
     target = "@io_grpc_grpc_java//grpclb",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-inprocess",
     target = "@io_grpc_grpc_java//inprocess",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-netty",
     target = "@io_grpc_grpc_java//netty",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-netty-shaded",
     target = "@io_grpc_grpc_java//netty:shaded_maven",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-okhttp",
     target = "@io_grpc_grpc_java//okhttp",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-protobuf",
     target = "@io_grpc_grpc_java//protobuf",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-protobuf-lite",
     target = "@io_grpc_grpc_java//protobuf-lite",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-rls",
     target = "@io_grpc_grpc_java//rls",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-services",
     target = "@io_grpc_grpc_java//services:services_maven",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-stub",
     target = "@io_grpc_grpc_java//stub",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-testing",
     target = "@io_grpc_grpc_java//testing",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-xds",
     target = "@io_grpc_grpc_java//xds:xds_maven",
 )
-
 maven.override(
     coordinates = "io.grpc:grpc-util",
     target = "@io_grpc_grpc_java//util",

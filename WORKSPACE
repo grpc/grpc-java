@@ -10,14 +10,15 @@ http_archive(
 )
 
 load("@bazel_features//:deps.bzl", "bazel_features_deps")
+
 bazel_features_deps()
 
 http_archive(
     name = "rules_java",
+    sha256 = "4e1a28a25c2efa53500c928d22ceffbc505dd95b335a2d025836a293b592212f",
     urls = [
         "https://github.com/bazelbuild/rules_java/releases/download/9.1.0/rules_java-9.1.0.tar.gz",
     ],
-    sha256 = "4e1a28a25c2efa53500c928d22ceffbc505dd95b335a2d025836a293b592212f",
 )
 
 load("@rules_java//java:rules_java_deps.bzl", "compatibility_proxy_repo")
@@ -32,9 +33,7 @@ http_archive(
 )
 
 load("@rules_jvm_external//:defs.bzl", "maven_install")
-load("//:repositories.bzl", "IO_GRPC_GRPC_JAVA_ARTIFACTS")
-load("//:repositories.bzl", "IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS")
-load("//:repositories.bzl", "grpc_java_repositories")
+load("//:repositories.bzl", "IO_GRPC_GRPC_JAVA_ARTIFACTS", "IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS", "grpc_java_repositories")
 
 grpc_java_repositories()
 
