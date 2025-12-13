@@ -142,6 +142,12 @@ import javax.annotation.Nullable;
  *
  * <p>{@link java.net.URI} and {@link Uri} both support IPv6 literals in square brackets as defined
  * by RFC 2732.
+ *
+ * <p>{@link java.net.URI} supports IPv6 scope IDs but accepts and emits a non-standard syntax.
+ * {@link Uri} implements the newer RFC 6874, which percent encodes scope IDs and the % delimiter
+ * itself. RFC 9844 claims to obsolete RFC 6874 because web browsers would not support it. This
+ * class implements RFC 6874 anyway, mostly to avoid creating a barrier to migration away from
+ * {@link java.net.URI}.
  */
 @Internal
 public final class Uri {
@@ -825,12 +831,32 @@ public final class Uri {
      */
     @CanIgnoreReturnValue
     public Builder setHost(@Nullable InetAddress addr) {
-      this.host = addr != null ? InetAddresses.toUriString(addr) : null;
+      this.host = addr != null ? toUriString(addr) : null;
       return this;
+    }
+
+    private static String toUriString(InetAddress addr) {
+      // InetAddresses.toUriString(addr) is almost enough but neglects RFC 6874 percent encoding.
+      String inetAddrStr = InetAddresses.toUriString(addr);
+      int percentIndex = inetAddrStr.indexOf('%');
+      if (percentIndex < 0) {
+        return inetAddrStr;
+      }
+
+      String scope = inetAddrStr.substring(percentIndex, inetAddrStr.length() - 1);
+      return inetAddrStr.substring(0, percentIndex) + percentEncode(scope, unreservedChars) + "]";
     }
 
     @CanIgnoreReturnValue
     Builder setRawHost(String host) {
+      if (host.startsWith("[") && host.endsWith("]")) {
+        // IP-literal: Guava's isUriInetAddress() is almost enough but it doesn't check the scope.
+        int percentIndex = host.indexOf('%');
+        if (percentIndex > 0) {
+          String scope = host.substring(percentIndex, host.length() - 1);
+          checkPercentEncodedArg(scope, "scope", unreservedChars);
+        }
+      }
       // IP-literal validation is complicated so we delegate it to Guava. We use this particular
       // method of InetAddresses because it doesn't try to match interfaces on the local machine.
       // (The validity of a URI should be the same no matter which machine does the parsing.)
