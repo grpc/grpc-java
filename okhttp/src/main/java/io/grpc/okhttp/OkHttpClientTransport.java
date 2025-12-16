@@ -802,7 +802,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         }
         synchronized (lock) {
           maxConcurrentStreams = Integer.MAX_VALUE;
-          startPendingStreams();
+          checkState(pendingStreams.isEmpty(),
+              "Pending streams detected during transport start."
+                  + " RPCs should not be started before transport is ready.");
         }
         // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
         // may send goAway immediately.
