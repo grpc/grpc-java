@@ -1186,6 +1186,11 @@ final class GrpclbState {
     public String toString() {
       return "ChildLbPickerEntry(" + childPicker + ")";
     }
+
+    @VisibleForTesting
+    SubchannelPicker getChildPicker() {
+      return childPicker;
+    }
   }
 
   @VisibleForTesting

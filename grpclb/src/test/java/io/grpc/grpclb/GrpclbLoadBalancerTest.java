@@ -72,6 +72,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.GrpclbState.BackendEntry;
+import io.grpc.grpclb.GrpclbState.ChildLbPickerEntry;
 import io.grpc.grpclb.GrpclbState.DropEntry;
 import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.IdleSubchannelEntry;
@@ -1933,13 +1934,31 @@ public class GrpclbLoadBalancerTest {
     // One subchannel is created by the child LB
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
+    verify(subchannel).requestConnection();
     assertThat(picker0.dropList).containsExactly(null, null);
+    assertThat(picker0.pickList).hasSize(1);
+    assertThat(picker0.pickList.get(0)).isInstanceOf(ChildLbPickerEntry.class);
 
     // READY
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     verify(helper, atLeast(1)).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker1.dropList).containsExactly(null, null);
+    assertThat(picker1.pickList).hasSize(1);
+    ChildLbPickerEntry readyEntry = (ChildLbPickerEntry) picker1.pickList.get(0);
+    PickResult readyResult =
+        readyEntry.getChildPicker().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(readyResult.getSubchannel()).isEqualTo(subchannel);
+
+    Status error = Status.UNAVAILABLE.withDescription("Simulated connection error");
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(error));
+    verify(helper, atLeast(1)).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    RoundRobinPicker failurePicker = (RoundRobinPicker) pickerCaptor.getValue();
+    assertThat(failurePicker.pickList).hasSize(1);
+    ChildLbPickerEntry failureEntry = (ChildLbPickerEntry) failurePicker.pickList.get(0);
+    PickResult failureResult =
+        failureEntry.getChildPicker().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(failureResult.getStatus()).isEqualTo(error);
 
     // New server list with drops
     List<ServerEntry> backends2 = Arrays.asList(
@@ -2108,6 +2127,14 @@ public class GrpclbLoadBalancerTest {
     // READY
     deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     verify(helper, atLeast(1)).updateBalancingState(eq(READY), pickerCaptor.capture());
+    deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(IDLE));
+    verify(helper, atLeast(1)).updateBalancingState(eq(IDLE), pickerCaptor.capture());
+    RoundRobinPicker pickerIdle = (RoundRobinPicker) pickerCaptor.getValue();
+    verify(subchannel, times(1)).requestConnection();
+
+    // Picking while IDLE should trigger a new connection request
+    pickerIdle.pickSubchannel(mock(PickSubchannelArgs.class));
+    verify(subchannel, times(2)).requestConnection();
 
     // Finally, an LB response, which brings us out of fallback
     List<ServerEntry> backends1 = Arrays.asList(
