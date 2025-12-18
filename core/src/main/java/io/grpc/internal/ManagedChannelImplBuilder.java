@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.UriWrapper.wrap;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -814,10 +815,10 @@ public final class ManagedChannelImplBuilder
 
   @VisibleForTesting
   static class ResolvedNameResolver {
-    public final URI targetUri;
+    public final UriWrapper targetUri;
     public final NameResolverProvider provider;
 
-    public ResolvedNameResolver(URI targetUri, NameResolverProvider provider) {
+    public ResolvedNameResolver(UriWrapper targetUri, NameResolverProvider provider) {
       this.targetUri = checkNotNull(targetUri, "targetUri");
       this.provider = checkNotNull(provider, "provider");
     }
@@ -872,7 +873,7 @@ public final class ManagedChannelImplBuilder
       }
     }
 
-    return new ResolvedNameResolver(targetUri, provider);
+    return new ResolvedNameResolver(wrap(targetUri), provider);
   }
 
   private static class DirectAddressNameResolverProvider extends NameResolverProvider {

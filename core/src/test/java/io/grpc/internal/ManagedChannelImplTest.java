@@ -28,6 +28,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE;
 import static io.grpc.PickSubchannelArgsMatcher.eqPickSubchannelArgs;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
+import static io.grpc.internal.UriWrapper.wrap;
 import static junit.framework.TestCase.assertNotSame;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -315,7 +316,7 @@ public class ManagedChannelImplTest {
     NameResolverProvider nameResolverProvider =
         channelBuilder.nameResolverRegistry.getProviderForScheme(expectedUri.getScheme());
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, expectedUri, nameResolverProvider,
+        channelBuilder, mockTransportFactory, wrap(expectedUri), nameResolverProvider,
         new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
         timer.getTimeProvider());
@@ -504,7 +505,7 @@ public class ManagedChannelImplTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, expectedUri, nameResolverFactory,
+        channelBuilder, mockTransportFactory, wrap(expectedUri), nameResolverFactory,
         new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
@@ -569,7 +570,7 @@ public class ManagedChannelImplTest {
     when(mockTransportFactory.getSupportedSocketAddressTypes()).thenReturn(Collections.singleton(
         InetSocketAddress.class));
     channel = new ManagedChannelImpl(
-        channelBuilder, mockTransportFactory, expectedUri, nameResolverFactory,
+        channelBuilder, mockTransportFactory, wrap(expectedUri), nameResolverFactory,
         new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(), timer.getTimeProvider());
@@ -4416,11 +4417,11 @@ public class ManagedChannelImplTest {
 
     URI targetUri = new URI("defaultscheme", "", "/foo.googleapis.com:8080", null);
     NameResolver nameResolver = ManagedChannelImpl.getNameResolver(
-        targetUri, null, nameResolverProvider, NAMERESOLVER_ARGS);
+        wrap(targetUri), null, nameResolverProvider, NAMERESOLVER_ARGS);
     assertThat(nameResolver.getServiceAuthority()).isEqualTo(serviceAuthority);
 
     nameResolver = ManagedChannelImpl.getNameResolver(
-        targetUri, overrideAuthority, nameResolverProvider, NAMERESOLVER_ARGS);
+        wrap(targetUri), overrideAuthority, nameResolverProvider, NAMERESOLVER_ARGS);
     assertThat(nameResolver.getServiceAuthority()).isEqualTo(overrideAuthority);
   }
 
@@ -4449,7 +4450,7 @@ public class ManagedChannelImplTest {
     };
     try {
       ManagedChannelImpl.getNameResolver(
-          URI.create("defaultscheme:///foo.gogoleapis.com:8080"),
+          wrap(URI.create("defaultscheme:///foo.gogoleapis.com:8080")),
           null, nameResolverProvider, NAMERESOLVER_ARGS);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
