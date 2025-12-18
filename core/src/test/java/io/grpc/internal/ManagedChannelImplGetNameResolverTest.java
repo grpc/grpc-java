@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.UriWrapper.wrap;
 import static org.junit.Assert.fail;
 
 import io.grpc.NameResolver;
@@ -125,7 +126,7 @@ public class ManagedChannelImplGetNameResolverTest {
         ManagedChannelImplBuilder.getNameResolverProvider(
             target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
     assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
-    assertThat(resolved.targetUri).isEqualTo(expectedUri);
+    assertThat(resolved.targetUri).isEqualTo(wrap(expectedUri));
     assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
   }
 
