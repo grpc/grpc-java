@@ -742,7 +742,7 @@ public class DelayedClientTransportTest {
     InsightBuilder insight = new InsightBuilder();
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
-        .matches("\\[wait_for_ready, buffered_nanos=[0-9]+\\, waiting_for_connection]");
+        .matches("\\[wait_for_ready, connecting_and_lb_delay=[0-9]+ns\\, was_still_waiting]");
   }
 
   @Test
@@ -759,7 +759,7 @@ public class DelayedClientTransportTest {
     assertThat(insight.toString())
         .matches("\\[wait_for_ready, "
             + "Last Pick Failure=Status\\{code=PERMISSION_DENIED, description=null, cause=null\\},"
-            + " buffered_nanos=[0-9]+, waiting_for_connection]");
+            + " connecting_and_lb_delay=[0-9]+ns, was_still_waiting]");
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
