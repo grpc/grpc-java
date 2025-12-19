@@ -13,11 +13,17 @@
         <action android:name="action1"/>
         <data android:scheme="scheme" android:host="authority" android:path="/path"/>
       </intent-filter>
+      <intent-filter>
+        <action android:name="bare.action1"/>
+      </intent-filter>
     </service>
     <service android:name="io.grpc.binder.HostServices$HostService2" android:exported="false">
       <intent-filter>
         <action android:name="action2"/>
         <data android:scheme="scheme" android:host="authority" android:path="/path"/>
+      </intent-filter>
+      <intent-filter>
+        <action android:name="bare.action2"/>
       </intent-filter>
     </service>
   </application>

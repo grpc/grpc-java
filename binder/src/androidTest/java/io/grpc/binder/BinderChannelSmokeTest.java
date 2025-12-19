@@ -17,6 +17,7 @@
 package io.grpc.binder;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.TestUtils.setFlagForScope;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -250,6 +251,17 @@ public final class BinderChannelSmokeTest {
                 "intent://authority/path#Intent;action=action1;scheme=scheme;end;", appContext)
             .build();
     assertThat(doCall("Hello").get()).isEqualTo("Hello");
+  }
+
+  @Test
+  public void testConnectViaRfc3986TargetUri() throws Exception {
+    try (AutoCloseable unused = setFlagForScope("GRPC_ENABLE_RFC3986_URIS", true)) {
+      // Compare with the <intent-filter> mapping in AndroidManifest.xml.
+      channel =
+          BinderChannelBuilder.forTarget("intent:#Intent;action=bare.action1;end;", appContext)
+              .build();
+      assertThat(doCall("Hello").get()).isEqualTo("Hello");
+    }
   }
 
   @Test
