@@ -75,6 +75,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -1667,10 +1668,147 @@ public class OpenTelemetryMetricsModuleTest {
     assertEquals("67", capturedBaggage.getEntryValue("user-id"));
   }
 
+  @Test
+  public void targetAttributeFilter_notSet_usesOriginalTarget() {
+    // Test that when no filter is set, the original target is used
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+    ClientCall<String, String> call;
+    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
+  @Test
+  public void targetAttributeFilter_allowsTarget_usesOriginalTarget() {
+    // Test that when filter allows the target, the original target is used
+    String target = "dns:///example.com";
+    Predicate<String> targetFilter = t -> t.contains("example.com");
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+    ClientCall<String, String> call;
+    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
+  @Test
+  public void targetAttributeFilter_rejectsTarget_mapsToOther() {
+    // Test that when filter rejects the target, it is mapped to "other"
+    String target = "dns:///example.com";
+    Predicate<String> targetFilter = t -> t.contains("allowed.com");
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+    ClientCall<String, String> call;
+    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, "other",
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource) {
     return new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+  }
+
+  private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
+      OpenTelemetryMetricsResource resource, Predicate<String> filter) {
+    return new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(), filter);
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {

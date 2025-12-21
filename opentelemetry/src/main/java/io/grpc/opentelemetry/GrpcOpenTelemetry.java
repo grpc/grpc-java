@@ -48,6 +48,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+import javax.annotation.Nullable;
 
 /**
  *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
@@ -97,7 +99,8 @@ public final class GrpcOpenTelemetry {
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
-        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins,
+        builder.targetAttributeFilter);
     this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
@@ -139,6 +142,11 @@ public final class GrpcOpenTelemetry {
   @VisibleForTesting
   Tracer getTracer() {
     return this.openTelemetryTracingModule.getTracer();
+  }
+
+  @VisibleForTesting
+  Predicate<String> getTargetAttributeFilter() {
+    return this.openTelemetryMetricsModule.getTargetAttributeFilter();
   }
 
   /**
@@ -359,6 +367,8 @@ public final class GrpcOpenTelemetry {
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
+    @Nullable
+    private Predicate<String> targetAttributeFilter;
 
     private Builder() {}
 
@@ -418,6 +428,14 @@ public final class GrpcOpenTelemetry {
 
     Builder enableTracing(boolean enable) {
       ENABLE_OTEL_TRACING = enable;
+      return this;
+    }
+
+    /**
+     * Sets an optional filter for the grpc.target attribute.
+     */
+    public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
+      this.targetAttributeFilter = filter;
       return this;
     }
 
