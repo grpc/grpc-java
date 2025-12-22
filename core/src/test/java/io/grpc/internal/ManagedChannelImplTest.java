@@ -107,7 +107,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.MetricInstrumentRegistry;
-import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
@@ -309,8 +308,7 @@ public class ManagedChannelImplTest {
       ArgumentCaptor.forClass(ClientStreamListener.class);
   @Mock
   private ChildChannelConfigurer mockChildChannelConfigurer;
-  @Mock
-  private MetricRecorder mockMetricRecorder;
+
 
   private void createChannel(ClientInterceptor... interceptors) {
     createChannel(false, interceptors);
