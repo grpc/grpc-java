@@ -73,8 +73,12 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public void readBytes(ByteBuffer dest) {
+    int remaining = dest.remaining();
     try {
-      buffer.read(dest);
+      int read = buffer.read(dest);
+      if (read < remaining) {
+        throw new IndexOutOfBoundsException("EOF trying to read " + remaining + " bytes");
+      }
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
