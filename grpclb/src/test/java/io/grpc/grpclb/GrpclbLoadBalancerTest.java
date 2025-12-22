@@ -2056,6 +2056,7 @@ public class GrpclbLoadBalancerTest {
     // Verify subchannel creation by child LB
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
+    assertThat(picker0.dropList).containsExactly(null, null);
     assertThat(picker0.pickList).hasSize(1);
     assertThat(picker0.pickList.get(0)).isInstanceOf(ChildLbPickerEntry.class);
 
