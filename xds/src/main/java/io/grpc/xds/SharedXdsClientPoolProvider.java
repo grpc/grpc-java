@@ -58,7 +58,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @Nullable
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
-  // The first one wins, anything with the same target string uses the client created for the first one
+  /*
+     The first one wins.
+     Anything with the same target string uses the client created for the first one.
+  */
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {

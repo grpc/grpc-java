@@ -105,6 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
+    ManagedChannel parent = mock(ManagedChannel.class);
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -116,7 +117,33 @@ public class NameResolverTest {
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
         .setArg(FOO_ARG_KEY, customArgValue)
+        .setParentChannel(parent)
         .build();
+  }
+
+  @Test
+  public void args_parentChannel() {
+    ManagedChannel parent = mock(ManagedChannel.class);
+
+    // Create a real SynchronizationContext instead of mocking it
+    SynchronizationContext realSyncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(realSyncContext)
+        .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setParentChannel(parent)
+        .build();
+
+    assertThat(args.getParentChannel()).isSameInstanceAs(parent);
   }
 
   @Test
