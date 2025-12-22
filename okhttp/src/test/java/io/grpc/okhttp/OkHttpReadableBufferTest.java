@@ -46,12 +46,6 @@ public class OkHttpReadableBufferTest extends ReadableBufferTestBase {
 
   @Override
   @Test
-  public void readToByteBufferShouldSucceed() {
-    // Not supported.
-  }
-
-  @Override
-  @Test
   public void partialReadToByteBufferShouldSucceed() {
     // Not supported.
   }

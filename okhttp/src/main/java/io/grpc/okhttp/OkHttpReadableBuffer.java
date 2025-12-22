@@ -73,8 +73,11 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public void readBytes(ByteBuffer dest) {
-    // We are not using it.
-    throw new UnsupportedOperationException();
+    try {
+      buffer.read(dest);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Override
