@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import java.util.ArrayDeque;
@@ -120,20 +119,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         }
       };
 
-  private static final NoThrowReadOperation<ByteBuffer> BYTE_BUF_OP =
-      new NoThrowReadOperation<ByteBuffer>() {
-        @Override
-        public int read(ReadableBuffer buffer, int length, ByteBuffer dest, int unused) {
-          // Change the limit so that only lengthToCopy bytes are available.
-          int prevLimit = dest.limit();
-          ((Buffer) dest).limit(dest.position() + length);
-          // Write the bytes and restore the original limit.
-          buffer.readBytes(dest);
-          ((Buffer) dest).limit(prevLimit);
-          return 0;
-        }
-      };
-
   private static final ReadOperation<OutputStream> STREAM_OP =
       new ReadOperation<OutputStream>() {
         @Override
@@ -147,11 +132,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   @Override
   public void readBytes(byte[] dest, int destOffset, int length) {
     executeNoThrow(BYTE_ARRAY_OP, length, dest, destOffset);
-  }
-
-  @Override
-  public void readBytes(ByteBuffer dest) {
-    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
   }
 
   @Override
