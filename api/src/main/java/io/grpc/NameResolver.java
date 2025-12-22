@@ -323,6 +323,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
+    @Nullable private final ManagedChannel parentChannel;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -337,6 +338,7 @@ public abstract class NameResolver {
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
+      this.parentChannel = builder.parentChannel;
     }
 
     /**
@@ -433,6 +435,14 @@ public abstract class NameResolver {
         throw new IllegalStateException("ChannelLogger is not set in Builder");
       }
       return channelLogger;
+    }
+
+    /**
+     * Returns the parent {@link ManagedChannel} served by this NameResolver.
+     */
+    @Internal
+    public ManagedChannel getParentChannel() {
+      return parentChannel;
     }
 
     /**
@@ -544,6 +554,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
+      private ManagedChannel parentChannel;
 
       Builder() {
       }
@@ -656,6 +667,16 @@ public abstract class NameResolver {
        */
       public Builder setNameResolverRegistry(NameResolverRegistry registry) {
         this.nameResolverRegistry = registry;
+        return this;
+      }
+
+      /**
+       * See {@link Args#parentChannel}. This is an optional field.
+       *
+       * @since 1.79.0
+       */
+      public Builder setParentChannel(ManagedChannel parentChannel) {
+        this.parentChannel = parentChannel;
         return this;
       }
 

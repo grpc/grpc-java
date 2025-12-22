@@ -39,6 +39,7 @@ import io.envoyproxy.envoy.service.status.v3.ClientStatusResponse;
 import io.envoyproxy.envoy.type.matcher.v3.NodeMatcher;
 import io.grpc.Deadline;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -515,6 +516,13 @@ public class CsdsServiceTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+      throw new UnsupportedOperationException("Should not be called");
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ManagedChannel parentChannel) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

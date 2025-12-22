@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -57,6 +58,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @Nullable
   private final Bootstrapper bootstrapper;
   private final Object lock = new Object();
+  // The first one wins, anything with the same target string uses the client created for the first one
   private final Map<String, ObjectPool<XdsClient>> targetToXdsClientMap = new ConcurrentHashMap<>();
 
   SharedXdsClientPoolProvider() {
@@ -88,20 +90,31 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     } else {
       bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
     }
-    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials);
+    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials,
+        null);
   }
 
   @Override
   public ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
-    return getOrCreate(target, bootstrapInfo, metricRecorder, null);
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null,
+        null);
+  }
+
+  @Override
+  public ObjectPool<XdsClient> getOrCreate(
+      String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+      ManagedChannel parentChannel) {
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null,
+        parentChannel);
   }
 
   public ObjectPool<XdsClient> getOrCreate(
       String target,
       BootstrapInfo bootstrapInfo,
       MetricRecorder metricRecorder,
-      CallCredentials transportCallCredentials) {
+      CallCredentials transportCallCredentials,
+      ManagedChannel parentChannel) {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
@@ -109,7 +122,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         if (ref == null) {
           ref =
               new RefCountedXdsClientObjectPool(
-                  bootstrapInfo, target, metricRecorder, transportCallCredentials);
+                  bootstrapInfo, target, metricRecorder, transportCallCredentials, parentChannel);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -134,6 +147,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private final String target; // The target associated with the xDS client.
     private final MetricRecorder metricRecorder;
     private final CallCredentials transportCallCredentials;
+    private final ManagedChannel parentChannel;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -147,7 +161,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     @VisibleForTesting
     RefCountedXdsClientObjectPool(
         BootstrapInfo bootstrapInfo, String target, MetricRecorder metricRecorder) {
-      this(bootstrapInfo, target, metricRecorder, null);
+      this(bootstrapInfo, target, metricRecorder, null, null);
     }
 
     @VisibleForTesting
@@ -155,11 +169,13 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         BootstrapInfo bootstrapInfo,
         String target,
         MetricRecorder metricRecorder,
-        CallCredentials transportCallCredentials) {
+        CallCredentials transportCallCredentials,
+        ManagedChannel parentChannel) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
       this.target = target;
       this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
       this.transportCallCredentials = transportCallCredentials;
+      this.parentChannel = parentChannel;
     }
 
     @Override
@@ -172,7 +188,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
           GrpcXdsTransportFactory xdsTransportFactory =
-              new GrpcXdsTransportFactory(transportCallCredentials);
+              new GrpcXdsTransportFactory(transportCallCredentials, parentChannel);
           xdsClient =
               new XdsClientImpl(
                   xdsTransportFactory,

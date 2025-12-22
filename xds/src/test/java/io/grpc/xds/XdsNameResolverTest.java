@@ -57,6 +57,7 @@ import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -2479,6 +2480,24 @@ public class XdsNameResolverTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+      targets.add(target);
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ManagedChannel parentChannel) {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override
