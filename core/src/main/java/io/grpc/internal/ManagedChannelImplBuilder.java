@@ -720,8 +720,7 @@ public final class ManagedChannelImplBuilder
   /**
    * Applies the configuration logic from the given parent channel to this builder.
    *
-   * <p>
-   * This mechanism allows properties (like metrics, tracing, or interceptors) to propagate
+   * <p>This mechanism allows properties (like metrics, tracing, or interceptors) to propagate
    * automatically from a parent channel to any child channels it creates
    * (e.g., Subchannels or OOB channels).
    *
@@ -741,8 +740,7 @@ public final class ManagedChannelImplBuilder
   /**
    * Sets the configurer that will be stored in the channel built by this builder.
    *
-   * <p>
-   * This configurer will subsequently be used to configure any descendants (children)
+   * <p>This configurer will subsequently be used to configure any descendants (children)
    * created by that channel.
    *
    * @param childChannelConfigurer the configurer to store in the channel.
