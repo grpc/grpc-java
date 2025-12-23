@@ -38,6 +38,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.Grpc;
 import io.grpc.KnownLength;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -97,10 +98,9 @@ public class OpenTelemetryMetricsModuleTest {
   private static final CallOptions.Key<String> CUSTOM_OPTION =
       CallOptions.Key.createWithDefault("option1", "default");
   private static final CallOptions CALL_OPTIONS =
-      CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
+      CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, 10L);
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      ClientStreamTracer.StreamInfo.newBuilder()
-          .setCallOptions(CallOptions.DEFAULT.withOption(NAME_RESOLUTION_DELAYED, 10L)).build();
+      ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CALL_OPTIONS).build();
   private static final String CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME = "grpc.client.attempt.started";
   private static final String CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME
       = "grpc.client.attempt.duration";
@@ -248,7 +248,8 @@ public class OpenTelemetryMetricsModuleTest {
             grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
             module.getClientInterceptor("target:///"));
     ClientCall<String, String> call;
-    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+    call = interceptedChannel.newCall(
+        method, CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue"));
 
     assertEquals("customvalue", capturedCallOptions.get().getOption(CUSTOM_OPTION));
     assertEquals(1, capturedCallOptions.get().getStreamTracerFactories().size());
@@ -277,7 +278,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
@@ -322,7 +324,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.inboundMessage(1);
     tracer.inboundWireSize(154);
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes clientAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -444,7 +446,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
@@ -453,7 +456,7 @@ public class OpenTelemetryMetricsModuleTest {
     fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
     tracer.outboundMessage(0);
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes finalAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -511,7 +514,7 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS,
             method.getFullMethodName(), emptyList());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -827,7 +830,7 @@ public class OpenTelemetryMetricsModuleTest {
     fakeClock.forwardTime(24, MILLISECONDS);
     // RPC succeeded
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes clientAttributes2
         = io.opentelemetry.api.common.Attributes.of(
@@ -968,7 +971,7 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS,
             method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
@@ -995,7 +998,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.streamClosed(Status.OK); // RPC succeeded
 
     // --- The overall call ends ---
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     // Define attributes for assertions
     io.opentelemetry.api.common.Attributes finalAttributes
@@ -1056,7 +1059,7 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS,
             method.getFullMethodName(), emptyList());
 
     // Create a StreamInfo specifically for hedged attempts
@@ -1087,7 +1090,7 @@ public class OpenTelemetryMetricsModuleTest {
     hedgeTracer2.streamClosed(Status.OK); // Second hedge succeeds
 
     // --- The overall call ends ---
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     // Define attributes for assertions
     io.opentelemetry.api.common.Attributes finalAttributes
@@ -1137,11 +1140,11 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS,
             method.getFullMethodName(), emptyList());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
-    callAttemptsTracerFactory.callEnded(status, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(status, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes attemptStartedAttributes
         = io.opentelemetry.api.common.Attributes.of(
@@ -1246,7 +1249,8 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1255,7 +1259,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.addOptionalLabel("grpc.lb.locality", "the-moon");
     tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1314,12 +1318,13 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1379,7 +1384,8 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1388,7 +1394,7 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.addOptionalLabel("grpc.lb.backend_service", "the-moon");
     tracer.addOptionalLabel("grpc.lb.foo", "thats-no-moon");
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1448,12 +1454,13 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+        new CallAttemptsTracerFactory(
+            module, target, CALL_OPTIONS, method.getFullMethodName(), emptyList());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     tracer.streamClosed(Status.OK);
-    callAttemptsTracerFactory.callEnded(Status.OK, CallOptions.DEFAULT);
+    callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
 
     io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
         TARGET_KEY, target,
@@ -1502,6 +1509,100 @@ public class OpenTelemetryMetricsModuleTest {
                     .hasHistogramSatisfying(
                         histogram -> histogram.hasPointsSatisfying(
                             point -> point.hasAttributes(clientAttributes))));
+  }
+
+  @Test
+  public void customLabel_present() {
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_RETRY_DELAY, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true
+    );
+    String target = "target:///";
+    String customValue = "some-random-value";
+    CallOptions callOptions =
+        STREAM_INFO.getCallOptions().withOption(Grpc.CALL_OPTION_CUSTOM_LABEL, customValue);
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    String customLabel = "grpc.client.call.custom";
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList(customLabel),
+        emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(
+            module, target, callOptions, method.getFullMethodName(), emptyList());
+
+    ClientStreamTracer.StreamInfo streamInfo =
+        STREAM_INFO.toBuilder().setCallOptions(callOptions).build();
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(streamInfo, new Metadata());
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(streamInfo, new Metadata());
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        streamInfo.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        streamInfo.toBuilder().setIsHedging(true).build(), new Metadata());
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK, callOptions);
+
+    AttributeKey<String> attributeKey = AttributeKey.stringKey(customLabel);
+
+    assertThat(sortByName(openTelemetryTesting.getMetrics()))
+        .satisfiesExactly(
+            metric -> assertThat(metric)
+                .hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue),
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue),
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue),
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                .hasLongSumSatisfying(
+                    longSum -> longSum.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_DURATION)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_HEDGES)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRIES)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_TRANSPARENT_RETRIES)
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> point.hasAttribute(attributeKey, customValue))));
   }
 
   @Test
@@ -1751,6 +1852,11 @@ public class OpenTelemetryMetricsModuleTest {
     Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
 
     assertEquals("red_pill_or_blue_pill", capturedBaggage.getEntryValue("choice"));
+  }
+
+  private static List<MetricData> sortByName(List<MetricData> metrics) {
+    metrics.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
+    return metrics;
   }
 
   /**

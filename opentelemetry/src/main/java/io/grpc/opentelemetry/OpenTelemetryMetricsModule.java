@@ -326,6 +326,7 @@ final class OpenTelemetryMetricsModule {
     CallAttemptsTracerFactory(
         OpenTelemetryMetricsModule module,
         String target,
+        CallOptions callOptions,
         String fullMethodName,
         List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins) {
       this.module = checkNotNull(module, "module");
@@ -335,9 +336,14 @@ final class OpenTelemetryMetricsModule {
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          METHOD_KEY, fullMethodName,
-          TARGET_KEY, target);
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          .put(METHOD_KEY, fullMethodName)
+          .put(TARGET_KEY, target);
+      if (module.customLabelEnabled) {
+        builder.put(
+            CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
+      io.opentelemetry.api.common.Attributes attribute = builder.build();
 
       // Record here in case mewClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
@@ -361,9 +367,14 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        io.opentelemetry.api.common.Attributes attribute =
-            io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
-                TARGET_KEY, target);
+        AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+            .put(METHOD_KEY, fullMethodName)
+            .put(TARGET_KEY, target);
+        if (module.customLabelEnabled) {
+          builder.put(
+              CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+        }
+        io.opentelemetry.api.common.Attributes attribute = builder.build();
         if (module.resource.clientAttemptCountCounter() != null) {
           module.resource.clientAttemptCountCounter().add(1, attribute);
         }
@@ -675,7 +686,7 @@ final class OpenTelemetryMetricsModule {
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
-          OpenTelemetryMetricsModule.this, target,
+          OpenTelemetryMetricsModule.this, target, callOptions,
           recordMethodName(method.getFullMethodName(), method.isSampledToLocalTracing()),
           callPlugins);
       ClientCall<ReqT, RespT> call =
