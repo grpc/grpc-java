@@ -1679,8 +1679,8 @@ public class OpenTelemetryMetricsModuleTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), module.getClientInterceptor(target));
-    ClientCall<String, String> call;
-    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
 
     // Make the call
     Metadata headers = new Metadata();
@@ -1723,8 +1723,8 @@ public class OpenTelemetryMetricsModuleTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), module.getClientInterceptor(target));
-    ClientCall<String, String> call;
-    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
 
     // Make the call
     Metadata headers = new Metadata();
@@ -1767,8 +1767,8 @@ public class OpenTelemetryMetricsModuleTest {
     Channel interceptedChannel =
         ClientInterceptors.intercept(
             grpcServerRule.getChannel(), module.getClientInterceptor(target));
-    ClientCall<String, String> call;
-    call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
 
     // Make the call
     Metadata headers = new Metadata();
