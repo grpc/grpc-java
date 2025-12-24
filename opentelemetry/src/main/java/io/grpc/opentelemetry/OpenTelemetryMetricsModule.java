@@ -69,6 +69,10 @@ import javax.annotation.Nullable;
  * tracer. It's the tracer that reports per-attempt stats, and the factory that reports the stats
  * of the overall RPC, such as RETRIES_PER_CALL, to OpenTelemetry.
  *
+ * <p>This module optionally applies a target attribute filter to limit the cardinality of
+ * the {@code grpc.target} attribute in client-side metrics by mapping disallowed targets
+ * to a stable placeholder value.
+ *
  * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
  * starts earlier than the ServerCall. Therefore, only one tracer is created per stream/call, and
  * it's the tracer that reports the summary to OpenTelemetry.

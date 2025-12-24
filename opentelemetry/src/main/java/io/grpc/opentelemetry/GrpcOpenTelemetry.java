@@ -432,7 +432,12 @@ public final class GrpcOpenTelemetry {
     }
 
     /**
-     * Sets an optional filter for the grpc.target attribute.
+     * Sets an optional filter to control recording of the {@code grpc.target} metric attribute.
+     *
+     * <p>If the predicate returns {@code true}, the original target is recorded. Otherwise,
+     * the target is recorded as {@code "other"} to limit metric cardinality.
+     *
+     * <p>If unset, all targets are recorded as-is.
      */
     public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
       this.targetAttributeFilter = filter;
