@@ -197,7 +197,7 @@ public final class ManagedChannelRegistry {
         continue;
       }
       ManagedChannelProvider.NewChannelBuilderResult result
-          = provider.newChannelBuilder(target, creds);
+          = provider.newChannelBuilder(target, creds, nameResolverRegistry, nameResolverProvider);
       if (result.getChannelBuilder() != null) {
         return result.getChannelBuilder();
       }

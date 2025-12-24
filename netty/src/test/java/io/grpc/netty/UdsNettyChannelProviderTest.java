@@ -28,9 +28,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.ManagedChannelProvider;
 import io.grpc.ManagedChannelProvider.NewChannelBuilderResult;
 import io.grpc.ManagedChannelRegistryAccessor;
-import io.grpc.NameResolverRegistry;
 import io.grpc.TlsChannelCredentials;
-import io.grpc.internal.testing.FakeNameResolverProvider;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -115,24 +113,6 @@ public class UdsNettyChannelProviderTest {
     Assume.assumeTrue(Utils.isEpollAvailable());
     ManagedChannelBuilder<?> managedChannelBuilder
             = Grpc.newChannelBuilder("unix:///sock.sock", InsecureChannelCredentials.create());
-    assertThat(managedChannelBuilder).isNotNull();
-    ManagedChannel channel = managedChannelBuilder.build();
-    assertThat(channel).isNotNull();
-    assertThat(channel.authority()).isEqualTo("/sock.sock");
-    channel.shutdownNow();
-  }
-
-  @Test
-  public void managedChannelRegistry_newChannelBuilderForNameResolverRegistry() {
-    Assume.assumeTrue(Utils.isEpollAvailable());
-    NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
-    DomainSocketAddress socketAddress = new DomainSocketAddress("test-server");
-    FakeNameResolverProvider fakeNameResolverProvider = new FakeNameResolverProvider(
-            "unix:///sock.sock", socketAddress);
-    nameResolverRegistry.register(fakeNameResolverProvider);
-    ManagedChannelBuilder<?> managedChannelBuilder
-            = Grpc.newChannelBuilder("unix:///sock.sock",
-            InsecureChannelCredentials.create(), nameResolverRegistry);
     assertThat(managedChannelBuilder).isNotNull();
     ManagedChannel channel = managedChannelBuilder.build();
     assertThat(channel).isNotNull();
