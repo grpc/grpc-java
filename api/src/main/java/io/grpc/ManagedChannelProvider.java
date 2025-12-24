@@ -82,13 +82,28 @@ public abstract class ManagedChannelProvider {
   }
 
   /**
-   * Creates a channel builder with a target string, credentials, NameResolverRegistry
-   * and NameResolverProvider. Returns an error-string result if unable to
-   * understand the credentials.
+   * Creates a channel builder using the provided target, credentials, and resolution
+   * components.
+   *
+   * <p>This method allows for fine-grained control over name resolution by providing
+   * both a {@link NameResolverRegistry} and a specific {@link NameResolverProvider}.
+   * Unlike the public factory methods, this returns a {@link NewChannelBuilderResult},
+   * which may contain an error string if the provided credentials or target are
+   * not supported by this provider.
+   *
+   * @param target the target URI for the channel
+   * @param creds the channel credentials to use
+   * @param nameResolverRegistry the registry used for looking up name resolvers
+   * @param nameResolverProvider a specific provider to use, or {@code null} to
+   *     search the registry
+   * @return a {@link NewChannelBuilderResult} containing either the builder or an
+   *     error description
+   * @since 1.79.0
    */
   protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
                                                       NameResolverRegistry nameResolverRegistry,
                                                       NameResolverProvider nameResolverProvider) {
+    // Implementation note: Currently delegates to the simplified version
     return newChannelBuilder(target, creds);
   }
 
