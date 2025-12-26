@@ -59,7 +59,6 @@ import org.chromium.net.UrlResponseInfo;
  * Client stream for the cronet transport.
  */
 class CronetClientStream extends AbstractClientStream {
-  private static final int READ_BUFFER_CAPACITY = 4 * 1024;
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
 
@@ -85,6 +84,8 @@ class CronetClientStream extends AbstractClientStream {
   private final Collection<Object> annotations;
   private final TransportState state;
   private final Sink sink = new Sink();
+  @VisibleForTesting
+  final int readBufferSize;
   private StreamBuilderFactory streamFactory;
 
   CronetClientStream(
@@ -102,7 +103,8 @@ class CronetClientStream extends AbstractClientStream {
       CallOptions callOptions,
       TransportTracer transportTracer,
       boolean useGetForSafeMethods,
-      boolean usePutForIdempotentMethods) {
+      boolean usePutForIdempotentMethods,
+      int readBufferSize) {
     super(
         new CronetWritableBufferAllocator(), statsTraceCtx, transportTracer, headers, callOptions,
         useGetForSafeMethods && method.isSafe());
@@ -120,6 +122,7 @@ class CronetClientStream extends AbstractClientStream {
     this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
     this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer,
             callOptions);
+    this.readBufferSize = readBufferSize;
 
     // Tests expect the "plain" deframer behavior, not MigratingDeframer
     // https://github.com/grpc/grpc-java/issues/7140
@@ -309,7 +312,7 @@ class CronetClientStream extends AbstractClientStream {
         if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
           Log.v(LOG_TAG, "BidirectionalStream.read");
         }
-        stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+        stream.read(ByteBuffer.allocateDirect(readBufferSize));
       }
     }
 
@@ -429,7 +432,7 @@ class CronetClientStream extends AbstractClientStream {
         Log.v(LOG_TAG, "BidirectionalStream.read");
       }
       reportHeaders(info.getAllHeadersAsList(), false);
-      stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
+      stream.read(ByteBuffer.allocateDirect(readBufferSize));
     }
 
     @Override
