@@ -56,6 +56,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -67,6 +68,10 @@ import javax.annotation.Nullable;
  * tracer for each attempt. If there is no stream created when the call is ended, we still create a
  * tracer. It's the tracer that reports per-attempt stats, and the factory that reports the stats
  * of the overall RPC, such as RETRIES_PER_CALL, to OpenTelemetry.
+ *
+ * <p>This module optionally applies a target attribute filter to limit the cardinality of
+ * the {@code grpc.target} attribute in client-side metrics by mapping disallowed targets
+ * to a stable placeholder value.
  *
  * <p>On the server-side, there is only one ServerStream per each ServerCall, and ServerStream
  * starts earlier than the ServerCall. Therefore, only one tracer is created per stream/call, and
@@ -95,15 +100,30 @@ final class OpenTelemetryMetricsModule {
   private final boolean localityEnabled;
   private final boolean backendServiceEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
+  @Nullable
+  private final Predicate<String> targetAttributeFilter;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
                              Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
+    this(stopwatchSupplier, resource, optionalLabels, plugins, null);
+  }
+
+  OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
+      OpenTelemetryMetricsResource resource,
+      Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
+      @Nullable Predicate<String> targetAttributeFilter) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
     this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
+    this.targetAttributeFilter = targetAttributeFilter;
+  }
+
+  @VisibleForTesting
+  Predicate<String> getTargetAttributeFilter() {
+    return targetAttributeFilter;
   }
 
   /**
@@ -124,7 +144,15 @@ final class OpenTelemetryMetricsModule {
         pluginBuilder.add(plugin);
       }
     }
-    return new MetricsClientInterceptor(target, pluginBuilder.build());
+    String filteredTarget = recordTarget(target);
+    return new MetricsClientInterceptor(filteredTarget, pluginBuilder.build());
+  }
+
+  String recordTarget(String target) {
+    if (targetAttributeFilter == null) {
+      return target;
+    }
+    return targetAttributeFilter.test(target) ? target : "other";
   }
 
   static String recordMethodName(String fullMethodName, boolean isGeneratedMethod) {

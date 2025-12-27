@@ -35,6 +35,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.util.Arrays;
+import java.util.function.Predicate;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -128,6 +129,17 @@ public class GrpcOpenTelemetryTest {
         .setInstrumentationVersion(GrpcUtil.IMPLEMENTATION_VERSION)
         .build()
     );
+  }
+
+  @Test
+  public void builderTargetAttributeFilter() {
+    Predicate<String> filter = t -> t.contains("allowed.com");
+    GrpcOpenTelemetry module = GrpcOpenTelemetry.newBuilder()
+        .targetAttributeFilter(filter)
+        .build();
+
+    assertThat(module.getTargetAttributeFilter())
+        .isSameInstanceAs(filter);
   }
 
   @Test
