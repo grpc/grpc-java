@@ -26,6 +26,15 @@ import java.util.List;
  */
 @Internal
 public interface MetricRecorder {
+
+  /**
+   * Returns a {@link MetricRecorder} that performs no operations.
+   * The returned instance ignores all calls and skips all validation checks.
+   */
+  static MetricRecorder noOp() {
+    return NoOpMetricRecorder.INSTANCE;
+  }
+
   /**
    * Adds a value for a double-precision counter metric instrument.
    *
@@ -175,5 +184,48 @@ public interface MetricRecorder {
     /** Unregister. */
     @Override
     void close();
+  }
+
+  /**
+   * No-Op implementation of MetricRecorder.
+   * Overrides all default methods to skip validation checks for maximum performance.
+   */
+  final class NoOpMetricRecorder implements MetricRecorder {
+    private static final NoOpMetricRecorder INSTANCE = new NoOpMetricRecorder();
+
+    @Override
+    public void addDoubleCounter(DoubleCounterMetricInstrument metricInstrument, double value,
+                                 List<String> requiredLabelValues,
+                                 List<String> optionalLabelValues) {
+    }
+
+    @Override
+    public void addLongCounter(LongCounterMetricInstrument metricInstrument, long value,
+                               List<String> requiredLabelValues, List<String> optionalLabelValues) {
+    }
+
+    @Override
+    public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
+                                     List<String> requiredLabelValues,
+                                     List<String> optionalLabelValues) {
+    }
+
+    @Override
+    public void recordDoubleHistogram(DoubleHistogramMetricInstrument metricInstrument,
+                                      double value, List<String> requiredLabelValues,
+                                      List<String> optionalLabelValues) {
+    }
+
+    @Override
+    public void recordLongHistogram(LongHistogramMetricInstrument metricInstrument, long value,
+                                    List<String> requiredLabelValues,
+                                    List<String> optionalLabelValues) {
+    }
+
+    @Override
+    public Registration registerBatchCallback(BatchCallback callback,
+                                              CallbackMetricInstrument... metricInstruments) {
+      return () -> { };
+    }
   }
 }

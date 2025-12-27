@@ -69,6 +69,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -101,6 +102,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -302,9 +304,11 @@ public class ManagedChannelImplTest {
   private boolean panicExpected;
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
-
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
+  @Mock
+  private ChildChannelConfigurer mockChildChannelConfigurer;
+
 
   private void createChannel(ClientInterceptor... interceptors) {
     createChannel(false, interceptors);
@@ -5159,5 +5163,117 @@ public class ManagedChannelImplTest {
     // Provides dummy variable for retry related params (not used in this test class)
     return ManagedChannelServiceConfig
         .fromServiceConfig(rawServiceConfig, true, 3, 4, policySelection);
+  }
+
+  @Test
+  public void getChildChannelConfigurer_returnsConfiguredValue() {
+    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder(TARGET,
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            return mockTransportFactory;
+          }
+        },
+        new FixedPortProvider(DEFAULT_PORT));
+
+    when(mockTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
+
+    ManagedChannel channel = builder
+        .nameResolverFactory(new FakeNameResolverFactory(
+            Collections.singletonList(URI.create(TARGET)),
+            Collections.emptyList(),
+            true,
+            null))
+        .childChannelConfigurer(mockChildChannelConfigurer)
+        .build();
+
+    assertThat(channel.getChildChannelConfigurer()).isSameInstanceAs(mockChildChannelConfigurer);
+    channel.shutdownNow();
+  }
+
+  @Test
+  public void configureChannel_propagatesConfigurerToNewBuilder_endToEnd() {
+    when(mockTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
+
+    // 1. Setup Interceptor
+    final AtomicInteger interceptorCalls = new AtomicInteger(0);
+    final ClientInterceptor trackingInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        interceptorCalls.incrementAndGet();
+        return next.newCall(method, callOptions);
+      }
+    };
+
+    // 2. Setup Configurer
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void accept(ManagedChannelBuilder<?> builder) {
+        builder.intercept(trackingInterceptor);
+      }
+    };
+
+    // 3. Create Parent Channel
+    ManagedChannelImplBuilder parentBuilder = new ManagedChannelImplBuilder("fake://parent-target",
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            return mockTransportFactory;
+          }
+        },
+        new FixedPortProvider(DEFAULT_PORT));
+
+    ManagedChannel parentChannel = parentBuilder
+        // MATCH THE CONSTRUCTOR SIGNATURE: (List<URI>, List<EAG>, boolean, Status)
+        .nameResolverFactory(new FakeNameResolverFactory(
+            Collections.singletonList(URI.create("fake://parent-target")),
+            Collections.emptyList(),
+            true,
+            null))
+        .childChannelConfigurer(configurer)
+        .build();
+
+    // 4. Create Child Channel Builder
+    ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder("fake://child-target",
+        new ClientTransportFactoryBuilder() {
+          @Override
+          public ClientTransportFactory buildClientTransportFactory() {
+            return mockTransportFactory;
+          }
+        },
+        new FixedPortProvider(DEFAULT_PORT));
+
+    childBuilder.configureChannel(parentChannel);
+
+    // Ensure child also has a resolver factory
+    childBuilder.nameResolverFactory(new FakeNameResolverFactory(
+        Collections.singletonList(URI.create("fake://child-target")),
+        Collections.emptyList(),
+        true,
+        null));
+
+    ManagedChannel childChannel = childBuilder.build();
+
+    // 5. Verification
+    ClientCall<String, Integer> call = childChannel.newCall(
+        MethodDescriptor.<String, Integer>newBuilder()
+            .setType(MethodDescriptor.MethodType.UNARY)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(new StringMarshaller())
+            .setResponseMarshaller(new IntegerMarshaller())
+            .build(),
+        CallOptions.DEFAULT);
+
+    call.start(new ClientCall.Listener<Integer>() {
+    }, new Metadata());
+
+    assertThat(interceptorCalls.get())
+        .isEqualTo(1);
+
+    childChannel.shutdownNow();
+    parentChannel.shutdownNow();
   }
 }

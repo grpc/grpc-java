@@ -36,14 +36,16 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
+  private final ManagedChannel parentChannel;
 
-  GrpcXdsTransportFactory(CallCredentials callCredentials) {
+  GrpcXdsTransportFactory(CallCredentials callCredentials, ManagedChannel parentChannel) {
     this.callCredentials = callCredentials;
+    this.parentChannel = parentChannel;
   }
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo, callCredentials);
+    return new GrpcXdsTransport(serverInfo, callCredentials, parentChannel);
   }
 
   @VisibleForTesting
@@ -71,6 +73,17 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       this.channel = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES)
+          .build();
+      this.callCredentials = callCredentials;
+    }
+
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials,
+                            ManagedChannel parentChannel) {
+      String target = serverInfo.target();
+      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
+      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
+          .keepAliveTime(5, TimeUnit.MINUTES)
+          .configureChannel(parentChannel)
           .build();
       this.callCredentials = callCredentials;
     }
