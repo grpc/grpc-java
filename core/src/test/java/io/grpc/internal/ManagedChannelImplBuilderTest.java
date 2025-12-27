@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.TestUtils.setFlagForScope;
 import static junit.framework.TestCase.assertFalse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -56,26 +57,31 @@ import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link ManagedChannelImplBuilder}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ManagedChannelImplBuilderTest {
   private static final int DUMMY_PORT = 42;
   private static final String DUMMY_TARGET = "fake-target";
@@ -98,6 +104,13 @@ public class ManagedChannelImplBuilderTest {
         }
       };
 
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
@@ -114,9 +127,12 @@ public class ManagedChannelImplBuilderTest {
               "io\\.grpc\\.InternalConfigurator|io\\.grpc\\.Configurator|"
                   + "io\\.grpc\\.InternalConfiguratorRegistry|io\\.grpc\\.ConfiguratorRegistry|"
                   + "io\\.grpc\\.internal\\.[^.]+"));
+  private final Deque<AutoCloseable> toBeClosedUponTeardown = new ArrayDeque<>();
 
   @Before
   public void setUp() throws Exception {
+    toBeClosedUponTeardown.push(
+        setFlagForScope("GRPC_ENABLE_RFC3986_URIS", enableRfc3986UrisParam));
     builder = new ManagedChannelImplBuilder(
         DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
@@ -126,6 +142,13 @@ public class ManagedChannelImplBuilderTest {
         DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
         new FixedPortProvider(DUMMY_PORT));
+  }
+
+  @After
+  public void cleanUpCloseables() throws Exception {
+    while (!toBeClosedUponTeardown.isEmpty()) {
+      toBeClosedUponTeardown.pop().close();
+    }
   }
 
   /** Ensure getDefaultPort() returns default port when no custom implementation provided. */
@@ -373,8 +396,11 @@ public class ManagedChannelImplBuilderTest {
       ManagedChannel unused = grpcCleanupRule.register(builder.build());
       fail("Should fail");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo(
-          "Address types of NameResolver 'dns' for 'valid:1234' not supported by transport");
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo(
+              "Address types of NameResolver 'dns' for 'dns:///valid:1234' not supported by"
+                  + " transport");
     }
   }
 

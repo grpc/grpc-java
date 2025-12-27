@@ -164,4 +164,25 @@ public final class TestUtils {
     @Override
     public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
   }
+
+  /**
+   * Configures {@link GrpcUtil#getFlag(String, boolean)} to return 'value' for 'flag' for the
+   * lifetime of the returned {@link AutoCloseable}.
+   *
+   * <p>Use the returned {@link AutoCloseable} in a try-with-resources statement to set a flag just
+   * for its scope and unconditionally restore the flag's previous value upon scope exit.
+   *
+   * <p>Use this method in a @Before junit method to set a flag for the scope of a whole test.
+   * You must save the returned {@link AutoCloseable} and close it in an @After method.
+   */
+  public static AutoCloseable setFlagForScope(String flag, boolean value) {
+    String oldValue = System.setProperty(flag, Boolean.toString(value));
+    return () -> {
+      if (oldValue != null) {
+        System.setProperty(flag, oldValue);
+      } else {
+        System.clearProperty(flag);
+      }
+    };
+  }
 }

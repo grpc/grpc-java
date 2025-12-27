@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.internal.UriWrapper.wrap;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -185,7 +186,7 @@ public class ManagedChannelImplIdlenessTest {
     NameResolverProvider nameResolverProvider =
         builder.nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
     channel = new ManagedChannelImpl(
-        builder, mockTransportFactory, targetUri, nameResolverProvider,
+        builder, mockTransportFactory, wrap(targetUri), nameResolverProvider,
         new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
