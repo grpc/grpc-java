@@ -42,7 +42,7 @@ conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 # checkForUpdates: cronet-embedded:119.6045.31
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.44.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.45.0"
 # 2.32.0+ requires Java 17+
 # checkForUpdates: errorprone-core:2.31.+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
