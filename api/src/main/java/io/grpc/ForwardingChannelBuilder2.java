@@ -95,7 +95,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  protected T interceptWithTarget(InterceptorFactory factory) {
+  public T interceptWithTarget(InterceptorFactory factory) {
     delegate().interceptWithTarget(factory);
     return thisT();
   }
@@ -258,7 +258,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  protected T addMetricSink(MetricSink metricSink) {
+  public T addMetricSink(MetricSink metricSink) {
     delegate().addMetricSink(metricSink);
     return thisT();
   }

@@ -17,15 +17,25 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.BindableService;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ChildChannelConfigurer;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -138,6 +148,75 @@ public class GrpcXdsTransportFactoryTest {
     public void onStatusReceived(Status status) {
       endFuture.set(status);
     }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void verifyConfigApplied_interceptor() {
+    // Create a mock Interceptor
+    final ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
+    when(mockInterceptor.interceptCall(any(MethodDescriptor.class),
+        any(CallOptions.class), any(Channel.class)))
+        .thenReturn(new io.grpc.NoopClientCall<>());
+
+    // Create Configurer that adds the interceptor
+    ChildChannelConfigurer configurer = (builder) -> builder.intercept(mockInterceptor);
+
+    // Mock Parent Channel
+    ManagedChannel mockParentChannel = mock(ManagedChannel.class);
+    when(mockParentChannel.getChildChannelConfigurer()).thenReturn(configurer);
+
+    // Create Factory
+    GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
+        null,
+        mockParentChannel,
+        null);
+
+    // Create Transport
+    XdsTransportFactory.XdsTransport transport = factory.create(
+        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+
+    // Create a Call to trigger interceptors
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(mock(MethodDescriptor.Marshaller.class))
+        .setResponseMarshaller(mock(MethodDescriptor.Marshaller.class))
+        .build();
+
+    transport.createStreamingCall(method.getFullMethodName(), method.getRequestMarshaller(),
+        method.getResponseMarshaller());
+
+    // Verify interceptor was invoked
+    verify(mockInterceptor).interceptCall(any(MethodDescriptor.class),
+        any(CallOptions.class), any(Channel.class));
+
+    transport.shutdown();
+  }
+
+  @Test
+  public void useParentServerConfig() {
+    // 1. Mock Server and Configurer
+    Server mockServer = mock(Server.class);
+    ChildChannelConfigurer mockConfigurer = mock(ChildChannelConfigurer.class);
+    when(mockServer.getChildChannelConfigurer()).thenReturn(mockConfigurer);
+
+    // 2. Create Factory with Parent Server
+    GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
+        null, // CallCredentials
+        null, // Parent Channel
+        mockServer);
+
+    // 3. Create Transport (triggers channel creation)
+    XdsTransportFactory.XdsTransport transport = factory.create(
+        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+
+    // 4. Verify Configurer was accessed and applied
+    verify(mockServer).getChildChannelConfigurer();
+    verify(mockConfigurer).accept(any(ManagedChannelBuilder.class));
+
+    transport.shutdown();
   }
 }
 

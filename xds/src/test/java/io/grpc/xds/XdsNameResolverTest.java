@@ -27,7 +27,9 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -68,6 +70,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.ProxyDetector;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -2950,5 +2953,65 @@ public class XdsNameResolverTest {
     void deliverErrorStatus() {
       listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
+  }
+
+  @Test
+  public void start_passesParentChannelToClientPoolFactory() {
+    // Create a mock Parent Channel
+    ManagedChannel mockParentChannel = mock(ManagedChannel.class);
+
+    // Build NameResolver.Args containing the parent channel
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(serviceConfigParser)
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setParentChannel(mockParentChannel)
+        .build();
+
+    // Mock the XdsClientPoolFactory
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockObjectPool = mock(ObjectPool.class);
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    when(mockObjectPool.getObject()).thenReturn(mockXdsClient);
+    when(mockXdsClient.getBootstrapInfo()).thenReturn(bootstrapInfo);
+
+    when(mockPoolFactory.getOrCreate(
+        anyString(),
+        any(BootstrapInfo.class),
+        any(MetricRecorder.class),
+        any(ManagedChannel.class),
+        any()))
+        .thenReturn(mockObjectPool);
+
+    XdsNameResolver resolver = new XdsNameResolver(
+        URI.create(AUTHORITY),
+        null, // targetAuthority (nullable)
+        AUTHORITY, // name
+        null, // overrideAuthority (nullable)
+        serviceConfigParser,
+        syncContext,
+        scheduler,
+        mockPoolFactory,
+        mockRandom,
+        FilterRegistry.getDefaultRegistry(),
+        rawBootstrap,
+        metricRecorder,
+        args);
+
+    // Start the resolver (this triggers the factory call)
+    resolver.start(mockListener);
+
+    // Ensure the factory's getOrCreate method was called with parent channel
+    verify(mockPoolFactory).getOrCreate(
+        eq(AUTHORITY),
+        any(BootstrapInfo.class),
+        eq(metricRecorder),
+        eq(mockParentChannel),
+        isNull());
+
+    resolver.shutdown();
   }
 }
