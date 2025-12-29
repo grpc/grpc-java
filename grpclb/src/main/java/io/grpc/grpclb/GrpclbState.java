@@ -355,11 +355,12 @@ final class GrpclbState {
   }
 
   private void shutdownLbComm() {
+    shutdownLbRpc();
     if (lbCommChannel != null) {
-      lbCommChannel.shutdown();
+      // The channel should have no RPCs at this point
+      lbCommChannel.shutdownNow();
       lbCommChannel = null;
     }
-    shutdownLbRpc();
   }
 
   private void shutdownLbRpc() {
