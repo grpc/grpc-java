@@ -26,8 +26,10 @@ import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
@@ -37,15 +39,19 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
   private final ManagedChannel parentChannel;
+  private final Server parentServer;
 
-  GrpcXdsTransportFactory(CallCredentials callCredentials, ManagedChannel parentChannel) {
+
+  GrpcXdsTransportFactory(CallCredentials callCredentials, ManagedChannel parentChannel,
+                          Server parentServer) {
     this.callCredentials = callCredentials;
     this.parentChannel = parentChannel;
+    this.parentServer = parentServer;
   }
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo, callCredentials, parentChannel);
+    return new GrpcXdsTransport(serverInfo, callCredentials, parentChannel, parentServer);
   }
 
   @VisibleForTesting
@@ -78,13 +84,17 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials,
-                            ManagedChannel parentChannel) {
+                            ManagedChannel parentChannel, Server parentServer) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
-      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
-          .keepAliveTime(5, TimeUnit.MINUTES)
-          .configureChannel(parentChannel)
-          .build();
+      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
+          .keepAliveTime(5, TimeUnit.MINUTES);
+      if (parentChannel != null) {
+        channelBuilder.configureChannel(parentChannel);
+      } else if (parentServer != null) {
+        channelBuilder.configureChannel(parentServer);
+      }
+      this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;
     }
 

@@ -92,14 +92,14 @@ public abstract class ManagedChannel extends Channel {
    * load balancers and the channel builder) to propagate configuration to child channels.
    * Application code should not call this method.
    *
-   * @return the configurer, or {@code null} if none is set.
+   * @return the configurer, or {@code noOp()} if none is set.
    * @since 1.79.0
    */
   @Internal
   public ChildChannelConfigurer getChildChannelConfigurer() {
-    // Return null by default so we don't break existing custom ManagedChannel implementations
+    // Return noOP() by default so we don't break existing custom ManagedChannel implementations
     // (like wrappers or mocks) that don't override this method.
-    return null;
+    return ChildChannelConfigurers.noOp();
   }
 
   /**

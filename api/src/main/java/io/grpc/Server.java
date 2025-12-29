@@ -178,4 +178,21 @@ public abstract class Server {
    * @since 1.0.0
    */
   public abstract void awaitTermination() throws InterruptedException;
+
+  /**
+   * Returns the configurer for child channels.
+   *
+   * <p>This method is intended for use by the internal gRPC infrastructure
+   * to propagate configuration to child channels.
+   * Application code should not call this method.
+   *
+   * @return the configurer, or {@code noOp()} if none is set.
+   * @since 1.79.0
+   */
+  @Internal
+  public ChildChannelConfigurer getChildChannelConfigurer() {
+    // Return noOp() by default so we don't break existing custom ManagedChannel implementations
+    // (like wrappers or mocks) that don't override this method.
+    return ChildChannelConfigurers.noOp();
+  }
 }

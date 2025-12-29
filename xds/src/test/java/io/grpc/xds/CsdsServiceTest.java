@@ -41,6 +41,7 @@ import io.grpc.Deadline;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.MetricRecorder;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
@@ -522,7 +523,7 @@ public class CsdsServiceTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ManagedChannel parentChannel) {
+        ManagedChannel parentChannel, Server parentServer) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

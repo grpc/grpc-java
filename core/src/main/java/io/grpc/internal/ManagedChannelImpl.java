@@ -159,8 +159,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   /**
    * Stores the user-provided configuration function for internal child channels.
    *
-   * <p>This is intended for use by gRPC internal components (NameResolvers, LoadBalancers)
-   * that are responsible for creating auxillary {@code ManagedChannel} instances.
+   * <p>This is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
    * guaranteed to be not null (defaults to no-op).
    */
   private ChildChannelConfigurer childChannelConfigurer =  ChildChannelConfigurers.noOp();
@@ -693,7 +693,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   /**
    * Retrieves the user-provided configuration function for internal child channels.
    *
-   * <p>This method is intended for use by gRPC internal components (NameResolvers, LoadBalancers)
+   * <p>This method is intended for use by gRPC internal components
    * that are responsible for creating auxiliary {@code ManagedChannel} instances.
    *
    * @return the ChildChannelConfigurer, guaranteed to be not null (defaults to no-op).

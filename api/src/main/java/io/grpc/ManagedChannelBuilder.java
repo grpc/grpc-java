@@ -668,9 +668,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * child channels to ensure they inherit relevant configuration (like the
    * {@link ChildChannelConfigurer}) from the parent.
    *
-   * <p>The specific settings copied are implementation dependent, but typically include
-   * the child channel configurer and potentially user agents or offload executors.
-   *
    * @param parentChannel the channel to inherit configuration from
    * @return this
    * @since 1.79.0
@@ -681,11 +678,26 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Configures this builder using settings derived from an existing parent server.
+   *
+   * <p>This method is typically used by internal components (like LoadBalancers) when creating
+   * child channels to ensure they inherit relevant configuration (like the
+   * {@link ChildChannelConfigurer}) from the parent.
+   *
+   * @param parentServer the server to inherit configuration from
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T configureChannel(Server parentServer) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Sets a configurer that will be applied to all internal child channels created by this channel.
    *
    * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
-   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections
-   * or OOB load balancing channels.
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
    *
    * @param childChannelConfigurer the configurer to apply.
    * @return this

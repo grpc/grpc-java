@@ -86,7 +86,8 @@ public final class InternalSharedXdsClientPoolProvider {
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
       CallCredentials transportCallCredentials) {
     return new XdsClientResult(SharedXdsClientPoolProvider.getDefaultProvider()
-        .getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials, null));
+        .getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials,
+            null, null));
   }
 
   /**

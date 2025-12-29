@@ -25,6 +25,7 @@ import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.MetricRecorder;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
@@ -186,7 +187,7 @@ public class XdsServerTestHelper {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ManagedChannel parentChannel) {
+        ManagedChannel parentChannel, Server parentServer) {
       this.savedBootstrapInfo = bootstrapInfo;
       return new ObjectPool<XdsClient>() {
         @Override

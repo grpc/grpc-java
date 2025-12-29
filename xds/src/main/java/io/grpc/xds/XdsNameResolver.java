@@ -1081,7 +1081,8 @@ final class XdsNameResolver extends NameResolver {
           bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
         }
         this.xdsClientPool =
-            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder, parentChannel);
+            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder, parentChannel,
+                null);
       }
       return xdsClientPool.getObject();
     }

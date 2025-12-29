@@ -92,7 +92,7 @@ public class GrpcXdsTransportFactoryTest {
   @Test
   public void callApis() throws Exception {
     XdsTransportFactory.XdsTransport xdsTransport =
-        new GrpcXdsTransportFactory(null, null)
+        new GrpcXdsTransportFactory(null, null, null)
             .create(
                 Bootstrapper.ServerInfo.create(
                     "localhost:" + server.getPort(), InsecureChannelCredentials.create()));

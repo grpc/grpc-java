@@ -68,6 +68,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
@@ -2497,7 +2498,7 @@ public class XdsNameResolverTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ManagedChannel parentChannel) {
+        ManagedChannel parentChannel, Server parentServer) {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override

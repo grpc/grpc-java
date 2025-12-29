@@ -46,6 +46,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
+import io.grpc.Server;
 import io.grpc.StatusOr;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -724,12 +725,34 @@ public final class ManagedChannelImplBuilder
    * automatically from a parent channel to any child channels it creates
    * (e.g., Subchannels or OOB channels).
    *
-   * @param parentChannel the channel whose configuration logic should be applied to this builder.
+   * @param parentChannel the channel whose child's configuration logic
+   *                      should be applied to this builder.
    */
   @Override
   public ManagedChannelImplBuilder configureChannel(ManagedChannel parentChannel) {
     if (parentChannel != null) {
       ChildChannelConfigurer childChannelConfigurer = parentChannel.getChildChannelConfigurer();
+      if (childChannelConfigurer != null) {
+        childChannelConfigurer.accept(this);
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Applies the configuration logic from the given parent server to this builder.
+   *
+   * <p>This mechanism allows properties (like metrics, tracing, or interceptors) to propagate
+   * automatically from a parent server to any child channels it creates
+   * (e.g., xDS).
+   *
+   * @param parentServer the server whose child's configuration logic
+   *                      should be applied to this builder.
+   */
+  @Override
+  public ManagedChannelImplBuilder configureChannel(Server parentServer) {
+    if (parentServer != null) {
+      ChildChannelConfigurer childChannelConfigurer = parentServer.getChildChannelConfigurer();
       if (childChannelConfigurer != null) {
         childChannelConfigurer.accept(this);
       }
