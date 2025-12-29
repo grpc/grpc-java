@@ -26,6 +26,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -34,6 +35,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -70,6 +72,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -760,6 +763,72 @@ public class ManagedChannelImplBuilderTest {
     NameResolver.Args.Key<Integer> testKey = NameResolver.Args.Key.create("test-key");
     builder.setNameResolverArg(testKey, 42);
     assertThat(builder.nameResolverCustomArgs.get(testKey)).isEqualTo(42);
+  }
+
+  @Test
+  public void childChannelConfigurer_propagatesMetricsAndInterceptors_xdsTarget() {
+    // Setup Mocks
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
+
+    MetricSink mockMetricSink = mock(MetricSink.class);
+    ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
+
+    // Define the Configurer
+    ChildChannelConfigurer configurer = (builder) -> {
+      builder.addMetricSink(mockMetricSink);
+
+      // Assuming InternalInterceptorFactory is also accessible
+      builder.interceptWithTarget(target -> mockInterceptor);
+    };
+
+    // Mock NameResolver.Factory to capture Args
+    NameResolver.Factory mockNameResolverFactory = mock(NameResolver.Factory.class);
+    when(mockNameResolverFactory.getDefaultScheme()).thenReturn("xds");
+    NameResolver mockNameResolver = mock(NameResolver.class);
+    when(mockNameResolver.getServiceAuthority()).thenReturn("foo.authority");
+    ArgumentCaptor<NameResolver.Args> argsCaptor = ArgumentCaptor.forClass(NameResolver.Args.class);
+    when(mockNameResolverFactory.newNameResolver(any(),
+        argsCaptor.capture())).thenReturn(mockNameResolver);
+
+    // Use the configurer and the mock factory
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(new NameResolverFactoryToProviderFacade(mockNameResolverFactory));
+
+    ManagedChannelBuilder<?> parentBuilder = new ManagedChannelImplBuilder(
+        "xds:///my-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT))
+        .childChannelConfigurer(configurer)
+        .nameResolverRegistry(registry);
+
+    ManagedChannel channel = parentBuilder.build();
+    grpcCleanupRule.register(channel);
+
+    // Verify that newNameResolver was called
+    verify(mockNameResolverFactory).newNameResolver(any(), any());
+
+    // Extract the parent channel from Args
+    NameResolver.Args args = argsCaptor.getValue();
+    ManagedChannel parentChannelInArgs = args.getParentChannel();
+    assertNotNull("Parent channel should be present in NameResolver.Args",
+        parentChannelInArgs);
+
+    // Verify the configurer on the parent channel is the one we passed
+    assertThat(parentChannelInArgs.getChildChannelConfigurer()).isSameInstanceAs(configurer);
+
+    // Verify the configurer logically applies (by running it on a mock)
+    ManagedChannelBuilder<?> mockChildBuilder = mock(ManagedChannelBuilder.class);
+    // Stub addMetricSink to return the builder to avoid generic return type issues
+    doReturn(mockChildBuilder).when(mockChildBuilder).addMetricSink(any());
+
+    configurer.accept(mockChildBuilder);
+    verify(mockChildBuilder).addMetricSink(mockMetricSink);
+    verify(mockChildBuilder).interceptWithTarget(any());
   }
 
   @Test

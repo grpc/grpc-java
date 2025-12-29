@@ -25,6 +25,8 @@ import static io.grpc.xds.XdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
+import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChildChannelConfigurers;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
@@ -58,6 +60,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
+  private ChildChannelConfigurer childChannelConfigurer = ChildChannelConfigurers.noOp();
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -100,6 +103,20 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return this;
   }
 
+  /**
+   * Sets the configurer that will be stored in the server built by this builder.
+   *
+   * <p>This configurer will subsequently be used to configure any child channels
+   * created by that server.
+   *
+   * @param childChannelConfigurer the configurer to store in the channel.
+   */
+  @Override
+  public XdsServerBuilder childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+    this.childChannelConfigurer = childChannelConfigurer;
+    return this;
+  }
+
   @DoNotCall("Unsupported. Use forPort(int, ServerCredentials) instead")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
@@ -128,7 +145,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     }
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry);
+            filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry,
+        this.childChannelConfigurer);
   }
 
   @VisibleForTesting

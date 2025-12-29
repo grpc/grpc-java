@@ -5068,7 +5068,7 @@ public abstract class GrpcXdsClientImplTestBase {
   private XdsClientImpl createXdsClient(String serverUri) {
     BootstrapInfo bootstrapInfo = buildBootStrap(serverUri);
     return new XdsClientImpl(
-        new GrpcXdsTransportFactory(null),
+        new GrpcXdsTransportFactory(null, null, null),
         bootstrapInfo,
         fakeClock.getScheduledExecutorService(),
         backoffPolicyProvider,

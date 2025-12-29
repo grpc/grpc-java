@@ -30,15 +30,18 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusOr;
+import io.grpc.internal.ObjectPool;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -324,5 +327,29 @@ public class XdsServerBuilderTest {
     Future<Throwable> unused = startServerAsync();
     assertThat(xdsClientPoolFactory.savedBootstrapInfo.node().getId())
         .isEqualTo(XdsServerTestHelper.BOOTSTRAP_INFO.node().getId());
+  }
+
+  @Test
+  public void start_passesParentServerToClientPoolFactory() throws Exception {
+    ChildChannelConfigurer mockConfigurer = mock(ChildChannelConfigurer.class);
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
+    when(mockPool.getObject()).thenReturn(xdsClient);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any(), any())).thenReturn(mockPool);
+
+    buildBuilder(null);
+    builder.childChannelConfigurer(mockConfigurer);
+    builder.xdsClientPoolFactory(mockPoolFactory);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+
+    Future<Throwable> unused = startServerAsync();
+
+    // Verify getOrCreate called with the server instance
+    verify(mockPoolFactory).getOrCreate(
+        any(), any(), any(), org.mockito.ArgumentMatchers.<io.grpc.ManagedChannel>isNull(),
+        org.mockito.ArgumentMatchers.eq(xdsServer));
+
+    assertThat(xdsServer.getChildChannelConfigurer()).isSameInstanceAs(mockConfigurer);
   }
 }

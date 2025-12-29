@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -325,5 +326,26 @@ public class MetricRecorderImplTest {
         .registerBatchCallback(callbackCaptor.capture(), eq(longGaugeInstrument));
     callbackCaptor.getValue().run();
     registration.close();
+  }
+
+  @Test
+  public void noOp_returnsSingleton() {
+    assertThat(MetricRecorder.noOp()).isSameInstanceAs(MetricRecorder.noOp());
+  }
+
+  @Test
+  public void noOp_methodsDoNotThrow() {
+    MetricRecorder recorder = MetricRecorder.noOp();
+
+    recorder.addDoubleCounter(null, 1.0,
+        null, null);
+    recorder.addLongCounter(null, 1,
+        null, null);
+    recorder.addLongUpDownCounter(null, 1,
+        null, null);
+    recorder.recordDoubleHistogram(null, 1.0,
+        null, null);
+    recorder.recordLongHistogram(null, 1,
+        null, null);
   }
 }

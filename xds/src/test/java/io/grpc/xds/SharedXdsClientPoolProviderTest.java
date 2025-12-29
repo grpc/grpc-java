@@ -207,7 +207,8 @@ public class SharedXdsClientPoolProviderTest {
 
     // Create xDS client that uses the CallCredentials on the transport
     ObjectPool<XdsClient> xdsClientPool =
-        provider.getOrCreate("target", bootstrapInfo, metricRecorder, sampleCreds);
+        provider.getOrCreate("target", bootstrapInfo, metricRecorder, sampleCreds,
+            null, null);
     XdsClient xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(
         XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);

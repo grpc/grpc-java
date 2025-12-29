@@ -29,6 +29,8 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChildChannelConfigurers;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -128,6 +130,15 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
+  /**
+   * Stores the user-provided configuration function for internal child channels.
+   *
+   * <p>This is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   * guaranteed to be not null (defaults to no-op).
+   */
+  private ChildChannelConfigurer childChannelConfigurer =  ChildChannelConfigurers.noOp();
+
   XdsServerWrapper(
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
@@ -146,6 +157,30 @@ final class XdsServerWrapper extends Server {
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
+  }
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      FilterRegistry filterRegistry,
+      ChildChannelConfigurer childChannelConfigurer) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    sharedTimeService = true;
+    if (childChannelConfigurer != null) {
+      this.childChannelConfigurer = childChannelConfigurer;
+    }
   }
 
   @VisibleForTesting
@@ -202,7 +237,8 @@ final class XdsServerWrapper extends Server {
         bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
-          "#server", bootstrapInfo, new MetricRecorder() {});
+          "#server", bootstrapInfo, new MetricRecorder() {},
+          null, this);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -226,6 +262,19 @@ final class XdsServerWrapper extends Server {
       replacement = XdsClient.percentEncodePath(replacement);
     }
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
+  }
+
+  /**
+   * Retrieves the user-provided configuration function for internal child channels.
+   *
+   * <p>This method is intended for use by gRPC internal components (NameResolvers, LoadBalancers)
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   *
+   * @return the ChildChannelConfigurer, guaranteed to be not null (defaults to no-op).
+   */
+  @Override
+  public ChildChannelConfigurer getChildChannelConfigurer() {
+    return childChannelConfigurer;
   }
 
   @Override

@@ -29,6 +29,7 @@ import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientTransportFilter;
@@ -45,6 +46,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
+import io.grpc.Server;
 import io.grpc.StatusOr;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -123,6 +125,8 @@ public final class ManagedChannelImplBuilder
   static final Pattern URI_PATTERN = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]*:/.*");
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
+
+  ChildChannelConfigurer childChannelConfigurer;
 
   static {
     Method getClientInterceptorMethod = null;
@@ -400,7 +404,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  protected ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
+  public ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
     // Add a placeholder instance to the interceptor list, and replace it with a real instance
     // during build().
     this.interceptors.add(new InterceptorFactoryWrapper(factory));
@@ -709,8 +713,65 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  protected ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
+  public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
+    return this;
+  }
+
+  /**
+   * Applies the configuration logic from the given parent channel to this builder.
+   *
+   * <p>This mechanism allows properties (like metrics, tracing, or interceptors) to propagate
+   * automatically from a parent channel to any child channels it creates
+   * (e.g., Subchannels or OOB channels).
+   *
+   * @param parentChannel the channel whose child's configuration logic
+   *                      should be applied to this builder.
+   */
+  @Override
+  public ManagedChannelImplBuilder configureChannel(ManagedChannel parentChannel) {
+    if (parentChannel != null) {
+      ChildChannelConfigurer childChannelConfigurer = parentChannel.getChildChannelConfigurer();
+      if (childChannelConfigurer != null) {
+        childChannelConfigurer.accept(this);
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Applies the configuration logic from the given parent server to this builder.
+   *
+   * <p>This mechanism allows properties (like metrics, tracing, or interceptors) to propagate
+   * automatically from a parent server to any child channels it creates
+   * (e.g., xDS).
+   *
+   * @param parentServer the server whose child's configuration logic
+   *                      should be applied to this builder.
+   */
+  @Override
+  public ManagedChannelImplBuilder configureChannel(Server parentServer) {
+    if (parentServer != null) {
+      ChildChannelConfigurer childChannelConfigurer = parentServer.getChildChannelConfigurer();
+      if (childChannelConfigurer != null) {
+        childChannelConfigurer.accept(this);
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Sets the configurer that will be stored in the channel built by this builder.
+   *
+   * <p>This configurer will subsequently be used to configure any descendants (children)
+   * created by that channel.
+   *
+   * @param childChannelConfigurer the configurer to store in the channel.
+   */
+  @Override
+  public ManagedChannelImplBuilder childChannelConfigurer(
+      ChildChannelConfigurer childChannelConfigurer) {
+    this.childChannelConfigurer = childChannelConfigurer;
     return this;
   }
 
