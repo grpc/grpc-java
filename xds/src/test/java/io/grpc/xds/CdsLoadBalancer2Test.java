@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
@@ -78,11 +78,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
-import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
-import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
-import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.util.ArrayList;
@@ -139,7 +135,6 @@ public class CdsLoadBalancer2Test {
             .directExecutor()
             .build()),
       fakeClock);
-  private final ServerInfo lrsServerInfo = xdsClient.getBootstrapInfo().servers().get(0);
   private XdsDependencyManager xdsDepManager;
 
   @Mock
@@ -151,8 +146,10 @@ public class CdsLoadBalancer2Test {
 
   @Before
   public void setUp() throws Exception {
-    lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_RESOLVER_POLICY_NAME));
+    lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
+    lbRegistry.register(new FakeLoadBalancerProvider(CLUSTER_IMPL_POLICY_NAME));
     lbRegistry.register(new FakeLoadBalancerProvider("round_robin"));
+    lbRegistry.register(new FakeLoadBalancerProvider("outlier_detection_experimental"));
     lbRegistry.register(
         new FakeLoadBalancerProvider("ring_hash_experimental", new RingHashLoadBalancerProvider()));
     lbRegistry.register(new FakeLoadBalancerProvider("least_request_experimental",
@@ -222,7 +219,7 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  public void discoverTopLevelEdsCluster() {
+  public void discoverTopLevelCluster() {
     Cluster cluster = Cluster.newBuilder()
         .setName(CLUSTER)
         .setType(Cluster.DiscoveryType.EDS)
@@ -250,64 +247,7 @@ public class CdsLoadBalancer2Test {
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forEds(
-          CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, upstreamTlsContext,
-          Collections.emptyMap(), io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
-              null, null, null, null, SuccessRateEjection.create(null, null, null, null),
-              FailurePercentageEjection.create(null, null, null, null)), null));
-    assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
-        .isEqualTo("wrr_locality_experimental");
-  }
-
-  @Test
-  public void discoverTopLevelLogicalDnsCluster() {
-    Cluster cluster = Cluster.newBuilder()
-        .setName(CLUSTER)
-        .setType(Cluster.DiscoveryType.LOGICAL_DNS)
-        .setLoadAssignment(ClusterLoadAssignment.newBuilder()
-          .addEndpoints(LocalityLbEndpoints.newBuilder()
-            .addLbEndpoints(LbEndpoint.newBuilder()
-              .setEndpoint(Endpoint.newBuilder()
-                .setAddress(Address.newBuilder()
-                  .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("dns.example.com")
-                    .setPortValue(1111)))))))
-        .setEdsClusterConfig(Cluster.EdsClusterConfig.newBuilder()
-          .setServiceName(EDS_SERVICE_NAME)
-          .setEdsConfig(ConfigSource.newBuilder()
-            .setAds(AggregatedConfigSource.newBuilder())))
-        .setLbPolicy(Cluster.LbPolicy.LEAST_REQUEST)
-        .setLrsServer(ConfigSource.newBuilder()
-          .setSelf(SelfConfigSource.getDefaultInstance()))
-        .setCircuitBreakers(CircuitBreakers.newBuilder()
-            .addThresholds(CircuitBreakers.Thresholds.newBuilder()
-              .setPriority(RoutingPriority.DEFAULT)
-              .setMaxRequests(UInt32Value.newBuilder().setValue(100))))
-        .setTransportSocket(TransportSocket.newBuilder()
-            .setName("envoy.transport_sockets.tls")
-            .setTypedConfig(Any.pack(UpstreamTlsContext.newBuilder()
-                .setCommonTlsContext(upstreamTlsContext.getCommonTlsContext())
-                .build())))
-        .build();
-    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, cluster));
-    startXdsDepManager();
-
-    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
-    assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.name).isEqualTo(CLUSTER_RESOLVER_POLICY_NAME);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-        DiscoveryMechanism.forLogicalDns(
-          CLUSTER, "dns.example.com:1111", lrsServerInfo, 100L, upstreamTlsContext,
-          Collections.emptyMap(), null));
-    assertThat(
-        GracefulSwitchLoadBalancerAccessor.getChildProvider(childLbConfig.lbConfig).getPolicyName())
-        .isEqualTo("wrr_locality_experimental");
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
   }
 
   @Test
@@ -325,6 +265,7 @@ public class CdsLoadBalancer2Test {
 
   @Test
   public void nonAggregateCluster_resourceUpdate() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
     Cluster cluster = EDS_CLUSTER.toBuilder()
         .setCircuitBreakers(CircuitBreakers.newBuilder()
             .addThresholds(CircuitBreakers.Thresholds.newBuilder()
@@ -337,10 +278,9 @@ public class CdsLoadBalancer2Test {
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-          DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, 100L, null, Collections.emptyMap(), null, null));
+    ClusterImplConfig childLbConfig = (ClusterImplConfig) childBalancer.config;
+    assertThat(childLbConfig.cluster).isEqualTo(CLUSTER);
+    assertThat(childLbConfig.maxConcurrentRequests).isEqualTo(100L);
 
     cluster = EDS_CLUSTER.toBuilder()
         .setCircuitBreakers(CircuitBreakers.newBuilder()
@@ -352,24 +292,21 @@ public class CdsLoadBalancer2Test {
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     childBalancer = Iterables.getOnlyElement(childBalancers);
-    childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-          DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, 200L, null, Collections.emptyMap(), null, null));
+    childLbConfig = (ClusterImplConfig) childBalancer.config;
+    assertThat(childLbConfig.maxConcurrentRequests).isEqualTo(200L);
   }
 
   @Test
   public void nonAggregateCluster_resourceRevoked() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
     startXdsDepManager();
 
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-          DiscoveryMechanism.forEds(
-            CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null, null));
+    ClusterImplConfig childLbConfig = (ClusterImplConfig) childBalancer.config;
+    assertThat(childLbConfig.cluster).isEqualTo(CLUSTER);
 
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
 
@@ -398,10 +335,7 @@ public class CdsLoadBalancer2Test {
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(1);
     FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    ClusterResolverConfig childLbConfig = (ClusterResolverConfig) childBalancer.config;
-    assertThat(childLbConfig.discoveryMechanism).isEqualTo(
-          DiscoveryMechanism.forEds(
-            clusterName, EDS_SERVICE_NAME, null, null, null, Collections.emptyMap(), null, null));
+    assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
 
     assertThat(this.lastXdsConfig.getClusters()).containsKey(clusterName);
     shutdownLoadBalancer();
@@ -410,7 +344,6 @@ public class CdsLoadBalancer2Test {
 
   @Test
   public void discoverAggregateCluster_createsPriorityLbPolicy() {
-    lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
     CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
     lbRegistry.register(cdsLoadBalancerProvider);
     loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
@@ -522,21 +455,17 @@ public class CdsLoadBalancer2Test {
 
     verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
     assertThat(childBalancers).hasSize(2);
-    ClusterResolverConfig cluster1ResolverConfig =
-        (ClusterResolverConfig) childBalancers.get(0).config;
-    assertThat(cluster1ResolverConfig.discoveryMechanism.cluster)
+    ClusterImplConfig cluster1ImplConfig =
+        (ClusterImplConfig) childBalancers.get(0).config;
+    assertThat(cluster1ImplConfig.cluster)
         .isEqualTo("cluster-01.googleapis.com");
-    assertThat(cluster1ResolverConfig.discoveryMechanism.type)
-        .isEqualTo(DiscoveryMechanism.Type.EDS);
-    assertThat(cluster1ResolverConfig.discoveryMechanism.edsServiceName)
+    assertThat(cluster1ImplConfig.edsServiceName)
         .isEqualTo("backend-service-1.googleapis.com");
-    ClusterResolverConfig cluster2ResolverConfig =
-        (ClusterResolverConfig) childBalancers.get(1).config;
-    assertThat(cluster2ResolverConfig.discoveryMechanism.cluster)
+    ClusterImplConfig cluster2ImplConfig =
+        (ClusterImplConfig) childBalancers.get(1).config;
+    assertThat(cluster2ImplConfig.cluster)
         .isEqualTo("cluster-02.googleapis.com");
-    assertThat(cluster2ResolverConfig.discoveryMechanism.type)
-        .isEqualTo(DiscoveryMechanism.Type.EDS);
-    assertThat(cluster2ResolverConfig.discoveryMechanism.edsServiceName)
+    assertThat(cluster2ImplConfig.edsServiceName)
         .isEqualTo("backend-service-1.googleapis.com");
   }
 
