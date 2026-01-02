@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
@@ -31,18 +32,18 @@ public final class ScParser extends NameResolver.ServiceConfigParser {
   private final boolean retryEnabled;
   private final int maxRetryAttemptsLimit;
   private final int maxHedgedAttemptsLimit;
-  private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
+  private final LoadBalancerProvider parser;
 
   /** Creates a parse with global retry settings and an auto configured lb factory. */
   public ScParser(
       boolean retryEnabled,
       int maxRetryAttemptsLimit,
       int maxHedgedAttemptsLimit,
-      AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
+      LoadBalancerProvider parser) {
     this.retryEnabled = retryEnabled;
     this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
     this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
-    this.autoLoadBalancerFactory = checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
+    this.parser = checkNotNull(parser, "parser");
   }
 
   @Override
@@ -50,7 +51,9 @@ public final class ScParser extends NameResolver.ServiceConfigParser {
     try {
       Object loadBalancingPolicySelection;
       ConfigOrError choiceFromLoadBalancer =
-          autoLoadBalancerFactory.parseLoadBalancerPolicy(rawServiceConfig);
+          parser.parseLoadBalancingPolicyConfig(rawServiceConfig);
+      // TODO(ejona): The Provider API doesn't allow null, but AutoConfiguredLoadBalancerFactory can
+      // return null and it will need tweaking to ManagedChannelImpl.defaultServiceConfig to fix.
       if (choiceFromLoadBalancer == null) {
         loadBalancingPolicySelection = null;
       } else if (choiceFromLoadBalancer.getError() != null) {

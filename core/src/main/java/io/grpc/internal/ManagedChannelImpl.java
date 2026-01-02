@@ -69,6 +69,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -85,7 +86,6 @@ import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientStreamProvider;
 import io.grpc.internal.ClientTransportFactory.SwapChannelCredentialsResult;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
@@ -162,7 +162,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final URI targetUri;
   private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
-  private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
+  private final LoadBalancerProvider loadBalancerFactory;
   private final ClientTransportFactory originalTransportFactory;
   @Nullable
   private final ChannelCredentials originalChannelCreds;
@@ -1362,7 +1362,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class LbHelperImpl extends LoadBalancer.Helper {
-    AutoConfiguredLoadBalancer lb;
+    LoadBalancer lb;
 
     @Override
     public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
@@ -1786,7 +1786,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setAddresses(serversOrError.getValue())
             .setAttributes(attributes)
             .setLoadBalancingPolicyConfig(effectiveServiceConfig.getLoadBalancingConfig());
-        Status addressAcceptanceStatus = helper.lb.tryAcceptResolvedAddresses(
+        Status addressAcceptanceStatus = helper.lb.acceptResolvedAddresses(
             resolvedAddresses.build());
         return addressAcceptanceStatus;
       }
