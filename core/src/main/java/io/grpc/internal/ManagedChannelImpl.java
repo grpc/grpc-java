@@ -94,7 +94,6 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import io.grpc.internal.ManagedChannelServiceConfig.ServiceConfigConvertedSelector;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -159,7 +158,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Nullable
   private final String authorityOverride;
   private final NameResolverRegistry nameResolverRegistry;
-  private final URI targetUri;
+  private final UriWrapper targetUri;
   private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
@@ -546,7 +545,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   ManagedChannelImpl(
       ManagedChannelImplBuilder builder,
       ClientTransportFactory clientTransportFactory,
-      URI targetUri,
+      UriWrapper targetUri,
       NameResolverProvider nameResolverProvider,
       BackoffPolicy.Provider backoffPolicyProvider,
       ObjectPool<? extends Executor> balancerRpcExecutorPool,
@@ -677,9 +676,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   @VisibleForTesting
   static NameResolver getNameResolver(
-      URI targetUri, @Nullable final String overrideAuthority,
+      UriWrapper targetUri, @Nullable final String overrideAuthority,
       NameResolverProvider provider, NameResolver.Args nameResolverArgs) {
-    NameResolver resolver = provider.newNameResolver(targetUri, nameResolverArgs);
+    NameResolver resolver = targetUri.newNameResolver(provider, nameResolverArgs);
     if (resolver == null) {
       throw new IllegalArgumentException("cannot create a NameResolver for " + targetUri);
     }
