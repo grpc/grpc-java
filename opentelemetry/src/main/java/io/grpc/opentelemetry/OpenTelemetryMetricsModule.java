@@ -45,6 +45,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
@@ -56,7 +57,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -101,7 +101,7 @@ final class OpenTelemetryMetricsModule {
   private final boolean backendServiceEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
   @Nullable
-  private final Predicate<String> targetAttributeFilter;
+  private final TargetFilter targetAttributeFilter;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
@@ -112,7 +112,7 @@ final class OpenTelemetryMetricsModule {
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
       OpenTelemetryMetricsResource resource,
       Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
-      @Nullable Predicate<String> targetAttributeFilter) {
+      @Nullable TargetFilter targetAttributeFilter) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
@@ -122,7 +122,7 @@ final class OpenTelemetryMetricsModule {
   }
 
   @VisibleForTesting
-  Predicate<String> getTargetAttributeFilter() {
+  TargetFilter getTargetAttributeFilter() {
     return targetAttributeFilter;
   }
 

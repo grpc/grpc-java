@@ -29,13 +29,13 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.util.Arrays;
-import java.util.function.Predicate;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -133,13 +133,14 @@ public class GrpcOpenTelemetryTest {
 
   @Test
   public void builderTargetAttributeFilter() {
-    Predicate<String> filter = t -> t.contains("allowed.com");
     GrpcOpenTelemetry module = GrpcOpenTelemetry.newBuilder()
-        .targetAttributeFilter(filter)
+        .targetAttributeFilter(t -> t.contains("allowed.com"))
         .build();
 
-    assertThat(module.getTargetAttributeFilter())
-        .isSameInstanceAs(filter);
+    TargetFilter internalFilter = module.getTargetAttributeFilter();
+
+    assertThat(internalFilter.test("allowed.com")).isTrue();
+    assertThat(internalFilter.test("example.com")).isFalse();
   }
 
   @Test

@@ -100,7 +100,7 @@ public final class GrpcOpenTelemetry {
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
         STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins,
-        builder.targetAttributeFilter);
+        builder.targetFilter);
     this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
@@ -145,7 +145,7 @@ public final class GrpcOpenTelemetry {
   }
 
   @VisibleForTesting
-  Predicate<String> getTargetAttributeFilter() {
+  TargetFilter getTargetAttributeFilter() {
     return this.openTelemetryMetricsModule.getTargetAttributeFilter();
   }
 
@@ -357,6 +357,13 @@ public final class GrpcOpenTelemetry {
         && !disableDefault;
   }
 
+  /**
+   * Internal interface to avoid storing a {@link java.util.function.Predicate} directly, ensuring
+   * compatibility with Android devices (API level < 24) that do not use library desugaring.
+   */
+  interface TargetFilter {
+    boolean test(String target);
+  }
 
   /**
    * Builder for configuring {@link GrpcOpenTelemetry}.
@@ -368,7 +375,7 @@ public final class GrpcOpenTelemetry {
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
     @Nullable
-    private Predicate<String> targetAttributeFilter;
+    private TargetFilter targetFilter;
 
     private Builder() {}
 
@@ -432,15 +439,21 @@ public final class GrpcOpenTelemetry {
     }
 
     /**
-     * Sets an optional filter to control recording of the {@code grpc.target} metric attribute.
+     * Sets an optional filter to control recording of the {@code grpc.target} metric
+     * attribute.
      *
      * <p>If the predicate returns {@code true}, the original target is recorded. Otherwise,
      * the target is recorded as {@code "other"} to limit metric cardinality.
      *
      * <p>If unset, all targets are recorded as-is.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12595")
     public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
-      this.targetAttributeFilter = filter;
+      if (filter == null) {
+        this.targetFilter = null;
+      } else {
+        this.targetFilter = filter::test;
+      }
       return this;
     }
 

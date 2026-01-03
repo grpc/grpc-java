@@ -51,6 +51,7 @@ import io.grpc.Status.Code;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.stub.MetadataUtils;
@@ -75,7 +76,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -1715,7 +1715,12 @@ public class OpenTelemetryMetricsModuleTest {
   public void targetAttributeFilter_allowsTarget_usesOriginalTarget() {
     // Test that when filter allows the target, the original target is used
     String target = "dns:///example.com";
-    Predicate<String> targetFilter = t -> t.contains("example.com");
+    TargetFilter targetFilter = new TargetFilter() {
+      @Override
+      public boolean test(String target) {
+        return target.contains("example.com");
+      }
+    };
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
@@ -1759,7 +1764,12 @@ public class OpenTelemetryMetricsModuleTest {
   public void targetAttributeFilter_rejectsTarget_mapsToOther() {
     // Test that when filter rejects the target, it is mapped to "other"
     String target = "dns:///example.com";
-    Predicate<String> targetFilter = t -> t.contains("allowed.com");
+    TargetFilter targetFilter = new TargetFilter() {
+      @Override
+      public boolean test(String target) {
+        return target.contains("allowed.com");
+      }
+    };
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
@@ -1806,7 +1816,7 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
-      OpenTelemetryMetricsResource resource, Predicate<String> filter) {
+      OpenTelemetryMetricsResource resource, TargetFilter filter) {
     return new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(), filter);
   }
