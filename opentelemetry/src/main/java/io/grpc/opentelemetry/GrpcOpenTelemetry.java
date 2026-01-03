@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
@@ -448,6 +449,7 @@ public final class GrpcOpenTelemetry {
      * <p>If unset, all targets are recorded as-is.
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12595")
+    @IgnoreJRERequirement
     public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
       if (filter == null) {
         this.targetFilter = null;

@@ -12,7 +12,8 @@ dependencies {
     implementation libraries.guava,
             project(':grpc-core'),
             libraries.opentelemetry.api,
-            libraries.auto.value.annotations
+            libraries.auto.value.annotations,
+            libraries.animalsniffer.annotations
 
     testImplementation project(':grpc-testing'),
             project(':grpc-testing-proto'),
