@@ -452,7 +452,12 @@ public final class GrpcOpenTelemetry {
       if (filter == null) {
         this.targetFilter = null;
       } else {
-        this.targetFilter = filter::test;
+        this.targetFilter = new TargetFilter() {
+          @Override
+          public boolean test(String target) {
+            return filter.test(target);
+          }
+        };
       }
       return this;
     }
