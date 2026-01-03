@@ -86,8 +86,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      updateBalancingState(
-          CONNECTING, new FixedResultPicker(PickResult.withSubchannel(subchannel)));
+      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
