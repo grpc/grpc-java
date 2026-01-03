@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
-import com.google.common.base.MoreObjects;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -87,7 +86,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -105,7 +104,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
@@ -139,13 +138,13 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       case CONNECTING:
         // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
         // the current picker in-place. But ignoring the potential optimization is simpler.
-        picker = new Picker(PickResult.withNoResult());
+        picker = new FixedResultPicker(PickResult.withNoResult());
         break;
       case READY:
-        picker = new Picker(PickResult.withSubchannel(subchannel));
+        picker = new FixedResultPicker(PickResult.withSubchannel(subchannel));
         break;
       case TRANSIENT_FAILURE:
-        picker = new Picker(PickResult.withError(stateInfo.getStatus()));
+        picker = new FixedResultPicker(PickResult.withError(stateInfo.getStatus()));
         break;
       default:
         throw new IllegalArgumentException("Unsupported state:" + newState);
@@ -170,28 +169,6 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   public void requestConnection() {
     if (subchannel != null) {
       subchannel.requestConnection();
-    }
-  }
-
-  /**
-   * No-op picker which doesn't add any custom picking logic. It just passes already known result
-   * received in constructor.
-   */
-  private static final class Picker extends SubchannelPicker {
-    private final PickResult result;
-
-    Picker(PickResult result) {
-      this.result = checkNotNull(result, "result");
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
     }
   }
 

@@ -187,6 +187,7 @@ final class GrpclbState {
   private List<DropEntry> dropList = Collections.emptyList();
   // Contains only non-drop, i.e., backends from the round-robin list from the balancer.
   private List<BackendEntry> backendList = Collections.emptyList();
+  private ConnectivityState currentState = ConnectivityState.CONNECTING;
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
   private boolean requestConnectionPending;
@@ -937,10 +938,12 @@ final class GrpclbState {
     // Discard the new picker if we are sure it won't make any difference, in order to save
     // re-processing pending streams, and avoid unnecessary resetting of the pointer in
     // RoundRobinPicker.
-    if (picker.dropList.equals(currentPicker.dropList)
+    if (state.equals(currentState)
+        && picker.dropList.equals(currentPicker.dropList)
         && picker.pickList.equals(currentPicker.pickList)) {
       return;
     }
+    currentState = state;
     currentPicker = picker;
     helper.updateBalancingState(state, picker);
   }
