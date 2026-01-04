@@ -214,10 +214,40 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
+    // gRFC A61: trigger lazy initialization outside picker when no READY child exists,
+    // at least one child is in TRANSIENT_FAILURE, and no child is currently CONNECTING
+    maybeTriggerIdleChildConnection(numReady, numTF, numConnecting, numIdle);
+
     RingHashPicker picker =
         new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeaderKey, random);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
+  }
+
+  /**
+   * Triggers lazy initialization of an IDLE child pickFirst load balancer when:
+   *
+   * <ul>
+   *   <li>there is no READY child
+   *   <li>at least one child is in TRANSIENT_FAILURE
+   *   <li>no child is currently CONNECTING
+   *   <li>there exists at least one IDLE child
+   * </ul>
+   *
+   * <p>This corresponds to the second lazy-initialization condition described in gRFC A61, where
+   * recovery from TRANSIENT_FAILURE must be triggered outside the picker when no active connection
+   * attempt is in progress.
+   */
+  private void maybeTriggerIdleChildConnection(
+      int numReady, int numTF, int numConnecting, int numIdle) {
+    if (numReady == 0 && numTF > 0 && numConnecting == 0 && numIdle > 0) {
+      for (ChildLbState child : getChildLbStates()) {
+        if (child.getCurrentState() == ConnectivityState.IDLE) {
+          child.getLb().requestConnection();
+          return;
+        }
+      }
+    }
   }
 
   @Override
