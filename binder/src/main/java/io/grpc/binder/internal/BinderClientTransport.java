@@ -56,6 +56,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
@@ -305,7 +306,7 @@ public final class BinderClientTransport extends BinderTransport
   @Override
   @GuardedBy("this")
   void notifyShutdown(Status status) {
-    clientTransportListener.transportShutdown(status);
+    clientTransportListener.transportShutdown(status, SimpleDisconnectError.UNKNOWN);
   }
 
   @Override

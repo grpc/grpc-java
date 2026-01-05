@@ -19,17 +19,15 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
@@ -99,7 +97,8 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancerProvide
 
       if (delegateProvider == null
           || !policySelection.provider.getPolicyName().equals(delegateProvider.getPolicyName())) {
-        helper.updateBalancingState(ConnectivityState.CONNECTING, new EmptyPicker());
+        helper.updateBalancingState(
+            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         delegate.shutdown();
         delegateProvider = policySelection.provider;
         LoadBalancer old = delegate;
@@ -215,18 +214,5 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancerProvide
   @Override
   public String getPolicyName() {
     return "auto_configured_internal";
-  }
-
-  private static final class EmptyPicker extends SubchannelPicker {
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return PickResult.withNoResult();
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(EmptyPicker.class).toString();
-    }
   }
 }

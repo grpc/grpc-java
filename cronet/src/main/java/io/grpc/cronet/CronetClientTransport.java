@@ -34,6 +34,7 @@ import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import java.net.InetSocketAddress;
@@ -229,7 +230,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       startedGoAway = true;
     }
 
-    listener.transportShutdown(status);
+    listener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     synchronized (lock) {
       goAway = true;

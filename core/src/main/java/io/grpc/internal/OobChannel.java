@@ -38,8 +38,8 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.FixedResultPicker;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
@@ -117,7 +117,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     this.channelz = Preconditions.checkNotNull(channelz);
     this.delayedTransport.start(new ManagedClientTransport.Listener() {
         @Override
-        public void transportShutdown(Status s) {
+        public void transportShutdown(Status s, DisconnectError e) {
           // Don't care
         }
 
@@ -182,23 +182,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
     };
 
-    final class OobSubchannelPicker extends SubchannelPicker {
-      final PickResult result = PickResult.withSubchannel(subchannelImpl);
-
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return result;
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(OobSubchannelPicker.class)
-            .add("result", result)
-            .toString();
-      }
-    }
-
-    subchannelPicker = new OobSubchannelPicker();
+    subchannelPicker = new FixedResultPicker(PickResult.withSubchannel(subchannelImpl));
     delayedTransport.reprocess(subchannelPicker);
   }
 
@@ -270,23 +254,8 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         delayedTransport.reprocess(subchannelPicker);
         break;
       case TRANSIENT_FAILURE:
-        final class OobErrorPicker extends SubchannelPicker {
-          final PickResult errorResult = PickResult.withError(newState.getStatus());
-
-          @Override
-          public PickResult pickSubchannel(PickSubchannelArgs args) {
-            return errorResult;
-          }
-
-          @Override
-          public String toString() {
-            return MoreObjects.toStringHelper(OobErrorPicker.class)
-                .add("errorResult", errorResult)
-                .toString();
-          }
-        }
-
-        delayedTransport.reprocess(new OobErrorPicker());
+        delayedTransport.reprocess(
+            new FixedResultPicker(PickResult.withError(newState.getStatus())));
         break;
       default:
         // Do nothing

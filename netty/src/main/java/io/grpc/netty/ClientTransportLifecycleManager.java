@@ -19,6 +19,7 @@ package io.grpc.netty;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Status;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.ManagedClientTransport;
 
 /** Maintainer of transport lifecycle status. */
@@ -55,18 +56,18 @@ final class ClientTransportLifecycleManager {
    * Marks transport as shutdown, but does not set the error status. This must eventually be
    * followed by a call to notifyShutdown.
    */
-  public void notifyGracefulShutdown(Status s) {
+  public void notifyGracefulShutdown(Status s, DisconnectError disconnectError) {
     if (transportShutdown) {
       return;
     }
     transportShutdown = true;
-    listener.transportShutdown(s);
+    listener.transportShutdown(s, disconnectError);
   }
 
   /** Returns {@code true} if was the first shutdown. */
   @CanIgnoreReturnValue
-  public boolean notifyShutdown(Status s) {
-    notifyGracefulShutdown(s);
+  public boolean notifyShutdown(Status s, DisconnectError disconnectError) {
+    notifyGracefulShutdown(s, disconnectError);
     if (shutdownStatus != null) {
       return false;
     }
@@ -82,12 +83,12 @@ final class ClientTransportLifecycleManager {
     listener.transportInUse(inUse);
   }
 
-  public void notifyTerminated(Status s) {
+  public void notifyTerminated(Status s, DisconnectError disconnectError) {
     if (transportTerminated) {
       return;
     }
     transportTerminated = true;
-    notifyShutdown(s);
+    notifyShutdown(s, disconnectError);
     listener.transportTerminated();
   }
 

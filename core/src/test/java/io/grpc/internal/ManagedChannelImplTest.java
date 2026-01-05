@@ -798,7 +798,8 @@ public class ManagedChannelImplTest {
     transportInfo.listener.transportReady();
 
     // terminate transport
-    transportInfo.listener.transportShutdown(Status.CANCELLED);
+    transportInfo.listener.transportShutdown(Status.CANCELLED,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
@@ -841,7 +842,8 @@ public class ManagedChannelImplTest {
     assertTrue(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
     // terminate transport
-    transportInfo.listener.transportShutdown(Status.INTERNAL);
+    transportInfo.listener.transportShutdown(Status.INTERNAL,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
@@ -1002,7 +1004,8 @@ public class ManagedChannelImplTest {
     }
 
     // Killing the remaining real transport will terminate the channel
-    transportListener.transportShutdown(Status.UNAVAILABLE);
+    transportListener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     assertFalse(channel.isTerminated());
     verify(executorPool, never()).returnObject(any());
     transportListener.transportTerminated();
@@ -1072,7 +1075,8 @@ public class ManagedChannelImplTest {
 
     // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
     // the transport states.
-    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo2.listener.transportReady();
     verify(stateListener1).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     verify(stateListener2).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
@@ -1141,7 +1145,8 @@ public class ManagedChannelImplTest {
 
     // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
     // the transport states.
-    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo2.listener.transportReady();
     verify(stateListener1).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     verify(stateListener2).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
@@ -1277,7 +1282,8 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(same(Status.CANCELLED), same(trailers));
 
 
-    transportListener.transportShutdown(Status.UNAVAILABLE);
+    transportListener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportListener.transportTerminated();
 
     // Clean up as much as possible to allow the channel to terminate.
@@ -1429,7 +1435,8 @@ public class ManagedChannelImplTest {
 
     MockClientTransportInfo badTransportInfo = transports.poll();
     // Which failed to connect
-    badTransportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    badTransportInfo.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     inOrder.verifyNoMoreInteractions();
 
     // The channel then try the second address (goodAddress)
@@ -1579,7 +1586,8 @@ public class ManagedChannelImplTest {
         .newClientTransport(
             same(addr2), any(ClientTransportOptions.class), any(ChannelLogger.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
-    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     // Connecting to server2, which will fail too
     verify(mockTransportFactory)
@@ -1587,7 +1595,8 @@ public class ManagedChannelImplTest {
             same(addr2), any(ClientTransportOptions.class), any(ChannelLogger.class));
     MockClientTransportInfo transportInfo2 = transports.poll();
     Status server2Error = Status.UNAVAILABLE.withDescription("Server2 failed to connect");
-    transportInfo2.listener.transportShutdown(server2Error);
+    transportInfo2.listener.transportShutdown(server2Error,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     // ... which makes the subchannel enter TRANSIENT_FAILURE. The last error Status is propagated
     // to LoadBalancer.
@@ -1697,9 +1706,11 @@ public class ManagedChannelImplTest {
     verify(transportInfo2.transport).shutdown(same(ManagedChannelImpl.SHUTDOWN_STATUS));
 
     // Cleanup
-    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo1.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo1.listener.transportTerminated();
-    transportInfo2.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo2.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo2.listener.transportTerminated();
     timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
   }
@@ -1739,8 +1750,10 @@ public class ManagedChannelImplTest {
     verify(ti1.transport).shutdownNow(any(Status.class));
     verify(ti2.transport).shutdownNow(any(Status.class));
 
-    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
-    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"),
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"),
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     ti1.listener.transportTerminated();
 
     assertFalse(channel.isTerminated());
@@ -1829,7 +1842,8 @@ public class ManagedChannelImplTest {
         ArgumentMatchers.<ClientStreamTracer[]>any());
 
     // The transport goes away
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo.listener.transportTerminated();
 
     // A new call will trigger a new transport
@@ -1848,7 +1862,8 @@ public class ManagedChannelImplTest {
     // This transport fails
     Status transportError = Status.UNAVAILABLE.withDescription("Connection refused");
     assertEquals(0, balancerRpcExecutor.numPendingTasks());
-    transportInfo.listener.transportShutdown(transportError);
+    transportInfo.listener.transportShutdown(transportError,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     assertTrue(balancerRpcExecutor.runDueTasks() > 0);
 
     // Fail-fast RPC will fail, while wait-for-ready RPC will still be pending
@@ -2102,8 +2117,10 @@ public class ManagedChannelImplTest {
     verify(ti1.transport).shutdownNow(any(Status.class));
     verify(ti2.transport).shutdownNow(any(Status.class));
 
-    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
-    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"));
+    ti1.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"),
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+    ti2.listener.transportShutdown(Status.UNAVAILABLE.withDescription("shutdown now"),
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     ti1.listener.transportTerminated();
 
     assertFalse(channel.isTerminated());
@@ -2331,7 +2348,8 @@ public class ManagedChannelImplTest {
 
     // Transport closed when connecting
     assertEquals(expectedRefreshCount, resolver.refreshCalled);
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     // When channel enters idle, new resolver is created but not started.
     if (!isIdle) {
       expectedRefreshCount++;
@@ -2346,7 +2364,8 @@ public class ManagedChannelImplTest {
 
     // Transport closed when ready
     assertEquals(expectedRefreshCount, resolver.refreshCalled);
-    transportInfo.listener.transportShutdown(Status.UNAVAILABLE);
+    transportInfo.listener.transportShutdown(Status.UNAVAILABLE,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     // When channel enters idle, new resolver is created but not started.
     if (!isIdle) {
       expectedRefreshCount++;
@@ -3917,7 +3936,8 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).shutdown();
     // simulating the shutdown of load balancer triggers the shutdown of subchannel
     shutdownSafely(helper, subchannel);
-    transportInfo.listener.transportShutdown(Status.INTERNAL);
+    transportInfo.listener.transportShutdown(Status.INTERNAL,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo.listener.transportTerminated(); // simulating transport terminated
     assertTrue(
         "channel.isTerminated() is expected to be true but was false",
@@ -4022,7 +4042,8 @@ public class ManagedChannelImplTest {
     // simulating the shutdown of load balancer triggers the shutdown of subchannel
     shutdownSafely(helper, subchannel);
     // simulating transport shutdown & terminated
-    transportInfo.listener.transportShutdown(Status.INTERNAL);
+    transportInfo.listener.transportShutdown(Status.INTERNAL,
+        SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     transportInfo.listener.transportTerminated();
     assertTrue(
         "channel.isTerminated() is expected to be true but was false",
@@ -4794,7 +4815,7 @@ public class ManagedChannelImplTest {
     assertEquals(1, readyCallbackCalled.get());
     assertEquals(0, terminationCallbackCalled.get());
 
-    transportListener.transportShutdown(Status.OK);
+    transportListener.transportShutdown(Status.OK, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
 
     transportListener.transportTerminated();
     assertEquals(1, terminationCallbackCalled.get());

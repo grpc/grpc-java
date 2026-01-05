@@ -49,6 +49,7 @@ import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ObjectPool;
@@ -529,7 +530,7 @@ public final class BinderClientTransportTest {
     private final SettableFuture<Boolean> isTerminated = SettableFuture.create();
 
     @Override
-    public void transportShutdown(Status shutdownStatus) {
+    public void transportShutdown(Status shutdownStatus, DisconnectError disconnectError) {
       if (!this.shutdownStatus.set(shutdownStatus)) {
         throw new IllegalStateException("transportShutdown() already called");
       }
