@@ -219,7 +219,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertSame(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
     inOrder.verify(mockSubchannel).requestConnection();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
@@ -278,7 +278,7 @@ public class PickFirstLoadBalancerTest {
     assertThat(args.getAddresses()).isEqualTo(servers);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
-    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
@@ -300,7 +300,7 @@ public class PickFirstLoadBalancerTest {
     verify(mockSubchannel).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    Subchannel subchannel = pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel();
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
     reset(mockHelper);
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
 
@@ -317,7 +317,7 @@ public class PickFirstLoadBalancerTest {
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertEquals(subchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
     verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
     verifyNoMoreInteractions(mockHelper);
@@ -405,8 +405,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
 
-    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs)
-        .getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
 
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
         pickerCaptor.getValue().pickSubchannel(mockArgs));
