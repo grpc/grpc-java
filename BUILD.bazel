@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@rules_java//java:defs.bzl", "java_library", "java_plugin", "java_proto_library")
+load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@rules_java//java:defs.bzl", "java_library", "java_plugin")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 load(":java_grpc_library.bzl", "java_grpc_library")
 

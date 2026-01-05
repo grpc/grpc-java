@@ -32,7 +32,7 @@ public class ManagedClientTransportTest {
   public void testListener() {
     ManagedClientTransport.Listener listener = new ManagedClientTransport.Listener() {
       @Override
-      public void transportShutdown(Status s) {}
+      public void transportShutdown(Status s, DisconnectError e) {}
 
       @Override
       public void transportTerminated() {}
@@ -45,7 +45,7 @@ public class ManagedClientTransportTest {
     };
 
     // Test that the listener methods do not throw.
-    listener.transportShutdown(Status.OK);
+    listener.transportShutdown(Status.OK, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
     listener.transportTerminated();
     listener.transportReady();
     listener.transportInUse(true);

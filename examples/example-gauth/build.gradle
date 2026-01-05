@@ -30,7 +30,7 @@ dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-auth:${grpcVersion}"
-    implementation "com.google.auth:google-auth-library-oauth2-http:1.40.0"
+    implementation "com.google.auth:google-auth-library-oauth2-http:1.41.0"
     implementation "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }

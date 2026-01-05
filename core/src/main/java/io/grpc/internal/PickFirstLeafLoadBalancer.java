@@ -24,7 +24,6 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import io.grpc.Attributes;
@@ -164,7 +163,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
-      updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
     }
 
     if (rawConnectivityState == READY) {
@@ -237,7 +236,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     subchannels.clear();
     addressIndex.updateGroups(ImmutableList.of());
     rawConnectivityState = TRANSIENT_FAILURE;
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   void processSubchannelState(SubchannelData subchannelData, ConnectivityStateInfo stateInfo) {
@@ -290,7 +289,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
-        updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         break;
 
       case READY:
@@ -322,7 +321,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
-              new Picker(PickResult.withError(stateInfo.getStatus())));
+              new FixedResultPicker(PickResult.withError(stateInfo.getStatus())));
 
           // Refresh Name Resolution, but only when all 3 conditions are met
           // * We are at the end of addressIndex
@@ -385,11 +384,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
-      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(
+      updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
           subchannelData.healthStateInfo.getStatus())));
     } else if (concludedState != TRANSIENT_FAILURE) {
       updateBalancingState(subchannelData.getHealthState(),
-          new Picker(PickResult.withNoResult()));
+          new FixedResultPicker(PickResult.withNoResult()));
     }
   }
 
@@ -591,28 +590,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   ConnectivityState getConcludedConnectivityState() {
     return this.concludedState;
-  }
-
-  /**
-   * No-op picker which doesn't add any custom picking logic. It just passes already known result
-   * received in constructor.
-   */
-  private static final class Picker extends SubchannelPicker {
-    private final PickResult result;
-
-    Picker(PickResult result) {
-      this.result = checkNotNull(result, "result");
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
-    }
   }
 
   /**
