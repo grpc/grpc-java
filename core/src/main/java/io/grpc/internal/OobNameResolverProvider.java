@@ -59,7 +59,7 @@ final class OobNameResolverProvider extends NameResolverProvider {
 
   @Override
   protected int priority() {
-    return 5;
+    return 5; // Doesn't matter, as we expect only one provider in the registry
   }
 
   public void updateAddresses(List<EquivalentAddressGroup> eags) {
