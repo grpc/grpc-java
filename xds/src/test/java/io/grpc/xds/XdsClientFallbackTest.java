@@ -484,7 +484,7 @@ public class XdsClientFallbackTest {
     XdsClientImpl client =
         CommonBootstrapperTestUtils.createXdsClient(
             Arrays.asList(garbageUri, validUri),
-            new GrpcXdsTransportFactory(null),
+            new GrpcXdsTransportFactory(null, null, null),
             fakeClock,
             new ExponentialBackoffPolicy.Provider(),
             MessagePrinter.INSTANCE,
@@ -509,7 +509,7 @@ public class XdsClientFallbackTest {
     XdsClientImpl client =
         CommonBootstrapperTestUtils.createXdsClient(
             Arrays.asList(validUri, garbageUri),
-            new GrpcXdsTransportFactory(null),
+            new GrpcXdsTransportFactory(null, null, null),
             fakeClock,
             new ExponentialBackoffPolicy.Provider(),
             MessagePrinter.INSTANCE,
@@ -536,7 +536,7 @@ public class XdsClientFallbackTest {
     XdsClientImpl client =
         CommonBootstrapperTestUtils.createXdsClient(
             Arrays.asList(garbageUri1, garbageUri2),
-            new GrpcXdsTransportFactory(null),
+            new GrpcXdsTransportFactory(null, null, null),
             fakeClock,
             new ExponentialBackoffPolicy.Provider(),
             MessagePrinter.INSTANCE,

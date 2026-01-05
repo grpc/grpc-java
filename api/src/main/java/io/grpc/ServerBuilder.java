@@ -425,6 +425,39 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   }
 
   /**
+   * Configures this builder using settings derived from an existing parent server.
+   *
+   * <p>This method is typically used by internal components when creating
+   * child channels to ensure they inherit relevant configuration (like the
+   * {@link ChildChannelConfigurer}) from the parent.
+   *
+   * @param parentServer the server to inherit configuration from
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T configureChannel(Server parentServer) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets a configurer that will be applied to all internal child channels created by this server.
+   *
+   * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections
+   * or OOB load balancing channels.
+   *
+   * @param childChannelConfigurer the configurer to apply.
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+
+  /**
    * Builds a server using the given parameters.
    *
    * <p>The returned service will not been started or be bound a port. You will need to start it

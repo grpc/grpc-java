@@ -95,7 +95,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  protected T interceptWithTarget(InterceptorFactory factory) {
+  public T interceptWithTarget(InterceptorFactory factory) {
     delegate().interceptWithTarget(factory);
     return thisT();
   }
@@ -258,7 +258,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  protected T addMetricSink(MetricSink metricSink) {
+  public T addMetricSink(MetricSink metricSink) {
     delegate().addMetricSink(metricSink);
     return thisT();
   }
@@ -266,6 +266,24 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   @Override
   public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     delegate().setNameResolverArg(key, value);
+    return thisT();
+  }
+
+  @Override
+  public T configureChannel(ManagedChannel parentChannel) {
+    delegate().configureChannel(parentChannel);
+    return thisT();
+  }
+
+  @Override
+  public T configureChannel(Server parentServer) {
+    delegate().configureChannel(parentServer);
+    return thisT();
+  }
+
+  @Override
+  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+    delegate().childChannelConfigurer(childChannelConfigurer);
     return thisT();
   }
 

@@ -192,6 +192,18 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
     return thisT();
   }
 
+  @Override
+  public T configureChannel(Server parentServer) {
+    delegate().configureChannel(parentServer);
+    return thisT();
+  }
+
+  @Override
+  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+    delegate().childChannelConfigurer(childChannelConfigurer);
+    return thisT();
+  }
+
   /**
    * Returns the {@link Server} built by the delegate by default. Overriding method can return
    * different value.

@@ -160,17 +160,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
-   * Internal-only: Adds a factory that will construct an interceptor based on the channel's target.
+   * Adds a factory that will construct an interceptor based on the channel's target.
    * This can be used to work around nameResolverFactory() changing the target string.
    */
-  @Internal
-  protected T interceptWithTarget(InterceptorFactory factory) {
+  public T interceptWithTarget(InterceptorFactory factory) {
     throw new UnsupportedOperationException();
   }
 
-  /** Internal-only. */
-  @Internal
-  protected interface InterceptorFactory {
+  public interface InterceptorFactory {
     ClientInterceptor newInterceptor(String target);
   }
 
@@ -638,8 +635,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.64.0
    */
-  @Internal
-  protected T addMetricSink(MetricSink metricSink) {
+  public T addMetricSink(MetricSink metricSink) {
     throw new UnsupportedOperationException();
   }
 
@@ -659,6 +655,53 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Configures this builder using settings derived from an existing parent channel.
+   *
+   * <p>This method is typically used by internal components (like LoadBalancers) when creating
+   * child channels to ensure they inherit relevant configuration (like the
+   * {@link ChildChannelConfigurer}) from the parent.
+   *
+   * @param parentChannel the channel to inherit configuration from
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T configureChannel(ManagedChannel parentChannel) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Configures this builder using settings derived from an existing parent server.
+   *
+   * <p>This method is typically used by internal components (like LoadBalancers) when creating
+   * child channels to ensure they inherit relevant configuration (like the
+   * {@link ChildChannelConfigurer}) from the parent.
+   *
+   * @param parentServer the server to inherit configuration from
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T configureChannel(Server parentServer) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets a configurer that will be applied to all internal child channels created by this channel.
+   *
+   * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
+   *
+   * @param childChannelConfigurer the configurer to apply.
+   * @return this
+   * @since 1.79.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   /**

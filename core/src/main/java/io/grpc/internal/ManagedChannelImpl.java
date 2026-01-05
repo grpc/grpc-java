@@ -40,6 +40,8 @@ import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChildChannelConfigurers;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -153,6 +155,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
       };
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
+
+  /**
+   * Stores the user-provided configuration function for internal child channels.
+   *
+   * <p>This is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   * guaranteed to be not null (defaults to no-op).
+   */
+  private ChildChannelConfigurer childChannelConfigurer =  ChildChannelConfigurers.noOp();
 
   private final InternalLogId logId;
   private final String target;
@@ -553,6 +564,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
+    if (builder.childChannelConfigurer != null) {
+      this.childChannelConfigurer = builder.childChannelConfigurer;
+    }
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
@@ -599,7 +613,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
-            .setNameResolverRegistry(builder.nameResolverRegistry);
+            .setNameResolverRegistry(builder.nameResolverRegistry)
+            .setParentChannel(this);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -673,6 +688,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
       serviceConfigUpdated = true;
     }
+  }
+
+  /**
+   * Retrieves the user-provided configuration function for internal child channels.
+   *
+   * <p>This method is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   *
+   * @return the ChildChannelConfigurer, guaranteed to be not null (defaults to no-op).
+   */
+  @Override
+  public ChildChannelConfigurer getChildChannelConfigurer() {
+    return childChannelConfigurer;
   }
 
   @VisibleForTesting
@@ -1467,7 +1495,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelLogger,
           transportFilters,
           target,
-          lbHelper.getMetricRecorder());
+          /*
+           *  TODO(AgraVator): we are breaking the metrics for the internal sub channels of
+           *  OobChannels by passing in MetricRecorder.noOp(). Point this out in the release notes.
+           */
+          MetricRecorder.noOp());
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1557,6 +1589,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder();
+
+      // Note that we follow the global configurator pattern and try to fuse the configurations as
+      // soon as the builder gets created
+      ManagedChannel parentChannel = ManagedChannelImpl.this;
+      builder.configureChannel(parentChannel);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

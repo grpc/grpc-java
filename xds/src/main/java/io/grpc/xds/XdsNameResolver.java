@@ -39,6 +39,7 @@ import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricRecorder;
@@ -182,7 +183,8 @@ final class XdsNameResolver extends NameResolver {
     } else {
       checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.xdsClientPool = new BootstrappingXdsClientPool(
-          xdsClientPoolFactory, target, bootstrapOverride, metricRecorder);
+          xdsClientPoolFactory, target, bootstrapOverride, metricRecorder,
+          nameResolverArgs.getParentChannel());
     }
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
@@ -1054,16 +1056,19 @@ final class XdsNameResolver extends NameResolver {
     private final @Nullable Map<String, ?> bootstrapOverride;
     private final @Nullable MetricRecorder metricRecorder;
     private ObjectPool<XdsClient> xdsClientPool;
+    private ManagedChannel parentChannel;
 
     BootstrappingXdsClientPool(
         XdsClientPoolFactory xdsClientPoolFactory,
         String target,
         @Nullable Map<String, ?> bootstrapOverride,
-        @Nullable MetricRecorder metricRecorder) {
+        @Nullable MetricRecorder metricRecorder,
+        @Nullable ManagedChannel parentChannel) {
       this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.target = checkNotNull(target, "target");
       this.bootstrapOverride = bootstrapOverride;
       this.metricRecorder = metricRecorder;
+      this.parentChannel = parentChannel;
     }
 
     @Override
@@ -1076,7 +1081,8 @@ final class XdsNameResolver extends NameResolver {
           bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
         }
         this.xdsClientPool =
-            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder);
+            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder, parentChannel,
+                null);
       }
       return xdsClientPool.getObject();
     }
