@@ -225,7 +225,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   /**
-   * Triggers lazy initialization of an IDLE child pickFirst load balancer when:
+   * Triggers proactive connection of an IDLE child load balancer when the following conditions are
+   * met.
    *
    * <ul>
    *   <li>there is no READY child
@@ -234,9 +235,9 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
    *   <li>there exists at least one IDLE child
    * </ul>
    *
-   * <p>This corresponds to the second lazy-initialization condition described in gRFC A61, where
-   * recovery from TRANSIENT_FAILURE must be triggered outside the picker when no active connection
-   * attempt is in progress.
+   * <p>This corresponds to the proactive connection logic described in gRFC A61, where recovery
+   * from TRANSIENT_FAILURE must be triggered outside the picker when no active connection attempt
+   * is in progress.
    */
   private void maybeTriggerIdleChildConnection(
       int numReady, int numTF, int numConnecting, int numIdle) {
