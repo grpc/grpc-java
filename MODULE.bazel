@@ -8,14 +8,14 @@ module(
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.63.1",
-    "com.google.auth:google-auth-library-credentials:1.40.0",
-    "com.google.auth:google-auth-library-oauth2-http:1.40.0",
+    "com.google.api.grpc:proto-google-common-protos:2.63.2",
+    "com.google.auth:google-auth-library-credentials:1.41.0",
+    "com.google.auth:google-auth-library-oauth2-http:1.41.0",
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:2.12.1",
-    "com.google.errorprone:error_prone_annotations:2.44.0",
+    "com.google.errorprone:error_prone_annotations:2.45.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.5.0-android",
     "com.google.re2j:re2j:1.8",
@@ -23,20 +23,20 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.4.5",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.127.Final",
-    "io.netty:netty-codec-http2:4.1.127.Final",
-    "io.netty:netty-codec-http:4.1.127.Final",
-    "io.netty:netty-codec-socks:4.1.127.Final",
-    "io.netty:netty-codec:4.1.127.Final",
-    "io.netty:netty-common:4.1.127.Final",
-    "io.netty:netty-handler-proxy:4.1.127.Final",
-    "io.netty:netty-handler:4.1.127.Final",
-    "io.netty:netty-resolver:4.1.127.Final",
+    "io.netty:netty-buffer:4.1.130.Final",
+    "io.netty:netty-codec-http2:4.1.130.Final",
+    "io.netty:netty-codec-http:4.1.130.Final",
+    "io.netty:netty-codec-socks:4.1.130.Final",
+    "io.netty:netty-codec:4.1.130.Final",
+    "io.netty:netty-common:4.1.130.Final",
+    "io.netty:netty-handler-proxy:4.1.130.Final",
+    "io.netty:netty-handler:4.1.130.Final",
+    "io.netty:netty-resolver:4.1.130.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.74.Final",
     "io.netty:netty-tcnative-classes:2.0.74.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.127.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.127.Final",
-    "io.netty:netty-transport:4.1.127.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.130.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.130.Final",
+    "io.netty:netty-transport:4.1.130.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -46,10 +46,10 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 ]
 # GRPC_DEPS_END
 
-bazel_dep(name = "bazel_jar_jar", version = "0.1.7")
+bazel_dep(name = "bazel_jar_jar", version = "0.1.11.bcr.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", version = "0.0.0-20240326-1c8d509c5", repo_name = "com_google_googleapis")
-bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58", repo_name = "io_grpc_grpc_proto")
+bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58.bcr.1", repo_name = "io_grpc_grpc_proto")
 bazel_dep(name = "protobuf", version = "33.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "rules_java", version = "9.1.0")

@@ -19,7 +19,6 @@ package io.grpc.rls;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -93,27 +92,14 @@ final class RlsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(final Status error) {
-    class ErrorPicker extends SubchannelPicker {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withError(error);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this)
-            .add("error", error)
-            .toString();
-      }
-    }
-
     if (routeLookupClient != null) {
       logger.log(ChannelLogLevel.DEBUG, "closing the routeLookupClient on a name resolution error");
       routeLookupClient.close();
       routeLookupClient = null;
       lbPolicyConfiguration = null;
     }
-    helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new ErrorPicker());
+    helper.updateBalancingState(
+        ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   @Override

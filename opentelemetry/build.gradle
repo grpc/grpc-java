@@ -29,6 +29,11 @@ dependencies {
             extension = "signature"
         }
     }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
 }
 
 tasks.named("jar").configure {

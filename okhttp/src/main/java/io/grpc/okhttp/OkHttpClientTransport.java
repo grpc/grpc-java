@@ -48,6 +48,8 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.CertificateUtils;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.DisconnectError;
+import io.grpc.internal.GoAwayDisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
@@ -56,6 +58,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.NoopSslSession;
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
@@ -129,7 +132,7 @@ import okio.Timeout;
  * A okhttp-based {@link ConnectionClientTransport} implementation.
  */
 class OkHttpClientTransport implements ConnectionClientTransport, TransportExceptionHandler,
-      OutboundFlowController.Transport {
+      OutboundFlowController.Transport, ClientKeepAlivePinger.TransportWithDisconnectReason {
   private static final Map<ErrorCode, Status> ERROR_CODE_TO_STATUS = buildErrorCodeToStatusMap();
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   private static final String GRPC_ENABLE_PER_RPC_AUTHORITY_CHECK =
@@ -992,13 +995,18 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
 
       goAwayStatus = reason;
-      listener.transportShutdown(goAwayStatus);
+      listener.transportShutdown(goAwayStatus, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
       stopIfNecessary();
     }
   }
 
   @Override
   public void shutdownNow(Status reason) {
+    shutdownNow(reason, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
+  }
+
+  @Override
+  public void shutdownNow(Status reason, DisconnectError disconnectError) {
     shutdown(reason);
     synchronized (lock) {
       Iterator<Map.Entry<Integer, OkHttpClientStream>> it = streams.entrySet().iterator();
@@ -1088,7 +1096,13 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     synchronized (lock) {
       if (goAwayStatus == null) {
         goAwayStatus = status;
-        listener.transportShutdown(status);
+        GrpcUtil.Http2Error http2Error;
+        if (errorCode == null) {
+          http2Error = GrpcUtil.Http2Error.NO_ERROR;
+        } else {
+          http2Error = GrpcUtil.Http2Error.forCode(errorCode.httpCode);
+        }
+        listener.transportShutdown(status, new GoAwayDisconnectError(http2Error));
       }
       if (errorCode != null && !goAwaySent) {
         // Send GOAWAY with lastGoodStreamId of 0, since we don't expect any server-initiated
