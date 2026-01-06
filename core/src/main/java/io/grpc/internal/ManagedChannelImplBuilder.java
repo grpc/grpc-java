@@ -47,6 +47,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.StatusOr;
+import io.grpc.Uri;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
@@ -104,6 +105,16 @@ public final class ManagedChannelImplBuilder
    * An idle timeout smaller than this would be capped to it.
    */
   static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
+
+  private static boolean enableRfc3986Uris = GrpcUtil.getFlag("GRPC_ENABLE_RFC3986_URIS", false);
+
+  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
+  @VisibleForTesting
+  static boolean setRfc3986UrisEnabled(boolean value) {
+    boolean prevValue = ManagedChannelImplBuilder.enableRfc3986Uris;
+    ManagedChannelImplBuilder.enableRfc3986Uris = value;
+    return prevValue;
+  }
 
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
@@ -719,8 +730,11 @@ public final class ManagedChannelImplBuilder
   public ManagedChannel build() {
     ClientTransportFactory clientTransportFactory =
         clientTransportFactoryBuilder.buildClientTransportFactory();
-    ResolvedNameResolver resolvedResolver = getNameResolverProvider(
-        target, nameResolverRegistry, clientTransportFactory.getSupportedSocketAddressTypes());
+    ResolvedNameResolver resolvedResolver =
+        enableRfc3986Uris
+            ? getNameResolverProviderRfc3986(target, nameResolverRegistry)
+            : getNameResolverProvider(target, nameResolverRegistry);
+    resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
         clientTransportFactory,
@@ -822,12 +836,25 @@ public final class ManagedChannelImplBuilder
       this.targetUri = checkNotNull(targetUri, "targetUri");
       this.provider = checkNotNull(provider, "provider");
     }
+
+    void checkAddressTypes(
+        Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+      if (channelTransportSocketAddressTypes != null) {
+        Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes =
+            provider.getProducedSocketAddressTypes();
+        if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
+          throw new IllegalArgumentException(
+              String.format(
+                  "Address types of NameResolver '%s' for '%s' not supported by transport",
+                  provider.getDefaultScheme(), targetUri));
+        }
+      }
+    }
   }
 
   @VisibleForTesting
   static ResolvedNameResolver getNameResolverProvider(
-      String target, NameResolverRegistry nameResolverRegistry,
-      Collection<Class<? extends SocketAddress>> channelTransportSocketAddressTypes) {
+      String target, NameResolverRegistry nameResolverRegistry) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     NameResolverProvider provider = null;
@@ -863,14 +890,46 @@ public final class ManagedChannelImplBuilder
           target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
     }
 
-    if (channelTransportSocketAddressTypes != null) {
-      Collection<Class<? extends SocketAddress>> nameResolverSocketAddressTypes
-          = provider.getProducedSocketAddressTypes();
-      if (!channelTransportSocketAddressTypes.containsAll(nameResolverSocketAddressTypes)) {
-        throw new IllegalArgumentException(String.format(
-            "Address types of NameResolver '%s' for '%s' not supported by transport",
-            targetUri.getScheme(), target));
-      }
+    return new ResolvedNameResolver(wrap(targetUri), provider);
+  }
+
+  @VisibleForTesting
+  static ResolvedNameResolver getNameResolverProviderRfc3986(
+      String target, NameResolverRegistry nameResolverRegistry) {
+    // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
+    // "dns:///".
+    NameResolverProvider provider = null;
+    Uri targetUri = null;
+    StringBuilder uriSyntaxErrors = new StringBuilder();
+    try {
+      targetUri = Uri.parse(target);
+    } catch (URISyntaxException e) {
+      // Can happen with ip addresses like "[::1]:1234" or 127.0.0.1:1234.
+      uriSyntaxErrors.append(e.getMessage());
+    }
+    if (targetUri != null) {
+      // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
+      // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
+      // scheme from the registry.
+      targetUri =
+          Uri.newBuilder()
+              .setScheme(nameResolverRegistry.getDefaultScheme())
+              .setHost("")
+              .setPath("/" + target)
+              .build();
+      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+    }
+
+    if (provider == null) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Could not find a NameResolverProvider for %s%s",
+              target, uriSyntaxErrors.length() > 0 ? " (" + uriSyntaxErrors + ")" : ""));
     }
 
     return new ResolvedNameResolver(wrap(targetUri), provider);
