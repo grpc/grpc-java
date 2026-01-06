@@ -3946,8 +3946,10 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
+    LoadBalancerRegistry registry = new LoadBalancerRegistry();
+    registry.register(mockLoadBalancerProvider);
     AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
-        new AutoConfiguredLoadBalancerFactory("pick_first");
+        new AutoConfiguredLoadBalancerFactory(registry, MOCK_POLICY_NAME);
 
     ScParser parser = new ScParser(
         retryEnabled,

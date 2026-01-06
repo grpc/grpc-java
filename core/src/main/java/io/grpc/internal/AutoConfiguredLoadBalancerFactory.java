@@ -38,10 +38,10 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 
-public final class AutoConfiguredLoadBalancerFactory {
+public final class AutoConfiguredLoadBalancerFactory extends LoadBalancerProvider {
 
   private final LoadBalancerRegistry registry;
-  private final String defaultPolicy;
+  private final LoadBalancerProvider defaultProvider;
 
   public AutoConfiguredLoadBalancerFactory(String defaultPolicy) {
     this(LoadBalancerRegistry.getDefaultRegistry(), defaultPolicy);
@@ -50,47 +50,34 @@ public final class AutoConfiguredLoadBalancerFactory {
   @VisibleForTesting
   AutoConfiguredLoadBalancerFactory(LoadBalancerRegistry registry, String defaultPolicy) {
     this.registry = checkNotNull(registry, "registry");
-    this.defaultPolicy = checkNotNull(defaultPolicy, "defaultPolicy");
+    LoadBalancerProvider provider =
+        registry.getProvider(checkNotNull(defaultPolicy, "defaultPolicy"));
+    if (provider == null) {
+      Status status = Status.INTERNAL.withDescription("Could not find policy '" + defaultPolicy
+          + "'. Make sure its implementation is either registered to LoadBalancerRegistry or"
+          + " included in META-INF/services/io.grpc.LoadBalancerProvider from your jar files.");
+      provider = new FixedPickerLoadBalancerProvider(
+          ConnectivityState.TRANSIENT_FAILURE,
+          new LoadBalancer.FixedResultPicker(PickResult.withError(status)),
+          status);
+    }
+    this.defaultProvider = provider;
   }
 
+  @Override
   public AutoConfiguredLoadBalancer newLoadBalancer(Helper helper) {
     return new AutoConfiguredLoadBalancer(helper);
   }
 
-  private static final class NoopLoadBalancer extends LoadBalancer {
-
-    @Override
-    @Deprecated
-    @SuppressWarnings("InlineMeSuggester")
-    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    }
-
-    @Override
-    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      return Status.OK;
-    }
-
-    @Override
-    public void handleNameResolutionError(Status error) {}
-
-    @Override
-    public void shutdown() {}
-  }
-
   @VisibleForTesting
-  public final class AutoConfiguredLoadBalancer {
+  public final class AutoConfiguredLoadBalancer extends LoadBalancer {
     private final Helper helper;
     private LoadBalancer delegate;
     private LoadBalancerProvider delegateProvider;
 
     AutoConfiguredLoadBalancer(Helper helper) {
       this.helper = helper;
-      delegateProvider = registry.getProvider(defaultPolicy);
-      if (delegateProvider == null) {
-        throw new IllegalStateException("Could not find policy '" + defaultPolicy
-            + "'. Make sure its implementation is either registered to LoadBalancerRegistry or"
-            + " included in META-INF/services/io.grpc.LoadBalancerProvider from your jar files.");
-      }
+      this.delegateProvider = defaultProvider;
       delegate = delegateProvider.newLoadBalancer(helper);
     }
 
@@ -98,23 +85,12 @@ public final class AutoConfiguredLoadBalancerFactory {
      * Returns non-OK status if the delegate rejects the resolvedAddresses (e.g. if it does not
      * support an empty list).
      */
-    Status tryAcceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    @Override
+    public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       PolicySelection policySelection =
           (PolicySelection) resolvedAddresses.getLoadBalancingPolicyConfig();
 
       if (policySelection == null) {
-        LoadBalancerProvider defaultProvider;
-        try {
-          defaultProvider = getProviderOrThrow(defaultPolicy, "using default policy");
-        } catch (PolicyException e) {
-          Status s = Status.INTERNAL.withDescription(e.getMessage());
-          helper.updateBalancingState(
-              ConnectivityState.TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(s)));
-          delegate.shutdown();
-          delegateProvider = null;
-          delegate = new NoopLoadBalancer();
-          return Status.OK;
-        }
         policySelection =
             new PolicySelection(defaultProvider, /* config= */ null);
       }
@@ -145,20 +121,24 @@ public final class AutoConfiguredLoadBalancerFactory {
               .build());
     }
 
-    void handleNameResolutionError(Status error) {
+    @Override
+    public void handleNameResolutionError(Status error) {
       getDelegate().handleNameResolutionError(error);
     }
 
+    @Override
     @Deprecated
-    void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       getDelegate().handleSubchannelState(subchannel, stateInfo);
     }
 
-    void requestConnection() {
+    @Override
+    public void requestConnection() {
       getDelegate().requestConnection();
     }
 
-    void shutdown() {
+    @Override
+    public void shutdown() {
       delegate.shutdown();
       delegate = null;
     }
@@ -177,16 +157,6 @@ public final class AutoConfiguredLoadBalancerFactory {
     LoadBalancerProvider getDelegateProvider() {
       return delegateProvider;
     }
-  }
-
-  private LoadBalancerProvider getProviderOrThrow(String policy, String choiceReason)
-      throws PolicyException {
-    LoadBalancerProvider provider = registry.getProvider(policy);
-    if (provider == null) {
-      throw new PolicyException(
-          "Trying to load '" + policy + "' because " + choiceReason + ", but it's unavailable");
-    }
-    return provider;
   }
 
   /**
@@ -209,8 +179,11 @@ public final class AutoConfiguredLoadBalancerFactory {
    *
    * @return the parsed {@link PolicySelection}, or {@code null} if no selection could be made.
    */
+  // TODO(ejona): The Provider API doesn't allow null, but ScParser can handle this and it will need
+  // tweaking to ManagedChannelImpl.defaultServiceConfig to fix.
   @Nullable
-  ConfigOrError parseLoadBalancerPolicy(Map<String, ?> serviceConfig) {
+  @Override
+  public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> serviceConfig) {
     try {
       List<LbConfig> loadBalancerConfigs = null;
       if (serviceConfig != null) {
@@ -228,12 +201,18 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
   }
 
-  @VisibleForTesting
-  static final class PolicyException extends Exception {
-    private static final long serialVersionUID = 1L;
+  @Override
+  public boolean isAvailable() {
+    return true;
+  }
 
-    private PolicyException(String msg) {
-      super(msg);
-    }
+  @Override
+  public int getPriority() {
+    return 5;
+  }
+
+  @Override
+  public String getPolicyName() {
+    return "auto_configured_internal";
   }
 }
