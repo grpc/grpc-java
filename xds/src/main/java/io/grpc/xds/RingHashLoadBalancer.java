@@ -214,9 +214,12 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
-    // gRFC A61: trigger lazy initialization outside picker when no READY child exists,
-    // at least one child is in TRANSIENT_FAILURE, and no child is currently CONNECTING
-    maybeTriggerIdleChildConnection(numReady, numTF, numConnecting, numIdle);
+    // gRFC A61: if the aggregated connectivity state is TRANSIENT_FAILURE or CONNECTING and
+    // there are no endpoints in CONNECTING state, the ring_hash policy will choose one of
+    // the endpoints in IDLE state (if any) to trigger a connection attempt on
+    if (numReady == 0 && numTF > 0 && numConnecting == 0 && numIdle > 0) {
+      triggerIdleChildConnection();
+    }
 
     RingHashPicker picker =
         new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeaderKey, random);
@@ -224,29 +227,15 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
     this.currentConnectivityState = overallState;
   }
 
+
   /**
-   * Triggers proactive connection of an IDLE child load balancer when the following conditions are
-   * met.
-   *
-   * <ul>
-   *   <li>there is no READY child
-   *   <li>at least one child is in TRANSIENT_FAILURE
-   *   <li>no child is currently CONNECTING
-   *   <li>there exists at least one IDLE child
-   * </ul>
-   *
-   * <p>This corresponds to the proactive connection logic described in gRFC A61, where recovery
-   * from TRANSIENT_FAILURE must be triggered outside the picker when no active connection attempt
-   * is in progress.
+   * Triggers a connection attempt for the first IDLE child load balancer.
    */
-  private void maybeTriggerIdleChildConnection(
-      int numReady, int numTF, int numConnecting, int numIdle) {
-    if (numReady == 0 && numTF > 0 && numConnecting == 0 && numIdle > 0) {
-      for (ChildLbState child : getChildLbStates()) {
-        if (child.getCurrentState() == ConnectivityState.IDLE) {
-          child.getLb().requestConnection();
-          return;
-        }
+  private void triggerIdleChildConnection() {
+    for (ChildLbState child : getChildLbStates()) {
+      if (child.getCurrentState() == ConnectivityState.IDLE) {
+        child.getLb().requestConnection();
+        return;
       }
     }
   }

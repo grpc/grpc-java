@@ -806,6 +806,8 @@ public class RingHashLoadBalancerTest {
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
     verify(subchannelList.get(0), never()).requestConnection(); // In TF
+    verify(subchannelList.get(1)).requestConnection();
+    verify(subchannelList.get(2), never()).requestConnection(); // Not one of the first 2
   }
 
   @Test
