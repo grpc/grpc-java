@@ -1715,15 +1715,10 @@ public class OpenTelemetryMetricsModuleTest {
   public void targetAttributeFilter_allowsTarget_usesOriginalTarget() {
     // Test that when filter allows the target, the original target is used
     String target = "dns:///example.com";
-    TargetFilter targetFilter = new TargetFilter() {
-      @Override
-      public boolean test(String target) {
-        return target.contains("example.com");
-      }
-    };
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource,
+        t -> t.contains("example.com"));
 
     Channel interceptedChannel =
         ClientInterceptors.intercept(
@@ -1764,15 +1759,10 @@ public class OpenTelemetryMetricsModuleTest {
   public void targetAttributeFilter_rejectsTarget_mapsToOther() {
     // Test that when filter rejects the target, it is mapped to "other"
     String target = "dns:///example.com";
-    TargetFilter targetFilter = new TargetFilter() {
-      @Override
-      public boolean test(String target) {
-        return target.contains("allowed.com");
-      }
-    };
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
-    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource, targetFilter);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource,
+        t -> t.contains("allowed.com"));
 
     Channel interceptedChannel =
         ClientInterceptors.intercept(
