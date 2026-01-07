@@ -46,6 +46,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme://user@host:0443/path?query#fragment");
     assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
+    assertThat(uri.isPathAbsolute()).isTrue();
+    assertThat(uri.isPathRootless()).isFalse();
   }
 
   @Test
@@ -127,6 +129,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isFalse();
   }
 
   @Test
@@ -139,6 +143,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("mailto:ceo@company.com?subject=raise");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
   }
 
   @Test
@@ -151,6 +157,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme:");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isFalse();
   }
 
   @Test
@@ -349,9 +357,31 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_onePathSegment_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("dns:www.example.com");
+    assertThat(uri.getPathSegments()).containsExactly("www.example.com");
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
+  }
+
+  @Test
   public void parse_twoPathSegments() throws URISyntaxException {
     Uri uri = Uri.create("file:/foo/bar");
     assertThat(uri.getPathSegments()).containsExactly("foo", "bar");
+  }
+
+  @Test
+  public void parse_twoPathSegments_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("file:foo/bar");
+    assertThat(uri.getPathSegments()).containsExactly("foo", "bar");
+  }
+
+  @Test
+  public void parse_percentEncodedPathSegment_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("mailto:%2Fdev%2Fnull@example.com");
+    assertThat(uri.getPathSegments()).containsExactly("/dev/null@example.com");
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
   }
 
   @Test

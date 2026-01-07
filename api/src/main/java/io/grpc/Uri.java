@@ -481,6 +481,15 @@ public final class Uri {
    * <p>Prefer this method over {@link #getPath()} because it preserves the distinction between
    * segment separators and literal '/'s within a path segment.
    *
+   * <p>A trailing '/' delimiter in the path results in the empty string as the last element in the
+   * returned list. For example, <code>file://localhost/foo/bar/</code> has path segments <code>
+   * ["foo", "bar", ""]</code>
+   *
+   * <p>A leading '/' delimiter cannot be detected using this method. For example, both <code>
+   * dns:example.com</code> and <code>dns:///example.com</code> have the same list of path segments:
+   * <code>["example.com"]</code>. Use {@link #isPathAbsolute()} or {@link #isPathRootless()} to
+   * distinguish these cases.
+   *
    * <p>The returned list is immutable.
    */
   public List<String> getPathSegments() {
@@ -488,6 +497,44 @@ public final class Uri {
     ImmutableList.Builder<String> segmentsBuilder = ImmutableList.builder();
     parseAssumedUtf8PathIntoSegments(path, segmentsBuilder);
     return segmentsBuilder.build();
+  }
+
+  /**
+   * Returns true iff this URI's path component starts with a path segment (rather than the '/'
+   * segment delimiter).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>tel:+1-206-555-1212
+   * </code>, <code>mailto:me@example.com</code> and <code>urn:isbn:978-1492082798</code> all have
+   * rootless paths. <code>mailto:%2Fdev%2Fnull@example.com</code> is also rootless because its
+   * percent-encoded slashes are not segment delimiters but rather part of the first and only path
+   * segment.
+   *
+   * <p>Contrast rootless paths with absolute ones (see {@link #isPathAbsolute()}.
+   */
+  public boolean isPathRootless() {
+    return !path.isEmpty() && !path.startsWith("/");
+  }
+
+  /**
+   * Returns true iff this URI's path component starts with the '/' segment delimiter (rather than a
+   * path segment).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>file:///resume.txt
+   * </code>, <code>file:/resume.txt</code> and <code>file://localhost/</code> all have absolute
+   * paths while <code>tel:+1-206-555-1212</code>'s path is not absolute. <code>
+   * mailto:%2Fdev%2Fnull@example.com</code> is also not absolute because its percent-encoded
+   * slashes are not segment delimiters but rather part of the first and only path segment.
+   *
+   * <p>Contrast absolute paths with rootless ones (see {@link #isPathRootless()}.
+   *
+   * <p>NB: The term "absolute" has two different meanings in RFC 3986 which are easily confused.
+   * This method tests for a property of this URI's path component. Contrast with {@link
+   * #isAbsolute()} which tests the URI itself for a different property.
+   */
+  public boolean isPathAbsolute() {
+    return path.startsWith("/");
   }
 
   /**
