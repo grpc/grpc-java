@@ -29,7 +29,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
-import com.google.common.base.Objects;
+import com.google.common.truth.Fact;
+import com.google.common.truth.FailureMetadata;
+import com.google.common.truth.Subject;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.internal.SerializingExecutor;
 import java.time.Duration;
@@ -106,17 +108,15 @@ public class CallOptionsTest {
 
   @Test
   public void noStrayModifications() {
-    assertThat(equal(allSet, allSet.withAuthority("blah").withAuthority(sampleAuthority)))
-        .isTrue();
-    assertThat(
-        equal(allSet,
-            allSet.withDeadline(Deadline.after(314, NANOSECONDS)).withDeadline(sampleDeadline)))
-        .isTrue();
-    assertThat(
-        equal(allSet,
+    assertAbout(callOptions()).that(allSet.withAuthority("blah").withAuthority(sampleAuthority))
+        .isEquivalentTo(allSet);
+    assertAbout(callOptions()).that(
+            allSet.withDeadline(Deadline.after(314, NANOSECONDS)).withDeadline(sampleDeadline))
+        .isEquivalentTo(allSet);
+    assertAbout(callOptions()).that(
             allSet.withCallCredentials(mock(CallCredentials.class))
-            .withCallCredentials(sampleCreds)))
-        .isTrue();
+                .withCallCredentials(sampleCreds))
+        .isEquivalentTo(allSet);
   }
 
   @Test
@@ -265,12 +265,32 @@ public class CallOptionsTest {
     assertSame(CallOptions.DEFAULT.withoutWaitForReady().getWaitForReady(), Boolean.FALSE);
   }
 
-  // Only used in noStrayModifications()
-  // TODO(carl-mastrangelo): consider making a CallOptionsSubject for Truth.
-  private static boolean equal(CallOptions o1, CallOptions o2) {
-    return Objects.equal(o1.getDeadline(), o2.getDeadline())
-        && Objects.equal(o1.getAuthority(), o2.getAuthority())
-        && Objects.equal(o1.getCredentials(), o2.getCredentials());
+  private static Subject.Factory<CallOptionsSubject, CallOptions> callOptions() {
+    return CallOptionsSubject::new;
+  }
+
+  private static final class CallOptionsSubject extends Subject {
+
+    private final CallOptions actual;
+
+    private CallOptionsSubject(FailureMetadata metadata, CallOptions actual) {
+      super(metadata, actual);
+      this.actual = actual;
+    }
+
+    public void isEquivalentTo(CallOptions expected) {
+      if (actual == null) {
+        failWithActual("expected", expected);
+        return;
+      }
+      if (expected == null) {
+        failWithoutActual(Fact.simpleFact("expected non-null CallOptions"));
+        return;
+      }
+      check("deadline").that(actual.getDeadline()).isEqualTo(expected.getDeadline());
+      check("authority").that(actual.getAuthority()).isEqualTo(expected.getAuthority());
+      check("credentials").that(actual.getCredentials()).isEqualTo(expected.getCredentials());
+    }
   }
 
   private static class FakeTicker extends Deadline.Ticker {
