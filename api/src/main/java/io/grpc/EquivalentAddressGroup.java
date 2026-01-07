@@ -34,6 +34,7 @@ import java.util.List;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
+  private static final int MAX_ADDRESSES_TO_STRING = 100;
 
   /**
    * The authority to be used when constructing Subchannels for this EquivalentAddressGroup.
@@ -113,8 +114,24 @@ public final class EquivalentAddressGroup {
 
   @Override
   public String toString() {
-    // TODO(zpencer): Summarize return value if addr is very large
-    return "[" + addrs + "/" + attrs + "]";
+    StringBuilder sb = new StringBuilder();
+    sb.append('[');
+    if (addrs.size() <= MAX_ADDRESSES_TO_STRING) {
+      sb.append(addrs);
+    } else {
+      sb.append('[');
+      for (int i = 0; i < MAX_ADDRESSES_TO_STRING; i++) {
+        if (i > 0) {
+          sb.append(", ");
+        }
+        sb.append(addrs.get(i));
+      }
+      sb.append(", ... ");
+      sb.append(addrs.size() - MAX_ADDRESSES_TO_STRING);
+      sb.append(" more]");
+    }
+    sb.append('/').append(attrs).append(']');
+    return sb.toString();
   }
 
   @Override
