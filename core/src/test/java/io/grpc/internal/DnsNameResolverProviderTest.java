@@ -16,8 +16,7 @@
 
 package io.grpc.internal;
 
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -59,10 +58,35 @@ public class DnsNameResolverProviderTest {
   }
 
   @Test
-  public void newNameResolver() {
-    assertSame(DnsNameResolver.class,
-        provider.newNameResolver(URI.create("dns:///localhost:443"), args).getClass());
-    assertNull(
-        provider.newNameResolver(URI.create("notdns:///localhost:443"), args));
+  public void newNameResolver_acceptsHostAndPort() {
+    NameResolver nameResolver = provider.newNameResolver(URI.create("dns:///localhost:443"), args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("localhost:443");
+  }
+
+  @Test
+  public void newNameResolver_rejectsNonDnsScheme() {
+    NameResolver nameResolver =
+        provider.newNameResolver(URI.create("notdns:///localhost:443"), args);
+    assertThat(nameResolver).isNull();
+  }
+
+  @Test
+  public void newNameResolver_toleratesTrailingPathSegments() {
+    NameResolver nameResolver =
+        provider.newNameResolver(URI.create("dns:///foo.googleapis.com/ig/nor/ed"), args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void newNameResolver_toleratesAuthority() {
+    NameResolver nameResolver =
+        provider.newNameResolver(URI.create("dns://8.8.8.8/foo.googleapis.com"), args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 }
