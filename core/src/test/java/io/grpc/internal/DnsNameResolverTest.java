@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -78,8 +79,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import javax.annotation.Nullable;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -100,6 +99,7 @@ public class DnsNameResolverTest {
 
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
 
   private final Map<String, ?> serviceConfig = new LinkedHashMap<>();
 
@@ -152,8 +152,6 @@ public class DnsNameResolverTest {
   private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resultCaptor;
-  @Nullable
-  private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
   @Mock private ProxyDetector mockProxyDetector;
@@ -213,22 +211,9 @@ public class DnsNameResolverTest {
   @Before
   public void setUp() {
     DnsNameResolver.enableJndi = true;
-    networkaddressCacheTtlPropertyValue =
-        System.getProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
 
     // By default the mock listener processes the result successfully.
     when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.OK);
-  }
-
-  @After
-  public void restoreSystemProperty() {
-    if (networkaddressCacheTtlPropertyValue == null) {
-      System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    } else {
-      System.setProperty(
-          DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY,
-          networkaddressCacheTtlPropertyValue);
-    }
   }
 
   @Test
@@ -275,19 +260,19 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_androidIgnoresPropertyValue() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(2));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "2");
     resolveNeverCache(true);
   }
 
   @Test
   public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(-1));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     resolveNeverCache(true);
   }
 
   @Test
   public void resolve_neverCache() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
     resolveNeverCache(false);
   }
 
@@ -387,7 +372,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_cacheForever() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
@@ -421,7 +406,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_usingCache() throws Exception {
     long ttl = 60;
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
     final List<InetAddress> answer = createAddressList(2);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
@@ -456,7 +441,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_cacheExpired() throws Exception {
     long ttl = 60;
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
@@ -491,13 +476,13 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_invalidTtlPropertyValue() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
     resolveDefaultValue();
   }
 
   @Test
   public void resolve_noPropertyValue() throws Exception {
-    System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    flagResetRule.clearSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY);
     resolveDefaultValue();
   }
 
