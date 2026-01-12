@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -212,6 +213,40 @@ public class GrpclbNameResolverTest {
   }
 
   @Test
+  public void resolve_presentResourceResolver_manyBalancerAddressesSummarizedInToString()
+      throws Exception {
+    int addressCount = 1000;
+    InetAddress backendAddr = InetAddress.getByAddress(new byte[] {127, 0, 0, 0});
+    String lbName = "foo.example.com.";  // original name in SRV record
+    SrvRecord srvRecord = new SrvRecord(lbName, 8080);
+    List<InetAddress> lbAddrs = new ArrayList<>();
+    for (int i = 0; i < addressCount; i++) {
+      lbAddrs.add(InetAddress.getByAddress(new byte[] {10, 1, 0, (byte) (i + 1)}));
+    }
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(hostName))
+        .thenReturn(Collections.singletonList(backendAddr));
+    when(mockAddressResolver.resolveAddress(lbName))
+        .thenReturn(lbAddrs);
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(anyString())).thenReturn(Collections.<String>emptyList());
+    when(mockResourceResolver.resolveSrv(anyString()))
+        .thenReturn(Collections.singletonList(srvRecord));
+
+    resolver.setAddressResolver(mockAddressResolver);
+    resolver.setResourceResolver(mockResourceResolver);
+
+    resolver.start(mockListener);
+    assertThat(fakeClock.runDueTasks()).isEqualTo(1);
+    verify(mockListener).onResult2(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    EquivalentAddressGroup resolvedBalancerAddr =
+        Iterables.getOnlyElement(result.getAttributes().get(GrpclbConstants.ATTR_LB_ADDRS));
+    assertThat(resolvedBalancerAddr.getAddresses().size()).isEqualTo(addressCount);
+    assertThat(resolvedBalancerAddr.toString()).contains("... ");
+  }
+
+  @Test
   public void resolve_nullResourceResolver() throws Exception {
     InetAddress backendAddr = InetAddress.getByAddress(new byte[] {127, 0, 0, 0});
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
@@ -341,4 +376,5 @@ public class GrpclbNameResolverTest {
     verify(mockResourceResolver, never()).resolveTxt("_grpc_config." + hostName);
     verify(mockResourceResolver).resolveSrv("_grpclb._tcp." + hostName);
   }
+
 }
