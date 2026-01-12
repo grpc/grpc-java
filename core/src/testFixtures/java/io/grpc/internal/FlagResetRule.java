@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import javax.annotation.Nullable;
 import org.junit.rules.ExternalResource;
 
 /**
@@ -43,6 +44,35 @@ public final class FlagResetRule extends ExternalResource {
   public <T> void setFlagForTest(SetterMethod<T> setter, T value) {
     final T oldValue = setter.set(value);
     toRunAfter.push(() -> setter.set(oldValue));
+  }
+
+  /**
+   * Sets java system property 'key' to 'value' and arranges for its previous value to be
+   * unconditionally restored when the test completes.
+   */
+  public void setSystemPropertyForTest(String key, String value) {
+    String oldValue = System.setProperty(key, value);
+    restoreSystemPropertyAfterTest(key, oldValue);
+  }
+
+  /**
+   * Clears java system property 'key' and arranges for its previous value to be unconditionally
+   * restored when the test completes.
+   */
+  public void clearSystemPropertyForTest(String key) {
+    String oldValue = System.clearProperty(key);
+    restoreSystemPropertyAfterTest(key, oldValue);
+  }
+
+  private void restoreSystemPropertyAfterTest(String key, @Nullable String oldValue) {
+    toRunAfter.push(
+        () -> {
+          if (oldValue == null) {
+            System.clearProperty(key);
+          } else {
+            System.setProperty(key, oldValue);
+          }
+        });
   }
 
   @Override
