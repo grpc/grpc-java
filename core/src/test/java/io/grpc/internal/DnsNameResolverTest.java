@@ -64,7 +64,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,7 +111,6 @@ public class DnsNameResolverTest {
         }
       });
 
-  private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
   private static final FakeClock.TaskFilter NAME_RESOLVER_REFRESH_TASK_FILTER =
@@ -139,15 +137,6 @@ public class DnsNameResolverTest {
     public void close(Executor instance) {}
   }
 
-  private final NameResolver.Args args = NameResolver.Args.newBuilder()
-      .setDefaultPort(DEFAULT_PORT)
-      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
-      .setSynchronizationContext(syncContext)
-      .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setChannelLogger(mock(ChannelLogger.class))
-      .setScheduledExecutorService(fakeExecutor.getScheduledExecutorService())
-      .build();
-
   @Mock
   private NameResolver.Listener2 mockListener;
   @Captor
@@ -166,6 +155,7 @@ public class DnsNameResolverTest {
         name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
         isAndroid);
   }
+
 
   private RetryingNameResolver newResolver(
       String name,
@@ -214,28 +204,6 @@ public class DnsNameResolverTest {
 
     // By default the mock listener processes the result successfully.
     when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.OK);
-  }
-
-  @Test
-  public void invalidDnsName() throws Exception {
-    testInvalidUri(new URI("dns", null, "/[invalid]", null));
-  }
-
-  @Test
-  public void validIpv6() throws Exception {
-    testValidUri(new URI("dns", null, "/[::1]", null), "[::1]", DEFAULT_PORT);
-  }
-
-  @Test
-  public void validDnsNameWithoutPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com", null),
-        "foo.googleapis.com", DEFAULT_PORT);
-  }
-
-  @Test
-  public void validDnsNameWithPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null),
-        "foo.googleapis.com:456", 456);
   }
 
   @Test
@@ -1282,22 +1250,6 @@ public class DnsNameResolverTest {
     assertThat(result).isNotNull();
     assertThat(result.getError()).isNull();
     assertThat(result.getConfig()).isEqualTo(ImmutableMap.of());
-  }
-
-  private void testInvalidUri(URI uri) {
-    try {
-      provider.newNameResolver(uri, args);
-      fail("Should have failed");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
-  }
-
-  private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = (DnsNameResolver) provider.newNameResolver(uri, args);
-    assertNotNull(resolver);
-    assertEquals(expectedPort, resolver.getPort());
-    assertEquals(exportedAuthority, resolver.getServiceAuthority());
   }
 
   private byte lastByte = 0;

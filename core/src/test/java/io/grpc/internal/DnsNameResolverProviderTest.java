@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.TruthJUnit.assume;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -75,6 +76,7 @@ public class DnsNameResolverProviderTest {
     assertThat(nameResolver).isNotNull();
     assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
     assertThat(nameResolver.getServiceAuthority()).isEqualTo("localhost:443");
+    assertThat(((DnsNameResolver) nameResolver).getPort()).isEqualTo(443);
   }
 
   @Test
@@ -93,6 +95,15 @@ public class DnsNameResolverProviderTest {
   }
 
   @Test
+  public void newNameResolver_validDnsNameWithoutPort_usesDefaultPort() {
+    DnsNameResolver nameResolver =
+        (DnsNameResolver) newNameResolver("dns:/foo.googleapis.com", args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+    assertThat(nameResolver.getPort()).isEqualTo(args.getDefaultPort());
+  }
+
+  @Test
   public void newNameResolver_toleratesTrailingPathSegments() {
     NameResolver nameResolver = newNameResolver("dns:///foo.googleapis.com/ig/nor/ed", args);
     assertThat(nameResolver).isNotNull();
@@ -106,6 +117,22 @@ public class DnsNameResolverProviderTest {
     assertThat(nameResolver).isNotNull();
     assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
     assertThat(nameResolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void newNameResolver_validIpv6Host() {
+    NameResolver nameResolver = newNameResolver("dns:/%5B::1%5D", args);
+    assertThat(nameResolver).isNotNull();
+    assertThat(nameResolver.getClass()).isSameInstanceAs(DnsNameResolver.class);
+    assertThat(nameResolver.getServiceAuthority()).isEqualTo("[::1]");
+  }
+
+  @Test
+  public void newNameResolver_invalidIpv6Host_throws() {
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class, () -> newNameResolver("dns:/%5Binvalid%5D", args));
+    assertThat(e).hasMessageThat().contains("invalid");
   }
 
   private NameResolver newNameResolver(String uriString, NameResolver.Args args) {
