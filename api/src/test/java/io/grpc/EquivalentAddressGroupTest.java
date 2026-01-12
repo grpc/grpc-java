@@ -18,7 +18,6 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import java.lang.reflect.Field;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +33,7 @@ public class EquivalentAddressGroupTest {
 
   @Test
   public void toString_summarizesLargeAddressList() {
-    int maxAddressesToString = maxAddressesToString();
+    int maxAddressesToString = EquivalentAddressGroup.MAX_ADDRESSES_TO_STRING;
     List<SocketAddress> addrs = new ArrayList<>();
     for (int i = 0; i <= maxAddressesToString; i++) {
       addrs.add(new FakeSocketAddress("addr" + i));
@@ -55,7 +54,7 @@ public class EquivalentAddressGroupTest {
 
   @Test
   public void toString_doesNotSummarizeAtMaxAddressCount() {
-    int maxAddressesToString = maxAddressesToString();
+    int maxAddressesToString = EquivalentAddressGroup.MAX_ADDRESSES_TO_STRING;
     List<SocketAddress> addrs = new ArrayList<>();
     for (int i = 0; i < maxAddressesToString; i++) {
       addrs.add(new FakeSocketAddress("addr" + i));
@@ -64,16 +63,6 @@ public class EquivalentAddressGroupTest {
 
     String expected = "[" + addrs + "/{}]";
     assertThat(eag.toString()).isEqualTo(expected);
-  }
-
-  private static int maxAddressesToString() {
-    try {
-      Field field = EquivalentAddressGroup.class.getDeclaredField("MAX_ADDRESSES_TO_STRING");
-      field.setAccessible(true);
-      return (int) field.get(null);
-    } catch (NoSuchFieldException | IllegalAccessException e) {
-      throw new LinkageError("Unable to read MAX_ADDRESSES_TO_STRING", e);
-    }
   }
 
   private static final class FakeSocketAddress extends SocketAddress {

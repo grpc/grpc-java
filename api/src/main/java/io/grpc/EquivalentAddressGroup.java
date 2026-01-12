@@ -34,7 +34,7 @@ import java.util.List;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
-  private static final int MAX_ADDRESSES_TO_STRING = 100;
+  static final int MAX_ADDRESSES_TO_STRING = 100;
 
   /**
    * The authority to be used when constructing Subchannels for this EquivalentAddressGroup.
