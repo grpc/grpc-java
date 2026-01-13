@@ -97,4 +97,25 @@ public final class MatcherParser {
                 "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
     }
   }
+
+  /** Translates envoy proto FractionalPercent to internal FractionMatcher. */
+  public static Matchers.FractionMatcher parseFractionMatcher(
+      io.envoyproxy.envoy.type.v3.FractionalPercent proto) {
+    int denominator;
+    switch (proto.getDenominator()) {
+      case HUNDRED:
+        denominator = 100;
+        break;
+      case TEN_THOUSAND:
+        denominator = 10_000;
+        break;
+      case MILLION:
+        denominator = 1_000_000;
+        break;
+      case UNRECOGNIZED:
+      default:
+        throw new IllegalArgumentException("Unknown denominator type: " + proto.getDenominator());
+    }
+    return Matchers.FractionMatcher.create(proto.getNumerator(), denominator);
+  }
 }

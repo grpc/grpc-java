@@ -42,12 +42,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ExtAuthzConfigTest {
+public class ExtAuthzConfigParserTest {
 
   private static final Any GOOGLE_DEFAULT_CHANNEL_CREDS =
       Any.pack(GoogleDefaultCredentials.newBuilder().build());
   private static final Any FAKE_ACCESS_TOKEN_CALL_CREDS =
-      Any.pack(AccessTokenCredentials.newBuilder().build());
+      Any.pack(AccessTokenCredentials.newBuilder().setToken("fake-token").build());
 
   private ExtAuthz.Builder extAuthzBuilder;
 
@@ -63,10 +63,11 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_missingGrpcService_throws() {
+  public void parse_missingGrpcService_throws() {
     ExtAuthz extAuthz = ExtAuthz.newBuilder().build();
     try {
-      ExtAuthzConfig.fromProto(extAuthz);
+      ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat()
@@ -75,12 +76,13 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_invalidGrpcService_throws() {
+  public void parse_invalidGrpcService_throws() {
     ExtAuthz extAuthz = ExtAuthz.newBuilder()
         .setGrpcService(io.envoyproxy.envoy.config.core.v3.GrpcService.newBuilder().build())
         .build();
     try {
-      ExtAuthzConfig.fromProto(extAuthz);
+      ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Failed to parse GrpcService config:");
@@ -88,13 +90,14 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_invalidAllowExpression_throws() {
+  public void parse_invalidAllowExpression_throws() {
     ExtAuthz extAuthz = extAuthzBuilder
         .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
             .setAllowExpression(RegexMatcher.newBuilder().setRegex("[invalid").build()).build())
         .build();
     try {
-      ExtAuthzConfig.fromProto(extAuthz);
+      ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Invalid regex pattern for allow_expression:");
@@ -102,13 +105,14 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_invalidDisallowExpression_throws() {
+  public void parse_invalidDisallowExpression_throws() {
     ExtAuthz extAuthz = extAuthzBuilder
         .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
             .setDisallowExpression(RegexMatcher.newBuilder().setRegex("[invalid").build()).build())
         .build();
     try {
-      ExtAuthzConfig.fromProto(extAuthz);
+      ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Invalid regex pattern for disallow_expression:");
@@ -116,37 +120,40 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_success() throws ExtAuthzParseException {
-    ExtAuthz extAuthz = extAuthzBuilder
-        .setGrpcService(extAuthzBuilder.getGrpcServiceBuilder()
-            .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
-            .addInitialMetadata(HeaderValue.newBuilder().setKey("key").setValue("value").build())
-            .build())
-        .setFailureModeAllow(true).setFailureModeAllowHeaderAdd(true)
-        .setIncludePeerCertificate(true)
-        .setStatusOnError(
-            io.envoyproxy.envoy.type.v3.HttpStatus.newBuilder().setCodeValue(403).build())
-        .setDenyAtDisable(
-            RuntimeFeatureFlag.newBuilder().setDefaultValue(BoolValue.of(true)).build())
-        .setFilterEnabled(RuntimeFractionalPercent.newBuilder()
-            .setDefaultValue(FractionalPercent.newBuilder().setNumerator(50)
-                .setDenominator(DenominatorType.TEN_THOUSAND).build())
-            .build())
-        .setAllowedHeaders(ListStringMatcher.newBuilder()
-            .addPatterns(StringMatcher.newBuilder().setExact("allowed-header").build()).build())
-        .setDisallowedHeaders(ListStringMatcher.newBuilder()
-            .addPatterns(StringMatcher.newBuilder().setPrefix("disallowed-").build()).build())
-        .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
-            .setAllowExpression(RegexMatcher.newBuilder().setRegex("allow.*").build())
-            .setDisallowExpression(RegexMatcher.newBuilder().setRegex("disallow.*").build())
-            .setDisallowAll(BoolValue.of(true)).setDisallowIsError(BoolValue.of(true)).build())
-        .build();
+  public void parse_success() throws ExtAuthzParseException {
+    ExtAuthz extAuthz =
+        extAuthzBuilder
+            .setGrpcService(extAuthzBuilder.getGrpcServiceBuilder()
+                .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
+                .addInitialMetadata(
+                    HeaderValue.newBuilder().setKey("key").setValue("value").build())
+                .build())
+            .setFailureModeAllow(true).setFailureModeAllowHeaderAdd(true)
+            .setIncludePeerCertificate(true)
+            .setStatusOnError(
+                io.envoyproxy.envoy.type.v3.HttpStatus.newBuilder().setCodeValue(403).build())
+            .setDenyAtDisable(
+                RuntimeFeatureFlag.newBuilder().setDefaultValue(BoolValue.of(true)).build())
+            .setFilterEnabled(RuntimeFractionalPercent.newBuilder()
+                .setDefaultValue(FractionalPercent.newBuilder().setNumerator(50)
+                    .setDenominator(DenominatorType.TEN_THOUSAND).build())
+                .build())
+            .setAllowedHeaders(ListStringMatcher.newBuilder()
+                .addPatterns(StringMatcher.newBuilder().setExact("allowed-header").build()).build())
+            .setDisallowedHeaders(ListStringMatcher.newBuilder()
+                .addPatterns(StringMatcher.newBuilder().setPrefix("disallowed-").build()).build())
+            .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
+                .setAllowExpression(RegexMatcher.newBuilder().setRegex("allow.*").build())
+                .setDisallowExpression(RegexMatcher.newBuilder().setRegex("disallow.*").build())
+                .setDisallowAll(BoolValue.of(true)).setDisallowIsError(BoolValue.of(true)).build())
+            .build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.grpcService().googleGrpc().target()).isEqualTo("test-cluster");
     assertThat(config.grpcService().timeout().get().getSeconds()).isEqualTo(5);
-    assertThat(config.grpcService().initialMetadata().isPresent()).isTrue();
+    assertThat(config.grpcService().initialMetadata()).isNotEmpty();
     assertThat(config.failureModeAllow()).isTrue();
     assertThat(config.failureModeAllowHeaderAdd()).isTrue();
     assertThat(config.includePeerCertificate()).isTrue();
@@ -167,10 +174,11 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_saneDefaults() throws ExtAuthzParseException {
+  public void parse_saneDefaults() throws ExtAuthzParseException {
     ExtAuthz extAuthz = extAuthzBuilder.build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.failureModeAllow()).isFalse();
     assertThat(config.failureModeAllowHeaderAdd()).isFalse();
@@ -184,13 +192,14 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_headerMutationRules_allowExpressionOnly() throws ExtAuthzParseException {
+  public void parse_headerMutationRules_allowExpressionOnly() throws ExtAuthzParseException {
     ExtAuthz extAuthz = extAuthzBuilder
         .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
             .setAllowExpression(RegexMatcher.newBuilder().setRegex("allow.*").build()).build())
         .build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.decoderHeaderMutationRules().isPresent()).isTrue();
     HeaderMutationRulesConfig rules = config.decoderHeaderMutationRules().get();
@@ -199,14 +208,14 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_headerMutationRules_disallowExpressionOnly() throws ExtAuthzParseException {
-    ExtAuthz extAuthz = extAuthzBuilder
-        .setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
+  public void parse_headerMutationRules_disallowExpressionOnly() throws ExtAuthzParseException {
+    ExtAuthz extAuthz =
+        extAuthzBuilder.setDecoderHeaderMutationRules(HeaderMutationRules.newBuilder()
             .setDisallowExpression(RegexMatcher.newBuilder().setRegex("disallow.*").build())
-            .build())
-        .build();
+            .build()).build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.decoderHeaderMutationRules().isPresent()).isTrue();
     HeaderMutationRulesConfig rules = config.decoderHeaderMutationRules().get();
@@ -215,42 +224,43 @@ public class ExtAuthzConfigTest {
   }
 
   @Test
-  public void fromProto_filterEnabled_hundred() throws ExtAuthzParseException {
+  public void parse_filterEnabled_hundred() throws ExtAuthzParseException {
     ExtAuthz extAuthz = extAuthzBuilder
         .setFilterEnabled(RuntimeFractionalPercent.newBuilder().setDefaultValue(FractionalPercent
             .newBuilder().setNumerator(25).setDenominator(DenominatorType.HUNDRED).build()).build())
         .build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.filterEnabled()).isEqualTo(Matchers.FractionMatcher.create(25, 100));
   }
 
   @Test
-  public void fromProto_filterEnabled_million() throws ExtAuthzParseException {
+  public void parse_filterEnabled_million() throws ExtAuthzParseException {
     ExtAuthz extAuthz = extAuthzBuilder
         .setFilterEnabled(
             RuntimeFractionalPercent.newBuilder().setDefaultValue(FractionalPercent.newBuilder()
                 .setNumerator(123456).setDenominator(DenominatorType.MILLION).build()).build())
         .build();
 
-    ExtAuthzConfig config = ExtAuthzConfig.fromProto(extAuthz);
+    ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
 
     assertThat(config.filterEnabled())
         .isEqualTo(Matchers.FractionMatcher.create(123456, 1_000_000));
   }
 
   @Test
-  public void fromProto_filterEnabled_unrecognizedDenominator() {
-    ExtAuthz extAuthz = extAuthzBuilder
-        .setFilterEnabled(RuntimeFractionalPercent.newBuilder()
-            .setDefaultValue(
-                FractionalPercent.newBuilder().setNumerator(1).setDenominatorValue(4).build())
-            .build())
-        .build();
+  public void parse_filterEnabled_unrecognizedDenominator() {
+    ExtAuthz extAuthz = extAuthzBuilder.setFilterEnabled(RuntimeFractionalPercent.newBuilder()
+        .setDefaultValue(
+            FractionalPercent.newBuilder().setNumerator(1).setDenominatorValue(4).build())
+        .build()).build();
 
     try {
-      ExtAuthzConfig.fromProto(extAuthz);
+      ExtAuthzConfigParser.parse(extAuthz, 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().isEqualTo("Unknown denominator type: UNRECOGNIZED");

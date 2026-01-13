@@ -17,9 +17,9 @@
 package io.grpc.xds.internal.headermutations;
 
 import com.google.auto.value.AutoValue;
+import com.google.re2j.Pattern;
 import io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /**
  * Represents the configuration for header mutation rules, as defined in the
