@@ -103,6 +103,8 @@ public class DnsNameResolverProviderTest {
     assertThat(nameResolver.getPort()).isEqualTo(args.getDefaultPort());
   }
 
+  // TODO(jdcormie): Trailing path segments *should* be forbidden. This test just demonstrates that
+  // both newNameResolver() overloads behave the same with respect to this bug.
   @Test
   public void newNameResolver_toleratesTrailingPathSegments() {
     NameResolver nameResolver = newNameResolver("dns:///foo.googleapis.com/ig/nor/ed", args);
