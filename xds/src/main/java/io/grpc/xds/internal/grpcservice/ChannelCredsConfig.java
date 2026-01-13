@@ -16,11 +16,12 @@
 
 package io.grpc.xds.internal.grpcservice;
 
-import io.grpc.ManagedChannel;
-
 /**
- * A factory for creating {@link ManagedChannel}s from a {@link GrpcServiceConfig}.
+ * Configuration for channel credentials.
  */
-public interface GrpcServiceConfigChannelFactory {
-  ManagedChannel createChannel(GrpcServiceConfig config);
+public interface ChannelCredsConfig {
+  /**
+   * Returns the type of the credentials.
+   */
+  String type();
 }

@@ -18,18 +18,11 @@ package io.grpc.xds.internal.extauthz;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules;
-import io.envoyproxy.envoy.extensions.filters.http.ext_authz.v3.ExtAuthz;
 import io.grpc.Status;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
-import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
 import java.util.Optional;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Represents the configuration for the external authorization (ext_authz) filter. This class
@@ -42,62 +35,10 @@ import java.util.regex.PatternSyntaxException;
 public abstract class ExtAuthzConfig {
 
   /** Creates a new builder for creating {@link ExtAuthzConfig} instances. */
-  public static Builder builder() {
+  public static Builder newBuilder() {
     return new AutoValue_ExtAuthzConfig.Builder().allowedHeaders(ImmutableList.of())
         .disallowedHeaders(ImmutableList.of()).statusOnError(Status.PERMISSION_DENIED)
         .filterEnabled(Matchers.FractionMatcher.create(100, 100));
-  }
-
-  /**
-   * Parses the {@link io.envoyproxy.envoy.extensions.filters.http.ext_authz.v3.ExtAuthz} proto to
-   * create an {@link ExtAuthzConfig} instance.
-   *
-   * @param extAuthzProto The ext_authz proto to parse.
-   * @return An {@link ExtAuthzConfig} instance.
-   * @throws ExtAuthzParseException if the proto is invalid or contains unsupported features.
-   */
-  public static ExtAuthzConfig fromProto(ExtAuthz extAuthzProto) throws ExtAuthzParseException {
-    if (!extAuthzProto.hasGrpcService()) {
-      throw new ExtAuthzParseException(
-          "unsupported ExtAuthz service type: only grpc_service is " + "supported");
-    }
-    GrpcServiceConfig grpcServiceConfig;
-    try {
-      grpcServiceConfig = GrpcServiceConfig.fromProto(extAuthzProto.getGrpcService());
-    } catch (GrpcServiceParseException e) {
-      throw new ExtAuthzParseException("Failed to parse GrpcService config: " + e.getMessage(), e);
-    }
-    Builder builder = builder().grpcService(grpcServiceConfig)
-        .failureModeAllow(extAuthzProto.getFailureModeAllow())
-        .failureModeAllowHeaderAdd(extAuthzProto.getFailureModeAllowHeaderAdd())
-        .includePeerCertificate(extAuthzProto.getIncludePeerCertificate())
-        .denyAtDisable(extAuthzProto.getDenyAtDisable().getDefaultValue().getValue());
-
-    if (extAuthzProto.hasFilterEnabled()) {
-      builder.filterEnabled(parsePercent(extAuthzProto.getFilterEnabled().getDefaultValue()));
-    }
-
-    if (extAuthzProto.hasStatusOnError()) {
-      builder.statusOnError(
-          GrpcUtil.httpStatusToGrpcStatus(extAuthzProto.getStatusOnError().getCodeValue()));
-    }
-
-    if (extAuthzProto.hasAllowedHeaders()) {
-      builder.allowedHeaders(extAuthzProto.getAllowedHeaders().getPatternsList().stream()
-          .map(MatcherParser::parseStringMatcher).collect(ImmutableList.toImmutableList()));
-    }
-
-    if (extAuthzProto.hasDisallowedHeaders()) {
-      builder.disallowedHeaders(extAuthzProto.getDisallowedHeaders().getPatternsList().stream()
-          .map(MatcherParser::parseStringMatcher).collect(ImmutableList.toImmutableList()));
-    }
-
-    if (extAuthzProto.hasDecoderHeaderMutationRules()) {
-      builder.decoderHeaderMutationRules(
-          parseHeaderMutationRules(extAuthzProto.getDecoderHeaderMutationRules()));
-    }
-
-    return builder.build();
   }
 
   /**
@@ -155,7 +96,7 @@ public abstract class ExtAuthzConfig {
   public abstract Matchers.FractionMatcher filterEnabled();
 
   /**
-   * Specifies which request headers are sent to the authorization service. If not set, all headers
+   * Specifies which request headers are sent to the authorization service. If empty, all headers
    * are sent.
    *
    * @see ExtAuthz#getAllowedHeaders()
@@ -200,51 +141,5 @@ public abstract class ExtAuthzConfig {
     public abstract Builder decoderHeaderMutationRules(HeaderMutationRulesConfig rules);
 
     public abstract ExtAuthzConfig build();
-  }
-
-
-  private static Matchers.FractionMatcher parsePercent(
-      io.envoyproxy.envoy.type.v3.FractionalPercent proto) throws ExtAuthzParseException {
-    int denominator;
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        denominator = 100;
-        break;
-      case TEN_THOUSAND:
-        denominator = 10_000;
-        break;
-      case MILLION:
-        denominator = 1_000_000;
-        break;
-      case UNRECOGNIZED:
-      default:
-        throw new ExtAuthzParseException("Unknown denominator type: " + proto.getDenominator());
-    }
-    return Matchers.FractionMatcher.create(proto.getNumerator(), denominator);
-  }
-
-  private static HeaderMutationRulesConfig parseHeaderMutationRules(HeaderMutationRules proto)
-      throws ExtAuthzParseException {
-    HeaderMutationRulesConfig.Builder builder = HeaderMutationRulesConfig.builder();
-    builder.disallowAll(proto.getDisallowAll().getValue());
-    builder.disallowIsError(proto.getDisallowIsError().getValue());
-    if (proto.hasAllowExpression()) {
-      builder.allowExpression(
-          parseRegex(proto.getAllowExpression().getRegex(), "allow_expression"));
-    }
-    if (proto.hasDisallowExpression()) {
-      builder.disallowExpression(
-          parseRegex(proto.getDisallowExpression().getRegex(), "disallow_expression"));
-    }
-    return builder.build();
-  }
-
-  private static Pattern parseRegex(String regex, String fieldName) throws ExtAuthzParseException {
-    try {
-      return Pattern.compile(regex);
-    } catch (PatternSyntaxException e) {
-      throw new ExtAuthzParseException(
-          "Invalid regex pattern for " + fieldName + ": " + e.getMessage(), e);
-    }
   }
 }

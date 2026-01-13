@@ -37,6 +37,7 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext.AllowedGrpcService;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,60 @@ public class GrpcBootstrapperImplTest {
     XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
         bootstrapper::bootstrap);
     assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: 'xds_servers' is empty");
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+        + "      \"call_creds\": [{\"type\": \"access_token\"}]\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    @SuppressWarnings("unchecked")
+    Map<String, AllowedGrpcService> allowed =
+        (Map<String, AllowedGrpcService>) info.allowedGrpcServices().get();
+
+    assertThat(allowed).isNotNull();
+    assertThat(allowed).containsKey("dns:///foo.com:443");
+    AllowedGrpcService service = allowed.get("dns:///foo.com:443");
+    assertThat(service.configuredChannelCredentials().channelCredentials())
+        .isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(service.callCredentials().isPresent()).isFalse();
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices_invalidChannelCreds() {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": []\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: server dns:///foo.com:443 'channel_creds' required");
   }
 
   @Test
