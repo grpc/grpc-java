@@ -36,12 +36,12 @@ public final class CertificateUtils {
   // dNSName (2)
   // iPAddress (7)
   private static final int SAN_TYPE_DNS_NAME = 2;
-  private static final int SAN_TYPE_IP_ADDRESS = 7;
+  private static final int SAN_TYPE_URI = 6;
 
   private CertificateUtils() {}
 
   /**
-   * Gets the principal from a certificate. It returns the cert's first IP Address SAN if set,
+   * Gets the principal from a certificate. It returns the cert's first URI SAN if set,
    * otherwise the cert's first DNS SAN if set, otherwise the subject field of the certificate in
    * RFC 2253 format.
    *
@@ -52,14 +52,14 @@ public final class CertificateUtils {
     try {
       Collection<List<?>> sans = cert.getSubjectAlternativeNames();
       if (sans != null) {
-        // Look for IP Address SAN.
+        // Look for URI SAN (Priority 1).
         for (List<?> san : sans) {
           if (san.size() == 2 && san.get(0) instanceof Integer
-              && (Integer) san.get(0) == SAN_TYPE_IP_ADDRESS) {
+              && (Integer) san.get(0) == SAN_TYPE_URI) {
             return (String) san.get(1);
           }
         }
-        // If no IP Address SAN, look for DNS SAN.
+        // If no URI SAN, look for DNS SAN (Priority 2).
         for (List<?> san : sans) {
           if (san.size() == 2 && san.get(0) instanceof Integer
               && (Integer) san.get(0) == SAN_TYPE_DNS_NAME) {
@@ -68,11 +68,11 @@ public final class CertificateUtils {
         }
       }
     } catch (java.security.cert.CertificateParsingException e) {
-      logger.log(Level.WARNING, "Error parsing certificate SANs. This is not expected, "
-          + "falling back to the subject according to the spec.", e);
+      logger.log(Level.FINE, "Error parsing certificate SANs.", e);
     }
-    return cert.getSubjectX500Principal().getName();
+    return cert.getSubjectX500Principal().getName("RFC2253");
   }
+
 
   /**
    * Gets the URL PEM encoded certificate. It Pem encodes first and then urlencodes.

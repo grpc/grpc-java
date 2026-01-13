@@ -39,13 +39,14 @@ import org.junit.runners.JUnit4;
 public class CertificateUtilsTest {
 
   @Test
-  public void getPrincipal_ipAddressSan() throws Exception {
+  public void getPrincipal_uriSan() throws Exception {
     X509Certificate mockCert = mock(X509Certificate.class);
-    List<Object> ipSan = Arrays.asList(7, "192.168.1.1"); // SAN_TYPE_IP_ADDRESS
-    Collection<List<?>> sans = Arrays.asList(ipSan);
+    List<Object> uriSan = Arrays.asList(6, "spiffe://foo/bar"); // SAN_TYPE_URI
+    Collection<List<?>> sans = Arrays.asList(uriSan);
     when(mockCert.getSubjectAlternativeNames()).thenReturn(sans);
-    assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("192.168.1.1");
+    assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("spiffe://foo/bar");
   }
+
 
   @Test
   public void getPrincipal_dnsSan() throws Exception {
@@ -75,36 +76,37 @@ public class CertificateUtilsTest {
   }
 
   @Test
-  public void getPrincipal_ipSanWrongSize_usesDnsSan() throws Exception {
+  public void getPrincipal_uriSanWrongSize_usesDnsSan() throws Exception {
     X509Certificate mockCert = mock(X509Certificate.class);
-    List<Object> ipSan = Collections.singletonList(7); // SAN_TYPE_IP_ADDRESS, wrong size
+    List<Object> uriSan = Collections.singletonList(6); // SAN_TYPE_URI, wrong size
     List<Object> dnsSan = Arrays.asList(2, "foo.test.google.fr"); // SAN_TYPE_DNS_NAME
-    Collection<List<?>> sans = Arrays.asList(ipSan, dnsSan);
+    Collection<List<?>> sans = Arrays.asList(uriSan, dnsSan);
     when(mockCert.getSubjectAlternativeNames()).thenReturn(sans);
     assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("foo.test.google.fr");
   }
 
   @Test
-  public void getPrincipal_ipSanWrongType_usesDnsSan() throws Exception {
+  public void getPrincipal_uriSanTakesPrecedenceOverDnsSan() throws Exception {
     X509Certificate mockCert = mock(X509Certificate.class);
-    // SAN_TYPE_IP_ADDRESS, wrong type
-    List<Object> ipSan = Arrays.asList("not-an-integer", "192.168.1.1");
+    List<Object> uriSan = Arrays.asList(6, "spiffe://foo/bar"); // SAN_TYPE_URI
     List<Object> dnsSan = Arrays.asList(2, "foo.test.google.fr"); // SAN_TYPE_DNS_NAME
-    Collection<List<?>> sans = Arrays.asList(ipSan, dnsSan);
+    Collection<List<?>> sans = Arrays.asList(dnsSan, uriSan); // Order shouldn't matter
     when(mockCert.getSubjectAlternativeNames()).thenReturn(sans);
-    assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("foo.test.google.fr");
+    assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("spiffe://foo/bar");
   }
 
+
   @Test
-  public void getPrincipal_dnsSanWrongType_usesSubject() throws Exception {
+  public void getPrincipal_sanWrongType_usesSubject() throws Exception {
     X509Certificate mockCert = mock(X509Certificate.class);
-    // Wrong SAN type for DNS check
-    List<Object> otherSan = Arrays.asList(6, "foo.test.google.fr"); // SAN_TYPE_URI
+    // Use type 1 (rfc822Name) which is ignored
+    List<Object> otherSan = Arrays.asList(1, "foo@test.com");
     Collection<List<?>> sans = Collections.singletonList(otherSan);
     when(mockCert.getSubjectAlternativeNames()).thenReturn(sans);
     when(mockCert.getSubjectX500Principal()).thenReturn(new X500Principal("CN=test"));
     assertThat(CertificateUtils.getPrincipal(mockCert)).isEqualTo("CN=test");
   }
+
 
   @Test
   public void getPrincipal_sanParsingException_usesSubject() throws Exception {

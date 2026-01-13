@@ -53,313 +53,304 @@ import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class CheckRequestBuilderTest {
-    @Rule
-    public final MockitoRule mockito = MockitoJUnit.rule();
+  @Rule
+  public final MockitoRule mockito = MockitoJUnit.rule();
 
-    @Mock
-    private ServerCall<Void, Void> serverCall;
-    @Mock
-    private SSLSession sslSession;
-    @Mock
-    private CheckRequestBuilder.CertificateProvider certificateProvider;
+  @Mock
+  private ServerCall<Void, Void> serverCall;
+  @Mock
+  private SSLSession sslSession;
+  @Mock
+  private CheckRequestBuilder.CertificateProvider certificateProvider;
 
-    private CheckRequestBuilder checkRequestBuilder;
-    private MethodDescriptor<Void, Void> methodDescriptor;
-    private Timestamp requestTime;
+  private CheckRequestBuilder checkRequestBuilder;
+  private MethodDescriptor<Void, Void> methodDescriptor;
+  private Timestamp requestTime;
 
-    @Before
-    public void setUp() throws ExtAuthzParseException {
-        ExtAuthzConfig config = buildExtAuthzConfig();
-        checkRequestBuilder =
-                new CheckRequestBuilder.CheckRequestBuilderImpl(config, certificateProvider);
-        methodDescriptor = TestMethodDescriptors.voidMethod();
-        requestTime = Timestamp.newBuilder().setSeconds(12345).setNanos(67890).build();
-    }
+  @Before
+  public void setUp() throws ExtAuthzParseException {
+    ExtAuthzConfig config = buildExtAuthzConfig();
+    checkRequestBuilder =
+        new CheckRequestBuilder(config, certificateProvider);
+    methodDescriptor = TestMethodDescriptors.voidMethod();
+    requestTime = Timestamp.newBuilder().setSeconds(12345).setNanos(67890).build();
+  }
 
-    @Test
-    public void buildRequest_forServer_happyPath() throws Exception {
-        // Setup for addresses
-        SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+  @Test
+  public void buildRequest_forServer_happyPath() throws Exception {
+    // Setup for addresses
+    SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
 
-        // Setup for SSL and certificates
-        X509Certificate peerCert = mock(X509Certificate.class);
-        X509Certificate localCert = mock(X509Certificate.class);
-        Certificate[] peerCerts = new Certificate[] {peerCert};
-        Certificate[] localCerts = new Certificate[] {localCert};
-        when(sslSession.getPeerCertificates()).thenReturn(peerCerts);
-        when(sslSession.getLocalCertificates()).thenReturn(localCerts);
-        when(certificateProvider.getPrincipal(peerCert)).thenReturn("peer-principal");
-        when(certificateProvider.getPrincipal(localCert)).thenReturn("local-principal");
-        when(certificateProvider.getUrlPemEncodedCertificate(peerCert))
-                .thenReturn("encoded-peer-cert");
+    // Setup for SSL and certificates
+    X509Certificate peerCert = mock(X509Certificate.class);
+    X509Certificate localCert = mock(X509Certificate.class);
+    Certificate[] peerCerts = new Certificate[] {peerCert};
+    Certificate[] localCerts = new Certificate[] {localCert};
+    when(sslSession.getPeerCertificates()).thenReturn(peerCerts);
+    when(sslSession.getLocalCertificates()).thenReturn(localCerts);
+    when(certificateProvider.getPrincipal(peerCert)).thenReturn("peer-principal");
+    when(certificateProvider.getPrincipal(localCert)).thenReturn("local-principal");
+    when(certificateProvider.getUrlPemEncodedCertificate(peerCert)).thenReturn("encoded-peer-cert");
 
-        // Setup for headers
-        Metadata headers = new Metadata();
-        headers.put(Metadata.Key.of("allowed-header", Metadata.ASCII_STRING_MARSHALLER), "v1");
-        headers.put(Metadata.Key.of("disallowed-header", Metadata.ASCII_STRING_MARSHALLER), "v2");
-        headers.put(Metadata.Key.of("overridden-header", Metadata.ASCII_STRING_MARSHALLER), "v3");
-        byte[] binaryValue = new byte[] {1, 2, 3};
-        headers.put(Metadata.Key.of("bin-header-bin", Metadata.BINARY_BYTE_MARSHALLER),
-                binaryValue);
+    // Setup for headers
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("allowed-header", Metadata.ASCII_STRING_MARSHALLER), "v1");
+    headers.put(Metadata.Key.of("disallowed-header", Metadata.ASCII_STRING_MARSHALLER), "v2");
+    headers.put(Metadata.Key.of("overridden-header", Metadata.ASCII_STRING_MARSHALLER), "v3");
+    byte[] binaryValue = new byte[] {1, 2, 3};
+    headers.put(Metadata.Key.of("bin-header-bin", Metadata.BINARY_BYTE_MARSHALLER), binaryValue);
 
-        // Configure CheckRequestBuilder to allow specific headers
-        ListStringMatcher allowedHeaders = ListStringMatcher.newBuilder()
-                .addPatterns(StringMatcher.newBuilder().setExact("allowed-header").build())
-                .addPatterns(StringMatcher.newBuilder().setExact("overridden-header").build())
-                .build();
-        ListStringMatcher disallowedHeaders = ListStringMatcher.newBuilder()
-                .addPatterns(StringMatcher.newBuilder().setExact("disallowed-header").build())
-                .addPatterns(StringMatcher.newBuilder().setExact("overridden-header").build())
-                .build();
-        ExtAuthzConfig config = buildExtAuthzConfig(allowedHeaders, disallowedHeaders, true);
-        checkRequestBuilder =
-                new CheckRequestBuilder.CheckRequestBuilderImpl(config, certificateProvider);
+    // Configure CheckRequestBuilder to allow specific headers
+    ListStringMatcher allowedHeaders = ListStringMatcher.newBuilder()
+        .addPatterns(StringMatcher.newBuilder().setExact("allowed-header").build())
+        .addPatterns(StringMatcher.newBuilder().setExact("overridden-header").build()).build();
+    ListStringMatcher disallowedHeaders = ListStringMatcher.newBuilder()
+        .addPatterns(StringMatcher.newBuilder().setExact("disallowed-header").build())
+        .addPatterns(StringMatcher.newBuilder().setExact("overridden-header").build()).build();
+    ExtAuthzConfig config = buildExtAuthzConfig(allowedHeaders, disallowedHeaders, true);
+    checkRequestBuilder =
+        new CheckRequestBuilder(config, certificateProvider);
 
-        // Setup server call attributes
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
-                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
-                        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    // Setup server call attributes
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
 
-        // Build and verify the request
-        CheckRequest request = checkRequestBuilder.buildRequest(serverCall, headers, requestTime);
+    // Build and verify the request
+    CheckRequest request = checkRequestBuilder.buildRequest(serverCall, headers, requestTime);
 
-        AttributeContext attrContext = request.getAttributes();
-        assertThat(attrContext.getSource().getAddress().getSocketAddress().getAddress())
-                .isEqualTo("192.168.1.1");
-        assertThat(attrContext.getSource().getPrincipal()).isEqualTo("peer-principal");
-        assertThat(attrContext.getSource().getCertificate()).isEqualTo("encoded-peer-cert");
-        assertThat(attrContext.getDestination().getAddress().getSocketAddress().getAddress())
-                .isEqualTo("10.0.0.2");
-        assertThat(attrContext.getDestination().getPrincipal()).isEqualTo("local-principal");
+    AttributeContext attrContext = request.getAttributes();
+    assertThat(attrContext.getSource().getAddress().getSocketAddress().getAddress())
+        .isEqualTo("192.168.1.1");
+    assertThat(attrContext.getSource().getPrincipal()).isEqualTo("peer-principal");
+    assertThat(attrContext.getSource().getCertificate()).isEqualTo("encoded-peer-cert");
+    assertThat(attrContext.getDestination().getAddress().getSocketAddress().getAddress())
+        .isEqualTo("10.0.0.2");
+    assertThat(attrContext.getDestination().getPrincipal()).isEqualTo("local-principal");
 
-        AttributeContext.HttpRequest http = attrContext.getRequest().getHttp();
-        assertThat(http.getHeadersMap()).containsEntry("allowed-header", "v1");
-        assertThat(http.getHeadersMap()).doesNotContainKey("bin-header-bin");
-        assertThat(http.getHeadersMap()).doesNotContainKey("disallowed-header");
-        assertThat(http.getHeadersMap()).doesNotContainKey("overridden-header");
-    }
+    AttributeContext.HttpRequest http = attrContext.getRequest().getHttp();
+    assertThat(http.getHeadersMap()).containsEntry("allowed-header", "v1");
+    assertThat(http.getHeadersMap()).doesNotContainKey("bin-header-bin");
+    assertThat(http.getHeadersMap()).doesNotContainKey("disallowed-header");
+    assertThat(http.getHeadersMap()).doesNotContainKey("overridden-header");
+  }
 
-    @Test
-    public void buildRequest_forServer_noTransportAttrs() {
-        when(serverCall.getAttributes()).thenReturn(Attributes.EMPTY);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
-        Metadata headers = new Metadata();
+  @Test
+  public void buildRequest_forServer_noTransportAttrs() {
+    when(serverCall.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    Metadata headers = new Metadata();
 
-        CheckRequest request = checkRequestBuilder.buildRequest(serverCall, headers, requestTime);
+    CheckRequest request = checkRequestBuilder.buildRequest(serverCall, headers, requestTime);
 
-        assertThat(request.getAttributes().getRequest().getTime()).isEqualTo(requestTime);
-        assertThat(request.getAttributes().getRequest().getHttp().getPath())
-                .isEqualTo(methodDescriptor.getFullMethodName());
-        assertThat(request.getAttributes().getRequest().getHttp().getMethod()).isEqualTo("POST");
-        assertThat(request.getAttributes().getRequest().getHttp().getProtocol())
-                .isEqualTo("HTTP/2");
-        assertThat(request.getAttributes().getRequest().getHttp().getSize()).isEqualTo(-1);
-        assertThat(request.getAttributes().getRequest().getHttp().getHeadersMap()).isEmpty();
-        assertThat(request.getAttributes().hasSource()).isFalse();
-        assertThat(request.getAttributes().hasDestination()).isFalse();
-    }
+    assertThat(request.getAttributes().getRequest().getTime()).isEqualTo(requestTime);
+    assertThat(request.getAttributes().getRequest().getHttp().getPath())
+        .isEqualTo("/" + methodDescriptor.getFullMethodName());
 
+    assertThat(request.getAttributes().getRequest().getHttp().getMethod()).isEqualTo("POST");
+    assertThat(request.getAttributes().getRequest().getHttp().getProtocol()).isEqualTo("HTTP/2");
+    assertThat(request.getAttributes().getRequest().getHttp().getSize()).isEqualTo(-1);
+    assertThat(request.getAttributes().getRequest().getHttp().getHeadersMap()).isEmpty();
+    assertThat(request.getAttributes().hasSource()).isFalse();
+    assertThat(request.getAttributes().hasDestination()).isFalse();
+  }
 
-    @Test
-    public void buildRequest_forClient_happyPath_emptyAllowedHeaders() throws Exception {
-        // Setup for headers
-        Metadata headers = new Metadata();
-        headers.put(Metadata.Key.of("some-header", Metadata.ASCII_STRING_MARSHALLER), "v1");
-        headers.put(Metadata.Key.of("disallowed-header", Metadata.ASCII_STRING_MARSHALLER), "v2");
-        byte[] binaryValue = new byte[] {1, 2, 3};
-        headers.put(Metadata.Key.of("bin-header-bin", Metadata.BINARY_BYTE_MARSHALLER),
-                binaryValue);
+  @Test
+  public void buildRequest_forClient_happyPath_emptyAllowedHeaders() throws Exception {
+    // Setup for headers
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("some-header", Metadata.ASCII_STRING_MARSHALLER), "v1");
+    headers.put(Metadata.Key.of("disallowed-header", Metadata.ASCII_STRING_MARSHALLER), "v2");
+    byte[] binaryValue = new byte[] {1, 2, 3};
+    headers.put(Metadata.Key.of("bin-header-bin", Metadata.BINARY_BYTE_MARSHALLER), binaryValue);
 
-        // Configure CheckRequestBuilder with empty allowed headers
-        ListStringMatcher allowedHeaders = ListStringMatcher.newBuilder().build(); // empty
-        ListStringMatcher disallowedHeaders = ListStringMatcher.newBuilder()
-                .addPatterns(StringMatcher.newBuilder().setExact("disallowed-header").build())
-                .build();
-        ExtAuthzConfig config = buildExtAuthzConfig(allowedHeaders, disallowedHeaders, true);
-        checkRequestBuilder =
-                new CheckRequestBuilder.CheckRequestBuilderImpl(config, certificateProvider);
+    // Configure CheckRequestBuilder with empty allowed headers
+    ListStringMatcher allowedHeaders = ListStringMatcher.newBuilder().build(); // empty
+    ListStringMatcher disallowedHeaders = ListStringMatcher.newBuilder()
+        .addPatterns(StringMatcher.newBuilder().setExact("disallowed-header").build()).build();
+    ExtAuthzConfig config = buildExtAuthzConfig(allowedHeaders, disallowedHeaders, true);
+    checkRequestBuilder =
+        new CheckRequestBuilder(config, certificateProvider);
 
-        // Build and verify the request
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(methodDescriptor, headers, requestTime);
+    // Build and verify the request
+    CheckRequest request = checkRequestBuilder.buildRequest(methodDescriptor, headers, requestTime);
 
-        AttributeContext attrContext = request.getAttributes();
-        assertThat(attrContext.hasSource()).isFalse();
-        assertThat(attrContext.hasDestination()).isFalse();
+    AttributeContext attrContext = request.getAttributes();
+    assertThat(attrContext.hasSource()).isFalse();
+    assertThat(attrContext.hasDestination()).isFalse();
 
-        AttributeContext.HttpRequest http = attrContext.getRequest().getHttp();
-        assertThat(http.getPath()).isEqualTo(methodDescriptor.getFullMethodName());
-        assertThat(http.getHeadersMap()).containsEntry("some-header", "v1");
-        assertThat(http.getHeadersMap()).containsEntry("bin-header-bin", "AQID");
-        assertThat(http.getHeadersMap()).doesNotContainKey("disallowed-header");
-    }
+    AttributeContext.HttpRequest http = attrContext.getRequest().getHttp();
+    assertThat(http.getPath()).isEqualTo("/" + methodDescriptor.getFullMethodName());
 
-    @Test
-    public void buildRequest_forServer_noSslSession() {
-        SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
-                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    assertThat(http.getHeadersMap()).containsEntry("some-header", "v1");
+    assertThat(http.getHeadersMap()).containsEntry("bin-header-bin", "AQID");
+    assertThat(http.getHeadersMap()).doesNotContainKey("disallowed-header");
+  }
 
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+  @Test
+  public void buildRequest_forServer_noSslSession() {
+    SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
 
-        AttributeContext attrContext = request.getAttributes();
-        assertThat(attrContext.hasSource()).isTrue();
-        Address sourceAddress = attrContext.getSource().getAddress();
-        assertThat(sourceAddress.getSocketAddress().getAddress()).isEqualTo("192.168.1.1");
-        assertThat(sourceAddress.getSocketAddress().getPortValue()).isEqualTo(12345);
-        assertThat(attrContext.getSource().getPrincipal()).isEmpty();
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
 
-        assertThat(attrContext.hasDestination()).isTrue();
-        Address destAddress = attrContext.getDestination().getAddress();
-        assertThat(destAddress.getSocketAddress().getAddress()).isEqualTo("10.0.0.2");
-        assertThat(destAddress.getSocketAddress().getPortValue()).isEqualTo(443);
-        assertThat(attrContext.getDestination().getPrincipal()).isEmpty();
-    }
+    AttributeContext attrContext = request.getAttributes();
+    assertThat(attrContext.hasSource()).isTrue();
+    Address sourceAddress = attrContext.getSource().getAddress();
+    assertThat(sourceAddress.getSocketAddress().getAddress()).isEqualTo("192.168.1.1");
+    assertThat(sourceAddress.getSocketAddress().getPortValue()).isEqualTo(12345);
+    assertThat(attrContext.getSource().getPrincipal()).isEmpty();
 
-    @Test
-    public void buildRequest_forServer_sslPeerUnverified() throws Exception {
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
-        when(sslSession.getPeerCertificates())
-                .thenThrow(new SSLPeerUnverifiedException("unverified"));
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
-                        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    assertThat(attrContext.hasDestination()).isTrue();
+    Address destAddress = attrContext.getDestination().getAddress();
+    assertThat(destAddress.getSocketAddress().getAddress()).isEqualTo("10.0.0.2");
+    assertThat(destAddress.getSocketAddress().getPortValue()).isEqualTo(443);
+    assertThat(attrContext.getDestination().getPrincipal()).isEmpty();
+  }
 
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+  @Test
+  public void buildRequest_forServer_sslPeerUnverified() throws Exception {
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+    when(sslSession.getPeerCertificates()).thenThrow(new SSLPeerUnverifiedException("unverified"));
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
 
-        AttributeContext.Peer source = request.getAttributes().getSource();
-        assertThat(source.getPrincipal()).isEmpty();
-        assertThat(source.getCertificate()).isEmpty();
-    }
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
 
-    @Test
-    public void buildRequest_forServer_includePeerCertFalse() throws Exception {
-        ExtAuthzConfig config = buildExtAuthzConfig(ListStringMatcher.newBuilder().build(),
-                ListStringMatcher.newBuilder().build(), false);
-        checkRequestBuilder =
-                new CheckRequestBuilder.CheckRequestBuilderImpl(config, certificateProvider);
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
-        X509Certificate peerCert = mock(X509Certificate.class);
-        Certificate[] peerCerts = new Certificate[] {peerCert};
+    AttributeContext.Peer source = request.getAttributes().getSource();
+    assertThat(source.getPrincipal()).isEmpty();
+    assertThat(source.getCertificate()).isEmpty();
+  }
 
-        when(sslSession.getPeerCertificates()).thenReturn(peerCerts);
-        when(certificateProvider.getPrincipal(peerCert)).thenReturn("peer-principal");
+  @Test
+  public void buildRequest_forServer_includePeerCertFalse() throws Exception {
+    ExtAuthzConfig config = buildExtAuthzConfig(ListStringMatcher.newBuilder().build(),
+        ListStringMatcher.newBuilder().build(), false);
+    checkRequestBuilder =
+        new CheckRequestBuilder(config, certificateProvider);
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+    X509Certificate peerCert = mock(X509Certificate.class);
+    Certificate[] peerCerts = new Certificate[] {peerCert};
 
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
-                        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    when(sslSession.getPeerCertificates()).thenReturn(peerCerts);
+    when(certificateProvider.getPrincipal(peerCert)).thenReturn("peer-principal");
 
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
 
-        AttributeContext.Peer source = request.getAttributes().getSource();
-        assertThat(source.getPrincipal()).isEqualTo("peer-principal");
-        assertThat(source.getCertificate()).isEmpty();
-    }
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
 
-    @Test
-    public void buildRequest_forServer_nullOrEmptyCertificates() throws Exception {
-        SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
-                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
-                        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    AttributeContext.Peer source = request.getAttributes().getSource();
+    assertThat(source.getPrincipal()).isEqualTo("peer-principal");
+    assertThat(source.getCertificate()).isEmpty();
+  }
 
-        // Test with null certificates
-        when(sslSession.getPeerCertificates()).thenReturn(null);
-        when(sslSession.getLocalCertificates()).thenReturn(null);
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
-        AttributeContext.Peer source = request.getAttributes().getSource();
-        assertThat(source.getPrincipal()).isEmpty();
-        assertThat(source.getCertificate()).isEmpty();
-        AttributeContext.Peer destination = request.getAttributes().getDestination();
-        assertThat(destination.getPrincipal()).isEmpty();
+  @Test
+  public void buildRequest_forServer_nullOrEmptyCertificates() throws Exception {
+    SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
 
-        // Test with empty certificates
-        when(sslSession.getPeerCertificates()).thenReturn(new Certificate[0]);
-        when(sslSession.getLocalCertificates()).thenReturn(new Certificate[0]);
-        request = checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
-        source = request.getAttributes().getSource();
-        assertThat(source.getPrincipal()).isEmpty();
-        assertThat(source.getCertificate()).isEmpty();
-        destination = request.getAttributes().getDestination();
-        assertThat(destination.getPrincipal()).isEmpty();
-    }
+    // Test with null certificates
+    when(sslSession.getPeerCertificates()).thenReturn(null);
+    when(sslSession.getLocalCertificates()).thenReturn(null);
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+    AttributeContext.Peer source = request.getAttributes().getSource();
+    assertThat(source.getPrincipal()).isEmpty();
+    assertThat(source.getCertificate()).isEmpty();
+    AttributeContext.Peer destination = request.getAttributes().getDestination();
+    assertThat(destination.getPrincipal()).isEmpty();
 
-    @Test
-    public void buildRequest_forServer_nonX509Certificate() throws Exception {
-        SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
-        SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
-        Attributes attributes =
-                Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
-                        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
-                        .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
-        when(serverCall.getAttributes()).thenReturn(attributes);
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
-        Certificate nonX509Cert = mock(Certificate.class);
-        Certificate[] certs = new Certificate[] {nonX509Cert};
+    // Test with empty certificates
+    when(sslSession.getPeerCertificates()).thenReturn(new Certificate[0]);
+    when(sslSession.getLocalCertificates()).thenReturn(new Certificate[0]);
+    request = checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+    source = request.getAttributes().getSource();
+    assertThat(source.getPrincipal()).isEmpty();
+    assertThat(source.getCertificate()).isEmpty();
+    destination = request.getAttributes().getDestination();
+    assertThat(destination.getPrincipal()).isEmpty();
+  }
 
-        when(sslSession.getPeerCertificates()).thenReturn(certs);
-        when(sslSession.getLocalCertificates()).thenReturn(certs);
+  @Test
+  public void buildRequest_forServer_nonX509Certificate() throws Exception {
+    SocketAddress localAddress = new InetSocketAddress("10.0.0.2", 443);
+    SocketAddress remoteAddress = new InetSocketAddress("192.168.1.1", 12345);
+    Attributes attributes =
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddress)
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress)
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession).build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    Certificate nonX509Cert = mock(Certificate.class);
+    Certificate[] certs = new Certificate[] {nonX509Cert};
 
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+    when(sslSession.getPeerCertificates()).thenReturn(certs);
+    when(sslSession.getLocalCertificates()).thenReturn(certs);
 
-        AttributeContext.Peer source = request.getAttributes().getSource();
-        assertThat(source.getPrincipal()).isEmpty();
-        AttributeContext.Peer destination = request.getAttributes().getDestination();
-        assertThat(destination.getPrincipal()).isEmpty();
-    }
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
 
-    @Test
-    public void buildRequest_forServer_nonInetSocketAddress() {
-        SocketAddress remoteAddress = mock(SocketAddress.class);
-        when(serverCall.getAttributes()).thenReturn(Attributes.newBuilder()
-                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress).build());
-        when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
-        CheckRequest request =
-                checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
-        assertThat(request.getAttributes().getSource().hasAddress()).isFalse();
-    }
+    AttributeContext.Peer source = request.getAttributes().getSource();
+    assertThat(source.getPrincipal()).isEmpty();
+    AttributeContext.Peer destination = request.getAttributes().getDestination();
+    assertThat(destination.getPrincipal()).isEmpty();
+  }
 
-    private ExtAuthzConfig buildExtAuthzConfig() throws ExtAuthzParseException {
-        return buildExtAuthzConfig(ListStringMatcher.newBuilder().build(),
-                ListStringMatcher.newBuilder().build(), true);
-    }
+  @Test
+  public void buildRequest_forServer_nonInetSocketAddress() {
+    SocketAddress remoteAddress = mock(SocketAddress.class);
+    when(serverCall.getAttributes()).thenReturn(
+        Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddress).build());
+    when(serverCall.getMethodDescriptor()).thenReturn(methodDescriptor);
+    CheckRequest request =
+        checkRequestBuilder.buildRequest(serverCall, new Metadata(), requestTime);
+    assertThat(request.getAttributes().getSource().hasAddress()).isFalse();
+  }
 
-    private ExtAuthzConfig buildExtAuthzConfig(ListStringMatcher allowed,
-            ListStringMatcher disallowed, boolean includePeerCertificate)
-            throws ExtAuthzParseException {
-        Any googleDefaultChannelCreds = Any.pack(GoogleDefaultCredentials.newBuilder().build());
-        Any fakeAccessTokenCreds =
-                Any.pack(AccessTokenCredentials.newBuilder().setToken("fake-token").build());
-        ExtAuthz.Builder builder = ExtAuthz.newBuilder()
-                .setGrpcService(io.envoyproxy.envoy.config.core.v3.GrpcService.newBuilder()
-                        .setGoogleGrpc(io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc
-                                .newBuilder().setTargetUri("test-cluster")
-                                .addChannelCredentialsPlugin(googleDefaultChannelCreds)
-                                .addCallCredentialsPlugin(fakeAccessTokenCreds).build())
-                        .build())
-                .setIncludePeerCertificate(includePeerCertificate).setAllowedHeaders(allowed)
-                .setDisallowedHeaders(disallowed);
-        return ExtAuthzConfig.fromProto(builder.build());
-    }
+  private ExtAuthzConfig buildExtAuthzConfig() throws ExtAuthzParseException {
+    return buildExtAuthzConfig(ListStringMatcher.newBuilder().build(),
+        ListStringMatcher.newBuilder().build(), true);
+  }
+
+  private ExtAuthzConfig buildExtAuthzConfig(ListStringMatcher allowed,
+      ListStringMatcher disallowed, boolean includePeerCertificate) throws ExtAuthzParseException {
+    Any googleDefaultChannelCreds = Any.pack(GoogleDefaultCredentials.newBuilder().build());
+    Any fakeAccessTokenCreds =
+        Any.pack(AccessTokenCredentials.newBuilder().setToken("fake-token").build());
+    ExtAuthz.Builder builder = ExtAuthz.newBuilder()
+        .setGrpcService(io.envoyproxy.envoy.config.core.v3.GrpcService.newBuilder()
+            .setGoogleGrpc(io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("test-cluster").addChannelCredentialsPlugin(googleDefaultChannelCreds)
+                .addCallCredentialsPlugin(fakeAccessTokenCreds).build())
+            .build())
+        .setIncludePeerCertificate(includePeerCertificate).setAllowedHeaders(allowed)
+        .setDisallowedHeaders(disallowed);
+    return ExtAuthzConfigParser.parse(builder.build(), 
+          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+  }
 }
