@@ -38,6 +38,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
@@ -105,16 +106,6 @@ public final class ManagedChannelImplBuilder
    * An idle timeout smaller than this would be capped to it.
    */
   static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
-
-  private static boolean enableRfc3986Uris = GrpcUtil.getFlag("GRPC_ENABLE_RFC3986_URIS", false);
-
-  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
-  @VisibleForTesting
-  static boolean setRfc3986UrisEnabled(boolean value) {
-    boolean prevValue = ManagedChannelImplBuilder.enableRfc3986Uris;
-    ManagedChannelImplBuilder.enableRfc3986Uris = value;
-    return prevValue;
-  }
 
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
@@ -731,7 +722,7 @@ public final class ManagedChannelImplBuilder
     ClientTransportFactory clientTransportFactory =
         clientTransportFactoryBuilder.buildClientTransportFactory();
     ResolvedNameResolver resolvedResolver =
-        enableRfc3986Uris
+        InternalFeatureFlags.getRfc3986UrisEnabled()
             ? getNameResolverProviderRfc3986(target, nameResolverRegistry)
             : getNameResolverProvider(target, nameResolverRegistry);
     resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());

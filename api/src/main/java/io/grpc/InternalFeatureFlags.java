@@ -16,8 +16,23 @@
 
 package io.grpc;
 
+import com.google.common.annotations.VisibleForTesting;
+
+/** Global variables that govern major changes to the behavior of more than one grpc module. */
 @Internal
 public class InternalFeatureFlags {
+
+  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
+  @VisibleForTesting
+  public static boolean setRfc3986UrisEnabled(boolean value) {
+    return FeatureFlags.setRfc3986UrisEnabled(value);
+  }
+
+  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
+  public static boolean getRfc3986UrisEnabled() {
+    return FeatureFlags.getRfc3986UrisEnabled();
+  }
+
   public static boolean getFlag(String envVarName, boolean enableByDefault) {
     return FeatureFlags.getFlag(envVarName, enableByDefault);
   }

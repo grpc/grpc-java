@@ -41,6 +41,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.FlagResetRule;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -129,7 +130,7 @@ public class ManagedChannelImplBuilderTest {
   @Before
   public void setUp() throws Exception {
     flagResetRule.setFlagForTest(
-        ManagedChannelImplBuilder::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
 
     builder = new ManagedChannelImplBuilder(
         DUMMY_TARGET,
