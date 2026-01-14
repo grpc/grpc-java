@@ -33,7 +33,8 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link NameResolverRegistry}. */
 @RunWith(JUnit4.class)
 public class NameResolverRegistryTest {
-  private final URI uri = URI.create("dns:///localhost");
+  private final URI javaNetUri = URI.create("dns:///localhost");
+  private final Uri ioGrpcUri = Uri.create("dns:///localhost");
   private final NameResolver.Args args = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(mock(ProxyDetector.class))
@@ -96,43 +97,80 @@ public class NameResolverRegistryTest {
   }
 
   @Test
-  public void newNameResolver_providerReturnsNull() {
+  public void newNameResolver_providerReturnsNull_ioGrpcUri() {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(
         new BaseProvider(true, 5, "noScheme") {
           @Override
           public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
-            assertThat(passedUri).isSameInstanceAs(uri);
+            assertThat(passedUri).isSameInstanceAs(ioGrpcUri);
             assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
-    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(ioGrpcUri, args)).isNull();
     assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("noScheme");
   }
 
   @Test
-  public void newNameResolver_providerReturnsNonNull() {
+  public void newNameResolver_providerReturnsNull_javaNetUri() {
     NameResolverRegistry registry = new NameResolverRegistry();
-    registry.register(new BaseProvider(true, 5, uri.getScheme()) {
-      @Override
-      public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
-        return null;
-      }
-    });
-    final NameResolver nr = new NameResolver() {
-      @Override public String getServiceAuthority() {
-        throw new UnsupportedOperationException();
-      }
+    registry.register(
+        new BaseProvider(true, 5, "noScheme") {
+          @Override
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+            assertThat(passedUri).isSameInstanceAs(javaNetUri);
+            assertThat(passedArgs).isSameInstanceAs(args);
+            return null;
+          }
+        });
+    assertThat(registry.asFactory().newNameResolver(javaNetUri, args)).isNull();
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("noScheme");
+  }
 
-      @Override public void start(Listener2 listener) {
-        throw new UnsupportedOperationException();
-      }
+  @Test
+  public void newNameResolver_providerReturnsNonNull_ioGrpcUri() {
+    NameResolverRegistry registry = new NameResolverRegistry();
+    Uri uri = ioGrpcUri;
+    registry.register(
+        new BaseProvider(true, 5, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
+            return null;
+          }
+        });
+    final NameResolver nr = new DummyNameResolver();
+    registry.register(
+        new BaseProvider(true, 4, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
+            return nr;
+          }
+        });
+    registry.register(
+        new BaseProvider(true, 3, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
+            fail("Should not be called");
+            throw new AssertionError();
+          }
+        });
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo(uri.getScheme());
+  }
 
-      @Override public void shutdown() {
-        throw new UnsupportedOperationException();
-      }
-    };
+  @Test
+  public void newNameResolver_providerReturnsNonNull_javaNetUri() {
+    NameResolverRegistry registry = new NameResolverRegistry();
+    URI uri = javaNetUri;
+    registry.register(
+        new BaseProvider(true, 5, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+            return null;
+          }
+        });
+    final NameResolver nr = new DummyNameResolver();
     registry.register(
         new BaseProvider(true, 4, uri.getScheme()) {
           @Override
@@ -153,27 +191,45 @@ public class NameResolverRegistryTest {
   }
 
   @Test
-  public void newNameResolver_multipleScheme() {
+  public void newNameResolver_multipleScheme_ioGrpcUri() {
     NameResolverRegistry registry = new NameResolverRegistry();
-    registry.register(new BaseProvider(true, 5, uri.getScheme()) {
-      @Override
-      public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
-        return null;
-      }
-    });
-    final NameResolver nr = new NameResolver() {
-      @Override public String getServiceAuthority() {
-        throw new UnsupportedOperationException();
-      }
+    Uri uri = ioGrpcUri;
+    registry.register(
+        new BaseProvider(true, 5, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
+            return null;
+          }
+        });
+    final NameResolver nr = new DummyNameResolver();
+    registry.register(
+        new BaseProvider(true, 4, "other") {
+          @Override
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
+            return nr;
+          }
+        });
 
-      @Override public void start(Listener2 listener) {
-        throw new UnsupportedOperationException();
-      }
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
+    assertThat(registry.asFactory().newNameResolver(Uri.create("other:///0.0.0.0:80"), args))
+        .isSameInstanceAs(nr);
+    assertThat(registry.asFactory().newNameResolver(Uri.create("OTHER:///0.0.0.0:80"), args))
+        .isSameInstanceAs(nr);
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("dns");
+  }
 
-      @Override public void shutdown() {
-        throw new UnsupportedOperationException();
-      }
-    };
+  @Test
+  public void newNameResolver_multipleScheme_javaNetUri() {
+    NameResolverRegistry registry = new NameResolverRegistry();
+    URI uri = javaNetUri;
+    registry.register(
+        new BaseProvider(true, 5, uri.getScheme()) {
+          @Override
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+            return null;
+          }
+        });
+    final NameResolver nr = new DummyNameResolver();
     registry.register(
         new BaseProvider(true, 4, "other") {
           @Override
@@ -186,16 +242,17 @@ public class NameResolverRegistryTest {
     assertThat(registry.asFactory().newNameResolver(URI.create("/0.0.0.0:80"), args)).isNull();
     assertThat(registry.asFactory().newNameResolver(URI.create("///0.0.0.0:80"), args)).isNull();
     assertThat(registry.asFactory().newNameResolver(URI.create("other:///0.0.0.0:80"), args))
-            .isSameInstanceAs(nr);
+        .isSameInstanceAs(nr);
     assertThat(registry.asFactory().newNameResolver(URI.create("OTHER:///0.0.0.0:80"), args))
-            .isSameInstanceAs(nr);
+        .isSameInstanceAs(nr);
     assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("dns");
   }
 
   @Test
   public void newNameResolver_noProvider() {
     NameResolver.Factory factory = new NameResolverRegistry().asFactory();
-    assertThat(factory.newNameResolver(uri, args)).isNull();
+    assertThat(factory.newNameResolver(javaNetUri, args)).isNull();
+    assertThat(factory.newNameResolver(ioGrpcUri, args)).isNull();
     assertThat(factory.getDefaultScheme()).isEqualTo("unknown");
   }
 
@@ -262,8 +319,30 @@ public class NameResolverRegistryTest {
     }
 
     @Override
+    public NameResolver newNameResolver(Uri targetUri, NameResolver.Args args) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
     public String getDefaultScheme() {
       return scheme == null ? "scheme" + getClass().getSimpleName() : scheme;
+    }
+  }
+
+  private static class DummyNameResolver extends NameResolver {
+    @Override
+    public String getServiceAuthority() {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void start(Listener2 listener) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void shutdown() {
+      throw new UnsupportedOperationException();
     }
   }
 }

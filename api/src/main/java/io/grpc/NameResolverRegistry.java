@@ -183,6 +183,13 @@ public final class NameResolverRegistry {
     }
 
     @Override
+    @Nullable
+    public NameResolver newNameResolver(io.grpc.Uri targetUri, NameResolver.Args args) {
+      NameResolverProvider provider = getProviderForScheme(targetUri.getScheme());
+      return provider == null ? null : provider.newNameResolver(targetUri, args);
+    }
+
+    @Override
     public String getDefaultScheme() {
       return NameResolverRegistry.this.getDefaultScheme();
     }
