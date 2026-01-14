@@ -16,9 +16,25 @@
 
 package io.grpc;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
 class FeatureFlags {
+  private static boolean enableRfc3986Uris = getFlag("GRPC_ENABLE_RFC3986_URIS", false);
+
+  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
+  @VisibleForTesting
+  static boolean setRfc3986UrisEnabled(boolean value) {
+    boolean prevValue = enableRfc3986Uris;
+    enableRfc3986Uris = value;
+    return prevValue;
+  }
+
+  /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
+  static boolean getRfc3986UrisEnabled() {
+    return enableRfc3986Uris;
+  }
+
   static boolean getFlag(String envVarName, boolean enableByDefault) {
     String envVar = System.getenv(envVarName);
     if (envVar == null) {
