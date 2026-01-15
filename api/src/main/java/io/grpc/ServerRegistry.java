@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
@@ -93,8 +94,9 @@ public final class ServerRegistry {
     if (instance == null) {
       List<ServerProvider> providerList = ServiceProviders.loadAll(
           ServerProvider.class,
+          ServiceLoader.load(ServerProvider.class, ServerProvider.class.getClassLoader())
+            .iterator(),
           getHardCodedClasses(),
-          ServerProvider.class.getClassLoader(),
           new ServerPriorityAccessor());
       instance = new ServerRegistry();
       for (ServerProvider provider : providerList) {

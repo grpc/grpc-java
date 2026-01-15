@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.ThreadSafe;
@@ -100,8 +101,10 @@ public final class ManagedChannelRegistry {
     if (instance == null) {
       List<ManagedChannelProvider> providerList = ServiceProviders.loadAll(
           ManagedChannelProvider.class,
+          ServiceLoader
+            .load(ManagedChannelProvider.class, ManagedChannelProvider.class.getClassLoader())
+            .iterator(),
           getHardCodedClasses(),
-          ManagedChannelProvider.class.getClassLoader(),
           new ManagedChannelPriorityAccessor());
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {

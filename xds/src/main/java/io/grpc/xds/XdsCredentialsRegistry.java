@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -109,8 +110,10 @@ final class XdsCredentialsRegistry {
     if (instance == null) {
       List<XdsCredentialsProvider> providerList = InternalServiceProviders.loadAll(
               XdsCredentialsProvider.class,
+              ServiceLoader
+                .load(XdsCredentialsProvider.class, XdsCredentialsProvider.class.getClassLoader())
+                .iterator(),
               getHardCodedClasses(),
-              XdsCredentialsProvider.class.getClassLoader(),
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "

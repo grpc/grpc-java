@@ -20,7 +20,9 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
@@ -34,20 +36,39 @@ final class ServiceProviders {
    * {@link ServiceLoader}.
    * If this is Android, returns all available implementations in {@code hardcoded}.
    * The list is sorted in descending priority order.
+   *
+   * <p>{@code serviceLoader} should be created with {@code ServiceLoader.load(MyClass.class,
+   * MyClass.class.getClassLoader()).iterator()} in order to be detected by R8 so that R8 full mode
+   * will keep the constructors for the provider classes.
    */
   public static <T> List<T> loadAll(
       Class<T> klass,
+      Iterator<T> serviceLoader,
       Iterable<Class<?>> hardcoded,
-      ClassLoader cl,
       final PriorityAccessor<T> priorityAccessor) {
-    Iterable<T> candidates;
-    if (isAndroid(cl)) {
-      candidates = getCandidatesViaHardCoded(klass, hardcoded);
+    Iterator<T> candidates;
+    if (serviceLoader instanceof ListIterator) {
+      // A rewriting tool has replaced the ServiceLoader with a List of some sort (R8 uses
+      // ArrayList, AppReduce uses singletonList). We prefer to use such iterators on Android as
+      // they won't need reflection like the hard-coded list does. In addition, the provider
+      // instances will have already been created, so it seems we should use them.
+      //
+      // R8: https://r8.googlesource.com/r8/+/490bc53d9310d4cc2a5084c05df4aadaec8c885d/src/main/java/com/android/tools/r8/ir/optimize/ServiceLoaderRewriter.java
+      // AppReduce: service_loader_pass.cc
+      candidates = serviceLoader;
+    } else if (isAndroid(klass.getClassLoader())) {
+      // Avoid getResource() on Android, which must read from a zip which uses a lot of memory
+      candidates = getCandidatesViaHardCoded(klass, hardcoded).iterator();
+    } else if (!serviceLoader.hasNext()) {
+      // Attempt to load using the context class loader and ServiceLoader.
+      // This allows frameworks like http://aries.apache.org/modules/spi-fly.html to plug in.
+      candidates = ServiceLoader.load(klass).iterator();
     } else {
-      candidates = getCandidatesViaServiceLoader(klass, cl);
+      candidates = serviceLoader;
     }
     List<T> list = new ArrayList<>();
-    for (T current: candidates) {
+    while (candidates.hasNext()) {
+      T current = candidates.next();
       if (!priorityAccessor.isAvailable(current)) {
         continue;
       }
@@ -84,15 +105,14 @@ final class ServiceProviders {
   }
 
   /**
-   * Loads service providers for the {@code klass} service using {@link ServiceLoader}.
+   * For testing only: Loads service providers for the {@code klass} service using {@link
+   * ServiceLoader}. Does not support spi-fly and related tricks.
    */
   @VisibleForTesting
   public static <T> Iterable<T> getCandidatesViaServiceLoader(Class<T> klass, ClassLoader cl) {
     Iterable<T> i = ServiceLoader.load(klass, cl);
-    // Attempt to load using the context class loader and ServiceLoader.
-    // This allows frameworks like http://aries.apache.org/modules/spi-fly.html to plug in.
     if (!i.iterator().hasNext()) {
-      i = ServiceLoader.load(klass);
+      return null;
     }
     return i;
   }
