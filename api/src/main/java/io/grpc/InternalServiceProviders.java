@@ -38,7 +38,7 @@ public final class InternalServiceProviders {
     return loadAll(
         klass,
         ServiceLoader.load(klass, classLoader).iterator(),
-        hardCodedClasses,
+        () -> hardCodedClasses,
         priorityAccessor);
   }
 
@@ -48,9 +48,9 @@ public final class InternalServiceProviders {
   public static <T> List<T> loadAll(
       Class<T> klass,
       Iterator<T> serviceLoader,
-      Iterable<Class<?>> hardCodedClasses,
+      Supplier<Iterable<Class<?>>> hardCodedClasses,
       PriorityAccessor<T> priorityAccessor) {
-    return ServiceProviders.loadAll(klass, serviceLoader, hardCodedClasses, priorityAccessor);
+    return ServiceProviders.loadAll(klass, serviceLoader, hardCodedClasses::get, priorityAccessor);
   }
 
   /**
@@ -78,4 +78,8 @@ public final class InternalServiceProviders {
   }
 
   public interface PriorityAccessor<T> extends ServiceProviders.PriorityAccessor<T> {}
+
+  public interface Supplier<T> {
+    T get();
+  }
 }

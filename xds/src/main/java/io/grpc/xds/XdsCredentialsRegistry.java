@@ -113,7 +113,7 @@ final class XdsCredentialsRegistry {
               ServiceLoader
                 .load(XdsCredentialsProvider.class, XdsCredentialsProvider.class.getClassLoader())
                 .iterator(),
-              getHardCodedClasses(),
+              XdsCredentialsRegistry::getHardCodedClasses,
               new XdsCredentialsProviderPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No XdsCredsRegistry found via ServiceLoader, including for GoogleDefault, "

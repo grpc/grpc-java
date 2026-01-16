@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Supplier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -44,7 +45,7 @@ final class ServiceProviders {
   public static <T> List<T> loadAll(
       Class<T> klass,
       Iterator<T> serviceLoader,
-      Iterable<Class<?>> hardcoded,
+      Supplier<Iterable<Class<?>>> hardcoded,
       final PriorityAccessor<T> priorityAccessor) {
     Iterator<T> candidates;
     if (serviceLoader instanceof ListIterator) {
@@ -58,7 +59,7 @@ final class ServiceProviders {
       candidates = serviceLoader;
     } else if (isAndroid(klass.getClassLoader())) {
       // Avoid getResource() on Android, which must read from a zip which uses a lot of memory
-      candidates = getCandidatesViaHardCoded(klass, hardcoded).iterator();
+      candidates = getCandidatesViaHardCoded(klass, hardcoded.get()).iterator();
     } else if (!serviceLoader.hasNext()) {
       // Attempt to load using the context class loader and ServiceLoader.
       // This allows frameworks like http://aries.apache.org/modules/spi-fly.html to plug in.

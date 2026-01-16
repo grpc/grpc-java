@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -23,6 +24,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.InternalServiceProviders.PriorityAccessor;
 import java.util.Collections;
@@ -30,6 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,7 +40,6 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link ServiceProviders}. */
 @RunWith(JUnit4.class)
 public class ServiceProvidersTest {
-  private static final List<Class<?>> NO_HARDCODED = Collections.emptyList();
   private static final PriorityAccessor<ServiceProvidersTestAbstractProvider> ACCESSOR =
       new PriorityAccessor<ServiceProvidersTestAbstractProvider>() {
         @Override
@@ -52,6 +54,19 @@ public class ServiceProvidersTest {
       };
   private final String serviceFile =
       "META-INF/services/io.grpc.ServiceProvidersTestAbstractProvider";
+  private boolean failingHardCodedAccessed;
+  private final Supplier<Iterable<Class<?>>> failingHardCoded = new Supplier<Iterable<Class<?>>>() {
+    @Override
+    public Iterable<Class<?>> get() {
+      failingHardCodedAccessed = true;
+      throw new AssertionError();
+    }
+  };
+
+  @After
+  public void tearDown() {
+    assertThat(failingHardCodedAccessed).isFalse();
+  }
 
   @Test
   public void contextClassLoaderProvider() {
@@ -70,7 +85,8 @@ public class ServiceProvidersTest {
       Thread.currentThread().setContextClassLoader(rcll);
       assertEquals(
           Available7Provider.class,
-          load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+          load(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR)
+            .getClass());
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -85,7 +101,7 @@ public class ServiceProvidersTest {
           serviceFile,
           "io/grpc/ServiceProvidersTestAbstractProvider-doesNotExist.txt");
       Thread.currentThread().setContextClassLoader(cl);
-      assertNull(load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
+      assertNull(load(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR));
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -97,10 +113,11 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-multipleProvider.txt");
     assertSame(
         Available7Provider.class,
-        load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        load(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR)
+          .getClass());
 
     List<ServiceProvidersTestAbstractProvider> providers = loadAll(
-        ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+        ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR);
     assertEquals(3, providers.size());
     assertEquals(Available7Provider.class, providers.get(0).getClass());
     assertEquals(Available5Provider.class, providers.get(1).getClass());
@@ -114,7 +131,8 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-unavailableProvider.txt");
     assertEquals(
         Available7Provider.class,
-        load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        load(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR)
+          .getClass());
   }
 
   @Test
@@ -122,7 +140,7 @@ public class ServiceProvidersTest {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTestAbstractProvider-unknownClassProvider.txt");
     try {
-      loadAll(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      loadAll(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR);
       fail("Exception expected");
     } catch (ServiceConfigurationError e) {
       // noop
@@ -136,7 +154,7 @@ public class ServiceProvidersTest {
     try {
       // Even though there is a working provider, if any providers fail then we should fail
       // completely to avoid returning something unexpected.
-      loadAll(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      loadAll(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR);
       fail("Expected exception");
     } catch (ServiceConfigurationError expected) {
       // noop
@@ -149,7 +167,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtPriorityProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      loadAll(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      loadAll(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR);
       fail("Expected exception");
     } catch (FailAtPriorityProvider.PriorityException expected) {
       // noop
@@ -162,7 +180,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtAvailableProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      loadAll(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
+      loadAll(ServiceProvidersTestAbstractProvider.class, failingHardCoded, cl, ACCESSOR);
       fail("Expected exception");
     } catch (FailAtAvailableProvider.AvailableException expected) {
       // noop
@@ -239,10 +257,10 @@ public class ServiceProvidersTest {
 
   private static <T> T load(
       Class<T> klass,
-      Iterable<Class<?>> hardcoded,
+      Supplier<Iterable<Class<?>>> hardCoded,
       ClassLoader cl,
       PriorityAccessor<T> priorityAccessor) {
-    List<T> candidates = loadAll(klass, hardcoded, cl, priorityAccessor);
+    List<T> candidates = loadAll(klass, hardCoded, cl, priorityAccessor);
     if (candidates.isEmpty()) {
       return null;
     }
@@ -251,13 +269,13 @@ public class ServiceProvidersTest {
 
   private static <T> List<T> loadAll(
       Class<T> klass,
-      Iterable<Class<?>> hardcoded,
+      Supplier<Iterable<Class<?>>> hardCoded,
       ClassLoader classLoader,
       PriorityAccessor<T> priorityAccessor) {
     return ServiceProviders.loadAll(
         klass,
         ServiceLoader.load(klass, classLoader).iterator(),
-        hardcoded,
+        hardCoded,
         priorityAccessor);
   }
 

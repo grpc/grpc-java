@@ -129,7 +129,7 @@ public final class NameResolverRegistry {
           ServiceLoader
             .load(NameResolverProvider.class, NameResolverProvider.class.getClassLoader())
             .iterator(),
-          getHardCodedClasses(),
+          NameResolverRegistry::getHardCodedClasses,
           new NameResolverPriorityAccessor());
       if (providerList.isEmpty()) {
         logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "

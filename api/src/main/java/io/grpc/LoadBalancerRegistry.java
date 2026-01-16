@@ -43,7 +43,6 @@ import javax.annotation.concurrent.ThreadSafe;
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
   private static LoadBalancerRegistry instance;
-  private static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
 
   private final LinkedHashSet<LoadBalancerProvider> allProviders =
       new LinkedHashSet<>();
@@ -105,7 +104,7 @@ public final class LoadBalancerRegistry {
           ServiceLoader
             .load(LoadBalancerProvider.class, LoadBalancerProvider.class.getClassLoader())
             .iterator(),
-          HARDCODED_CLASSES,
+          LoadBalancerRegistry::getHardCodedClasses,
           new LoadBalancerPriorityAccessor());
       instance = new LoadBalancerRegistry();
       for (LoadBalancerProvider provider : providerList) {

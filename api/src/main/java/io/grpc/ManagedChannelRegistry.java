@@ -104,7 +104,7 @@ public final class ManagedChannelRegistry {
           ServiceLoader
             .load(ManagedChannelProvider.class, ManagedChannelProvider.class.getClassLoader())
             .iterator(),
-          getHardCodedClasses(),
+          ManagedChannelRegistry::getHardCodedClasses,
           new ManagedChannelPriorityAccessor());
       instance = new ManagedChannelRegistry();
       for (ManagedChannelProvider provider : providerList) {

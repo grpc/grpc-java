@@ -96,7 +96,7 @@ public final class ServerRegistry {
           ServerProvider.class,
           ServiceLoader.load(ServerProvider.class, ServerProvider.class.getClassLoader())
             .iterator(),
-          getHardCodedClasses(),
+          ServerRegistry::getHardCodedClasses,
           new ServerPriorityAccessor());
       instance = new ServerRegistry();
       for (ServerProvider provider : providerList) {
