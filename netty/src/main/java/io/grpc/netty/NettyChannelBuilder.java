@@ -38,6 +38,8 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -705,6 +707,24 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   @VisibleForTesting
   NettyChannelBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
+    return this;
+  }
+
+  /**
+   * Sets the registry used for looking up name resolvers.
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder nameResolverRegistry(NameResolverRegistry registry) {
+    managedChannelImplBuilder.nameResolverRegistry(registry);
+    return this;
+  }
+
+  /**
+   * Sets the {@link io.grpc.NameResolverProvider} to use.
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder nameResolverProvider(NameResolverProvider provider) {
+    managedChannelImplBuilder.nameResolverProvider(provider);
     return this;
   }
 

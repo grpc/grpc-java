@@ -155,6 +155,8 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+  @Nullable
+  NameResolverProvider nameResolverProvider;
 
   final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
@@ -436,8 +438,13 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
+  public ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
     this.nameResolverRegistry = resolverRegistry;
+    return this;
+  }
+
+  public ManagedChannelImplBuilder nameResolverProvider(NameResolverProvider provider) {
+    this.nameResolverProvider = provider;
     return this;
   }
 
@@ -724,7 +731,7 @@ public final class ManagedChannelImplBuilder
     ResolvedNameResolver resolvedResolver =
         InternalFeatureFlags.getRfc3986UrisEnabled()
             ? getNameResolverProviderRfc3986(target, nameResolverRegistry)
-            : getNameResolverProvider(target, nameResolverRegistry);
+            : getNameResolverProvider(target, nameResolverRegistry, nameResolverProvider);
     resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
@@ -845,7 +852,8 @@ public final class ManagedChannelImplBuilder
 
   @VisibleForTesting
   static ResolvedNameResolver getNameResolverProvider(
-      String target, NameResolverRegistry nameResolverRegistry) {
+      String target, NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     NameResolverProvider provider = null;
@@ -860,19 +868,28 @@ public final class ManagedChannelImplBuilder
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      provider = nameResolverProvider;
+      if (provider == null) {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
-    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
-      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the registry.
+    if (!URI_PATTERN.matcher(target).matches()) {
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with
+      // the default scheme from the registry (if provider is not specified) or
+      // the provider's default scheme (if provider is specified).
+      String scheme = (provider != null)
+          ? provider.getDefaultScheme()
+          : nameResolverRegistry.getDefaultScheme();
       try {
-        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
+        targetUri = new URI(scheme, "", "/" + target, null);
       } catch (URISyntaxException e) {
-        // Should not be possible.
+        // Should not happen because we just validated the URI.
         throw new IllegalArgumentException(e);
       }
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      if (provider == null) {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
     if (provider == null) {
