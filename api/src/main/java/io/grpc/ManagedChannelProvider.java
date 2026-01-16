@@ -103,7 +103,6 @@ public abstract class ManagedChannelProvider {
   protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
                                                       NameResolverRegistry nameResolverRegistry,
                                                       NameResolverProvider nameResolverProvider) {
-    // Implementation note: Currently delegates to the simplified version
     return newChannelBuilder(target, creds);
   }
 

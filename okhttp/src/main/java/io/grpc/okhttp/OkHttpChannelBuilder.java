@@ -35,6 +35,8 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
@@ -586,6 +588,22 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
       default:
         throw new RuntimeException("Unknown negotiation type: " + negotiationType);
     }
+  }
+
+  /**
+   * Sets the registry used for looking up name resolvers.
+   */
+  public OkHttpChannelBuilder nameResolverRegistry(NameResolverRegistry registry) {
+    managedChannelImplBuilder.nameResolverRegistry(registry);
+    return this;
+  }
+
+  /**
+   * Sets the {@link NameResolverProvider} to use.
+   */
+  public OkHttpChannelBuilder nameResolverProvider(NameResolverProvider provider) {
+    managedChannelImplBuilder.nameResolverProvider(provider);
+    return this;
   }
 
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
