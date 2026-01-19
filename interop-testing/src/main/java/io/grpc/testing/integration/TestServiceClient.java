@@ -563,6 +563,11 @@ public class TestServiceClient {
         tester.testOrcaOob();
         break;
       }
+      
+      case MCS: {
+        tester.testMcs();
+        break;
+      }
 
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
@@ -1053,6 +1058,9 @@ public class TestServiceClient {
     @Override
     protected int operationTimeoutMillis() {
       return 15000;
+    }
+
+    public void testMcs() {
     }
   }
 
