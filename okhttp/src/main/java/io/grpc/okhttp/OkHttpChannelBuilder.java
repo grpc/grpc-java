@@ -216,10 +216,20 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   OkHttpChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       SSLSocketFactory factory) {
+    this(target, channelCreds, callCreds, factory, null, null);
+  }
+
+  OkHttpChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      SSLSocketFactory factory,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
-        new OkHttpChannelDefaultPortProvider());
+        new OkHttpChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
@@ -590,21 +600,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     }
   }
 
-  /**
-   * Sets the registry used for looking up name resolvers.
-   */
-  public OkHttpChannelBuilder nameResolverRegistry(NameResolverRegistry registry) {
-    managedChannelImplBuilder.nameResolverRegistry(registry);
-    return this;
-  }
 
-  /**
-   * Sets the {@link NameResolverProvider} to use.
-   */
-  public OkHttpChannelBuilder nameResolverProvider(NameResolverProvider provider) {
-    managedChannelImplBuilder.nameResolverProvider(provider);
-    return this;
-  }
 
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
       EnumSet.of(
