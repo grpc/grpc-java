@@ -209,10 +209,20 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   NettyChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       ProtocolNegotiator.ClientFactory negotiator) {
+    this(target, channelCreds, callCreds, negotiator, null, null);
+  }
+
+  NettyChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      ProtocolNegotiator.ClientFactory negotiator,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
-        new NettyChannelDefaultPortProvider());
+        new NettyChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
@@ -710,23 +720,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     return this;
   }
 
-  /**
-   * Sets the registry used for looking up name resolvers.
-   */
-  @CanIgnoreReturnValue
-  public NettyChannelBuilder nameResolverRegistry(NameResolverRegistry registry) {
-    managedChannelImplBuilder.nameResolverRegistry(registry);
-    return this;
-  }
 
-  /**
-   * Sets the {@link io.grpc.NameResolverProvider} to use.
-   */
-  @CanIgnoreReturnValue
-  public NettyChannelBuilder nameResolverProvider(NameResolverProvider provider) {
-    managedChannelImplBuilder.nameResolverProvider(provider);
-    return this;
-  }
 
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);

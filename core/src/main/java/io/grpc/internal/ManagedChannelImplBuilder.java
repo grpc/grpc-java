@@ -310,6 +310,49 @@ public final class ManagedChannelImplBuilder
   }
 
   /**
+   * Creates a new managed channel builder with a target string, which can be
+   * either a valid {@link io.grpc.NameResolver}-compliant URI, or an authority
+   * string. Transport
+   * implementors must provide client transport factory builder, and may set
+   * custom channel default
+   * port provider.
+   *
+   * @param channelCreds         The ChannelCredentials provided by the user.
+   *                             These may be used when
+   *                             creating derivative channels.
+   * @param nameResolverRegistry the registry used to look up name resolvers.
+   * @param nameResolverProvider the provider used to look up name resolvers.
+   */
+  public ManagedChannelImplBuilder(
+      String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider,
+      @Nullable NameResolverRegistry nameResolverRegistry,
+      @Nullable NameResolverProvider nameResolverProvider) {
+    this.target = checkNotNull(target, "target");
+    this.channelCredentials = channelCreds;
+    this.callCredentials = callCreds;
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder,
+        "clientTransportFactoryBuilder");
+    this.directServerAddress = null;
+
+    if (channelBuilderDefaultPortProvider != null) {
+      this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
+    } else {
+      this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
+    }
+    if (nameResolverRegistry != null) {
+      this.nameResolverRegistry = nameResolverRegistry;
+    }
+    if (nameResolverProvider != null) {
+      this.nameResolverProvider = nameResolverProvider;
+    }
+
+    // TODO(dnvindhya): Move configurator to all the individual builders
+    InternalConfiguratorRegistry.configureChannelBuilder(this);
+  }
+
+  /**
    * Returns a target string for the SocketAddress. It is only used as a placeholder, because
    * DirectAddressNameResolverProvider will not actually try to use it. However, it must be a valid
    * URI.
@@ -438,13 +481,8 @@ public final class ManagedChannelImplBuilder
     return this;
   }
 
-  public ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
+  ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
     this.nameResolverRegistry = resolverRegistry;
-    return this;
-  }
-
-  public ManagedChannelImplBuilder nameResolverProvider(NameResolverProvider provider) {
-    this.nameResolverProvider = provider;
     return this;
   }
 
