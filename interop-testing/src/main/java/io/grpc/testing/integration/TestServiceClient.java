@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.testing.integration.TestCases.MCS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -30,28 +31,14 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import com.google.protobuf.ByteString;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ChannelCredentials;
-import io.grpc.ClientInterceptor;
-import io.grpc.ClientInterceptors;
-import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
-import io.grpc.InsecureServerCredentials;
-import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
-import io.grpc.ServerBuilder;
-import io.grpc.TlsChannelCredentials;
+import io.grpc.*;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
@@ -65,6 +52,8 @@ import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
+import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
+import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
@@ -72,8 +61,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -601,9 +589,12 @@ public class TestServiceClient {
   }
 
   private class Tester extends AbstractInteropTest {
+    private FakeMetricsSink fakeMetricsSink = new FakeMetricsSink();
+
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      boolean useGeneric = false;
+      boolean useSubchannelMetricsSink = testCase.equals(MCS.toString());
+      boolean useGeneric = useSubchannelMetricsSink? true : false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
@@ -669,6 +660,9 @@ public class TestServiceClient {
         }
         if (addMdInterceptor != null) {
           channelBuilder.intercept(addMdInterceptor);
+        }
+        if (useSubchannelMetricsSink) {
+          InternalManagedChannelBuilder.addMetricSink(channelBuilder, fakeMetricsSink);
         }
         return channelBuilder;
       }
@@ -1060,7 +1054,19 @@ public class TestServiceClient {
       return 15000;
     }
 
-    public void testMcs() {
+    public void testMcs() throws Exception {
+      final StreamingInputCallRequest request = StreamingInputCallRequest.newBuilder()
+              .setPayload(Payload.newBuilder()
+                      .setBody(ByteString.copyFrom(new byte[27182])))
+              .build();
+      StreamRecorder<StreamingInputCallResponse> responseObserver = StreamRecorder.create();
+      StreamObserver<StreamingInputCallRequest> requestObserver =
+              asyncStub.streamingInputCall(responseObserver);
+      requestObserver.onNext(request);
+
+      // assertThat(fakeMetricsSink.longUpDownCounterMetricInstrumentValues.get("grpc.subchannel.open_connections")).isEqualTo(1);
+      requestObserver.onCompleted();
+      responseObserver.awaitCompletion();
     }
   }
 
@@ -1074,5 +1080,35 @@ public class TestServiceClient {
           .append(testCase.description());
     }
     return builder.toString();
+  }
+
+  static class FakeMetricsSink implements MetricSink {
+    Map<LongUpDownCounterMetricInstrument, Long> longUpDownCounterMetricInstrumentValues = new HashMap<>();
+    @Override
+    public Map<String, Boolean> getEnabledMetrics() {
+      return null;
+    }
+
+    @Override
+    public Set<String> getOptionalLabels() {
+      return null;
+    }
+
+    @Override
+    public int getMeasuresSize() {
+      return 0;
+    }
+
+    @Override
+    public void updateMeasures(List<MetricInstrument> instruments) {
+      System.out.println("updateMeasures");
+    }
+
+    @Override
+    public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
+                              List<String> requiredLabelValues,
+                              List<String> optionalLabelValues) {
+      longUpDownCounterMetricInstrumentValues.put(metricInstrument, value);
+    }
   }
 }

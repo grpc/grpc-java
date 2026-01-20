@@ -8,6 +8,11 @@ plugins {
 }
 
 description = "gRPC: Integration Testing"
+apply plugin: "java-library"
+test {
+    testLogging.showStandardStreams = true
+    systemProperty 'java.util.logging.config.file', "/home/kannanj/grpc-logger.properties"
+}
 
 dependencies {
     implementation project(path: ':grpc-alts', configuration: 'shadow'),
