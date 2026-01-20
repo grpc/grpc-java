@@ -30,6 +30,8 @@ import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import io.grpc.*;
 import io.grpc.alts.AltsChannelCredentials;
@@ -1059,17 +1061,51 @@ public class TestServiceClient {
               .setPayload(Payload.newBuilder()
                       .setBody(ByteString.copyFrom(new byte[27182])))
               .build();
-      StreamRecorder<StreamingInputCallResponse> responseObserver = StreamRecorder.create();
-      StreamObserver<StreamingInputCallRequest> requestObserver =
-              asyncStub.streamingInputCall(responseObserver);
-      requestObserver.onNext(request);
+      StreamRecorder<StreamingInputCallResponse> responseObserver1 = StreamRecorder.create();
+      StreamObserver<StreamingInputCallRequest> requestObserver1 =
+              asyncStub.streamingInputCall(responseObserver1);
+      requestObserver1.onNext(request);
+      StreamRecorder<StreamingInputCallResponse> responseObserver2 = StreamRecorder.create();
+      StreamObserver<StreamingInputCallRequest> requestObserver2 =
+              asyncStub.streamingInputCall(responseObserver2);
+      requestObserver2.onNext(request);
 
       // assertThat(fakeMetricsSink.longUpDownCounterMetricInstrumentValues.get("grpc.subchannel.open_connections")).isEqualTo(1);
-      requestObserver.onCompleted();
-      responseObserver.awaitCompletion();
+      requestObserver2.onCompleted();
+      responseObserver2.awaitCompletion();
+      requestObserver1.onCompleted();
+
+      responseObserver1.awaitCompletion();
+
     }
   }
 
+  /*
+  public static ListenableFuture<Boolean> performTaskAsync() {
+    // Create a SettableFuture. This is the "handle" we control externally.
+    final SettableFuture<Boolean> future = SettableFuture.create();
+
+    // Submit the actual work to the executor service
+    executorService.submit(() -> {
+      try {
+        System.out.println("Worker thread: Task starting...");
+        // Simulate some work that takes time
+        TimeUnit.SECONDS.sleep(2);
+        System.out.println("Worker thread: Task finished.");
+
+        // When the work is done, set the future's value to true
+        future.set(true);
+
+      } catch (InterruptedException e) {
+        // If something goes wrong, set the future to an exception
+        future.setException(e);
+      }
+    });
+
+    // Return the future immediately
+    return future;
+  }
+*/
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
     for (TestCases testCase : TestCases.values()) {
@@ -1100,9 +1136,7 @@ public class TestServiceClient {
     }
 
     @Override
-    public void updateMeasures(List<MetricInstrument> instruments) {
-      System.out.println("updateMeasures");
-    }
+    public void updateMeasures(List<MetricInstrument> instruments) {}
 
     @Override
     public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
