@@ -24,7 +24,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -32,6 +31,7 @@ import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
@@ -958,18 +958,7 @@ public final class GrpcUtil {
   }
 
   public static boolean getFlag(String envVarName, boolean enableByDefault) {
-    String envVar = System.getenv(envVarName);
-    if (envVar == null) {
-      envVar = System.getProperty(envVarName);
-    }
-    if (envVar != null) {
-      envVar = envVar.trim();
-    }
-    if (enableByDefault) {
-      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
-    } else {
-      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
-    }
+    return InternalFeatureFlags.getFlag(envVarName, enableByDefault);
   }
 
 
