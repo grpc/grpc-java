@@ -171,6 +171,11 @@ public final class NameResolverRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find IntentNameResolverProvider", e);
     }
+    try {
+      list.add(Class.forName("io.grpc.binder.internal.AndroidAppNameResolverProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find AndroidAppNameResolverProvider", e);
+    }
     return Collections.unmodifiableList(list);
   }
 
