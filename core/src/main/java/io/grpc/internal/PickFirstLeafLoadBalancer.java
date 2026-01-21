@@ -452,6 +452,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
+    boolean wasIdle = rawConnectivityState == IDLE;
     if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
       return;
     }
@@ -467,6 +468,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       case IDLE:
         subchannelData.subchannel.requestConnection();
         subchannelData.updateState(CONNECTING);
+        if (wasIdle) {
+          rawConnectivityState = CONNECTING;
+          updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+        }
         scheduleNextConnection();
         break;
       case CONNECTING:
