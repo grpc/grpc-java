@@ -19,11 +19,6 @@ subprojects {
 
     apply plugin: "com.google.osdetector"
     apply plugin: "net.ltgt.errorprone"
-    apply plugin: "java"
-    test {
-        testLogging.showStandardStreams = true
-        systemProperty 'java.util.logging.config.file', "/home/kannanj/grpc-logger.properties"
-    }
 
     group = "io.grpc"
     version = "1.79.0-SNAPSHOT" // CURRENT_GRPC_VERSION
