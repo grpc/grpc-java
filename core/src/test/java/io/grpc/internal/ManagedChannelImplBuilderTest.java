@@ -52,6 +52,7 @@ import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvi
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import io.grpc.testing.FlagResetRule;
 import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
