@@ -75,7 +75,7 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
-  private int mcs = 0;
+  private boolean useMcs = false;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -119,8 +119,8 @@ public class TestServiceServer {
           usage = true;
           break;
         }
-      } else if ("mcs".equals(key)) {
-        mcs = Integer.parseInt(value);
+      } else if ("use_mcs".equals(key)) {
+        useMcs = Boolean.parseBoolean(value);
         addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
       } else {
         System.err.println("Unknown argument: " + key);
@@ -190,8 +190,8 @@ public class TestServiceServer {
         if (v4Address != null && !v4Address.equals(localV4Address)) {
           ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
         }
-        if (mcs > 0) {
-          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(mcs);
+        if (useMcs) {
+          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(2);
         }
         break;
       case IPV6:

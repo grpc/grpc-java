@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.ComputeEngineCredentials;
@@ -30,10 +31,27 @@ import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
-import io.grpc.*;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ChannelCredentials;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
+import io.grpc.InternalManagedChannelBuilder;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.LongUpDownCounterMetricInstrument;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.MetricInstrument;
+import io.grpc.MetricSink;
+import io.grpc.ServerBuilder;
+import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
 import io.grpc.alts.ComputeEngineChannelCredentials;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
@@ -61,9 +79,13 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -596,7 +618,7 @@ public class TestServiceClient {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       boolean useSubchannelMetricsSink = testCase.equals(MCS.toString());
-      boolean useGeneric = useSubchannelMetricsSink? true : false;
+      boolean useGeneric = testCase.equals(MCS.toString())? true : false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
@@ -656,7 +678,17 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
         }
-        if (serviceConfig != null) {
+        if (testCase.equals(MCS.toString())) {
+          channelBuilder.disableServiceConfigLookUp();
+          try {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> serviceConfigMap = (Map<String, ?>) JsonParser.parse(
+                "{\"connection_scaling\":{\"max_connections_per_subchannel\": 2}}");
+            channelBuilder.defaultServiceConfig(serviceConfigMap);
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        } else if (serviceConfig != null) {
           channelBuilder.disableServiceConfigLookUp();
           channelBuilder.defaultServiceConfig(serviceConfig);
         }
@@ -980,31 +1012,16 @@ public class TestServiceClient {
           .build();
 
       final int retryLimit = 5;
-      BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
-      final Object lastItem = new Object();
+      StreamingOutputCallResponseObserver streamingOutputCallResponseObserver =
+          new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver =
-          asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
-
-            @Override
-            public void onNext(StreamingOutputCallResponse value) {
-              queue.add(value);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-              queue.add(t);
-            }
-
-            @Override
-            public void onCompleted() {
-              queue.add(lastItem);
-            }
-          });
+          asyncStub.fullDuplexCall(streamingOutputCallResponseObserver);
 
       streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
           .setOrcaOobReport(answer)
           .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      assertThat(streamingOutputCallResponseObserver.take())
+          .isInstanceOf(StreamingOutputCallResponse.class);
       int i = 0;
       for (; i < retryLimit; i++) {
         Thread.sleep(1000);
@@ -1017,7 +1034,7 @@ public class TestServiceClient {
       streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
           .setOrcaOobReport(answer2)
           .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      assertThat(streamingOutputCallResponseObserver.isCompleted).isTrue();
 
       for (i = 0; i < retryLimit; i++) {
         Thread.sleep(1000);
@@ -1027,8 +1044,6 @@ public class TestServiceClient {
         }
       }
       assertThat(i).isLessThan(retryLimit);
-      streamObserver.onCompleted();
-      assertThat(queue.take()).isSameInstanceAs(lastItem);
     }
 
     @Override
@@ -1056,56 +1071,60 @@ public class TestServiceClient {
       return 15000;
     }
 
+    class StreamingOutputCallResponseObserver implements StreamObserver<StreamingOutputCallResponse> {
+      private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+      private volatile boolean isCompleted = true;
+
+      @Override
+      public void onNext(StreamingOutputCallResponse value) {
+        queue.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        queue.add(t);
+      }
+
+      @Override
+      public void onCompleted() {
+        isCompleted = true;
+      }
+
+      Object take() throws InterruptedException {
+        return queue.take();
+      }
+    }
+
     public void testMcs() throws Exception {
-      final StreamingInputCallRequest request = StreamingInputCallRequest.newBuilder()
-              .setPayload(Payload.newBuilder()
-                      .setBody(ByteString.copyFrom(new byte[27182])))
-              .build();
-      StreamRecorder<StreamingInputCallResponse> responseObserver1 = StreamRecorder.create();
-      StreamObserver<StreamingInputCallRequest> requestObserver1 =
-              asyncStub.streamingInputCall(responseObserver1);
-      requestObserver1.onNext(request);
-      StreamRecorder<StreamingInputCallResponse> responseObserver2 = StreamRecorder.create();
-      StreamObserver<StreamingInputCallRequest> requestObserver2 =
-              asyncStub.streamingInputCall(responseObserver2);
-      requestObserver2.onNext(request);
+      StreamingOutputCallResponseObserver responseObserver1 = new StreamingOutputCallResponseObserver();
+      StreamObserver<StreamingOutputCallRequest> streamObserver1 =
+          asyncStub.fullDuplexCall(responseObserver1);
+      streamObserver1.onNext(StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+      assertThat(responseObserver1.take()).isInstanceOf(StreamingOutputCallResponse.class);
 
-      // assertThat(fakeMetricsSink.longUpDownCounterMetricInstrumentValues.get("grpc.subchannel.open_connections")).isEqualTo(1);
-      requestObserver2.onCompleted();
-      responseObserver2.awaitCompletion();
-      requestObserver1.onCompleted();
+      StreamingOutputCallResponseObserver responseObserver2 = new StreamingOutputCallResponseObserver();
+      StreamObserver<StreamingOutputCallRequest> streamObserver2 =
+          asyncStub.fullDuplexCall(responseObserver2);
+      streamObserver2.onNext(StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+      assertThat(responseObserver2.take()).isInstanceOf(StreamingOutputCallResponse.class);
 
-      responseObserver1.awaitCompletion();
+      assertThat(fakeMetricsSink.openConnectionCount).isEqualTo(1);
 
+      // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
+      // connection to be created in the same subchannel and not get queued.
+      StreamingOutputCallResponseObserver responseObserver3 = new StreamingOutputCallResponseObserver();
+      StreamObserver<StreamingOutputCallRequest> streamObserver3 =
+          asyncStub.fullDuplexCall(responseObserver3);
+      streamObserver3.onNext(StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
+      assertThat(responseObserver3.take()).isInstanceOf(StreamingOutputCallResponse.class);
+
+      assertThat(fakeMetricsSink.openConnectionCount).isEqualTo(2);
     }
   }
 
-  /*
-  public static ListenableFuture<Boolean> performTaskAsync() {
-    // Create a SettableFuture. This is the "handle" we control externally.
-    final SettableFuture<Boolean> future = SettableFuture.create();
-
-    // Submit the actual work to the executor service
-    executorService.submit(() -> {
-      try {
-        System.out.println("Worker thread: Task starting...");
-        // Simulate some work that takes time
-        TimeUnit.SECONDS.sleep(2);
-        System.out.println("Worker thread: Task finished.");
-
-        // When the work is done, set the future's value to true
-        future.set(true);
-
-      } catch (InterruptedException e) {
-        // If something goes wrong, set the future to an exception
-        future.setException(e);
-      }
-    });
-
-    // Return the future immediately
-    return future;
-  }
-*/
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
     for (TestCases testCase : TestCases.values()) {
@@ -1119,7 +1138,8 @@ public class TestServiceClient {
   }
 
   static class FakeMetricsSink implements MetricSink {
-    Map<LongUpDownCounterMetricInstrument, Long> longUpDownCounterMetricInstrumentValues = new HashMap<>();
+    private volatile long openConnectionCount;
+
     @Override
     public Map<String, Boolean> getEnabledMetrics() {
       return null;
@@ -1142,7 +1162,13 @@ public class TestServiceClient {
     public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
                               List<String> requiredLabelValues,
                               List<String> optionalLabelValues) {
-      longUpDownCounterMetricInstrumentValues.put(metricInstrument, value);
+      if (metricInstrument.getName().equals("grpc.subchannel.open_connections")) {
+        openConnectionCount = value;
+      }
+    }
+
+    synchronized long getOpenConnectionCount() {
+      return openConnectionCount;
     }
   }
 }
