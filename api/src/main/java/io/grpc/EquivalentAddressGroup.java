@@ -55,6 +55,15 @@ public final class EquivalentAddressGroup {
    */
   public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
+  /**
+   * Endpoint weight for load balancing purposes. While the type is Long, it must be a valid uint32.
+   * Must not be zero. The weight is proportional to the other endpoints; if an endpoint's weight is
+   * twice that of another endpoint, it is intended to receive twice the load.
+   */
+  @Attr
+  static final Attributes.Key<Long> ATTR_WEIGHT =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.ATTR_WEIGHT");
+
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 
