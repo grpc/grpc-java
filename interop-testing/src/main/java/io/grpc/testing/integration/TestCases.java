@@ -60,7 +60,8 @@ public enum TestCases {
   CHANNEL_SOAK("sends 'soak_iterations' large_unary rpcs in a loop, each on a new channel"),
   ORCA_PER_RPC("report backend metrics per query"),
   ORCA_OOB("report backend metrics out-of-band"),
-  MCS("max concurrent streaming");
+  MCS("max concurrent streaming"),
+  MCSSS("mcs server streaming");
 
   private final String description;
 

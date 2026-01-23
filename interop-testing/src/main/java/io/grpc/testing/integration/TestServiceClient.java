@@ -581,6 +581,11 @@ public class TestServiceClient {
         break;
       }
 
+      case MCSSS: {
+        tester.testMcs_serverStreaming();
+        break;
+      }
+
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
@@ -1123,7 +1128,16 @@ public class TestServiceClient {
 
       assertThat(fakeMetricsSink.openConnectionCount).isEqualTo(2);
     }
-  }
+
+    public void testMcs_serverStreaming() throws Exception {
+      StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build();
+      StreamingOutputCallResponseObserver responseObserver1 = new StreamingOutputCallResponseObserver();
+      asyncStub.streamingOutputCall(request, responseObserver1);
+      assertThat(responseObserver1.take()).isInstanceOf(StreamingOutputCallResponse.class);
+    }
+
+    }
 
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
