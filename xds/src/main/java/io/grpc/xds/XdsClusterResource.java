@@ -83,6 +83,8 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
   static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
       "type.googleapis.com/envoy.extensions.transport_sockets.http_11_proxy.v3"
           + ".Http11ProxyUpstreamTransport";
+  static final String TRANSPORT_SOCKET_NAME_RAW_BUFFER =
+      "type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer";
   private final LoadBalancerRegistry loadBalancerRegistry
       = LoadBalancerRegistry.getDefaultRegistry();
 
@@ -260,15 +262,21 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     boolean hasTransportSocket = cluster.hasTransportSocket();
     TransportSocket transportSocket = cluster.getTransportSocket();
 
-    if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())
-        && !(isEnabledXdsHttpConnect
-        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName()))) {
+
+    String transportSocketName = hasTransportSocket ? transportSocket.getName() : "<invalid>";
+    boolean socketIsTls = transportSocketName.equals(TRANSPORT_SOCKET_NAME_TLS);
+    boolean socketIsH1Proxy = transportSocketName.equals(TRANSPORT_SOCKET_NAME_HTTP11_PROXY);
+    boolean supportSocketIsH1Proxy = isEnabledXdsHttpConnect && socketIsH1Proxy;
+
+    if (hasTransportSocket && !socketIsTls && !supportSocketIsH1Proxy) {
       return StructOrError.fromError(
-          "transport-socket with name " + transportSocket.getName() + " not supported.");
+          "transport-socket with name " + transportSocketName + " not supported, socketIsTls="
+              + socketIsTls + ", socketIsH1Proxy=" + socketIsH1Proxy
+              + ", isEnabledXdsHttpConnect=" + isEnabledXdsHttpConnect
+              + ", supportSocketIsH1Proxy=" + supportSocketIsH1Proxy + ".");
     }
 
-    if (hasTransportSocket && isEnabledXdsHttpConnect
-        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName())) {
+    if (hasTransportSocket && supportSocketIsH1Proxy) {
       isHttp11ProxyAvailable = true;
       try {
         Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket

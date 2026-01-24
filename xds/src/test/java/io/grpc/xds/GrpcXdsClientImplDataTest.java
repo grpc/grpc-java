@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
 import static io.grpc.xds.XdsClusterResource.TRANSPORT_SOCKET_NAME_HTTP11_PROXY;
+import static io.grpc.xds.XdsClusterResource.TRANSPORT_SOCKET_NAME_RAW_BUFFER;
 import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
@@ -97,6 +98,7 @@ import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3
 import io.envoyproxy.envoy.extensions.load_balancing_policies.client_side_weighted_round_robin.v3.ClientSideWeightedRoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11ProxyUpstreamTransport;
+import io.envoyproxy.envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateProviderPluginInstance;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
@@ -2612,6 +2614,50 @@ public class GrpcXdsClientImplDataTest {
     Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =
         Http11ProxyUpstreamTransport.newBuilder()
             .setTransportSocket(TransportSocket.getDefaultInstance())
+            .build();
+
+    TransportSocket transportSocket = TransportSocket.newBuilder()
+        .setName(TRANSPORT_SOCKET_NAME_HTTP11_PROXY)
+        .setTypedConfig(Any.pack(http11ProxyUpstreamTransport))
+        .build();
+
+    Cluster cluster = Cluster.newBuilder()
+        .setName("cluster-http11-proxy.googleapis.com")
+        .setType(DiscoveryType.EDS)
+        .setEdsClusterConfig(
+            EdsClusterConfig.newBuilder()
+                .setEdsConfig(
+                    ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+                .setServiceName("service-http11-proxy.googleapis.com"))
+        .setLbPolicy(LbPolicy.ROUND_ROBIN)
+        .setTransportSocket(transportSocket)
+        .build();
+
+    CdsUpdate result =
+        XdsClusterResource.processCluster(cluster, null, LRS_SERVER_INFO,
+            LoadBalancerRegistry.getDefaultRegistry());
+
+    assertThat(result).isNotNull();
+    assertThat(result.isHttp11ProxyAvailable()).isTrue();
+  }
+
+  /**
+   * Http11ProxyUpstreamTransport with transport_socket=RawBuffer must behave the same as
+   * when transport_socket is unset.
+   */
+  @Test
+  public void parseNonAggregateCluster_withHttp11ProxyTransportSocket_rawBuffer() throws Exception {
+    XdsClusterResource.isEnabledXdsHttpConnect = true;
+
+    // Nested transport_socket (Http11ProxyUpstreamTransport.transport_socket).
+    TransportSocket transportSocketRawBuffer = TransportSocket.newBuilder()
+        .setName(TRANSPORT_SOCKET_NAME_RAW_BUFFER)
+        .setTypedConfig(Any.pack(RawBuffer.getDefaultInstance()))
+        .build();
+
+    Http11ProxyUpstreamTransport http11ProxyUpstreamTransport =
+        Http11ProxyUpstreamTransport.newBuilder()
+            .setTransportSocket(transportSocketRawBuffer)
             .build();
 
     TransportSocket transportSocket = TransportSocket.newBuilder()
