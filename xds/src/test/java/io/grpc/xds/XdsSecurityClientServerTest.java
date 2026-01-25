@@ -77,7 +77,6 @@ import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
-import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -317,7 +316,6 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_autoSniValidation_sniInUtc()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -341,14 +339,12 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_sniFromHostname()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -375,14 +371,12 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_noSniApplicable_usesMatcherFromCmnVdnCtx()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -406,7 +400,6 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
