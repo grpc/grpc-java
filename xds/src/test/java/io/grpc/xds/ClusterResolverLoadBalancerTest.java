@@ -416,8 +416,7 @@ public class ClusterResolverLoadBalancerTest {
     XdsClusterResource.isEnabledXdsHttpConnect = true;
     Cluster cluster = EDS_CLUSTER.toBuilder()
         .setTransportSocket(TransportSocket.newBuilder()
-            .setName(
-                "type.googleapis.com/" + Http11ProxyUpstreamTransport.getDescriptor().getFullName())
+            .setName("envoy.transport_sockets.http_11_proxy")
             .setTypedConfig(Any.pack(Http11ProxyUpstreamTransport.getDefaultInstance())))
         .build();
     // Proxy address in endpointMetadata, and no proxy in locality metadata
@@ -466,8 +465,7 @@ public class ClusterResolverLoadBalancerTest {
     XdsClusterResource.isEnabledXdsHttpConnect = true;
     Cluster cluster = EDS_CLUSTER.toBuilder()
         .setTransportSocket(TransportSocket.newBuilder()
-            .setName(
-                "type.googleapis.com/" + Http11ProxyUpstreamTransport.getDescriptor().getFullName())
+            .setName("envoy.transport_sockets.http_11_proxy")
             .setTypedConfig(Any.pack(Http11ProxyUpstreamTransport.getDefaultInstance())))
         .build();
     // No proxy address in endpointMetadata, and proxy in locality metadata

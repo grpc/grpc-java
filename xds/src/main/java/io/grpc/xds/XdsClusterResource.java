@@ -83,11 +83,20 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
-  static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
-      "type.googleapis.com/envoy.extensions.transport_sockets.http_11_proxy.v3"
-          + ".Http11ProxyUpstreamTransport";
-  static final String TRANSPORT_SOCKET_NAME_RAW_BUFFER =
-      "type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer";
+
+  // TODO(sergiitk): should this be in XdsResourceType next to TRANSPORT_SOCKET_NAME_TLS?
+  @VisibleForTesting
+  static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY = "envoy.transport_sockets.http_11_proxy";
+  @VisibleForTesting
+  static final String TRANSPORT_SOCKET_NAME_RAW_BUFFER = "envoy.transport_sockets.raw_buffer";
+
+  // TODO(sergiitk): tell Eric about the bug.
+  // static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
+  //     "type.googleapis.com/envoy.extensions.transport_sockets.http_11_proxy.v3"
+  //         + ".Http11ProxyUpstreamTransport";
+  // static final String TRANSPORT_SOCKET_NAME_RAW_BUFFER =
+  //     "type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer";
+
   private final LoadBalancerRegistry loadBalancerRegistry
       = LoadBalancerRegistry.getDefaultRegistry();
   private static final XdsLogger logger = XdsLogger.withLogId(
@@ -282,19 +291,29 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           + ", socketIsH1Proxy=" + socketIsH1Proxy
           + ", isEnabledXdsHttpConnect=" + isEnabledXdsHttpConnect
           + ", socketIsH1ProxyAndSupported=" + socketIsH1ProxyAndSupported + ".";
-      logger.log(XdsLogLevel.ERROR, extraErrorMsg);
+      logger.log(XdsLogLevel.FORCE_WARNING, extraErrorMsg);
 
       return StructOrError.fromError(errMsg + ".");
     }
 
     if (hasTransportSocket && socketIsH1ProxyAndSupported) {
+      logger.log(XdsLogLevel.FORCE_INFO, "Enabling HTTP11 Proxy, trying to parse");
       isHttp11ProxyAvailable = true;
+
       try {
         Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket
-            .getTypedConfig().unpack(io.envoyproxy.envoy.extensions.transport_sockets
-                .http_11_proxy.v3.Http11ProxyUpstreamTransport.class);
+            .getTypedConfig().unpack(Http11ProxyUpstreamTransport.class);
+
         hasTransportSocket = wrappedTransportSocket.hasTransportSocket();
         transportSocket = wrappedTransportSocket.getTransportSocket();
+        transportSocketName = hasTransportSocket ? transportSocket.getName() : "<wrapped-invalid>";
+
+        logger.log(XdsLogLevel.FORCE_INFO,
+            "Enabled HTTP11 Proxy, wrapped socket: " + transportSocketName
+        );
+
+        // TODO(sergiitk): tell Eric this is missing the wrapped socket check.
+
       } catch (InvalidProtocolBufferException e) {
         return StructOrError.fromError(
             "Cluster " + clusterName + ": malformed Http11ProxyUpstreamTransport: " + e);
