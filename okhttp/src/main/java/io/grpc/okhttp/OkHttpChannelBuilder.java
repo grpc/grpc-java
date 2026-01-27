@@ -35,6 +35,8 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
@@ -214,10 +216,20 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   OkHttpChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       SSLSocketFactory factory) {
+    this(target, channelCreds, callCreds, factory, null, null);
+  }
+
+  OkHttpChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      SSLSocketFactory factory,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new OkHttpChannelTransportFactoryBuilder(),
-        new OkHttpChannelDefaultPortProvider());
+        new OkHttpChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.sslSocketFactory = factory;
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
@@ -587,6 +599,8 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         throw new RuntimeException("Unknown negotiation type: " + negotiationType);
     }
   }
+
+
 
   private static final EnumSet<TlsChannelCredentials.Feature> understoodTlsFeatures =
       EnumSet.of(
