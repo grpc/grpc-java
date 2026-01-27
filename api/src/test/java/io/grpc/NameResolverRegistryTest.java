@@ -102,7 +102,9 @@ public class NameResolverRegistryTest {
     registry.register(
         new BaseProvider(true, 5, "noScheme") {
           @Override
-          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+          public NameResolver newNameResolver(io.grpc.Uri passedUri, NameResolver.Args passedArgs) {
+            assertThat(passedUri).isSameInstanceAs(ioGrpcUri);
+            assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
@@ -116,7 +118,9 @@ public class NameResolverRegistryTest {
     registry.register(
         new BaseProvider(true, 5, "noScheme") {
           @Override
-          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
+          public NameResolver newNameResolver(io.grpc.Uri passedUri, NameResolver.Args passedArgs) {
+            assertThat(passedUri).isSameInstanceAs(javaNetUri);
+            assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
