@@ -60,6 +60,7 @@ import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import io.grpc.testing.FlagResetRule;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;

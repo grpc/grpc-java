@@ -40,6 +40,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -52,6 +53,7 @@ import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvi
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
+import io.grpc.testing.FlagResetRule;
 import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -128,7 +130,7 @@ public class ManagedChannelImplBuilderTest {
   @Before
   public void setUp() throws Exception {
     flagResetRule.setFlagForTest(
-        ManagedChannelImplBuilder::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
 
     builder = new ManagedChannelImplBuilder(
         DUMMY_TARGET,
