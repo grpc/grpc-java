@@ -54,7 +54,13 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -525,6 +531,140 @@ public class AbstractClientStreamTest {
     CallOptions options = CallOptions.DEFAULT.withOnReadyThreshold(10);
     assertEquals(Integer.valueOf(10), options.getOnReadyThreshold());
     assertNull(options.clearOnReadyThreshold().getOnReadyThreshold());
+  }
+
+  @Test
+  public void inboundHeadersReceived_warnsWhenServerDoesNotAdvertiseAcceptEncoding() {
+    // Set up log capture
+    Logger logger = Logger.getLogger(AbstractClientStream.class.getName());
+    Level originalLevel = logger.getLevel();
+    List<LogRecord> logs = new ArrayList<>();
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logs.add(record);
+      }
+
+      @Override
+      public void flush() {}
+
+      @Override
+      public void close() {}
+    };
+    logger.addHandler(handler);
+    logger.setLevel(Level.FINE);
+
+    try {
+      AbstractClientStream stream =
+          new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+      stream.start(mockListener);
+
+      // Simulate that client sent gzip-compressed messages
+      stream.transportState().setSentMessageEncoding("gzip");
+
+      // Server responds without grpc-accept-encoding header
+      Metadata headers = new Metadata();
+      stream.transportState().inboundHeadersReceived(headers);
+
+      // Verify warning was logged
+      verify(mockListener).headersRead(headers);
+      assertThat(logs).hasSize(1);
+      LogRecord record = logs.get(0);
+      assertThat(record.getLevel()).isEqualTo(Level.FINE);
+      assertThat(record.getMessage()).contains("grpc-accept-encoding");
+      // The parameter {0} contains the encoding
+      assertThat(record.getParameters()).asList().contains("gzip");
+    } finally {
+      logger.removeHandler(handler);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  @Test
+  public void inboundHeadersReceived_noWarningWhenServerAdvertisesAcceptEncoding() {
+    // Set up log capture
+    Logger logger = Logger.getLogger(AbstractClientStream.class.getName());
+    Level originalLevel = logger.getLevel();
+    List<LogRecord> logs = new ArrayList<>();
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logs.add(record);
+      }
+
+      @Override
+      public void flush() {}
+
+      @Override
+      public void close() {}
+    };
+    logger.addHandler(handler);
+    logger.setLevel(Level.FINE);
+
+    try {
+      AbstractClientStream stream =
+          new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+      stream.start(mockListener);
+
+      // Simulate that client sent gzip-compressed messages
+      stream.transportState().setSentMessageEncoding("gzip");
+
+      // Server responds with grpc-accept-encoding header
+      Metadata headers = new Metadata();
+      headers.put(
+          GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY,
+          "gzip".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+      stream.transportState().inboundHeadersReceived(headers);
+
+      // Verify no warning was logged
+      verify(mockListener).headersRead(headers);
+      assertThat(logs).isEmpty();
+    } finally {
+      logger.removeHandler(handler);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  @Test
+  public void inboundHeadersReceived_noWarningWhenClientDidNotUseCompression() {
+    // Set up log capture
+    Logger logger = Logger.getLogger(AbstractClientStream.class.getName());
+    Level originalLevel = logger.getLevel();
+    List<LogRecord> logs = new ArrayList<>();
+    Handler handler = new Handler() {
+      @Override
+      public void publish(LogRecord record) {
+        logs.add(record);
+      }
+
+      @Override
+      public void flush() {}
+
+      @Override
+      public void close() {}
+    };
+    logger.addHandler(handler);
+    logger.setLevel(Level.FINE);
+
+    try {
+      AbstractClientStream stream =
+          new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+      stream.start(mockListener);
+
+      // Client did not set any encoding (using identity/no compression)
+      // sentMessageEncoding is null by default
+
+      // Server responds without grpc-accept-encoding header
+      Metadata headers = new Metadata();
+      stream.transportState().inboundHeadersReceived(headers);
+
+      // Verify no warning was logged (client didn't use compression)
+      verify(mockListener).headersRead(headers);
+      assertThat(logs).isEmpty();
+    } finally {
+      logger.removeHandler(handler);
+      logger.setLevel(originalLevel);
+    }
   }
 
   /**
