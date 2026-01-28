@@ -100,32 +100,32 @@ public class NameResolverRegistryTest {
   public void newNameResolver_providerReturnsNull_ioGrpcUri() {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(
-        new BaseProvider(true, 5, "noScheme") {
+        new BaseProvider(true, 5, ioGrpcUri.getScheme()) {
           @Override
-          public NameResolver newNameResolver(io.grpc.Uri passedUri, NameResolver.Args passedArgs) {
+          public NameResolver newNameResolver(Uri passedUri, NameResolver.Args passedArgs) {
             assertThat(passedUri).isSameInstanceAs(ioGrpcUri);
             assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
     assertThat(registry.asFactory().newNameResolver(ioGrpcUri, args)).isNull();
-    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("noScheme");
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo(ioGrpcUri.getScheme());
   }
 
   @Test
   public void newNameResolver_providerReturnsNull_javaNetUri() {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(
-        new BaseProvider(true, 5, "noScheme") {
+        new BaseProvider(true, 5, javaNetUri.getScheme()) {
           @Override
-          public NameResolver newNameResolver(io.grpc.Uri passedUri, NameResolver.Args passedArgs) {
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             assertThat(passedUri).isSameInstanceAs(javaNetUri);
             assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
     assertThat(registry.asFactory().newNameResolver(javaNetUri, args)).isNull();
-    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo("noScheme");
+    assertThat(registry.asFactory().getDefaultScheme()).isEqualTo(javaNetUri.getScheme());
   }
 
   @Test
