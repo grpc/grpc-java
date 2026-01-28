@@ -261,6 +261,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void edsClustersWithRingHashEndpointLbPolicy_oppositePickFirstWeightedShuffling()
+      throws Exception {
+    boolean original = CdsLoadBalancer2.pickFirstWeightedShuffling;
+    CdsLoadBalancer2.pickFirstWeightedShuffling = !CdsLoadBalancer2.pickFirstWeightedShuffling;
+    try {
+      edsClustersWithRingHashEndpointLbPolicy();
+    } finally {
+      CdsLoadBalancer2.pickFirstWeightedShuffling = original;
+    }
+  }
+
+  @Test
   public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
     boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
     LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
@@ -306,15 +318,15 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(addr1.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
     assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr2.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
     assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr3.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
     assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(50 * 60);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x6AAAAAAA /* 5/6 */ : 50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER + "[child1]");
