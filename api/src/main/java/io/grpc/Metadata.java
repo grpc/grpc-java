@@ -936,10 +936,12 @@ public final class Metadata {
     }
 
     byte[] toBytes() {
+      byte[] serialized = this.serialized;
       if (serialized == null) {
         synchronized (this) {
+          serialized = this.serialized;
           if (serialized == null) {
-            serialized = streamToBytes(toStream());
+            this.serialized = serialized = streamToBytes(toStream());
           }
         }
       }
