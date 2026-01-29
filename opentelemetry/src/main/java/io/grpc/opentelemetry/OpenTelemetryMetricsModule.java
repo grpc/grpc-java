@@ -159,8 +159,7 @@ final class OpenTelemetryMetricsModule {
     return isGeneratedMethod ? fullMethodName : "other";
   }
 
-  private static Context otelContextWithBaggage() {
-    Baggage baggage = BAGGAGE_KEY.get();
+  private static Context otelContextWithBaggage(@Nullable Baggage baggage) {
     if (baggage == null) {
       return Context.current();
     }
@@ -206,16 +205,19 @@ final class OpenTelemetryMetricsModule {
     volatile String backendService;
     long attemptNanos;
     Code statusCode;
+    final Baggage baggage;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
         StreamInfo info, String target, String fullMethodName,
-        List<OpenTelemetryPlugin.ClientStreamPlugin> streamPlugins) {
+        List<OpenTelemetryPlugin.ClientStreamPlugin> streamPlugins,
+        Baggage baggage) {
       this.attemptsState = attemptsState;
       this.module = module;
       this.info = info;
       this.target = target;
       this.fullMethodName = fullMethodName;
       this.streamPlugins = streamPlugins;
+      this.baggage = baggage;
       this.stopwatch = module.stopwatchSupplier.get().start();
     }
 
@@ -282,7 +284,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
-      Context otelContext = otelContextWithBaggage();
+      Context otelContext = otelContextWithBaggage(baggage);
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
@@ -300,6 +302,10 @@ final class OpenTelemetryMetricsModule {
           savedBackendService = "";
         }
         builder.put(BACKEND_SERVICE_KEY, savedBackendService);
+      }
+      for (java.util.Map.Entry<String, io.opentelemetry.api.baggage.BaggageEntry> entry :
+          baggage.asMap().entrySet()) {
+        builder.put(entry.getKey(), entry.getValue().getValue());
       }
       for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
@@ -342,6 +348,7 @@ final class OpenTelemetryMetricsModule {
     private int activeStreams;
     @GuardedBy("lock")
     private boolean finishedCallToBeRecorded;
+    private final Baggage baggage;
 
     CallAttemptsTracerFactory(
         OpenTelemetryMetricsModule module,
@@ -354,6 +361,7 @@ final class OpenTelemetryMetricsModule {
       this.callPlugins = checkNotNull(callPlugins, "callPlugins");
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
+      this.baggage = Baggage.fromContext(Context.current());
 
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
           METHOD_KEY, fullMethodName,
@@ -407,7 +415,8 @@ final class OpenTelemetryMetricsModule {
         }
         streamPlugins = Collections.unmodifiableList(streamPlugins);
       }
-      return new ClientTracer(this, module, info, target, fullMethodName, streamPlugins);
+      return new ClientTracer(this, module, info, target, fullMethodName, streamPlugins,
+          baggage);
     }
 
     // Called whenever each attempt is ended.
@@ -448,7 +457,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedCall() {
-      Context otelContext = otelContextWithBaggage();
+      Context otelContext = otelContextWithBaggage(baggage);
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -463,6 +472,12 @@ final class OpenTelemetryMetricsModule {
               METHOD_KEY, fullMethodName,
               TARGET_KEY, target
           );
+      AttributesBuilder baseAttributesBuilder = baseAttributes.toBuilder();
+      for (java.util.Map.Entry<String, io.opentelemetry.api.baggage.BaggageEntry> entry
+          : baggage.asMap().entrySet()) {
+        baseAttributesBuilder.put(entry.getKey(), entry.getValue().getValue());
+      }
+      baseAttributes = baseAttributesBuilder.build();
 
       // Duration
       if (module.resource.clientCallDurationCounter() != null) {
@@ -606,7 +621,8 @@ final class OpenTelemetryMetricsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      Context otelContext = otelContextWithBaggage();
+      Baggage baggage = BAGGAGE_KEY.get();
+      Context otelContext = otelContextWithBaggage(baggage);
       if (streamClosedUpdater != null) {
         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
           return;
@@ -622,6 +638,12 @@ final class OpenTelemetryMetricsModule {
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod))
           .put(STATUS_KEY, status.getCode().toString());
+      if (baggage != null) {
+        for (java.util.Map.Entry<String, io.opentelemetry.api.baggage.BaggageEntry> entry
+            : baggage.asMap().entrySet()) {
+          builder.put(entry.getKey(), entry.getValue().getValue());
+        }
+      }
       for (OpenTelemetryPlugin.ServerStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
       }
