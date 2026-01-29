@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc.testing;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
