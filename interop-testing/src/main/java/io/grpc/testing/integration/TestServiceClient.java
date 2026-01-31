@@ -17,7 +17,7 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.testing.integration.TestCases.MCS;
+import static io.grpc.testing.integration.TestCases.MCS_CS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -576,16 +576,10 @@ public class TestServiceClient {
         break;
       }
       
-      case MCS: {
+      case MCS_CS: {
         tester.testMcs();
         break;
       }
-
-      case MCSSS: {
-        tester.testMcs_serverStreaming();
-        break;
-      }
-
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
@@ -622,8 +616,8 @@ public class TestServiceClient {
 
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      boolean useSubchannelMetricsSink = testCase.equals(MCS.toString());
-      boolean useGeneric = testCase.equals(MCS.toString())? true : false;
+      boolean useSubchannelMetricsSink = testCase.equals(MCS_CS.toString());
+      boolean useGeneric = testCase.equals(MCS_CS.toString())? true : false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
@@ -683,7 +677,7 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
         }
-        if (testCase.equals(MCS.toString())) {
+        if (testCase.equals(MCS_CS.toString())) {
           channelBuilder.disableServiceConfigLookUp();
           try {
             @SuppressWarnings("unchecked")
@@ -1101,32 +1095,37 @@ public class TestServiceClient {
     }
 
     public void testMcs() throws Exception {
-      StreamingOutputCallResponseObserver responseObserver1 = new StreamingOutputCallResponseObserver();
+      StreamingOutputCallResponseObserver responseObserver1 =
+          new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver1 =
           asyncStub.fullDuplexCall(responseObserver1);
-      streamObserver1.onNext(StreamingOutputCallRequest.newBuilder()
-          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(responseObserver1.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
+          .setPayload(Payload.newBuilder().setBody(
+              ByteString.copyFrom(MCS_CS.description().getBytes())).build()).build();
+      streamObserver1.onNext(request);
+      Object responseObj = responseObserver1.take();
+      StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
+      String clientSocketAddressInCall1 = new String(callResponse.getPayload().getBody().toByteArray());
 
       StreamingOutputCallResponseObserver responseObserver2 = new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver2 =
           asyncStub.fullDuplexCall(responseObserver2);
-      streamObserver2.onNext(StreamingOutputCallRequest.newBuilder()
-          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(responseObserver2.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      streamObserver2.onNext(request);
+      callResponse = (StreamingOutputCallResponse) responseObserver2.take();
+      String clientSocketAddressInCall2 = new String(callResponse.getPayload().getBody().toByteArray());
 
-      assertThat(fakeMetricsSink.openConnectionCount).isEqualTo(1);
+      assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
 
       // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
       // connection to be created in the same subchannel and not get queued.
       StreamingOutputCallResponseObserver responseObserver3 = new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver3 =
           asyncStub.fullDuplexCall(responseObserver3);
-      streamObserver3.onNext(StreamingOutputCallRequest.newBuilder()
-          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(responseObserver3.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      streamObserver3.onNext(request);
+      callResponse = (StreamingOutputCallResponse) responseObserver3.take();
+      String clientSocketAddressInCall3 = new String(callResponse.getPayload().getBody().toByteArray());
 
-      assertThat(fakeMetricsSink.openConnectionCount).isEqualTo(2);
+      assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
     }
 
     public void testMcs_serverStreaming() throws Exception {

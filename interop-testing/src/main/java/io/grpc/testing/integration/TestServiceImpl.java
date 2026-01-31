@@ -16,13 +16,19 @@
 
 package io.grpc.testing.integration;
 
+import static io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR;
+import static io.grpc.testing.integration.TestCases.MCS_CS;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.ByteString;
+import io.grpc.Attributes;
+import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -42,6 +48,7 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.grpc.testing.integration.TestServiceGrpc.AsyncService;
+import java.net.SocketAddress;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,12 +62,14 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import io.grpc.Context;
 
 /**
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks
  * sent in response streams.
  */
 public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
+  static Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
   private final Random random = new Random();
 
   private final ScheduledExecutorService executor;
@@ -234,6 +243,16 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
               .withDescription(request.getResponseStatus().getMessage())
               .asRuntimeException());
           return;
+        }
+        if (new String(request.getPayload().getBody().toByteArray()).equals(MCS_CS.description())) {
+          SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
+          ByteString payload = ByteString.copyFrom(peerAddress.toString().getBytes());
+          StreamingOutputCallResponse.Builder responseBuilder =
+              StreamingOutputCallResponse.newBuilder();
+          responseBuilder.setPayload(
+              Payload.newBuilder()
+                  .setBody(payload));
+          responseObserver.onNext(responseBuilder.build());
         }
         dispatcher.enqueue(toChunkQueue(request));
       }
@@ -507,7 +526,8 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     return Arrays.asList(
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
-        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY));
+        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY),
+        new McsScalingTestcaseInterceptor());
   }
 
   /**
@@ -537,6 +557,25 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
             }, requestHeaders);
       }
     };
+  }
+
+  static class McsScalingTestcaseInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      SocketAddress peerAddress = call.getAttributes().get(TRANSPORT_ATTR_REMOTE_ADDR);
+
+      // Create a new context with the peer address value
+      Context newContext = Context.current().withValue(PEER_ADDRESS_CONTEXT_KEY, peerAddress);
+      try {
+
+        // Continue the call processing within the new context
+        // return newContext.call(() -> next.startCall(call, headers));
+        return Contexts.interceptCall(newContext, call, headers, next);
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    }
   }
 
   /**
