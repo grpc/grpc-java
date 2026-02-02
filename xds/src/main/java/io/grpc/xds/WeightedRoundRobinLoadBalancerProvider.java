@@ -26,6 +26,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -73,14 +74,16 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
   private ConfigOrError parseLoadBalancingPolicyConfigInternal(Map<String, ?> rawConfig) {
     Long blackoutPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "blackoutPeriod");
     Long weightExpirationPeriodNanos =
-            JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
+        JsonUtil.getStringAsDuration(rawConfig, "weightExpirationPeriod");
     Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
     Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
+    List<String> metricNamesForComputingUtilization = JsonUtil.getListOfStrings(rawConfig,
+        LoadBalancerConfigFactory.METRIC_NAMES_FOR_COMPUTING_UTILIZATION);
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
-            WeightedRoundRobinLoadBalancerConfig.newBuilder();
+        WeightedRoundRobinLoadBalancerConfig.newBuilder();
     if (blackoutPeriodNanos != null) {
       configBuilder.setBlackoutPeriodNanos(blackoutPeriodNanos);
     }
@@ -101,6 +104,11 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     }
     if (errorUtilizationPenalty != null) {
       configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
+    }
+    if (metricNamesForComputingUtilization != null) {
+      if (WeightedRoundRobinLoadBalancer.enableCustomConfig) {
+        configBuilder.setMetricNamesForComputingUtilization(metricNamesForComputingUtilization);
+      }
     }
     return ConfigOrError.fromConfig(configBuilder.build());
   }
