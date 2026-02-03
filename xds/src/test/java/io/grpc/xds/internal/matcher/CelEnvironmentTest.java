@@ -248,8 +248,8 @@ public final class CelEnvironmentTest {
     Map<?, ?> map = (Map<?, ?>) env.find("request").get();
     
     assertThat(map.get("unknown")).isNull();
-    assertThat(map.get(123)).isNull();
-    assertThat(map.containsKey(123)).isFalse();
+    assertThat(map.get(new Object())).isNull();
+    assertThat(map.containsKey(new Object())).isFalse();
   }
 
   @Test
@@ -279,5 +279,67 @@ public final class CelEnvironmentTest {
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
     }
+  }
+
+  @Test
+  public void headersWrapper_get_nonStringKey_returnsNull() {
+    MatchContext context = mock(MatchContext.class);
+    Map<String, String> headers = new HeadersWrapper(context);
+    assertThat(headers.get(new Object())).isNull();
+  }
+
+  @Test
+  public void headersWrapper_getHeader_binary_multipleValues() {
+    MatchContext context = mock(MatchContext.class);
+    Metadata metadata = new Metadata();
+    byte[] val1 = new byte[] { 1, 2, 3 };
+    byte[] val2 = new byte[] { 4, 5, 6 };
+    Metadata.Key<byte[]> key = Metadata.Key.of("bin-header-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    metadata.put(key, val1);
+    metadata.put(key, val2);
+    when(context.getMetadata()).thenReturn(metadata);
+
+    Map<String, String> headers = new HeadersWrapper(context);
+    String expected = com.google.common.io.BaseEncoding.base64().encode(val1) + ","
+        + com.google.common.io.BaseEncoding.base64().encode(val2);
+    assertThat(headers.get("bin-header-bin")).isEqualTo(expected);
+  }
+
+  @Test
+  public void headersWrapper_containsKey_nonStringKey_returnsFalse() {
+    MatchContext context = mock(MatchContext.class);
+    Map<String, String> headers = new HeadersWrapper(context);
+    assertThat(headers.containsKey(new Object())).isFalse();
+  }
+
+  @Test
+  public void headersWrapper_containsKey_pseudoHeader_returnsTrue() {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    Map<String, String> headers = new HeadersWrapper(context);
+    assertThat(headers.containsKey(":method")).isTrue();
+    assertThat(headers.containsKey(":path")).isTrue();
+    assertThat(headers.containsKey(":authority")).isTrue();
+  }
+
+  @Test
+  public void headersWrapper_keySet_containsExpectedKeys() {
+    MatchContext context = mock(MatchContext.class);
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "val");
+    when(context.getMetadata()).thenReturn(metadata);
+
+    Map<String, String> headers = new HeadersWrapper(context);
+    java.util.Set<String> keys = headers.keySet();
+    
+    assertThat(keys).containsAtLeast("custom-key", ":method", ":path", ":authority");
+  }
+
+  @Test
+  public void headersWrapper_getHeader_missingBinaryHeader_returnsNull() {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    Map<String, String> headers = new HeadersWrapper(context);
+    assertThat(headers.get("missing-bin")).isNull();
   }
 }
