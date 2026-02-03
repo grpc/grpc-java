@@ -44,8 +44,8 @@ For a guided tour, take a look at the [quick start
 guide](https://grpc.io/docs/languages/java/quickstart) or the more explanatory [gRPC
 basics](https://grpc.io/docs/languages/java/basics).
 
-The [examples](https://github.com/grpc/grpc-java/tree/v1.78.0/examples) and the
-[Android example](https://github.com/grpc/grpc-java/tree/v1.78.0/examples/android)
+The [examples](https://github.com/grpc/grpc-java/tree/v1.79.0/examples) and the
+[Android example](https://github.com/grpc/grpc-java/tree/v1.79.0/examples/android)
 are standalone projects that showcase the usage of gRPC.
 
 Download
@@ -56,34 +56,34 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.78.0</version>
+  <version>1.79.0</version>
   <scope>runtime</scope>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.78.0</version>
+  <version>1.79.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.78.0</version>
+  <version>1.79.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-runtimeOnly 'io.grpc:grpc-netty-shaded:1.78.0'
-implementation 'io.grpc:grpc-protobuf:1.78.0'
-implementation 'io.grpc:grpc-stub:1.78.0'
+runtimeOnly 'io.grpc:grpc-netty-shaded:1.79.0'
+implementation 'io.grpc:grpc-protobuf:1.79.0'
+implementation 'io.grpc:grpc-stub:1.79.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-implementation 'io.grpc:grpc-okhttp:1.78.0'
-implementation 'io.grpc:grpc-protobuf-lite:1.78.0'
-implementation 'io.grpc:grpc-stub:1.78.0'
+implementation 'io.grpc:grpc-okhttp:1.79.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.79.0'
+implementation 'io.grpc:grpc-stub:1.79.0'
 ```
 
 For [Bazel](https://bazel.build), you can either
@@ -91,7 +91,7 @@ For [Bazel](https://bazel.build), you can either
 (with the GAVs from above), or use `@io_grpc_grpc_java//api` et al (see below).
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.78.0
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.79.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://central.sonatype.com/repository/maven-snapshots/).
@@ -123,7 +123,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <configuration>
         <protocArtifact>com.google.protobuf:protoc:3.25.8:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.78.0:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.79.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -153,7 +153,7 @@ protobuf {
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.78.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.79.0'
     }
   }
   generateProtoTasks {
@@ -186,7 +186,7 @@ protobuf {
   }
   plugins {
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.78.0'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.79.0'
     }
   }
   generateProtoTasks {
