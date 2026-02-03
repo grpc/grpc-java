@@ -134,6 +134,42 @@ public class UnifiedMatcherTest {
   }
 
   @Test
+  public void celMatcher_evaluationError_returnsFalse() {
+    CelMatcher celMatcher = createCelMatcher("int(request.path) == 0");
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(
+                    com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                        .getDefaultInstance())))
+            .setCustomMatch(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(celMatcher)))
+            .build();
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                    .setSinglePredicate(predicate))
+                .setOnMatch(Matcher.OnMatch.newBuilder()
+                    .setAction(TypedExtensionConfig.newBuilder().setName("matched")))))
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("no-match")))
+        .build();
+
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    MatchContext context = mock(MatchContext.class);
+    when(context.getPath()).thenReturn("not-an-int");
+    // Ensure metadata access (if any by environment) checks out
+    when(context.getMetadata()).thenReturn(new Metadata());
+    when(context.getId()).thenReturn("1");
+
+    MatchResult result = matcher.match(context, 0);
+    // Should return false for match, so it falls through to no-match
+    assertThat(result.matched).isTrue();
+    assertThat(result.actions.get(0).getName()).isEqualTo("no-match");
+  }
+
+  @Test
   public void celStringExtractor_throwsIfReturnsBool() {
     try {
       io.grpc.xds.internal.matcher.CelStringExtractor.compile("true");
@@ -850,6 +886,123 @@ public class UnifiedMatcherTest {
         io.grpc.xds.internal.matcher.MatcherRunner.checkMatch(proto, context);
     
     assertThat(results).isNull();
+  }
+
+  @Test
+  public void predicate_missingType_throws() {
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.getDefaultInstance();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Predicate must have one of");
+    }
+  }
+
+  @Test
+  public void celMatcher_missingExprMatch_throws() {
+    com.github.xds.type.matcher.v3.CelMatcher celProto = 
+        com.github.xds.type.matcher.v3.CelMatcher.getDefaultInstance();
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
+        .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+            .setCustomMatch(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(celProto))))
+        .build();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("CelMatcher must have expr_match");
+    }
+  }
+
+  @Test
+  public void singlePredicate_unsupportedCustomMatcher_throws() {
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
+        .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+            .setCustomMatch(TypedExtensionConfig.newBuilder().setTypedConfig(
+                Any.pack(com.google.protobuf.Empty.getDefaultInstance()))))
+        .build();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Unsupported custom_match matcher");
+    }
+  }
+
+  @Test
+  public void singlePredicate_missingInput_throws() {
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
+        .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+            .setValueMatch(
+                com.github.xds.type.matcher.v3.StringMatcher.newBuilder().setExact("foo")))
+        .build();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("SinglePredicate must have input");
+    }
+  }
+
+  @Test
+  public void singlePredicate_missingMatcher_throws() {
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
+        .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance()))))
+        .build();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "SinglePredicate must have either value_match or custom_match");
+    }
+  }
+
+  @Test
+  public void orMatcher_tooFewPredicates_throws() {
+    Matcher.MatcherList.Predicate.PredicateList protoList = 
+        Matcher.MatcherList.Predicate.PredicateList.newBuilder()
+        .addPredicate(Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(
+            Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                .setInput(TypedExtensionConfig.newBuilder().setName("i"))
+                .setValueMatch(
+                    com.github.xds.type.matcher.v3.StringMatcher.newBuilder().setExact("v"))))
+        .build();
+    Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
+        .setOrMatcher(protoList)
+        .build();
+    try {
+      PredicateEvaluator.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("OrMatcher must have at least 2 predicates");
+    }
+  }
+
+  @Test
+  public void andMatcher_tooFewPredicates_throws() {
+    Matcher.MatcherList.Predicate.PredicateList proto = 
+        Matcher.MatcherList.Predicate.PredicateList.newBuilder()
+        .addPredicate(Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(
+            Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                .setInput(TypedExtensionConfig.newBuilder().setName("i"))
+                .setValueMatch(
+                    com.github.xds.type.matcher.v3.StringMatcher.newBuilder().setExact("v"))))
+        .build();
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setAndMatcher(proto).build());
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("AndMatcher must have at least 2 predicates");
+    }
   }
 
   @Test
