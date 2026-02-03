@@ -1,6 +1,6 @@
 module(
     name = "grpc-java",
-    version = "1.79.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
+    version = "1.79.0",  # CURRENT_GRPC_VERSION
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
 )
