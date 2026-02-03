@@ -41,6 +41,7 @@ java_library(
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
         artifact("com.google.re2j:re2j"),
+        artifact("dev.cel:cel-bundle"),
         artifact("io.netty:netty-buffer"),
         artifact("io.netty:netty-codec"),
         artifact("io.netty:netty-common"),

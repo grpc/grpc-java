@@ -56,6 +56,12 @@ dependencies {
             libraries.re2j,
             libraries.auto.value.annotations,
             libraries.protobuf.java.util
+    implementation(libraries.cel.runtime) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
+    implementation(libraries.cel.compiler) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-api')
@@ -175,6 +181,7 @@ tasks.named("javadoc").configure {
     exclude 'io/grpc/xds/XdsNameResolverProvider.java'
     exclude 'io/grpc/xds/internal/**'
     exclude 'io/grpc/xds/Internal*'
+    exclude 'dev/cel/**'
 }
 
 def prefixName = 'io.grpc.xds'
@@ -182,6 +189,7 @@ tasks.named("shadowJar").configure {
     archiveClassifier = null
     dependencies {
         include(project(':grpc-xds'))
+        include(dependency('dev.cel:.*'))
     }
     // Relocated packages commonly need exclusions in jacocoTestReport and javadoc
     // Keep in sync with BUILD.bazel's JAR_JAR_RULES
@@ -198,6 +206,8 @@ tasks.named("shadowJar").configure {
     // TODO: missing java_package option in .proto
     relocate 'udpa.annotations', "${prefixName}.shaded.udpa.annotations"
     relocate 'xds.annotations', "${prefixName}.shaded.xds.annotations"
+    relocate 'dev.cel', "${prefixName}.shaded.dev.cel"
+    relocate 'cel', "${prefixName}.shaded.cel"
     exclude "**/*.proto"
 }
 
