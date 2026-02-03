@@ -853,7 +853,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   public static long intervalWithJitter(long intervalNanos) {
     double inverseJitterFactor = isExperimentalRetryJitterEnabled
-            ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
+            ? 0.4 * random.nextDouble() + 0.8 : random.nextDouble();
     return (long) (intervalNanos * inverseJitterFactor);
   }
 
