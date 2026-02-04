@@ -1589,4 +1589,131 @@ public class UnifiedMatcherTest {
     // "barfoo" does not start with "foo" -> false
     assertThat(evaluator.evaluate(mockContextWith("host", "barfoo"))).isFalse();
   }
+
+  private MatchContext mockContextWith(String key, String value) {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(metadataWith(key, value));
+    return context;
+  }
+
+  @Test
+  public void resolveInput_malformedProto_throws() {
+    TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
+        .setTypedConfig(com.google.protobuf.Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput")
+            .setValue(com.google.protobuf.ByteString.copyFromUtf8("invalid-bytes"))
+            .build())
+        .build();
+    try {
+      UnifiedMatcher.resolveInput(config);
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Invalid input config");
+    }
+  }
+
+  @Test
+  public void matchInput_headerName_invalidCharacters_throws() {
+    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
+        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+        .setHeaderName("invalid$header")
+        .build();
+    TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
+        .setTypedConfig(com.google.protobuf.Any.pack(proto))
+        .build();
+    try {
+      UnifiedMatcher.resolveInput(config);
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Invalid header name");
+    }
+  }
+
+  @Test
+  public void matchInput_headerName_binary_aggregation() {
+    String headerName = "test-bin";
+    byte[] v1 = new byte[] {1, 2, 3};
+    byte[] v2 = new byte[] {4, 5, 6};
+    // Expected: comma-separated base64 values
+    String expected = com.google.common.io.BaseEncoding.base64().encode(v1) + "," 
+        + com.google.common.io.BaseEncoding.base64().encode(v2);
+    
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER), v1);
+    metadata.put(Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER), v2);
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(metadata);
+    
+    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
+        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+        .setHeaderName(headerName).build();
+    MatchInput<MatchContext> input = UnifiedMatcher.resolveInput(
+        TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+    
+    assertThat(input.apply(context)).isEqualTo(expected);
+  }
+
+  @Test
+  public void matchInput_headerName_binary_missing() {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    
+    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
+        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+        .setHeaderName("missing-bin").build();
+    MatchInput<MatchContext> input = UnifiedMatcher.resolveInput(
+        TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+    
+    assertThat(input.apply(context)).isNull();
+  }
+
+  @Test
+  public void checkRecursionDepth_nestedInTree_throws() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 17; i++) {
+      current = Matcher.newBuilder()
+          .setMatcherTree(Matcher.MatcherTree.newBuilder()
+              .setInput(TypedExtensionConfig.newBuilder()
+                  .setTypedConfig(com.google.protobuf.Any.pack(
+                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      .setHeaderName("k").build())))
+              .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                  .putMap("key", Matcher.OnMatch.newBuilder().setMatcher(current).build())))
+          .build();
+    }
+    try {
+      UnifiedMatcher.fromProto(current);
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("exceeds limit");
+    }
+  }
+
+  @Test
+  public void checkRecursionDepth_nestedInOnNoMatch_throws() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 17; i++) {
+      current = Matcher.newBuilder()
+          .setOnNoMatch(Matcher.OnMatch.newBuilder().setMatcher(current))
+          .build();
+    }
+    try {
+      UnifiedMatcher.fromProto(current);
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("exceeds limit");
+    }
+  }
+
+  @Test
+  public void noOpMatcher_runtimeRecursionLimit_returnsNoMatch() {
+    Matcher proto = Matcher.getDefaultInstance();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    
+    // Manually calling with depth > 16
+    MatchResult result = matcher.match(mock(MatchContext.class), 17);
+    assertThat(result.matched).isFalse();
+  }
 }
