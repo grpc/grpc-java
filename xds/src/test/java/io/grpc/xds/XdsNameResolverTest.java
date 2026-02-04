@@ -2067,8 +2067,10 @@ public class XdsNameResolverTest {
     // FQDN (trailing dot) is semantically equivalent to the relative form per RFC 1034 Section 3.1.
     assertThat(XdsNameResolver.matchHostName("foo.googleapis.com.", "foo.googleapis.com")).isTrue();
     assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", "foo.googleapis.com.")).isTrue();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com.", "foo.googleapis.com.")).isTrue();
-    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com.", "foo.googleapis.com")).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com.", "foo.googleapis.com."))
+        .isTrue();
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com.", "foo.googleapis.com"))
+        .isFalse();
 
     // Wildcard + trailing dot combinations.
     String pattern = "*.foo.googleapis.com";
