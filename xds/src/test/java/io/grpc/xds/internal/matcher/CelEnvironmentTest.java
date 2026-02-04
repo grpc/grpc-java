@@ -342,4 +342,68 @@ public final class CelEnvironmentTest {
     Map<String, String> headers = new HeadersWrapper(context);
     assertThat(headers.get("missing-bin")).isNull();
   }
+
+  @Test
+  public void celEnvironment_resolvesRefererAndUserAgent() {
+    MatchContext context = mock(MatchContext.class);
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("referer", Metadata.ASCII_STRING_MARSHALLER), "http://example.com");
+    metadata.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "grpc-test");
+    when(context.getMetadata()).thenReturn(metadata);
+
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+
+    assertThat(env.find("request.referer").get()).isEqualTo("http://example.com");
+    assertThat(env.find("request.useragent").get()).isEqualTo("grpc-test");
+  }
+
+  @Test
+  public void celEnvironment_joinsMultipleHeaderValues() {
+    MatchContext context = mock(MatchContext.class);
+    Metadata metadata = new Metadata();
+    Metadata.Key<String> key = Metadata.Key.of("referer", Metadata.ASCII_STRING_MARSHALLER);
+    metadata.put(key, "v1");
+    metadata.put(key, "v2");
+    when(context.getMetadata()).thenReturn(metadata);
+
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+
+    // Tests the String.join logic in getHeader
+    assertThat(env.find("request.referer").get()).isEqualTo("v1,v2");
+  }
+
+  @Test
+  public void celEnvironment_find_invalidFormat() {
+    MatchContext context = mock(MatchContext.class);
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+
+    // Name not starting with "request"
+    assertThat(env.find("other.path").isPresent()).isFalse();
+    
+    // Name with too many components (though Splitter limit is 2, the second part will be "a.b")
+    // getRequestField("a.b") will hit the default case and return null.
+    assertThat(env.find("request.a.b").isPresent()).isFalse();
+  }
+
+  @Test
+  public void lazyRequestMap_additionalMethods() {
+    MatchContext context = mock(MatchContext.class);
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+    Map<String, Object> map = (Map<String, Object>) env.find("request").get();
+
+    assertThat(map.isEmpty()).isFalse();
+    
+    // Test getting a known key that returns null (e.g., time)
+    // This covers the 'if (val == null)' branch in LazyRequestMap.get
+    assertThat(map.get("time")).isNull();
+  }
+
+  @Test
+  public void celEnvironment_missingHeader_returnsEmptyString() {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+
+    assertThat(env.find("request.referer").get()).isEqualTo("");
+  }
 }

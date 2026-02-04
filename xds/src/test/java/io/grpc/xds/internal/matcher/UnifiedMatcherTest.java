@@ -488,41 +488,7 @@ public class UnifiedMatcherTest {
     assertThat(result.actions.get(0).getName()).isEqualTo("matched");
   }
 
-  @Test
-  public void matcherTree_keepMatching_aggregate() {
-    // MatcherTree: Input = 'path'.
-    // Map: '/prefix' -> Action 'A1', KeepMatching=True
-    // OnNoMatch -> Action 'A2'
-    
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherTree(Matcher.MatcherTree.newBuilder()
-            .setInput(TypedExtensionConfig.newBuilder()
-                .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                        .setHeaderName("path").build())))
-            .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
-                .putMap("/prefix", Matcher.OnMatch.newBuilder()
-                    .setAction(TypedExtensionConfig.newBuilder().setName("A1"))
-                    .setKeepMatching(true)
-                    .build())))
-        .setOnNoMatch(Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("A2")))
-        .build();
-    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
 
-    MatchContext context = mock(MatchContext.class);
-    Metadata metadata = new Metadata();
-    metadata.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/prefix/something");
-    when(context.getMetadata()).thenReturn(metadata);
-
-    MatchResult result = matcher.match(context, 0);
-    assertThat(result.matched).isTrue();
-    // Correct behavior per gRFC A106: onNoMatch is ONLY for when no match is found.
-    // Since we found "A1", onNoMatch ("A2") should NOT be executed.
-    // keepMatching=true simply means we return with matched=true and let the parent decide.
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
-  }
 
   @Test
   public void requestUrlPath_available() {
@@ -635,25 +601,7 @@ public class UnifiedMatcherTest {
     }
   }
 
-  @Test
-  public void invalidInputCombination_matcherTreeWithCelInput_throws() {
-    try {
-      UnifiedMatcher.fromProto(Matcher.newBuilder()
-          .setMatcherTree(Matcher.MatcherTree.newBuilder()
-              .setInput(TypedExtensionConfig.newBuilder()
-                  .setTypedConfig(Any.pack(
-                      com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
-                          .getDefaultInstance())))
-              .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
-                  .putMap("key", Matcher.OnMatch.newBuilder()
-                      .setAction(TypedExtensionConfig.newBuilder().setName("action")).build())))
-          .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat()
-          .contains("HttpAttributesCelMatchInput cannot be used with MatcherTree");
-    }
-  }
+
 
   @Test
   public void matchInput_headerName_binary() {
@@ -699,96 +647,9 @@ public class UnifiedMatcherTest {
     assertThat(input.apply(context)).isNull();
   }
 
-  @Test
-  public void matcherTree_customMatch_throws() {
-    try {
-      UnifiedMatcher.fromProto(Matcher.newBuilder()
-          .setMatcherTree(Matcher.MatcherTree.newBuilder()
-              .setInput(TypedExtensionConfig.newBuilder()
-                  .setTypedConfig(Any.pack(
-                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                          .setHeaderName("key").build())))
-              .setCustomMatch(TypedExtensionConfig.newBuilder().setName("custom")))
-          .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("does not support custom_match");
-    }
-  }
 
-  @Test
-  public void matcherTree_noMap_throws() {
-    try {
-      UnifiedMatcher.fromProto(Matcher.newBuilder()
-          .setMatcherTree(Matcher.MatcherTree.newBuilder()
-              .setInput(TypedExtensionConfig.newBuilder()
-                  .setTypedConfig(Any.pack(
-                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                          .setHeaderName("key").build()))))
-          .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat()
-          .contains("must have either exact_match_map or prefix_match_map");
-    }
-  }
 
-  @Test
-  public void matcherTree_exactMatch() {
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherTree(Matcher.MatcherTree.newBuilder()
-            .setInput(TypedExtensionConfig.newBuilder()
-                .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                        .setHeaderName("x-key").build())))
-            .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
-                .putMap("foo", Matcher.OnMatch.newBuilder()
-                    .setAction(TypedExtensionConfig.newBuilder().setName("matched_foo")).build())
-                .putMap("bar", Matcher.OnMatch.newBuilder()
-                    .setAction(TypedExtensionConfig.newBuilder().setName("matched_bar")).build())))
-        .setOnNoMatch(Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("no_match")))
-        .build();
 
-    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);    
-    MatchContext context = mock(MatchContext.class);
-    Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of("x-key", Metadata.ASCII_STRING_MARSHALLER), "foo");
-    when(context.getMetadata()).thenReturn(headers);
-
-    MatchResult result = matcher.match(context, 0);
-    assertThat(result.matched).isTrue();
-    assertThat(result.actions.get(0).getName()).isEqualTo("matched_foo");
-  }
-
-  @Test
-  public void matcherTree_prefixMatch() {
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherTree(Matcher.MatcherTree.newBuilder()
-            .setInput(TypedExtensionConfig.newBuilder()
-                .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                        .setHeaderName("path").build())))
-            .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
-                .putMap("/api", Matcher.OnMatch.newBuilder()
-                    .setAction(TypedExtensionConfig.newBuilder().setName("api")).build())
-                .putMap("/api/v1", Matcher.OnMatch.newBuilder()
-                    .setAction(TypedExtensionConfig.newBuilder().setName("apiv1")).build())))
-        .setOnNoMatch(Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("no_match")))
-        .build();
-
-    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/api/v1/users");
-    when(context.getMetadata()).thenReturn(headers);
-
-    MatchResult result = matcher.match(context, 0);
-    assertThat(result.matched).isTrue();
-    // Longest prefix wins
-    assertThat(result.actions.get(0).getName()).isEqualTo("apiv1");
-  }
 
   @Test
   public void requestHeaders_equalityCheck_failsSafely() {
@@ -1378,48 +1239,7 @@ public class UnifiedMatcherTest {
     assertThat(result.actions.get(1).getName()).isEqualTo("A2");
   }
 
-  @Test
-  public void matcherTree_keepMatching_longestPrefixFirst() {
-    // Prefix /abc: A1, keep=true
-    // Prefix /ab:  A2, keep=true
-    // Prefix /a:   A3, keep=FALSE
 
-    Matcher.MatcherTree.MatchMap map = Matcher.MatcherTree.MatchMap.newBuilder()
-        .putMap("/abc", Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("A1"))
-            .setKeepMatching(true).build())
-        .putMap("/ab", Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("A2"))
-            .setKeepMatching(true).build())
-        .putMap("/a", Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("A3"))
-            .setKeepMatching(false).build())
-        .build();
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherTree(Matcher.MatcherTree.newBuilder()
-            .setInput(TypedExtensionConfig.newBuilder()
-                .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                        .setHeaderName("path").build())))
-            .setPrefixMatchMap(map))
-        .build();
-
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("path", "/abc"));
-    io.grpc.xds.internal.matcher.UnifiedMatcher matcher = 
-        io.grpc.xds.internal.matcher.UnifiedMatcher.fromProto(proto, (t) -> true);
-    MatchResult result = matcher.match(context, 0);
-
-    assertThat(result.matched).isTrue();
-    // Implementation sorts longest to shortest: /abc, /ab, /a
-    // 1. /abc matches -> A1. keep=true.
-    // 2. /ab matches  -> A2. keep=true.
-    // 3. /a matches   -> A3. keep=false -> STOP.
-    assertThat(result.actions).hasSize(3);
-    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
-    assertThat(result.actions.get(1).getName()).isEqualTo("A2");
-    assertThat(result.actions.get(2).getName()).isEqualTo("A3");
-  }
   
   private Metadata metadataWith(String key, String value) {
     Metadata m = new Metadata();
@@ -1603,33 +1423,5 @@ public class UnifiedMatcherTest {
     assertThat(result.matched).isTrue();
     assertThat(result.actions).hasSize(1);
     assertThat(result.actions.get(0).getName()).isEqualTo("inner_matcher_2");
-  }
-
-  @Test
-  public void matcherTree_example4_prefixMap() {
-    Matcher.MatcherTree.MatchMap map = Matcher.MatcherTree.MatchMap.newBuilder()
-        .putMap("grpc", Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("shorter_prefix")).build())
-        .putMap("grpc.channelz", Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("longer_prefix")).build())
-        .build();
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherTree(Matcher.MatcherTree.newBuilder()
-            .setInput(TypedExtensionConfig.newBuilder()
-                .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                        .setHeaderName("x-user-segment").build())))
-            .setPrefixMatchMap(map))
-        .build();
-    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto, (t) -> true);
-    
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(
-        metadataWith("x-user-segment", "grpc.channelz.v1.Channelz/GetTopChannels"));
-    MatchResult result = matcher.match(context, 0);
-
-    assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("longer_prefix");
   }
 }

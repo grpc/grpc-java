@@ -39,7 +39,6 @@ public final class CelStringExtractorTest {
   public void extract_fromMap() throws Exception {
     CelStringExtractor extractor = CelStringExtractor.compile("request['key']");
     Map<String, String> input = Collections.singletonMap("key", "value");
-    // "request" is the variable name used in CelStringExtractor
     Map<String, Object> activation = Collections.singletonMap("request", input);
     
     String result = extractor.extract(activation);
@@ -54,6 +53,7 @@ public final class CelStringExtractorTest {
     Map<String, Object> activation = Collections.singletonMap("request", 123);
     
     String result = extractor.extract(activation);
+    // Since 123 is not a String, it returns null
     assertThat(result).isNull();
   }
 
@@ -77,6 +77,27 @@ public final class CelStringExtractorTest {
       fail("Should throw CelValidationException");
     } catch (Exception e) {
       // Expected (CelValidationException or similar)
+    }
+  }
+
+  @Test
+  public void extract_withCelVariableResolver() throws Exception {
+    CelStringExtractor extractor = CelStringExtractor.compile("'val'");
+    dev.cel.runtime.CelVariableResolver resolver = name -> java.util.Optional.empty();
+
+    // Exercises the CelVariableResolver branch
+    assertThat(extractor.extract(resolver)).isEqualTo("val");
+  }
+
+  @Test
+  public void extract_unsupportedInputType_throws() throws Exception {
+    CelStringExtractor extractor = CelStringExtractor.compile("'foo'");
+    try {
+      // Pass a String instead of a Map or Resolver
+      extractor.extract("not-a-map");
+      fail("Should have thrown CelEvaluationException");
+    } catch (dev.cel.runtime.CelEvaluationException e) {
+      assertThat(e).hasMessageThat().contains("Unsupported input type");
     }
   }
 }
