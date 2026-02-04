@@ -188,7 +188,6 @@ public final class CelEnvironmentTest {
     MatchContext context = mock(MatchContext.class);
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
-    // find() returns empty for null values
     Optional<Object> result = env.find("request.time");
     assertThat(result.isPresent()).isFalse();
     
@@ -350,7 +349,6 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("referer", Metadata.ASCII_STRING_MARSHALLER), "http://example.com");
     metadata.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "grpc-test");
     when(context.getMetadata()).thenReturn(metadata);
-
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("request.referer").get()).isEqualTo("http://example.com");
@@ -365,7 +363,6 @@ public final class CelEnvironmentTest {
     metadata.put(key, "v1");
     metadata.put(key, "v2");
     when(context.getMetadata()).thenReturn(metadata);
-
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     // Tests the String.join logic in getHeader
@@ -377,11 +374,7 @@ public final class CelEnvironmentTest {
     MatchContext context = mock(MatchContext.class);
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
-    // Name not starting with "request"
     assertThat(env.find("other.path").isPresent()).isFalse();
-    
-    // Name with too many components (though Splitter limit is 2, the second part will be "a.b")
-    // getRequestField("a.b") will hit the default case and return null.
     assertThat(env.find("request.a.b").isPresent()).isFalse();
   }
 
@@ -389,12 +382,9 @@ public final class CelEnvironmentTest {
   public void lazyRequestMap_additionalMethods() {
     MatchContext context = mock(MatchContext.class);
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
-    Map<String, Object> map = (Map<String, Object>) env.find("request").get();
+    Map<?, ?> map = (Map<?, ?>) env.find("request").get();
 
     assertThat(map.isEmpty()).isFalse();
-    
-    // Test getting a known key that returns null (e.g., time)
-    // This covers the 'if (val == null)' branch in LazyRequestMap.get
     assertThat(map.get("time")).isNull();
   }
 
