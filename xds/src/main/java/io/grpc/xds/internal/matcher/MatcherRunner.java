@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ public final class MatcherRunner {
   }
 
   public interface MatchContext {
-    // Basic context usually involves Metadata (headers) and potentially other attributes.
     Metadata getMetadata();
     
     @javax.annotation.Nullable
@@ -52,7 +51,7 @@ public final class MatcherRunner {
     String getMethod();
     
     @javax.annotation.Nullable
-    String getId(); // x-request-id
+    String getId();
 
   }
 }

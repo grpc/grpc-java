@@ -23,14 +23,10 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 
-
-
 /**
  * Executes compiled CEL expressions.
  */
 public final class CelMatcher {
-
-
   private final CelRuntime.Program program;
 
   private CelMatcher(CelRuntime.Program program) {
@@ -76,7 +72,7 @@ public final class CelMatcher {
       throw new CelEvaluationException(
           "Unsupported input type for CEL evaluation: " + input.getClass().getName());
     }
-    // Validated to be boolean during compile check ideally, or we cast safely
+    
     if (result instanceof Boolean) {
       return (Boolean) result;
     }

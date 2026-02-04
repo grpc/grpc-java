@@ -59,7 +59,7 @@ final class GrpcCelEnvironment implements CelVariableResolver {
       case "query": return "";
       case "scheme": return "";
       case "protocol": return "";
-      case "time": return null; // Supported but not set in gRPC
+      case "time": return null;
       case "referer": return getHeader("referer");
       case "useragent": return getHeader("user-agent");
 

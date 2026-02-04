@@ -85,7 +85,6 @@ public final class CelStringExtractorTest {
     CelStringExtractor extractor = CelStringExtractor.compile("'val'");
     dev.cel.runtime.CelVariableResolver resolver = name -> java.util.Optional.empty();
 
-    // Exercises the CelVariableResolver branch
     assertThat(extractor.extract(resolver)).isEqualTo("val");
   }
 
@@ -93,7 +92,6 @@ public final class CelStringExtractorTest {
   public void extract_unsupportedInputType_throws() throws Exception {
     CelStringExtractor extractor = CelStringExtractor.compile("'foo'");
     try {
-      // Pass a String instead of a Map or Resolver
       extractor.extract("not-a-map");
       fail("Should have thrown CelEvaluationException");
     } catch (dev.cel.runtime.CelEvaluationException e) {

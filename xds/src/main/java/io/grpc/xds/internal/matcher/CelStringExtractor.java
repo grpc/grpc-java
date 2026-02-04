@@ -22,13 +22,10 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 
-
 /**
  * Executes compiled CEL expressions that extract a string.
  */
 public final class CelStringExtractor {
-
-
   private final CelRuntime.Program program;
 
   private CelStringExtractor(CelRuntime.Program program) {
@@ -78,7 +75,6 @@ public final class CelStringExtractor {
     if (result instanceof String) {
       return (String) result;
     }
-    // Return null key for non-string results (which will likely match nothing or be handled)
     return null; 
   }
 }

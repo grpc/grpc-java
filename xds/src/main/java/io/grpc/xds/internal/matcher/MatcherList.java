@@ -51,8 +51,6 @@ final class MatcherList extends UnifiedMatcher {
 
     List<TypedExtensionConfig> accumulated = new ArrayList<>();
     boolean matchedAtLeastOnce = false;
-
-
     for (FieldMatcher matcher : matchers) {
       if (matcher.matches(context)) {
         MatchResult result = matcher.onMatch.evaluate(context, depth);
@@ -79,7 +77,6 @@ final class MatcherList extends UnifiedMatcher {
         }
       }
     }
-    
     if (matchedAtLeastOnce) {
       return MatchResult.create(accumulated);
     }

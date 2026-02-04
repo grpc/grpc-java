@@ -1548,57 +1548,8 @@ public class UnifiedMatcherTest {
     assertThat(evaluator.evaluate(context)).isTrue();
   }
 
-
-
-  @Test
-  public void compoundMatchers_tooFewPredicates_throws() {
-    // Tests OrMatcher/AndMatcher minimum size (2 predicates)
-    Matcher.MatcherList.Predicate p = createHeaderMatchPredicate("h", "v");
-    Matcher.MatcherList.Predicate.PredicateList list = 
-        Matcher.MatcherList.Predicate.PredicateList.newBuilder().addPredicate(p).build();
-
-    try {
-      PredicateEvaluator.fromProto(
-          Matcher.MatcherList.Predicate.newBuilder().setOrMatcher(list).build());
-      org.junit.Assert.fail();
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("OrMatcher must have at least 2 predicates");
-    }
-
-    try {
-      PredicateEvaluator.fromProto(
-          Matcher.MatcherList.Predicate.newBuilder().setAndMatcher(list).build());
-      org.junit.Assert.fail();
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("AndMatcher must have at least 2 predicates");
-    }
-  }
-
-  @Test
-  public void notMatcher_invertsResult() {
-    // Tests NotMatcher coverage
-    Matcher.MatcherList.Predicate p = createHeaderMatchPredicate("h", "v");
-    PredicateEvaluator eval = PredicateEvaluator.fromProto(
-        Matcher.MatcherList.Predicate.newBuilder().setNotMatcher(p).build());
-    
-    // h:v matches -> Not(True) -> False
-    assertThat(eval.evaluate(mockContextWith("h", "v"))).isFalse();
-    // h:wrong doesn't match -> Not(False) -> True
-    assertThat(eval.evaluate(mockContextWith("h", "wrong"))).isTrue();
-  }
-
-  private MatchContext mockContextWith(String key, String value) {
-    MatchContext context = mock(MatchContext.class);
-    Metadata headers = new Metadata();
-    headers.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
-    when(context.getMetadata()).thenReturn(headers);
-    return context;
-  }
-
-
   @Test
   public void singlePredicate_stringMatcher_suffix_matches() {
-    // Verifies valid suffix config
     Matcher.MatcherList.Predicate.SinglePredicate predicate = 
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
@@ -1620,7 +1571,6 @@ public class UnifiedMatcherTest {
 
   @Test
   public void singlePredicate_stringMatcher_prefix_matches() {
-    // Verifies valid prefix config
     Matcher.MatcherList.Predicate.SinglePredicate predicate = 
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
@@ -1639,27 +1589,4 @@ public class UnifiedMatcherTest {
     // "barfoo" does not start with "foo" -> false
     assertThat(evaluator.evaluate(mockContextWith("host", "barfoo"))).isFalse();
   }
-
-  @Test
-  public void singlePredicate_stringMatcher_contains_matches() {
-    // Verifies valid contains config
-    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
-        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
-        .setInput(TypedExtensionConfig.newBuilder()
-            .setTypedConfig(Any.pack(
-                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
-                .setHeaderName("host").build())))
-        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
-            .setContains("oba"))
-        .build();
-
-    PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
-        Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
-    
-    // "foobar" contains "oba" -> true
-    assertThat(evaluator.evaluate(mockContextWith("host", "foobar"))).isTrue();
-    // "fobar" does not contain "oba" -> false
-    assertThat(evaluator.evaluate(mockContextWith("host", "none"))).isFalse();
-  }
 }
-
