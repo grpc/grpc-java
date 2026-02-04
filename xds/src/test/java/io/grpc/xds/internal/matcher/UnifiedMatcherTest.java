@@ -1424,4 +1424,162 @@ public class UnifiedMatcherTest {
     assertThat(result.actions).hasSize(1);
     assertThat(result.actions.get(0).getName()).isEqualTo("inner_matcher_2");
   }
+
+  @Test
+  public void resolveInput_malformedProto_throws() {
+    // Create a config with correct typeUrl but corrupted/invalid bytes
+    TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
+        .setTypedConfig(com.google.protobuf.Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput")
+            .setValue(com.google.protobuf.ByteString.copyFromUtf8("invalid-proto-data"))
+            .build())
+        .build();
+    try {
+      UnifiedMatcher.resolveInput(config);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Invalid input config");
+    }
+  }
+
+  @Test
+  public void matchInput_headerName_invalidCharacters_throws() {
+    // A lowercase header name that is still invalid for gRPC Metadata keys
+    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
+        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+        .setHeaderName("invalid$header")
+        .build();
+    TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.pack(proto))
+        .build();
+    try {
+      UnifiedMatcher.resolveInput(config);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Invalid header name");
+    }
+  }
+
+  @Test
+  public void matchInput_headerName_binary_missing() {
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    
+    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
+        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+        .setHeaderName("test-bin") // Binary suffix
+        .build();
+    MatchInput<MatchContext> input = UnifiedMatcher.resolveInput(
+        TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+    
+    assertThat(input.apply(context)).isNull();
+  }
+
+  @Test
+  public void noOpMatcher_noOnNoMatch_returnsNoMatch() {
+    // An empty Matcher proto defaults to a NoOpMatcher with no onNoMatch action
+    Matcher proto = Matcher.getDefaultInstance();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    
+    MatchResult result = matcher.match(mock(MatchContext.class), 0);
+    assertThat(result.matched).isFalse();
+  }
+
+  @Test
+  public void noOpMatcher_runtimeRecursionLimit_returnsNoMatch() {
+    Matcher proto = Matcher.getDefaultInstance();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    
+    // Manually trigger the runtime recursion check in NoOpMatcher
+    MatchResult result = matcher.match(mock(MatchContext.class), 17);
+    assertThat(result.matched).isFalse();
+  }
+
+  @Test
+  public void singlePredicate_celInputWithStringMatcher_throws() {
+    // Tests the explicit check that blocks CEL input for StringMatchers
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder().setExact("foo"))
+        .build();
+    
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "HttpAttributesCelMatchInput cannot be used with StringMatcher");
+    }
+  }
+
+  @Test
+  public void singlePredicate_headerInputWithCelMatcher_throws() {
+    // Tests the inverse check: CelMatcher must use HttpAttributesCelMatchInput
+    com.github.xds.type.matcher.v3.CelMatcher celMatcher = createCelMatcher("true");
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(
+                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                .setHeaderName("host").build())))
+        .setCustomMatch(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(com.google.protobuf.Any.pack(celMatcher)))
+        .build();
+    
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "CelMatcher can only be used with HttpAttributesCelMatchInput");
+    }
+  }
+
+  @Test
+  public void singlePredicate_noMatcher_throws() {
+    // Triggers: "SinglePredicate must have either value_match or custom_match"
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(com.google.protobuf.Any.pack(
+            com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+        .build();
+    
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("must have either value_match or custom_match");
+    }
+  }
+
+  @Test
+  public void compoundMatchers_tooFewPredicates_throws() {
+    // Coverage for OrMatcher and AndMatcher minimum predicate requirements
+    Matcher.MatcherList.Predicate p = createHeaderMatchPredicate("h", "v");
+    Matcher.MatcherList.Predicate.PredicateList list = 
+        Matcher.MatcherList.Predicate.PredicateList.newBuilder().addPredicate(p).build();
+
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setOrMatcher(list).build());
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("OrMatcher must have at least 2 predicates");
+    }
+
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setAndMatcher(list).build());
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("AndMatcher must have at least 2 predicates");
+    }
+  }
 }
