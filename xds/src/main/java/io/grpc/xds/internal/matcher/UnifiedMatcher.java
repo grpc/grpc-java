@@ -36,7 +36,6 @@ public abstract class UnifiedMatcher {
       "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
   private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
       "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
-
   static final int MAX_RECURSION_DEPTH = 16;
 
   @Nullable
