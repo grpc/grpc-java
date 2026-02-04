@@ -31,12 +31,11 @@ import javax.annotation.Nullable;
  */
 public abstract class UnifiedMatcher {
 
-  // Supported Extension Type URLs
+  // Supported Extension Type URLs per gRFC A106
   private static final String TYPE_URL_HTTP_HEADER_INPUT =
       "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
   private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
       "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
-
 
   static final int MAX_RECURSION_DEPTH = 16;
 
@@ -63,8 +62,6 @@ public abstract class UnifiedMatcher {
     }
     throw new IllegalArgumentException("Unsupported input type: " + typeUrl);
   }
-
-
 
   private static final class HeaderMatchInput implements MatchInput<MatchContext> {
     private final String headerName;
