@@ -1582,4 +1582,133 @@ public class UnifiedMatcherTest {
       assertThat(e).hasMessageThat().contains("AndMatcher must have at least 2 predicates");
     }
   }
+
+  @Test
+  public void singlePredicate_invalidCelMatcherProto_throws() {
+    // Triggers "Invalid CelMatcher config"
+    // Create a CEL matcher config with invalid bytes to trigger InvalidProtocolBufferException
+    TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
+        .setTypedConfig(com.google.protobuf.Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/xds.type.matcher.v3.CelMatcher")
+            .setValue(com.google.protobuf.ByteString.copyFromUtf8("invalid"))
+            .build())
+        .build();
+
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+        .setCustomMatch(config)
+        .build();
+    
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
+    }
+  }
+
+  @Test
+  public void singlePredicate_celEvalError_returnsFalse() {
+    // Triggers "return false" in "catch (CelEvaluationException e)"
+    // Expression: [][0] -> Index out of bounds, runtime error
+    // Type check passes (list access).
+    // We need a CheckedExpr.
+    
+    // We rely on a runtime failure (division by zero) to trigger CelEvaluationException.
+    
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+        .setCustomMatch(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(createCelMatcher("1/0 == 0"))))
+        .build();
+        
+    PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
+        Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+        
+    // Eval should return false (caught exception)
+    assertThat(evaluator.evaluate(mock(MatchContext.class))).isFalse();
+  }
+
+  @Test
+  public void stringMatcher_emptySuffix_throws() {
+    // Triggers "StringMatcher suffix ... must be non-empty"
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                .setHeaderName("host").build())))
+        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder().setSuffix(""))
+        .build();
+        
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "StringMatcher suffix (match_pattern) must be non-empty");
+    }
+  }
+
+  @Test
+  public void stringMatcher_unknownPattern_throws() {
+    // Triggers "Unknown StringMatcher match pattern"
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                .setHeaderName("host").build())))
+        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.getDefaultInstance())
+        .build();
+        
+    try {
+      PredicateEvaluator.fromProto(
+          Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("Unknown StringMatcher match pattern");
+    }
+  }
+
+
+  @Test
+  public void singlePredicate_stringMatcher_safeRegex_matches() {
+    // Verifies valid safe_regex config
+    com.github.xds.type.matcher.v3.RegexMatcher regexMatcher = 
+        com.github.xds.type.matcher.v3.RegexMatcher.newBuilder()
+        .setRegex("f.*o")
+        .build();
+        
+    Matcher.MatcherList.Predicate.SinglePredicate predicate = 
+        Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder()
+            .setTypedConfig(Any.pack(
+                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                .setHeaderName("host").build())))
+        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+            .setSafeRegex(regexMatcher))
+        .build();
+
+    PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
+        Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
+    
+    MatchContext context = mock(MatchContext.class);
+    when(context.getMetadata()).thenReturn(new Metadata());
+    // host header not present -> null -> false
+    assertThat(evaluator.evaluate(context)).isFalse();
+    
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("host", Metadata.ASCII_STRING_MARSHALLER), "foo");
+    when(context.getMetadata()).thenReturn(headers);
+    assertThat(evaluator.evaluate(context)).isTrue();
+  }
 }
