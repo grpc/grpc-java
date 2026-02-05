@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 
 import com.google.common.collect.ImmutableMap;
@@ -157,6 +158,45 @@ public class RoutingUtilsTest {
         virtualHosts, "baz.googleapis.com")).isNull();
     assertThat(RoutingUtils.findVirtualHostForHostName(
         virtualHosts, "foo.googleapis")).isNull();
+  }
+
+  @Test
+  public void findVirtualHostForHostName_invalidHostName() {
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost = VirtualHost.create("vhost",
+        Collections.singletonList("a.googleapis.com"), routes,
+        ImmutableMap.of());
+    List<VirtualHost> virtualHosts = Collections.singletonList(vHost);
+
+    // Empty hostName.
+    assertThrows(IllegalArgumentException.class,
+        () -> RoutingUtils.findVirtualHostForHostName(
+            virtualHosts, ""));
+    // HostName starting with dot.
+    assertThrows(IllegalArgumentException.class,
+        () -> RoutingUtils.findVirtualHostForHostName(
+            virtualHosts, ".a.googleapis.com"));
+  }
+
+  @Test
+  public void findVirtualHostForHostName_invalidPattern() {
+    List<Route> routes = Collections.emptyList();
+    // Empty domain pattern.
+    VirtualHost vHostEmpty = VirtualHost.create("vhost-empty",
+        Collections.singletonList(""), routes,
+        ImmutableMap.of());
+    assertThrows(IllegalArgumentException.class,
+        () -> RoutingUtils.findVirtualHostForHostName(
+            Collections.singletonList(vHostEmpty),
+            "a.googleapis.com"));
+    // Domain pattern starting with dot.
+    VirtualHost vHostDot = VirtualHost.create("vhost-dot",
+        Collections.singletonList(".a.googleapis.com"), routes,
+        ImmutableMap.of());
+    assertThrows(IllegalArgumentException.class,
+        () -> RoutingUtils.findVirtualHostForHostName(
+            Collections.singletonList(vHostDot),
+            "a.googleapis.com"));
   }
 
   @Test
