@@ -94,10 +94,6 @@ final class MatcherTree extends UnifiedMatcher {
       return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
     }
     String value = (String) valueObj;
-    if (value == null) {
-      return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
-    }
-    
     if (exactMatchMap != null) {
       OnMatch match = exactMatchMap.get(value);
       if (match != null) {

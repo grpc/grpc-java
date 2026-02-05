@@ -271,12 +271,38 @@ public final class CelEnvironmentTest {
   }
 
   @Test
-  public void celMatcher_match_nonBooleanResult_throws() throws Exception {
+  public void celMatcher_compile_nonBooleanAst_throws() throws Exception {
     try {
       CelMatcher.compile("'not-boolean'");
       fail("Should throw IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
+    }
+  }
+
+  @Test
+  public void celMatcher_match_runtimeNonBooleanResult_throws() throws Exception {
+    // 1. We create an AST that claims to be a BOOL but returns a STRING at runtime.
+    // We use a custom compiler where 'request' is defined as a BOOL.
+    dev.cel.compiler.CelCompiler liarCompiler = 
+        dev.cel.compiler.CelCompilerFactory.standardCelCompilerBuilder()
+            .addVar("request", dev.cel.common.types.SimpleType.BOOL)
+            .build();
+    dev.cel.common.CelAbstractSyntaxTree ast = liarCompiler.compile("request").getAst();
+    
+    // 2. This passes CelMatcher.compile() because its static result type is BOOL.
+    CelMatcher matcher = CelMatcher.compile(ast);
+    
+    // 3. At runtime, we provide a String. The CEL engine resolves 'request' to this String.
+    java.util.Map<String, Object> input = 
+        java.util.Collections.singletonMap("request", "i-am-a-string");
+    
+    try {
+      matcher.match(input);
+      org.junit.Assert.fail("Should have thrown CelEvaluationException");
+    } catch (dev.cel.runtime.CelEvaluationException e) {
+      assertThat(e).hasMessageThat()
+          .contains("CEL expression must evaluate to boolean, got: java.lang.String");
     }
   }
 
@@ -395,5 +421,29 @@ public final class CelEnvironmentTest {
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("request.referer").get()).isEqualTo("");
+  }
+
+  @Test
+  public void checkAllowedVariables_unknownVariable_throws() throws Exception {
+    // 1. Create a different compiler that allows a variable other than "request"
+    dev.cel.compiler.CelCompiler otherCompiler = 
+        dev.cel.compiler.CelCompilerFactory.standardCelCompilerBuilder()
+            .addVar("unknown_var", dev.cel.common.types.SimpleType.STRING)
+            .build();
+    
+    // 2. Compile an expression to get an AST containing the forbidden variable
+    // We use a boolean expression so it passes the AST result type check in CelMatcher.compile
+    dev.cel.common.CelAbstractSyntaxTree ast = 
+        otherCompiler.compile("unknown_var == 'foo'").getAst();
+
+    // 3. Pass the AST to the gRPC CelMatcher. This bypasses the gRPC compiler 
+    // but triggers the checkAllowedVariables validation.
+    try {
+      CelMatcher.compile(ast);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat()
+          .contains("CEL expression references unknown variable: unknown_var");
+    }
   }
 }

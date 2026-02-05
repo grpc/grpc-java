@@ -51,7 +51,7 @@ final class CelCommon {
       dev.cel.common.ast.CelReference ref = entry.getValue();
       // If overload_id is empty, it's a variable reference or type name.
       // We only support "request".
-      if (ref.value() == null && ref.overloadIds().isEmpty()) {
+      if (!ref.value().isPresent() && ref.overloadIds().isEmpty()) {
         if (!"request".equals(ref.name())) {
           throw new IllegalArgumentException(
               "CEL expression references unknown variable: " + ref.name());
