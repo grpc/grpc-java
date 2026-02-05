@@ -49,6 +49,7 @@ import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.ContextPropagators;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -103,22 +104,27 @@ final class OpenTelemetryMetricsModule {
   @Nullable
   private final TargetFilter targetAttributeFilter;
 
+  private final ContextPropagators contextPropagators;
+
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
-                             Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
-    this(stopwatchSupplier, resource, optionalLabels, plugins, null);
+      Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
+      ContextPropagators contextPropagators) {
+    this(stopwatchSupplier, resource, optionalLabels, plugins, null, contextPropagators);
   }
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
       OpenTelemetryMetricsResource resource,
       Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
-      @Nullable TargetFilter targetAttributeFilter) {
+      @Nullable TargetFilter targetAttributeFilter,
+      ContextPropagators contextPropagators) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
     this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
     this.targetAttributeFilter = targetAttributeFilter;
+    this.contextPropagators = checkNotNull(contextPropagators, "contextPropagators");
   }
 
   @VisibleForTesting
@@ -361,7 +367,10 @@ final class OpenTelemetryMetricsModule {
       this.callPlugins = checkNotNull(callPlugins, "callPlugins");
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
-      this.baggage = Baggage.fromContext(Context.current());
+      Baggage currentBaggage = BAGGAGE_KEY.get();
+      this.baggage = currentBaggage == null
+          ? Baggage.fromContext(Context.current())
+          : currentBaggage;
 
       io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
           METHOD_KEY, fullMethodName,
@@ -569,11 +578,14 @@ final class OpenTelemetryMetricsModule {
     private volatile long outboundWireSize;
     private volatile long inboundWireSize;
 
+    private final Baggage baggage;
+
     ServerTracer(OpenTelemetryMetricsModule module, String fullMethodName,
-        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins) {
+        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins, @Nullable Baggage baggage) {
       this.module = checkNotNull(module, "module");
       this.fullMethodName = fullMethodName;
       this.streamPlugins = checkNotNull(streamPlugins, "streamPlugins");
+      this.baggage = baggage;
       this.stopwatch = module.stopwatchSupplier.get().start();
     }
 
@@ -621,7 +633,8 @@ final class OpenTelemetryMetricsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      Baggage baggage = BAGGAGE_KEY.get();
+      Baggage grpcContextBaggage = BAGGAGE_KEY.get();
+      Baggage baggage = grpcContextBaggage != null ? grpcContextBaggage : this.baggage;
       Context otelContext = otelContextWithBaggage(baggage);
       if (streamClosedUpdater != null) {
         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
@@ -679,7 +692,11 @@ final class OpenTelemetryMetricsModule {
         }
         streamPlugins = Collections.unmodifiableList(streamPluginsMutable);
       }
-      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins);
+      Context context = contextPropagators.getTextMapPropagator().extract(
+          Context.current(), headers, MetadataGetter.getInstance());
+      Baggage baggage = Baggage.fromContext(context);
+      return new ServerTracer(
+          OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins, baggage);
     }
   }
 
