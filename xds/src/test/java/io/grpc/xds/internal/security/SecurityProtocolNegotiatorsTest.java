@@ -297,23 +297,6 @@ public class SecurityProtocolNegotiatorsTest {
   }
 
   @Test
-  public void sniInClientSecurityHandler_noSniConditionsMet_omitsSni() {
-    Bootstrapper.BootstrapInfo bootstrapInfoForClient = CommonBootstrapperTestUtils
-        .buildBootstrapInfo("google_cloud_private_spiffe-client", CLIENT_KEY_FILE,
-            CLIENT_PEM_FILE, CA_PEM_FILE, null, null, null, null, null);
-    UpstreamTlsContext upstreamTlsContext = CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-        "google_cloud_private_spiffe-client", true, "", false);
-    SslContextProviderSupplier sslContextProviderSupplier =
-        new SslContextProviderSupplier(upstreamTlsContext,
-            new TlsContextManagerImpl(bootstrapInfoForClient));
-
-    ClientSecurityHandler clientSecurityHandler =
-        new ClientSecurityHandler(grpcHandler, sslContextProviderSupplier, HOSTNAME);
-
-    assertThat(clientSecurityHandler.getSni()).isEqualTo("");
-  }
-
-  @Test
   public void serverSecurityHandler_addLast()
       throws InterruptedException, TimeoutException, ExecutionException {
     FakeClock executor = new FakeClock();

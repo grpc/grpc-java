@@ -222,8 +222,6 @@ public final class SecurityProtocolNegotiators {
       if (sniToUse.isEmpty()) {
         if (CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
           sniToUse = grpcHandler.getAuthority();
-        } else {
-          sniToUse = "";
         }
         autoSniSanValidationDoesNotApply = true;
       } else {
