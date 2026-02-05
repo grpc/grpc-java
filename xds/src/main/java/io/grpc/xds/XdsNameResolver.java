@@ -336,6 +336,7 @@ final class XdsNameResolver extends NameResolver {
             .setAttributes(attrs)
             .setServiceConfig(parsedServiceConfig)
             .build();
+    // todo: abhishek probably the filters are getting applied here ??
     if (!listener.onResult2(result).isOk()) {
       resolveState.xdsDependencyManager.requestReresolution();
     }
@@ -404,6 +405,7 @@ final class XdsNameResolver extends NameResolver {
   private final class ConfigSelector extends InternalConfigSelector {
     @Override
     public Result selectConfig(PickSubchannelArgs args) {
+      // todo: AgraVator probably the filters are getting populated here
       RoutingConfig routingCfg;
       RouteData selectedRoute;
       String cluster;
@@ -716,6 +718,7 @@ final class XdsNameResolver extends NameResolver {
       }
 
       VirtualHost virtualHost = update.getVirtualHost();
+      // filters and there configurations
       ImmutableList<NamedFilterConfig> filterConfigs = httpConnectionManager.httpFilterConfigs();
       long streamDurationNano = httpConnectionManager.httpMaxStreamDurationNano();
 

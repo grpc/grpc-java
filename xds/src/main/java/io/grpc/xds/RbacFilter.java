@@ -96,14 +96,23 @@ final class RbacFilter implements Filter {
     @Override
     public ConfigOrError<RbacConfig> parseFilterConfig(Message rawProtoMessage) {
       RBAC rbacProto;
-      if (!(rawProtoMessage instanceof Any)) {
+      if (rawProtoMessage instanceof Any) {
+        try {
+          rbacProto = ((Any) rawProtoMessage).unpack(RBAC.class);
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Invalid proto: " + e);
+        }
+      } else if (rawProtoMessage instanceof com.google.protobuf.Struct) {
+        try {
+          RBAC.Builder builder = RBAC.newBuilder();
+          com.google.protobuf.util.JsonFormat.parser().merge(
+              com.google.protobuf.util.JsonFormat.printer().print(rawProtoMessage), builder);
+          rbacProto = builder.build();
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Failed to parse Struct to RBAC: " + e);
+        }
+      } else {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
-      }
-      Any anyMessage = (Any) rawProtoMessage;
-      try {
-        rbacProto = anyMessage.unpack(RBAC.class);
-      } catch (InvalidProtocolBufferException e) {
-        return ConfigOrError.fromError("Invalid proto: " + e);
       }
       return parseRbacConfig(rbacProto);
     }
@@ -111,14 +120,23 @@ final class RbacFilter implements Filter {
     @Override
     public ConfigOrError<RbacConfig> parseFilterConfigOverride(Message rawProtoMessage) {
       RBACPerRoute rbacPerRoute;
-      if (!(rawProtoMessage instanceof Any)) {
+      if (rawProtoMessage instanceof Any) {
+        try {
+          rbacPerRoute = ((Any) rawProtoMessage).unpack(RBACPerRoute.class);
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Invalid proto: " + e);
+        }
+      } else if (rawProtoMessage instanceof com.google.protobuf.Struct) {
+        try {
+          RBACPerRoute.Builder builder = RBACPerRoute.newBuilder();
+          com.google.protobuf.util.JsonFormat.parser().merge(
+              com.google.protobuf.util.JsonFormat.printer().print(rawProtoMessage), builder);
+          rbacPerRoute = builder.build();
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Failed to parse Struct to RBACPerRoute: " + e);
+        }
+      } else {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
-      }
-      Any anyMessage = (Any) rawProtoMessage;
-      try {
-        rbacPerRoute = anyMessage.unpack(RBACPerRoute.class);
-      } catch (InvalidProtocolBufferException e) {
-        return ConfigOrError.fromError("Invalid proto: " + e);
       }
       if (rbacPerRoute.hasRbac()) {
         return parseRbacConfig(rbacPerRoute.getRbac());

@@ -88,15 +88,23 @@ final class GcpAuthenticationFilter implements Filter {
     @Override
     public ConfigOrError<GcpAuthenticationConfig> parseFilterConfig(Message rawProtoMessage) {
       GcpAuthnFilterConfig gcpAuthnProto;
-      if (!(rawProtoMessage instanceof Any)) {
+      if (rawProtoMessage instanceof Any) {
+        try {
+          gcpAuthnProto = ((Any) rawProtoMessage).unpack(GcpAuthnFilterConfig.class);
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Invalid proto: " + e);
+        }
+      } else if (rawProtoMessage instanceof com.google.protobuf.Struct) {
+        try {
+          GcpAuthnFilterConfig.Builder builder = GcpAuthnFilterConfig.newBuilder();
+          com.google.protobuf.util.JsonFormat.parser().merge(
+              com.google.protobuf.util.JsonFormat.printer().print(rawProtoMessage), builder);
+          gcpAuthnProto = builder.build();
+        } catch (InvalidProtocolBufferException e) {
+          return ConfigOrError.fromError("Failed to parse Struct to GcpAuthnFilterConfig: " + e);
+        }
+      } else {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
-      }
-      Any anyMessage = (Any) rawProtoMessage;
-
-      try {
-        gcpAuthnProto = anyMessage.unpack(GcpAuthnFilterConfig.class);
-      } catch (InvalidProtocolBufferException e) {
-        return ConfigOrError.fromError("Invalid proto: " + e);
       }
 
       long cacheSize = 10;

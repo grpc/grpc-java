@@ -35,10 +35,11 @@ final class FilterRegistry {
   static synchronized FilterRegistry getDefaultRegistry() {
     if (instance == null) {
       instance = newRegistry().register(
-              new FaultFilter.Provider(),
-              new RouterFilter.Provider(),
-              new RbacFilter.Provider(),
-              new GcpAuthenticationFilter.Provider());
+          new FaultFilter.Provider(),
+          new RouterFilter.Provider(),
+          new RbacFilter.Provider(),
+          new GcpAuthenticationFilter.Provider(),
+          new CompositeFilter.Provider());
     }
     return instance;
   }
@@ -56,6 +57,13 @@ final class FilterRegistry {
       }
     }
     return this;
+  }
+
+  @VisibleForTesting
+  void deregister(Filter.Provider provider) {
+    for (String typeUrl : provider.typeUrls()) {
+      supportedFilters.remove(typeUrl);
+    }
   }
 
   @Nullable

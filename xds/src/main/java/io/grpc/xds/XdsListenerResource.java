@@ -230,7 +230,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     // FilterChain contains L4 filters, so we ensure it contains only HCM.
     if (proto.getFiltersCount() != 1) {
       throw new ResourceInvalidException("FilterChain " + filterChainName
-          + " should contain exact one HttpConnectionManager filter");
+          + " should contain exactly one HttpConnectionManager filter");
     }
     io.envoyproxy.envoy.config.listener.v3.Filter l4Filter = proto.getFiltersList().get(0);
     if (!l4Filter.hasTypedConfig()) {
@@ -513,6 +513,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     // Parse http filters.
+    // todo: AgraVator are we changing the assumption here ??
     if (proto.getHttpFiltersList().isEmpty()) {
       throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
     }
@@ -582,6 +583,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   static StructOrError<Filter.FilterConfig> parseHttpFilter(
       io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
           httpFilter, FilterRegistry filterRegistry, boolean isForClient) {
+    // todo: AgraVator do we need to change anything here for composite filter ??
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {

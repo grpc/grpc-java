@@ -17,7 +17,7 @@
 
 set -e
 # import VERSION from the google internal go/envoy-import-status
-VERSION=b6df993feef0340391e6dbf6ad957ab42884ad05
+VERSION=a0b3df32ba54c92a08d3636a9a36013cb920e471
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -37,6 +37,7 @@ envoy/config/common/mutation_rules/v3/mutation_rules.proto
 envoy/config/core/v3/address.proto
 envoy/config/core/v3/backoff.proto
 envoy/config/core/v3/base.proto
+envoy/config/core/v3/cel.proto
 envoy/config/core/v3/config_source.proto
 envoy/config/core/v3/event_service_config.proto
 envoy/config/core/v3/extension.proto
@@ -74,7 +75,9 @@ envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
+envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/composite/v3/composite.proto
 envoy/extensions/filters/http/ext_authz/v3/ext_authz.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
@@ -111,6 +114,7 @@ envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/v3/address.proto
 envoy/type/matcher/v3/filter_state.proto
 envoy/type/matcher/v3/http_inputs.proto
+envoy/config/common/matcher/v3/matcher.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/type/matcher/v3/number.proto
@@ -129,6 +133,7 @@ envoy/type/v3/ratelimit_strategy.proto
 envoy/type/v3/ratelimit_unit.proto
 envoy/type/v3/semantic_version.proto
 envoy/type/v3/token_bucket.proto
+envoy/extensions/matching/common_inputs/network/v3/network_inputs.proto
 )
 
 pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null

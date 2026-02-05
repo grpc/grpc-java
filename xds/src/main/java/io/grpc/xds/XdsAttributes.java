@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
@@ -23,6 +24,7 @@ import io.grpc.NameResolver;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient;
+import java.util.Map;
 
 /**
  * Attributes used for xDS implementation.
@@ -99,6 +101,19 @@ final class XdsAttributes {
   @Grpc.TransportAttr
   static final Attributes.Key<Long> ATTR_DRAIN_GRACE_NANOS =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.drainGraceTime");
+
+  /**
+   * Attribute key for xDS route metadata used in filter matching.
+   */
+  @NameResolver.ResolutionResultAttr
+  public static final Attributes.Key<Map<String, Struct>> ATTR_FILTER_METADATA = Attributes.Key
+          .create("io.grpc.xds.XdsAttributes.filterMetadata");
+
+  /**
+   * CallOptions key for xDS route metadata used in filter matching.
+   */
+  public static final io.grpc.CallOptions.Key<Map<String, Struct>> CALL_OPTIONS_FILTER_METADATA =
+      io.grpc.CallOptions.Key.create("io.grpc.xds.XdsAttributes.filterMetadata");
 
   private XdsAttributes() {}
 }

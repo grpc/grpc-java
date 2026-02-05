@@ -97,4 +97,26 @@ public final class MatcherParser {
                 "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
     }
   }
+
+  /** Translate StringMatcher xDS proto to internal StringMatcher. */
+  public static Matchers.StringMatcher parseStringMatcher(
+      com.github.xds.type.matcher.v3.StringMatcher proto) {
+    switch (proto.getMatchPatternCase()) {
+      case EXACT:
+        return Matchers.StringMatcher.forExact(proto.getExact(), proto.getIgnoreCase());
+      case PREFIX:
+        return Matchers.StringMatcher.forPrefix(proto.getPrefix(), proto.getIgnoreCase());
+      case SUFFIX:
+        return Matchers.StringMatcher.forSuffix(proto.getSuffix(), proto.getIgnoreCase());
+      case SAFE_REGEX:
+        return Matchers.StringMatcher.forSafeRegEx(
+            Pattern.compile(proto.getSafeRegex().getRegex()));
+      case CONTAINS:
+        return Matchers.StringMatcher.forContains(proto.getContains());
+      case MATCHPATTERN_NOT_SET:
+      default:
+        throw new IllegalArgumentException(
+            "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
+    }
+  }
 }
