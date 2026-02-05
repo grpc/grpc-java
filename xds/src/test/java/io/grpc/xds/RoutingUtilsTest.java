@@ -89,6 +89,54 @@ public class RoutingUtilsTest {
   }
 
   @Test
+  public void findVirtualHostForHostName_trailingDot() {
+    // FQDN (trailing dot) is semantically equivalent to the relative form
+    // per RFC 1034 Section 3.1.
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHost1 = VirtualHost.create("virtualhost01.googleapis.com",
+        Collections.singletonList("a.googleapis.com"), routes,
+        ImmutableMap.of());
+    VirtualHost vHost2 = VirtualHost.create("virtualhost02.googleapis.com",
+        Collections.singletonList("*.googleapis.com"), routes,
+        ImmutableMap.of());
+    VirtualHost vHost3 = VirtualHost.create("virtualhost03.googleapis.com",
+        Collections.singletonList("*"), routes,
+        ImmutableMap.of());
+    List<VirtualHost> virtualHosts = Arrays.asList(vHost1, vHost2, vHost3);
+
+    // Trailing dot in hostName, exact match.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "a.googleapis.com.")).isEqualTo(vHost1);
+    // Trailing dot in hostName, wildcard match.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "b.googleapis.com.")).isEqualTo(vHost2);
+
+    // Trailing dot in domain pattern, exact match.
+    VirtualHost vHost4 = VirtualHost.create("virtualhost04.googleapis.com",
+        Collections.singletonList("a.googleapis.com."), routes,
+        ImmutableMap.of());
+    List<VirtualHost> virtualHosts2 =
+        Arrays.asList(vHost4, vHost2, vHost3);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts2, "a.googleapis.com")).isEqualTo(vHost4);
+
+    // Trailing dot in both hostName and domain pattern.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts2, "a.googleapis.com.")).isEqualTo(vHost4);
+
+    // Trailing dot in domain pattern, wildcard match.
+    VirtualHost vHost5 = VirtualHost.create("virtualhost05.googleapis.com",
+        Collections.singletonList("*.googleapis.com."), routes,
+        ImmutableMap.of());
+    List<VirtualHost> virtualHosts3 =
+        Arrays.asList(vHost5, vHost3);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts3, "b.googleapis.com")).isEqualTo(vHost5);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts3, "b.googleapis.com.")).isEqualTo(vHost5);
+  }
+
+  @Test
   public void routeMatching_pathOnly() {
     Metadata headers = new Metadata();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
