@@ -1716,4 +1716,54 @@ public class UnifiedMatcherTest {
     MatchResult result = matcher.match(mock(MatchContext.class), 17);
     assertThat(result.matched).isFalse();
   }
+
+  @Test
+  public void onMatch_empty_throws() {
+    Matcher proto = Matcher.newBuilder()
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()) // Neither .setMatcher() nor .setAction() called
+        .build();
+    
+    try {
+      UnifiedMatcher.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("OnMatch must have either matcher or action");
+    }
+  }
+
+  @Test
+  public void matcherList_empty_throws() {
+    // We create a MatcherList with no FieldMatchers added.
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()) 
+        .build();
+    
+    try {
+      UnifiedMatcher.fromProto(proto);
+      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("MatcherList must contain at least one FieldMatcher");
+    }
+  }
+
+  @Test
+  public void matcherList_maxRecursionDepth_returnsNoMatch() {
+    // We construct a valid MatcherList but call it with a depth value that exceeds the limit.
+    Matcher.MatcherList.FieldMatcher matcher = Matcher.MatcherList.FieldMatcher.newBuilder()
+        .setPredicate(createHeaderMatchPredicate("h", "v"))
+        .setOnMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("action")))
+        .build();
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(matcher))
+        .build();
+    
+    UnifiedMatcher matcherList = UnifiedMatcher.fromProto(proto);
+    MatchContext context = mock(MatchContext.class);
+    
+    // Manually pass depth 17 to trigger the 'depth > MAX_RECURSION_DEPTH' check
+    MatchResult result = matcherList.match(context, 17);
+    assertThat(result.matched).isFalse();
+  }
+
 }

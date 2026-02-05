@@ -407,6 +407,33 @@ public class MatcherTreeTest {
     }
   }
 
+  @Test
+  public void matcherTree_prefixMap_noMatch_shouldFallbackToOnNoMatch() {
+    Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
+             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                 .setHeaderName("path").build())))
+        .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+            .putMap("/a", Matcher.OnMatch.newBuilder()
+                .setAction(TypedExtensionConfig.newBuilder().setName("actionA").build())
+                .build()))
+        .build();
+    Matcher.OnMatch onNoMatch = Matcher.OnMatch.newBuilder()
+        .setAction(TypedExtensionConfig.newBuilder().setName("actionB")).build();
+    MatcherTree tree = new MatcherTree(proto, onNoMatch, s -> true);
+
+    MatchContext context = mock(MatchContext.class);
+    io.grpc.Metadata metadata = new io.grpc.Metadata();
+    metadata.put(
+        io.grpc.Metadata.Key.of("path", io.grpc.Metadata.ASCII_STRING_MARSHALLER), "/b");
+    when(context.getMetadata()).thenReturn(metadata);
+
+    MatchResult result = tree.match(context, 0);
+    assertThat(result.matched).isTrue();
+    assertThat(result.actions).hasSize(1);
+    assertThat(result.actions.get(0).getName()).isEqualTo("actionB");
+  }
+
   private Metadata metadataWith(String key, String value) {
     Metadata m = new Metadata();
     m.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
