@@ -113,9 +113,9 @@ public final class EquivalentAddressGroup {
 
   @Override
   public String toString() {
-    // EquivalentAddressGroup is intended to contain a small number of addresses for the same endpoint
-    // (e.g., IPv4/IPv6). Aggregating many groups into a single EquivalentAddressGroup is no
-    // longer done, so this no longer needs summarization.
+    // EquivalentAddressGroup is intended to contain a small number of addresses for the same
+    // endpoint(e.g., IPv4/IPv6). Aggregating many groups into a single EquivalentAddressGroup
+    // is no longer done, so this no longer needs summarization.
     return "[" + addrs + "/" + attrs + "]";
   }
 
