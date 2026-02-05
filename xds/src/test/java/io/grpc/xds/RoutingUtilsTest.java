@@ -137,6 +137,83 @@ public class RoutingUtilsTest {
   }
 
   @Test
+  public void findVirtualHostForHostName_exactMatch() {
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHostFoo = VirtualHost.create("vhost-foo",
+        Collections.singletonList("foo.googleapis.com"), routes,
+        ImmutableMap.of());
+    VirtualHost vHostBar = VirtualHost.create("vhost-bar",
+        Collections.singletonList("bar.googleapis.com"), routes,
+        ImmutableMap.of());
+    List<VirtualHost> virtualHosts =
+        Arrays.asList(vHostFoo, vHostBar);
+
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "foo.googleapis.com")).isEqualTo(vHostFoo);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "bar.googleapis.com")).isEqualTo(vHostBar);
+    // No match returns null.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "baz.googleapis.com")).isNull();
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "foo.googleapis")).isNull();
+  }
+
+  @Test
+  public void findVirtualHostForHostName_prefixWildcard() {
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHostWild = VirtualHost.create("vhost-wild",
+        Collections.singletonList("*.foo.googleapis.com"),
+        routes, ImmutableMap.of());
+    VirtualHost vHostOther = VirtualHost.create("vhost-other",
+        Collections.singletonList("other.googleapis.com"),
+        routes, ImmutableMap.of());
+    List<VirtualHost> virtualHosts =
+        Arrays.asList(vHostWild, vHostOther);
+
+    // Prefix wildcard matches.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "bar.foo.googleapis.com"))
+        .isEqualTo(vHostWild);
+    // Base domain without subdomain does not match *.foo.googleapis.com.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "foo.googleapis.com")).isNull();
+
+    // Longer prefix wildcard is preferred over shorter one.
+    VirtualHost vHostLong = VirtualHost.create("vhost-long",
+        Collections.singletonList("*.bar.foo.googleapis.com"),
+        routes, ImmutableMap.of());
+    List<VirtualHost> virtualHosts2 =
+        Arrays.asList(vHostLong, vHostWild);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts2, "baz.bar.foo.googleapis.com"))
+        .isEqualTo(vHostLong);
+  }
+
+  @Test
+  public void findVirtualHostForHostName_postfixWildcard() {
+    List<Route> routes = Collections.emptyList();
+    VirtualHost vHostWild = VirtualHost.create("vhost-wild",
+        Collections.singletonList("foo.*"), routes,
+        ImmutableMap.of());
+    VirtualHost vHostOther = VirtualHost.create("vhost-other",
+        Collections.singletonList("bar.googleapis.com"),
+        routes, ImmutableMap.of());
+    List<VirtualHost> virtualHosts =
+        Arrays.asList(vHostWild, vHostOther);
+
+    // Postfix wildcard matches.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "foo.googleapis.com"))
+        .isEqualTo(vHostWild);
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "foo.com")).isEqualTo(vHostWild);
+    // Different prefix does not match foo.*.
+    assertThat(RoutingUtils.findVirtualHostForHostName(
+        virtualHosts, "bar.foo.googleapis.com")).isNull();
+  }
+
+  @Test
   public void routeMatching_pathOnly() {
     Metadata headers = new Metadata();
     ThreadSafeRandom random = mock(ThreadSafeRandom.class);
