@@ -215,23 +215,19 @@ public final class SecurityProtocolNegotiators {
       this.sslContextProviderSupplier = sslContextProviderSupplier;
       EnvoyServerProtoData.BaseTlsContext tlsContext = sslContextProviderSupplier.getTlsContext();
       UpstreamTlsContext upstreamTlsContext = ((UpstreamTlsContext) tlsContext);
-      if (CertificateUtils.isXdsSniEnabled) {
-        String sniToUse = upstreamTlsContext.getAutoHostSni()
-            && !Strings.isNullOrEmpty(endpointHostname)
-            ? endpointHostname : upstreamTlsContext.getSni();
-        if (sniToUse.isEmpty()) {
-          if (CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
-            sniToUse = grpcHandler.getAuthority();
-          }
-          autoSniSanValidationDoesNotApply = true;
-        } else {
-          autoSniSanValidationDoesNotApply = false;
+
+      String sniToUse = upstreamTlsContext.getAutoHostSni()
+          && !Strings.isNullOrEmpty(endpointHostname)
+          ? endpointHostname : upstreamTlsContext.getSni();
+      if (sniToUse.isEmpty()) {
+        if (CertificateUtils.useChannelAuthorityIfNoSniApplicable) {
+          sniToUse = grpcHandler.getAuthority();
         }
-        sni = sniToUse;
+        autoSniSanValidationDoesNotApply = true;
       } else {
-        sni = grpcHandler.getAuthority();
         autoSniSanValidationDoesNotApply = false;
       }
+      sni = sniToUse;
     }
 
     @VisibleForTesting
