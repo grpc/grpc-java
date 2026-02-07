@@ -310,17 +310,22 @@ public final class CompositeFilter implements Filter {
         UnifiedMatcher.MatchingData data = new MatchingDataImpl(headers, null,
             call.getAttributes());
 
-        FilterDelegate delegate = matcher.match(data);
-        if (delegate != null && delegate.shouldExecute()) {
+        List<FilterDelegate> delegates = matcher.match(data);
+        if (delegates != null && !delegates.isEmpty()) {
           List<ServerInterceptor> interceptors = new ArrayList<>();
           final List<Filter> filters = new ArrayList<>();
           try {
-            for (DelegateEntry entry : delegate.delegates) {
-              Filter filter = entry.provider.newInstance("composite_child");
-              filters.add(filter);
-              ServerInterceptor interceptor = filter.buildServerInterceptor(entry.config, null);
-              if (interceptor != null) {
-                interceptors.add(interceptor);
+            for (FilterDelegate delegate : delegates) {
+              if (!delegate.shouldExecute()) {
+                continue;
+              }
+              for (DelegateEntry entry : delegate.delegates) {
+                Filter filter = entry.provider.newInstance("composite_child");
+                filters.add(filter);
+                ServerInterceptor interceptor = filter.buildServerInterceptor(entry.config, null);
+                if (interceptor != null) {
+                  interceptors.add(interceptor);
+                }
               }
             }
           } catch (Throwable t) {
@@ -496,19 +501,24 @@ public final class CompositeFilter implements Filter {
       started = true;
 
       UnifiedMatcher.MatchingData data = new MatchingDataImpl(headers, callOptions);
-      FilterDelegate filterDelegate = matcher.match(data);
+      List<FilterDelegate> filterDelegates = matcher.match(data);
 
-      if (filterDelegate != null && filterDelegate.shouldExecute()) {
+      if (filterDelegates != null && !filterDelegates.isEmpty()) {
         List<ClientInterceptor> interceptors = new ArrayList<>();
         List<Filter> filters = new ArrayList<>();
         try {
-          for (DelegateEntry entry : filterDelegate.delegates) {
-            Filter filter = entry.provider.newInstance("composite_child");
-            filters.add(filter);
-            ClientInterceptor interceptor = filter.buildClientInterceptor(entry.config, null,
-                scheduler);
-            if (interceptor != null) {
-              interceptors.add(interceptor);
+          for (FilterDelegate filterDelegate : filterDelegates) {
+            if (!filterDelegate.shouldExecute()) {
+              continue;
+            }
+            for (DelegateEntry entry : filterDelegate.delegates) {
+              Filter filter = entry.provider.newInstance("composite_child");
+              filters.add(filter);
+              ClientInterceptor interceptor = filter.buildClientInterceptor(entry.config, null,
+                  scheduler);
+              if (interceptor != null) {
+                interceptors.add(interceptor);
+              }
             }
           }
         } catch (Throwable t) {

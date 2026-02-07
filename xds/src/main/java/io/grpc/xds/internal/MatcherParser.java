@@ -91,6 +91,8 @@ public final class MatcherParser {
                 Pattern.compile(proto.getSafeRegex().getRegex()));
       case CONTAINS:
         return Matchers.StringMatcher.forContains(proto.getContains());
+      case CUSTOM:
+        throw new IllegalArgumentException("custom string matcher is not supported");
       case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException(
@@ -113,6 +115,8 @@ public final class MatcherParser {
             Pattern.compile(proto.getSafeRegex().getRegex()));
       case CONTAINS:
         return Matchers.StringMatcher.forContains(proto.getContains());
+      case CUSTOM:
+        throw new IllegalArgumentException("custom string matcher is not supported");
       case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException(

@@ -54,10 +54,10 @@ public abstract class UnifiedMatcher<T> {
 
   /**
    * Evaluates the matcher against the provided data.
-   * Returns the action config if matched, null otherwise.
+   * Returns the action configs if matched, null otherwise.
    */
   @Nullable
-  public abstract T match(MatchingData data);
+  public abstract List<T> match(MatchingData data);
 
   public static <T> UnifiedMatcher<T> create(Matcher proto, ActionParser<T> parser) {
     return createRecursive(proto, parser, 0);
@@ -65,8 +65,8 @@ public abstract class UnifiedMatcher<T> {
 
   private static <T> UnifiedMatcher<T> createRecursive(Matcher proto, ActionParser<T> parser,
       int depth) {
-    if (depth > 8) {
-      throw new IllegalArgumentException("Maximum recursion depth of 8 exceeded");
+    if (depth > 16) {
+      throw new IllegalArgumentException("Maximum recursion depth of 16 exceeded");
     }
     if (proto.hasMatcherList()) {
       return new MatcherList<>(proto.getMatcherList(), parser, depth);
@@ -91,7 +91,7 @@ public abstract class UnifiedMatcher<T> {
     }
 
     @Override
-    public T match(MatchingData data) {
+    public List<T> match(MatchingData data) {
       return delegate != null ? delegate.match(data) : null;
     }
   }
@@ -104,8 +104,8 @@ public abstract class UnifiedMatcher<T> {
     }
 
     @Override
-    public T match(MatchingData data) {
-      return action;
+    public List<T> match(MatchingData data) {
+      return ImmutableList.of(action);
     }
   }
 
@@ -121,24 +121,30 @@ public abstract class UnifiedMatcher<T> {
     }
 
     @Override
-    public T match(MatchingData data) {
+    public List<T> match(MatchingData data) {
+      List<T> results = new ArrayList<>();
       for (FieldMatcher<T> matcher : fieldMatchers) {
-        T result = matcher.match(data);
-        if (result != null) {
-          return result;
+        List<T> result = matcher.match(data);
+        if (result != null && !result.isEmpty()) {
+          results.addAll(result);
+          if (!matcher.keepMatching) {
+            break;
+          }
         }
       }
-      return null;
+      return results.isEmpty() ? null : ImmutableList.copyOf(results);
     }
   }
 
   private static class FieldMatcher<T> {
     private final UnifiedPredicate predicate;
     private final UnifiedMatcher<T> onMatch;
+    private final boolean keepMatching;
 
     FieldMatcher(Matcher.MatcherList.FieldMatcher proto, ActionParser<T> parser, int depth) {
       this.predicate = UnifiedPredicate.create(proto.getPredicate());
       Matcher.OnMatch onMatchProto = proto.getOnMatch();
+      this.keepMatching = onMatchProto.getKeepMatching();
       if (onMatchProto.hasAction()) {
         this.onMatch = new ActionMatcher<>(onMatchProto.getAction(), parser);
       } else if (onMatchProto.hasMatcher()) {
@@ -149,7 +155,7 @@ public abstract class UnifiedMatcher<T> {
     }
 
     @Nullable
-    T match(MatchingData data) {
+    List<T> match(MatchingData data) {
       if (predicate.matches(data)) {
         return onMatch.match(data);
       }
@@ -164,6 +170,9 @@ public abstract class UnifiedMatcher<T> {
 
     MatcherTree(Matcher.MatcherTree proto, ActionParser<T> parser, int depth) {
       this.input = new MatcherInput(proto.getInput());
+      if (proto.hasCustomMatch()) {
+        throw new IllegalArgumentException("custom_match is not supported in MatcherTree");
+      }
       this.exactMap = parseMap(proto.getExactMatchMap().getMapMap(), parser, depth);
       this.prefixMap = parseMap(proto.getPrefixMatchMap().getMapMap(), parser, depth);
     }
@@ -183,7 +192,7 @@ public abstract class UnifiedMatcher<T> {
     }
 
     @Override
-    public T match(MatchingData data) {
+    public List<T> match(MatchingData data) {
       String value = input.get(data);
       if (value == null) {
         return null;
@@ -225,7 +234,7 @@ public abstract class UnifiedMatcher<T> {
 
   private static class AlwaysFalseMatcher<T> extends UnifiedMatcher<T> {
     @Override
-    public T match(MatchingData data) {
+    public List<T> match(MatchingData data) {
       return null;
     }
   }
@@ -260,6 +269,9 @@ public abstract class UnifiedMatcher<T> {
 
     SinglePredicate(Predicate.SinglePredicate proto) {
       this.input = new MatcherInput(proto.getInput());
+      if (proto.hasCustomMatch()) {
+        throw new IllegalArgumentException("custom_match is not supported in SinglePredicate");
+      }
       if (proto.hasValueMatch()) {
         this.stringMatcher = MatcherParser.parseStringMatcher(proto.getValueMatch());
       } else {

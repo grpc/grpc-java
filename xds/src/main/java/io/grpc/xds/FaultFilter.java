@@ -106,23 +106,14 @@ final class FaultFilter implements Filter {
     @Override
     public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
       HTTPFault httpFaultProto;
-      if (rawProtoMessage instanceof Any) {
-        try {
-          httpFaultProto = ((Any) rawProtoMessage).unpack(HTTPFault.class);
-        } catch (InvalidProtocolBufferException e) {
-          return ConfigOrError.fromError("Invalid proto: " + e);
-        }
-      } else if (rawProtoMessage instanceof com.google.protobuf.Struct) {
-        try {
-          HTTPFault.Builder builder = HTTPFault.newBuilder();
-          com.google.protobuf.util.JsonFormat.parser().merge(
-              com.google.protobuf.util.JsonFormat.printer().print(rawProtoMessage), builder);
-          httpFaultProto = builder.build();
-        } catch (InvalidProtocolBufferException e) {
-          return ConfigOrError.fromError("Failed to parse Struct to HTTPFault: " + e);
-        }
-      } else {
+      if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+      }
+      Any anyMessage = (Any) rawProtoMessage;
+      try {
+        httpFaultProto = anyMessage.unpack(HTTPFault.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
       }
       return parseHttpFault(httpFaultProto);
     }

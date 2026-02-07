@@ -513,7 +513,6 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     }
 
     // Parse http filters.
-    // todo: AgraVator are we changing the assumption here ??
     if (proto.getHttpFiltersList().isEmpty()) {
       throw new ResourceInvalidException("Missing HttpFilter in HttpConnectionManager.");
     }
@@ -583,7 +582,6 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   static StructOrError<Filter.FilterConfig> parseHttpFilter(
       io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
           httpFilter, FilterRegistry filterRegistry, boolean isForClient) {
-    // todo: AgraVator do we need to change anything here for composite filter ??
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
