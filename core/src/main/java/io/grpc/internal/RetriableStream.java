@@ -167,7 +167,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       final boolean wasCancelled = (scheduledRetry != null) ? scheduledRetry.isCancelled() : false;
       final Future<?> retryFuture;
       final boolean retryWasScheduled = scheduledRetry != null;
-      if (scheduledRetry != null) {
+      if (retryWasScheduled) {
         retryFuture = scheduledRetry.markCancelled();
         scheduledRetry = null;
       } else {
