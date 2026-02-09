@@ -73,7 +73,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -339,66 +338,6 @@ final class XdsNameResolver extends NameResolver {
     if (!listener.onResult2(result).isOk()) {
       resolveState.xdsDependencyManager.requestReresolution();
     }
-  }
-
-  /**
-   * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern} with
-   * case-insensitive.
-   *
-   * <p>Wildcard pattern rules:
-   * <ol>
-   * <li>A single asterisk (*) matches any domain.</li>
-   * <li>Asterisk (*) is only permitted in the left-most or the right-most part of the pattern,
-   *     but not both.</li>
-   * </ol>
-   */
-  @VisibleForTesting
-  static boolean matchHostName(String hostName, String pattern) {
-    checkArgument(hostName.length() != 0 && !hostName.startsWith(".") && !hostName.endsWith("."),
-        "Invalid host name");
-    checkArgument(pattern.length() != 0 && !pattern.startsWith(".") && !pattern.endsWith("."),
-        "Invalid pattern/domain name");
-
-    hostName = hostName.toLowerCase(Locale.US);
-    pattern = pattern.toLowerCase(Locale.US);
-    // hostName and pattern are now in lower case -- domain names are case-insensitive.
-
-    if (!pattern.contains("*")) {
-      // Not a wildcard pattern -- hostName and pattern must match exactly.
-      return hostName.equals(pattern);
-    }
-    // Wildcard pattern
-
-    if (pattern.length() == 1) {
-      return true;
-    }
-
-    int index = pattern.indexOf('*');
-
-    // At most one asterisk (*) is allowed.
-    if (pattern.indexOf('*', index + 1) != -1) {
-      return false;
-    }
-
-    // Asterisk can only match prefix or suffix.
-    if (index != 0 && index != pattern.length() - 1) {
-      return false;
-    }
-
-    // HostName must be at least as long as the pattern because asterisk has to
-    // match one or more characters.
-    if (hostName.length() < pattern.length()) {
-      return false;
-    }
-
-    if (index == 0 && hostName.endsWith(pattern.substring(1))) {
-      // Prefix matching fails.
-      return true;
-    }
-
-    // Pattern matches hostname if suffix matching succeeds.
-    return index == pattern.length() - 1
-        && hostName.startsWith(pattern.substring(0, pattern.length() - 1));
   }
 
   private final class ConfigSelector extends InternalConfigSelector {

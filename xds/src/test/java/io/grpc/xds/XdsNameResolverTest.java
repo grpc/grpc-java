@@ -2021,48 +2021,6 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void matchHostName_exactlyMatch() {
-    String pattern = "foo.googleapis.com";
-    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("fo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("oo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
-  }
-
-  @Test
-  public void matchHostName_prefixWildcard() {
-    String pattern = "*.foo.googleapis.com";
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("bar-baz.foo.googleapis", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isTrue();
-    pattern = "*-bar.foo.googleapis.com";
-    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("-bar.foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis.com", pattern))
-        .isTrue();
-  }
-
-  @Test
-  public void matchHostName_postfixWildCard() {
-    String pattern = "foo.*";
-    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
-    assertThat(XdsNameResolver.matchHostName("foo.com", pattern)).isTrue();
-    pattern = "foo-*";
-    assertThat(XdsNameResolver.matchHostName("bar-.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo-", pattern)).isFalse();
-    assertThat(XdsNameResolver.matchHostName("foo-bar.com", pattern)).isTrue();
-    assertThat(XdsNameResolver.matchHostName("foo-.com", pattern)).isTrue();
-    assertThat(XdsNameResolver.matchHostName("foo-bar", pattern)).isTrue();
-  }
-
-  @Test
   public void resolved_faultAbortInLdsUpdate() {
     resolver.start(mockListener);
     FakeXdsClient xdsClient = (FakeXdsClient) resolver.getXdsClient();
