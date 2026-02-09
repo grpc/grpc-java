@@ -48,6 +48,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
+@SuppressWarnings({ "rawtypes", "unchecked" })
 public class CompositeFilterTest {
 
   private final CompositeFilter.Provider provider = new CompositeFilter.Provider();
@@ -157,7 +158,6 @@ public class CompositeFilterTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void clientInterceptorDelegates() {
     // Setup Config with simple matcher equivalent logic
     Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
@@ -255,9 +255,8 @@ public class CompositeFilterTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void clientInterceptorSkips() {
-    // Same setup but no match
+    // Setup Config with simple matcher equivalent logic with no match
     Matcher matcher = Matcher.newBuilder().build();
 
     ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
@@ -289,12 +288,12 @@ public class CompositeFilterTest {
     Metadata headers = new Metadata();
     call.start(mock(ClientCall.Listener.class), headers);
 
+    verify(fakeClientInterceptor, org.mockito.Mockito.never()).interceptCall(any(), any(), any());
     verify(next).newCall(any(), any());
     verify(nextCall).start(any(), eq(headers));
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void clientInterceptorDelegatesChain() {
     // Setup Chain Action
     TypedExtensionConfig child1 = TypedExtensionConfig.newBuilder()
@@ -393,7 +392,6 @@ public class CompositeFilterTest {
     fakeClientInterceptor = mock(ClientInterceptor.class);
     when(fakeFilter.buildClientInterceptor(any(), any(), any())).thenReturn(fakeClientInterceptor);
 
-    ClientCall childCall = mock(ClientCall.class);
     org.mockito.Mockito.doAnswer(invocation -> {
       io.grpc.Channel nextArg = (io.grpc.Channel) invocation.getArguments()[2];
       return nextArg.newCall(

@@ -48,6 +48,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SNIServerName;
@@ -74,6 +76,7 @@ public final class CompositeFilter implements Filter {
       "type.googleapis.com/envoy.extensions.matching.common_inputs.network.v3.ServerNameInput";
 
   private static final CompositeFilter INSTANCE = new CompositeFilter();
+  private static final Logger log = Logger.getLogger(CompositeFilter.class.getName());
 
   private CompositeFilter() {
   }
@@ -424,7 +427,7 @@ public final class CompositeFilter implements Filter {
           String headerName = input.getHeaderName();
           return headers.get(Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
         } catch (InvalidProtocolBufferException e) {
-          // log/ignore
+          log.log(Level.WARNING, "Unable to get headers from the request for matching", e);
         }
       } else if (TYPE_URL_SOURCE_IP_INPUT.equals(typeUrl)) {
         SocketAddress addr = attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
