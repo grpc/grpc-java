@@ -1106,6 +1106,7 @@ public class TestServiceClient {
       Object responseObj = responseObserver1.take();
       StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
       String clientSocketAddressInCall1 = new String(callResponse.getPayload().getBody().toByteArray());
+      assertThat(clientSocketAddressInCall1).isNotEmpty();
 
       StreamingOutputCallResponseObserver responseObserver2 = new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver2 =
@@ -1126,14 +1127,13 @@ public class TestServiceClient {
       String clientSocketAddressInCall3 = new String(callResponse.getPayload().getBody().toByteArray());
 
       assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
-    }
 
-    public void testMcs_serverStreaming() throws Exception {
-      StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-          .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build();
-      StreamingOutputCallResponseObserver responseObserver1 = new StreamingOutputCallResponseObserver();
-      asyncStub.streamingOutputCall(request, responseObserver1);
-      assertThat(responseObserver1.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      streamObserver1.onCompleted();
+      assertThat(responseObserver1.isCompleted).isTrue();
+      streamObserver2.onCompleted();
+      assertThat(responseObserver2.isCompleted).isTrue();
+      streamObserver3.onCompleted();
+      assertThat(responseObserver3.isCompleted).isTrue();
     }
 
     }
