@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.ComputeEngineCredentials;
@@ -40,16 +39,12 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
-import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.LongUpDownCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MetricInstrument;
-import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.alts.AltsChannelCredentials;
@@ -58,7 +53,6 @@ import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
@@ -72,8 +66,6 @@ import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
-import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
-import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
@@ -83,9 +75,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -612,12 +602,10 @@ public class TestServiceClient {
   }
 
   private class Tester extends AbstractInteropTest {
-    private FakeMetricsSink fakeMetricsSink = new FakeMetricsSink();
 
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
-      boolean useSubchannelMetricsSink = testCase.equals(MCS_CS.toString());
-      boolean useGeneric = testCase.equals(MCS_CS.toString())? true : false;
+      boolean useGeneric = testCase.equals(MCS_CS.toString()) ? true : false;
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
@@ -693,9 +681,6 @@ public class TestServiceClient {
         }
         if (addMdInterceptor != null) {
           channelBuilder.intercept(addMdInterceptor);
-        }
-        if (useSubchannelMetricsSink) {
-          InternalManagedChannelBuilder.addMetricSink(channelBuilder, fakeMetricsSink);
         }
         return channelBuilder;
       }
@@ -1070,7 +1055,8 @@ public class TestServiceClient {
       return 15000;
     }
 
-    class StreamingOutputCallResponseObserver implements StreamObserver<StreamingOutputCallResponse> {
+    class StreamingOutputCallResponseObserver implements
+        StreamObserver<StreamingOutputCallResponse> {
       private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
       private volatile boolean isCompleted = true;
 
@@ -1101,30 +1087,35 @@ public class TestServiceClient {
           asyncStub.fullDuplexCall(responseObserver1);
       StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
           .setPayload(Payload.newBuilder().setBody(
-              ByteString.copyFrom(MCS_CS.description().getBytes())).build()).build();
+              ByteString.copyFromUtf8(MCS_CS.description())).build()).build();
       streamObserver1.onNext(request);
       Object responseObj = responseObserver1.take();
       StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
-      String clientSocketAddressInCall1 = new String(callResponse.getPayload().getBody().toByteArray());
+      String clientSocketAddressInCall1 = new String(callResponse.getPayload().getBody()
+          .toByteArray(), UTF_8);
       assertThat(clientSocketAddressInCall1).isNotEmpty();
 
-      StreamingOutputCallResponseObserver responseObserver2 = new StreamingOutputCallResponseObserver();
+      StreamingOutputCallResponseObserver responseObserver2 =
+          new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver2 =
           asyncStub.fullDuplexCall(responseObserver2);
       streamObserver2.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver2.take();
-      String clientSocketAddressInCall2 = new String(callResponse.getPayload().getBody().toByteArray());
+      String clientSocketAddressInCall2 =
+          new String(callResponse.getPayload().getBody().toByteArray(), UTF_8);
 
       assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
 
       // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
       // connection to be created in the same subchannel and not get queued.
-      StreamingOutputCallResponseObserver responseObserver3 = new StreamingOutputCallResponseObserver();
+      StreamingOutputCallResponseObserver responseObserver3 =
+          new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver3 =
           asyncStub.fullDuplexCall(responseObserver3);
       streamObserver3.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver3.take();
-      String clientSocketAddressInCall3 = new String(callResponse.getPayload().getBody().toByteArray());
+      String clientSocketAddressInCall3 =
+          new String(callResponse.getPayload().getBody().toByteArray(), UTF_8);
 
       assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
 
@@ -1135,8 +1126,7 @@ public class TestServiceClient {
       streamObserver3.onCompleted();
       assertThat(responseObserver3.isCompleted).isTrue();
     }
-
-    }
+  }
 
   private static String validTestCasesHelpText() {
     StringBuilder builder = new StringBuilder();
@@ -1148,40 +1138,5 @@ public class TestServiceClient {
           .append(testCase.description());
     }
     return builder.toString();
-  }
-
-  static class FakeMetricsSink implements MetricSink {
-    private volatile long openConnectionCount;
-
-    @Override
-    public Map<String, Boolean> getEnabledMetrics() {
-      return null;
-    }
-
-    @Override
-    public Set<String> getOptionalLabels() {
-      return null;
-    }
-
-    @Override
-    public int getMeasuresSize() {
-      return 0;
-    }
-
-    @Override
-    public void updateMeasures(List<MetricInstrument> instruments) {}
-
-    @Override
-    public void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument, long value,
-                              List<String> requiredLabelValues,
-                              List<String> optionalLabelValues) {
-      if (metricInstrument.getName().equals("grpc.subchannel.open_connections")) {
-        openConnectionCount = value;
-      }
-    }
-
-    synchronized long getOpenConnectionCount() {
-      return openConnectionCount;
-    }
   }
 }

@@ -23,7 +23,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.ByteString;
-import io.grpc.Attributes;
+import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
@@ -62,7 +62,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import io.grpc.Context;
 
 /**
  * Implementation of the business logic for the TestService. Uses an executor to schedule chunks
@@ -71,7 +70,6 @@ import io.grpc.Context;
 public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
   static Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
   private final Random random = new Random();
-
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
   private final MetricRecorder metricRecorder;
@@ -568,9 +566,6 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
       // Create a new context with the peer address value
       Context newContext = Context.current().withValue(PEER_ADDRESS_CONTEXT_KEY, peerAddress);
       try {
-
-        // Continue the call processing within the new context
-        // return newContext.call(() -> next.startCall(call, headers));
         return Contexts.interceptCall(newContext, call, headers, next);
       } catch (Exception ex) {
         throw new RuntimeException(ex);
