@@ -18,6 +18,7 @@ package io.grpc.testing.integration;
 
 import static io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR;
 import static io.grpc.testing.integration.TestCases.MCS_CS;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
@@ -242,9 +243,10 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
               .asRuntimeException());
           return;
         }
-        if (new String(request.getPayload().getBody().toByteArray()).equals(MCS_CS.description())) {
+        if (new String(request.getPayload().getBody().toByteArray(), UTF_8)
+            .equals(MCS_CS.description())) {
           SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
-          ByteString payload = ByteString.copyFrom(peerAddress.toString().getBytes());
+          ByteString payload = ByteString.copyFromUtf8(peerAddress.toString());
           StreamingOutputCallResponse.Builder responseBuilder =
               StreamingOutputCallResponse.newBuilder();
           responseBuilder.setPayload(
