@@ -68,7 +68,7 @@ public class TestCasesTest {
       "timeout_on_sleeping_server",
       "orca_per_rpc",
       "orca_oob",
-      "mcs",
+      "mcs_cs",
     };
 
     // additional test cases
