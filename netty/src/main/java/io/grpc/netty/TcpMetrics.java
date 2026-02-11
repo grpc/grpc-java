@@ -37,7 +37,12 @@ final class TcpMetrics {
   static {
     MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
     ImmutableList<String> requiredLabels = ImmutableList.of("grpc.target");
-    ImmutableList<String> optionalLabels = ImmutableList.of();
+    ImmutableList<String> optionalLabels = ImmutableList.of(
+        "network.local.address",
+        "network.local.port",
+        "network.peer.address",
+        "network.peer.port"
+    );
     
     connectionsCreated = registry.registerLongCounter(
         "grpc.tcp.connections_created",
@@ -99,19 +104,21 @@ final class TcpMetrics {
       this.target = target;
     }
 
-    void channelActive() {
+    void channelActive(Channel channel) {
       if (metricRecorder != null && target != null) {
+        java.util.List<String> labelValues = getLabelValues(channel);
         metricRecorder.addLongCounter(TcpMetrics.connectionsCreated, 1,
-            Collections.singletonList(target), Collections.emptyList());
+            Collections.singletonList(target), labelValues);
         metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, 1,
-            Collections.singletonList(target), Collections.emptyList());
+            Collections.singletonList(target), labelValues);
       }
     }
 
     void channelInactive(Channel channel) {
       if (metricRecorder != null && target != null) {
+        java.util.List<String> labelValues = getLabelValues(channel);
         metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, -1,
-            Collections.singletonList(target), Collections.emptyList());
+            Collections.singletonList(target), labelValues);
         
         try {
           if (channel.getClass().getName().equals("io.netty.channel.epoll.EpollSocketChannel")) {
@@ -130,11 +137,11 @@ final class TcpMetrics {
             long rtt = ((Number) rttMethod.invoke(info)).longValue();
             
             metricRecorder.addLongCounter(TcpMetrics.packetsRetransmitted, totalRetrans,
-                Collections.singletonList(target), Collections.emptyList());
+                Collections.singletonList(target), labelValues);
             metricRecorder.addLongCounter(TcpMetrics.recurringRetransmits, retransmits,
-                Collections.singletonList(target), Collections.emptyList());
+                Collections.singletonList(target), labelValues);
             metricRecorder.recordDoubleHistogram(TcpMetrics.minRtt, rtt / 1000000.0,
-                Collections.singletonList(target), Collections.emptyList());
+                Collections.singletonList(target), labelValues);
           }
         } catch (Throwable t) {
           // Epoll not available or error getting tcp_info, just ignore.
@@ -142,6 +149,30 @@ final class TcpMetrics {
       }
     }
   }
+
+  private static java.util.List<String> getLabelValues(Channel channel) {
+    String localAddress = "";
+    String localPort = "";
+    String peerAddress = "";
+    String peerPort = "";
+    
+    java.net.SocketAddress local = channel.localAddress();
+    if (local instanceof java.net.InetSocketAddress) {
+      java.net.InetSocketAddress inetLocal = (java.net.InetSocketAddress) local;
+      localAddress = inetLocal.getAddress().getHostAddress();
+      localPort = String.valueOf(inetLocal.getPort());
+    }
+    
+    java.net.SocketAddress remote = channel.remoteAddress();
+    if (remote instanceof java.net.InetSocketAddress) {
+      java.net.InetSocketAddress inetRemote = (java.net.InetSocketAddress) remote;
+      peerAddress = inetRemote.getAddress().getHostAddress();
+      peerPort = String.valueOf(inetRemote.getPort());
+    }
+    
+    return java.util.Arrays.asList(localAddress, localPort, peerAddress, peerPort);
+  }
+
 
   private TcpMetrics() {}
 }

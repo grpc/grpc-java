@@ -500,7 +500,7 @@ class NettyClientHandler extends AbstractNettyHandler {
    */
   @Override
   public void channelActive(ChannelHandlerContext ctx) throws Exception {
-    tcpMetrics.channelActive();
+    tcpMetrics.channelActive(ctx.channel());
     super.channelActive(ctx);
   }
 

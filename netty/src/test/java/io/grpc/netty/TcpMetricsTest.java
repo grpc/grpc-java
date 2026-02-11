@@ -19,9 +19,14 @@ package io.grpc.netty;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Arrays;
 import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
@@ -47,25 +52,103 @@ public class TcpMetricsTest {
     metrics = new TcpMetrics.Tracker(metricRecorder, "target1");
   }
 
+  
   @Test
-  public void channelActive_incrementsCounts() {
-    metrics.channelActive();
+  public void registeredMetrics_haveCorrectOptionalLabels() {
+    java.util.List<String> expectedOptionalLabels = Arrays.asList(
+        "network.local.address",
+        "network.local.port",
+        "network.peer.address",
+        "network.peer.port"
+    );
+
+    org.junit.Assert.assertEquals(
+        expectedOptionalLabels, TcpMetrics.connectionsCreated.getOptionalLabelKeys());
+    org.junit.Assert.assertEquals(
+        expectedOptionalLabels, TcpMetrics.connectionCount.getOptionalLabelKeys());
+    org.junit.Assert.assertEquals(
+        expectedOptionalLabels, TcpMetrics.packetsRetransmitted.getOptionalLabelKeys());
+    org.junit.Assert.assertEquals(
+        expectedOptionalLabels, TcpMetrics.recurringRetransmits.getOptionalLabelKeys());
+    org.junit.Assert.assertEquals(
+        expectedOptionalLabels, TcpMetrics.minRtt.getOptionalLabelKeys());
+  }
+
+  @Test
+  public void channelActive_extractsLabels_ipv4() throws Exception {
+
+    InetAddress localInet = InetAddress.getByAddress(new byte[] { 127, 0, 0, 1 });
+    InetAddress remoteInet = InetAddress.getByAddress(new byte[] { 10, 0, 0, 1 });
+    when(channel.localAddress()).thenReturn(new InetSocketAddress(localInet, 8080));
+    when(channel.remoteAddress()).thenReturn(new InetSocketAddress(remoteInet, 443));
+
+    metrics.channelActive(channel);
+    
     verify(metricRecorder).addLongCounter(
         eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
-        eq(Collections.emptyList()));
+        eq(Arrays.asList(
+            localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verify(metricRecorder).addLongUpDownCounter(
         eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
-        eq(Collections.emptyList()));
+        eq(Arrays.asList(
+            localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void channelInactive_extractsLabels_ipv6() throws Exception {
+
+    InetAddress localInet = InetAddress.getByAddress(
+        new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 });
+    InetAddress remoteInet = InetAddress.getByAddress(
+        new byte[] { 32, 1, 13, -72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 });
+    when(channel.localAddress()).thenReturn(new InetSocketAddress(localInet, 8080));
+    when(channel.remoteAddress()).thenReturn(new InetSocketAddress(remoteInet, 443));
+
+    metrics.channelInactive(channel);
+    
+    verify(metricRecorder).addLongUpDownCounter(
+        eq(TcpMetrics.connectionCount), eq(-1L), eq(Collections.singletonList("target1")),
+        eq(Arrays.asList(
+            localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void channelActive_extractsLabels_nonInetAddress() throws Exception {
+    SocketAddress dummyAddress = new SocketAddress() {};
+    when(channel.localAddress()).thenReturn(dummyAddress);
+    when(channel.remoteAddress()).thenReturn(dummyAddress);
+
+    metrics.channelActive(channel);
+    
+    verify(metricRecorder).addLongCounter(
+        eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
+        eq(Arrays.asList("", "", "", "")));
+    verify(metricRecorder).addLongUpDownCounter(
+        eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
+        eq(Arrays.asList("", "", "", "")));
+    verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void channelActive_incrementsCounts() {
+    metrics.channelActive(channel);
+    verify(metricRecorder).addLongCounter(
+        eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
+        eq(Arrays.asList("", "", "", "")));
+    verify(metricRecorder).addLongUpDownCounter(
+        eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
+        eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
   public void channelInactive_decrementsCount_noEpoll_noError() {
     metrics.channelInactive(channel);
-    // It should decrement connectionCount
     verify(metricRecorder).addLongUpDownCounter(
         eq(TcpMetrics.connectionCount), eq(-1L), eq(Collections.singletonList("target1")),
-        eq(Collections.emptyList()));
+        eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
 }
