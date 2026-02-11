@@ -133,7 +133,6 @@ envoy/type/v3/ratelimit_strategy.proto
 envoy/type/v3/ratelimit_unit.proto
 envoy/type/v3/semantic_version.proto
 envoy/type/v3/token_bucket.proto
-envoy/extensions/matching/common_inputs/network/v3/network_inputs.proto
 )
 
 pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null
