@@ -44,6 +44,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FlagResetRule;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
