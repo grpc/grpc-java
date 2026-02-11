@@ -160,8 +160,11 @@ public final class ManagedChannelRegistry {
       String target, ChannelCredentials creds) {
     NameResolverProvider nameResolverProvider = null;
     try {
-      URI uri = new URI(target);
-      nameResolverProvider = nameResolverRegistry.getProviderForScheme(uri.getScheme());
+      String scheme =
+          FeatureFlags.getRfc3986UrisEnabled()
+              ? Uri.parse(target).getScheme()
+              : new URI(target).getScheme();
+      nameResolverProvider = nameResolverRegistry.getProviderForScheme(scheme);
     } catch (URISyntaxException ignore) {
       // bad URI found, just ignore and continue
     }
