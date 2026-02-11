@@ -251,6 +251,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
@@ -526,6 +527,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
 
@@ -1148,6 +1150,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
     return transport;

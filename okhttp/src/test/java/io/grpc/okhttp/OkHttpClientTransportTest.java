@@ -146,6 +146,7 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class OkHttpClientTransportTest {
+
   private static final int TIME_OUT_MS = 2000;
   private static final int INITIAL_WINDOW_SIZE = 65535;
   private static final String NETWORK_ISSUE_MESSAGE = "network issue";

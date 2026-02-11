@@ -30,6 +30,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -123,6 +124,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Supplier<Stopwatch> stopwatchFactory;
   private final TransportTracer transportTracer;
   private final Attributes eagAttributes;
+  private final TcpMetrics.Tracker tcpMetrics;
   private final String authority;
   private final InUseStateAggregator<Http2Stream> inUseState =
       new InUseStateAggregator<Http2Stream>() {
@@ -164,7 +166,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Attributes eagAttributes,
       String authority,
       ChannelLogger negotiationLogger,
-      Ticker ticker) {
+      Ticker ticker,
+      MetricRecorder metricRecorder) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
@@ -194,7 +197,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         eagAttributes,
         authority,
         negotiationLogger,
-        ticker);
+        ticker,
+        metricRecorder);
   }
 
   @VisibleForTesting
@@ -214,7 +218,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       Attributes eagAttributes,
       String authority,
       ChannelLogger negotiationLogger,
-      Ticker ticker) {
+      Ticker ticker,
+      MetricRecorder metricRecorder) {
     Preconditions.checkNotNull(connection, "connection");
     Preconditions.checkNotNull(frameReader, "frameReader");
     Preconditions.checkNotNull(lifecycleManager, "lifecycleManager");
@@ -269,7 +274,8 @@ class NettyClientHandler extends AbstractNettyHandler {
         pingCounter,
         ticker,
         maxHeaderListSize,
-        softLimitHeaderListSize);
+        softLimitHeaderListSize,
+        metricRecorder);
   }
 
   private NettyClientHandler(
@@ -288,7 +294,8 @@ class NettyClientHandler extends AbstractNettyHandler {
       PingLimiter pingLimiter,
       Ticker ticker,
       int maxHeaderListSize,
-      int softLimitHeaderListSize) {
+      int softLimitHeaderListSize,
+      MetricRecorder metricRecorder) {
     super(
         /* channelUnused= */ null,
         decoder,
@@ -350,6 +357,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
+    this.tcpMetrics = new TcpMetrics.Tracker(metricRecorder, "client");
   }
 
   /**
@@ -490,6 +498,12 @@ class NettyClientHandler extends AbstractNettyHandler {
   /**
    * Handler for the Channel shutting down.
    */
+  @Override
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    tcpMetrics.channelActive();
+    super.channelActive(ctx);
+  }
+
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     try {

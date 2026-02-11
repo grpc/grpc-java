@@ -42,6 +42,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
@@ -127,6 +128,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
   private final int maxMessageSize;
+  private final TcpMetrics.Tracker tcpMetrics;
   private final long keepAliveTimeInNanos;
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionAgeInNanos;
@@ -174,7 +176,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long permitKeepAliveTimeInNanos,
       int maxRstCount,
       long maxRstPeriodNanos,
-      Attributes eagAttributes) {
+      Attributes eagAttributes,
+      MetricRecorder metricRecorder) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
         maxHeaderListSize);
     Http2FrameLogger frameLogger = new Http2FrameLogger(LogLevel.DEBUG, NettyServerHandler.class);
@@ -208,7 +211,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxRstCount,
         maxRstPeriodNanos,
         eagAttributes,
-        Ticker.systemTicker());
+        Ticker.systemTicker(),
+        metricRecorder);
   }
 
   static NettyServerHandler newHandler(
@@ -234,7 +238,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxRstCount,
       long maxRstPeriodNanos,
       Attributes eagAttributes,
-      Ticker ticker) {
+      Ticker ticker,
+      MetricRecorder metricRecorder) {
     Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
         flowControlWindow);
@@ -294,7 +299,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         keepAliveEnforcer,
         autoFlowControl,
         rstStreamCounter,
-        eagAttributes, ticker);
+        eagAttributes, ticker,
+        metricRecorder);
   }
 
   private NettyServerHandler(
@@ -318,7 +324,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       boolean autoFlowControl,
       RstStreamCounter rstStreamCounter,
       Attributes eagAttributes,
-      Ticker ticker) {
+      Ticker ticker,
+      MetricRecorder metricRecorder) {
     super(
         channelUnused,
         decoder,
@@ -362,6 +369,8 @@ class NettyServerHandler extends AbstractNettyHandler {
 
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be non-negative: %s", maxMessageSize);
     this.maxMessageSize = maxMessageSize;
+    this.tcpMetrics = new TcpMetrics.Tracker(metricRecorder, "server");
+
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
     this.maxConnectionIdleManager = maxConnectionIdleManager;
@@ -663,6 +672,8 @@ class NettyServerHandler extends AbstractNettyHandler {
    */
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    tcpMetrics.channelInactive(ctx.channel());
+
     try {
       if (keepAliveManager != null) {
         keepAliveManager.onTransportTermination();

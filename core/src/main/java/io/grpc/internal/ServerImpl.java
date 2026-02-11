@@ -48,6 +48,8 @@ import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallExecutorSupplier;
 import io.grpc.ServerCallHandler;
@@ -97,6 +99,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
   private final InternalLogId logId;
   private final ObjectPool<? extends Executor> executorPool;
+  private final MetricRecorder metricRecorder;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
   private final HandlerRegistry registry;
@@ -143,6 +146,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       InternalServer transportServer,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
+    this.metricRecorder =
+        new MetricRecorderImpl(builder.metricSinks, MetricInstrumentRegistry.getDefaultRegistry());
+
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
@@ -182,6 +188,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       // Start and wait for any ports to actually be bound.
 
       ServerListenerImpl listener = new ServerListenerImpl();
+      transportServer.setMetricRecorder(metricRecorder);
       transportServer.start(listener);
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
