@@ -508,12 +508,15 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       if (subchannel == null) {
         return pickResult;
       }
+      
+      subchannel = ((WrrSubchannel) subchannel).delegate();
       if (!enableOobLoadReport) {
-        return PickResult.withSubchannel(subchannel,
-            OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
-                reportListeners.get(pick)));
+        return pickResult.withSubchannelReplacement(subchannel)
+            .withStreamTracerFactory(
+                OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
+                    reportListeners.get(pick)));
       } else {
-        return PickResult.withSubchannel(subchannel);
+        return pickResult.withSubchannelReplacement(subchannel);
       }
     }
 

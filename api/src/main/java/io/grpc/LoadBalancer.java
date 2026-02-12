@@ -662,6 +662,28 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult withSubchannelReplacement(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult withStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
+    }
+
+    /**
      * A decision to report a connectivity error to the RPC.  If the RPC is {@link
      * CallOptions#withWaitForReady wait-for-ready}, it will stay buffered.  Otherwise, it will fail
      * with the given error.
