@@ -662,6 +662,28 @@ public abstract class LoadBalancer {
     }
 
     /**
+     * Equivalent to {@code PickResult.withSubchannel(subchannel, this.getStreamTracerFactory())},
+     * but retains the authority override if it exists.
+     *
+     * @since 1.80.0
+     */
+    public PickResult withSubchannelReplacement(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride);
+    }
+
+    /**
+     * Equivalent to {@code PickResult.withSubchannel(this.getSubchannel(), streamTracerFactory)},
+     * but retains the authority override if it exists.
+     *
+     * @since 1.80.0
+     */
+    public PickResult withStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
+    }
+
+    /**
      * A decision to report a connectivity error to the RPC.  If the RPC is {@link
      * CallOptions#withWaitForReady wait-for-ready}, it will stay buffered.  Otherwise, it will fail
      * with the given error.

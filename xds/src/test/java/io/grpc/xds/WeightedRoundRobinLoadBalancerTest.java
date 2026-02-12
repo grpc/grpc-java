@@ -171,6 +171,19 @@ public class WeightedRoundRobinLoadBalancerTest {
     helper = mock(Helper.class, delegatesTo(testHelperInstance));
   }
 
+  private static WeightedRoundRobinPicker getWrrPicker(SubchannelPicker picker) {
+    if (picker.getClass().getName().endsWith("OrcaOobPicker")) {
+      try {
+        java.lang.reflect.Field f = picker.getClass().getDeclaredField("delegate");
+        f.setAccessible(true);
+        return (WeightedRoundRobinPicker) f.get(picker);
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return (WeightedRoundRobinPicker) picker;
+  }
+
   @Before
   public void setup() {
     for (int i = 0; i < 3; i++) {
@@ -213,7 +226,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     final WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getValue();
+        getWrrPicker(pickerCaptor.getValue());
     weightedPicker.pickSubchannel(mockArgs);
   }
 
@@ -274,9 +287,9 @@ public class WeightedRoundRobinLoadBalancerTest {
             eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
+        getWrrPicker(pickerCaptor.getAllValues().get(0));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+    weightedPicker = getWrrPicker(pickerCaptor.getAllValues().get(1));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
     String weightedPickerStr = weightedPicker.toString();
     assertThat(weightedPickerStr).contains("enableOobLoadReport=false");
@@ -337,7 +350,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -361,7 +374,7 @@ public class WeightedRoundRobinLoadBalancerTest {
             .setAttributes(affinity).build()));
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor2.capture());
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor2.getAllValues().get(2);
+    weightedPicker = getWrrPicker(pickerCaptor2.getAllValues().get(2));
     pickResult = weightedPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult)).isEqualTo(servers.get(0));
     assertThat(pickResult.getStreamTracerFactory()).isNull();
@@ -395,7 +408,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
+        getWrrPicker(pickerCaptor.getAllValues().get(2));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     WeightedChildLbState weightedChild3 = (WeightedChildLbState) getChild(weightedPicker, 2);
@@ -595,7 +608,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -655,9 +668,9 @@ public class WeightedRoundRobinLoadBalancerTest {
         eq(ConnectivityState.READY), pickerCaptor.capture());
     assertThat(pickerCaptor.getAllValues().size()).isEqualTo(2);
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(0);
+        getWrrPicker(pickerCaptor.getAllValues().get(0));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(1);
-    weightedPicker = (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+    weightedPicker = getWrrPicker(pickerCaptor.getAllValues().get(1));
     assertThat(weightedPicker.getChildren().size()).isEqualTo(2);
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
@@ -710,7 +723,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -761,7 +774,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
         eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     int expectedTasks = isEnabledHappyEyeballs() ? 2 : 1;
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(expectedTasks);
     Map<EquivalentAddressGroup, Integer> qpsByChannel = ImmutableMap.of(servers.get(0), 2,
@@ -816,7 +829,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(2);
+        getWrrPicker(pickerCaptor.getAllValues().get(2));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
@@ -857,7 +870,7 @@ public class WeightedRoundRobinLoadBalancerTest {
     verify(helper, times(2)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor.capture());
     WeightedRoundRobinPicker weightedPicker =
-        (WeightedRoundRobinPicker) pickerCaptor.getAllValues().get(1);
+        getWrrPicker(pickerCaptor.getAllValues().get(1));
     WeightedChildLbState weightedChild1 = (WeightedChildLbState) getChild(weightedPicker, 0);
     WeightedChildLbState weightedChild2 = (WeightedChildLbState) getChild(weightedPicker, 1);
     weightedChild1.new OrcaReportListener(weightedConfig.errorUtilizationPenalty).onLoadReport(
