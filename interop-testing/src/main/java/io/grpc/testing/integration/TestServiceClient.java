@@ -17,7 +17,6 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.testing.integration.TestCases.MCS_CS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -593,16 +592,14 @@ public class TestServiceClient {
         if (serverHostOverride != null) {
           channelBuilder.overrideAuthority(serverHostOverride);
         }
-        if (testCase.equals(MCS_CS.toString())) {
-          channelBuilder.disableServiceConfigLookUp();
-          try {
-            @SuppressWarnings("unchecked")
-            Map<String, ?> serviceConfigMap = (Map<String, ?>) JsonParser.parse(
-                "{\"connection_scaling\":{\"max_connections_per_subchannel\": 2}}");
-            channelBuilder.defaultServiceConfig(serviceConfigMap);
-          } catch (IOException e) {
-            throw new RuntimeException(e);
-          }
+        channelBuilder.disableServiceConfigLookUp();
+        try {
+          @SuppressWarnings("unchecked")
+          Map<String, ?> serviceConfigMap = (Map<String, ?>) JsonParser.parse(
+              "{\"connection_scaling\":{\"max_connections_per_subchannel\": 2}}");
+          channelBuilder.defaultServiceConfig(serviceConfigMap);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
         }
         tester.testMcs(TestServiceGrpc.newStub(channelBuilder.build()));
         break;
@@ -1045,7 +1042,8 @@ public class TestServiceClient {
       streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
           .setOrcaOobReport(answer2)
           .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(streamingOutputCallResponseObserver.isCompleted).isTrue();
+      assertThat(streamingOutputCallResponseObserver.take())
+          .isInstanceOf(StreamingOutputCallResponse.class);
 
       for (i = 0; i < retryLimit; i++) {
         Thread.sleep(1000);
@@ -1055,6 +1053,8 @@ public class TestServiceClient {
         }
       }
       assertThat(i).isLessThan(retryLimit);
+      streamObserver.onCompleted();
+      assertThat(streamingOutputCallResponseObserver.verifiedCompleted()).isTrue();
     }
 
     @Override
@@ -1084,8 +1084,8 @@ public class TestServiceClient {
 
     class StreamingOutputCallResponseObserver implements
         StreamObserver<StreamingOutputCallResponse> {
+      private final Object lastItem = new Object();
       private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
-      private volatile boolean isCompleted = true;
 
       @Override
       public void onNext(StreamingOutputCallResponse value) {
@@ -1099,11 +1099,15 @@ public class TestServiceClient {
 
       @Override
       public void onCompleted() {
-        isCompleted = true;
+        queue.add(lastItem);
       }
 
       Object take() throws InterruptedException {
         return queue.take();
+      }
+
+      boolean verifiedCompleted() throws InterruptedException {
+        return queue.take() == lastItem;
       }
     }
 
@@ -1113,13 +1117,15 @@ public class TestServiceClient {
       StreamObserver<StreamingOutputCallRequest> streamObserver1 =
           asyncStub.fullDuplexCall(responseObserver1);
       StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-          .setPayload(Payload.newBuilder().setBody(
-              ByteString.copyFromUtf8(MCS_CS.description())).build()).build();
+          .addResponseParameters(ResponseParameters.newBuilder()
+              .setSendClientSocketAddressInResponse(
+                  Messages.BoolValue.newBuilder().setValue(true).build())
+              .build())
+          .build();
       streamObserver1.onNext(request);
       Object responseObj = responseObserver1.take();
       StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
-      String clientSocketAddressInCall1 = new String(callResponse.getPayload().getBody()
-          .toByteArray(), UTF_8);
+      String clientSocketAddressInCall1 = callResponse.getClientSocketAddress();
       assertThat(clientSocketAddressInCall1).isNotEmpty();
 
       StreamingOutputCallResponseObserver responseObserver2 =
@@ -1128,30 +1134,30 @@ public class TestServiceClient {
           asyncStub.fullDuplexCall(responseObserver2);
       streamObserver2.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver2.take();
-      String clientSocketAddressInCall2 =
-          new String(callResponse.getPayload().getBody().toByteArray(), UTF_8);
+      String clientSocketAddressInCall2 = callResponse.getClientSocketAddress();
 
       assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
 
       // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
       // connection to be created in the same subchannel and not get queued.
-      /*StreamingOutputCallResponseObserver responseObserver3 =
+      StreamingOutputCallResponseObserver responseObserver3 =
           new StreamingOutputCallResponseObserver();
       StreamObserver<StreamingOutputCallRequest> streamObserver3 =
           asyncStub.fullDuplexCall(responseObserver3);
       streamObserver3.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver3.take();
-      String clientSocketAddressInCall3 =
-          new String(callResponse.getPayload().getBody().toByteArray(), UTF_8);
+      String clientSocketAddressInCall3 = callResponse.getClientSocketAddress();
 
-      assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);*/
+      // This assertion is currently failing because connection scaling when MCS limit has been
+      // reached is not yet implemented in gRPC Java.
+      assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
 
       streamObserver1.onCompleted();
-      assertThat(responseObserver1.isCompleted).isTrue();
+      assertThat(responseObserver1.verifiedCompleted()).isTrue();
       streamObserver2.onCompleted();
-      assertThat(responseObserver2.isCompleted).isTrue();
-      /*streamObserver3.onCompleted();
-      assertThat(responseObserver3.isCompleted).isTrue();*/
+      assertThat(responseObserver2.verifiedCompleted()).isTrue();
+      streamObserver3.onCompleted();
+      assertThat(responseObserver3.verifiedCompleted()).isTrue();
     }
   }
 

@@ -17,8 +17,6 @@
 package io.grpc.testing.integration;
 
 import static io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR;
-import static io.grpc.testing.integration.TestCases.MCS_CS;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
@@ -54,6 +52,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -243,18 +242,25 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
               .asRuntimeException());
           return;
         }
-        if (new String(request.getPayload().getBody().toByteArray(), UTF_8)
-            .equals(MCS_CS.description())) {
-          SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
-          ByteString payload = ByteString.copyFromUtf8(peerAddress.toString());
-          StreamingOutputCallResponse.Builder responseBuilder =
-              StreamingOutputCallResponse.newBuilder();
-          responseBuilder.setPayload(
-              Payload.newBuilder()
-                  .setBody(payload));
-          responseObserver.onNext(responseBuilder.build());
+        if (whetherSendClientSocketAddressInResponse(request)) {
+          responseObserver.onNext(
+              StreamingOutputCallResponse.newBuilder()
+                  .setClientSocketAddress(PEER_ADDRESS_CONTEXT_KEY.get().toString())
+                  .build());
+          return;
         }
         dispatcher.enqueue(toChunkQueue(request));
+      }
+
+      private boolean whetherSendClientSocketAddressInResponse(StreamingOutputCallRequest request) {
+        Iterator<ResponseParameters> responseParametersIterator =
+            request.getResponseParametersList().iterator();
+        while (responseParametersIterator.hasNext()) {
+          if (responseParametersIterator.next().getSendClientSocketAddressInResponse().getValue()) {
+            return true;
+          }
+        }
+        return false;
       }
 
       @Override
