@@ -150,6 +150,41 @@ public final class CelEnvironmentTest {
   }
 
   @Test
+  public void celEnvironment_disabledFeatures_throwsValidationException() {
+    // String concatenation
+    try {
+      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("'a' + 'b'").getAst();
+      org.junit.Assert.fail("String concatenation should be disabled");
+    } catch (dev.cel.common.CelValidationException e) {
+      assertThat(e).hasMessageThat().contains("found no matching overload for '_+_'");
+    }
+
+    // List concatenation
+    try {
+      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("[1] + [2]").getAst();
+      org.junit.Assert.fail("List concatenation should be disabled");
+    } catch (dev.cel.common.CelValidationException e) {
+      assertThat(e).hasMessageThat().contains("found no matching overload for '_+_'");
+    }
+
+    // String conversion
+    try {
+      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("string(1)").getAst();
+      org.junit.Assert.fail("String conversion should be disabled");
+    } catch (dev.cel.common.CelValidationException e) {
+      assertThat(e).hasMessageThat().contains("undeclared reference to 'string'");
+    }
+
+    // Comprehensions
+    try {
+      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("[1, 2, 3].all(x, x > 0)").getAst();
+      org.junit.Assert.fail("Comprehensions should be disabled");
+    } catch (dev.cel.common.CelValidationException e) {
+      assertThat(e).hasMessageThat().contains("undeclared reference to 'all'");
+    }
+  }
+
+  @Test
   public void celEnvironment_method_fallback() {
     MatchContext context = mock(MatchContext.class);
     when(context.getMethod()).thenReturn(null);

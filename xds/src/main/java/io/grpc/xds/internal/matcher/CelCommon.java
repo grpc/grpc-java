@@ -30,16 +30,47 @@ import dev.cel.runtime.CelRuntimeFactory;
 final class CelCommon {
   private static final CelOptions CEL_OPTIONS = CelOptions.newBuilder()
       .enableComprehension(false)
-      .enableStringConversion(false)
-      .enableStringConcatenation(false)
-      .enableListConcatenation(false)
       .maxRegexProgramSize(100)
       .build();
+
+  private static final dev.cel.checker.CelStandardDeclarations DECLARATIONS = 
+      dev.cel.checker.CelStandardDeclarations.newBuilder()
+          .filterFunctions((func, over) -> {
+            if (func == dev.cel.checker.CelStandardDeclarations.StandardFunction.STRING) {
+              return false;
+            }
+            if (func == dev.cel.checker.CelStandardDeclarations.StandardFunction.ADD) {
+              String id = over.celOverloadDecl().overloadId();
+              return !id.equals("add_string") && !id.equals("add_list");
+            }
+            return true;
+          })
+          .build();
+
+  private static final dev.cel.runtime.CelStandardFunctions FUNCTIONS = 
+      dev.cel.runtime.CelStandardFunctions.newBuilder()
+          .filterFunctions((func, over) -> {
+            if (func == dev.cel.runtime.CelStandardFunctions.StandardFunction.STRING) {
+              return false;
+            }
+            if (func == dev.cel.runtime.CelStandardFunctions.StandardFunction.ADD) {
+              String id = over.toString();
+              return !id.equals("ADD_STRING") && !id.equals("ADD_LIST");
+            }
+            return true;
+          })
+          .build();
+
   static final CelCompiler COMPILER = CelCompilerFactory.standardCelCompilerBuilder()
+      .setStandardEnvironmentEnabled(false)
+      .setStandardDeclarations(DECLARATIONS)
       .addVar("request", SimpleType.DYN)
       .setOptions(CEL_OPTIONS)
       .build();
+
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
+      .setStandardEnvironmentEnabled(false)
+      .setStandardFunctions(FUNCTIONS)
       .setOptions(CEL_OPTIONS)
       .build();
 
