@@ -56,10 +56,7 @@ dependencies {
             libraries.re2j,
             libraries.auto.value.annotations,
             libraries.protobuf.java.util
-    implementation(libraries.cel.runtime) {
-        exclude group: 'com.google.protobuf', module: 'protobuf-java'
-    }
-    implementation(libraries.cel.compiler) {
+    implementation(libraries.cel) {
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
     def nettyDependency = implementation project(':grpc-netty')
