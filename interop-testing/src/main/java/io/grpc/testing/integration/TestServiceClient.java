@@ -565,7 +565,7 @@ public class TestServiceClient {
         break;
       }
       
-      case MCS_CS: {
+      case MAX_CONCURRENT_STREAMS_CONNECTION_SCALING: {
         ChannelCredentials channelCredentials;
         if (useTls) {
           if (!useTestCa) {

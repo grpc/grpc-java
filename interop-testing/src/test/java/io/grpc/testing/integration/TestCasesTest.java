@@ -68,7 +68,7 @@ public class TestCasesTest {
       "timeout_on_sleeping_server",
       "orca_per_rpc",
       "orca_oob",
-      "mcs_cs",
+      "max_concurrent_streams_connection_scaling",
     };
 
     // additional test cases
