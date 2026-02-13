@@ -156,8 +156,6 @@ public class TestServiceServer {
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
   void start() throws Exception {
-    System.out.println("TestServiceServer.start() called with addressType " + addressType);
-    System.out.flush();
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;
     if (useAlts) {
@@ -196,8 +194,6 @@ public class TestServiceServer {
           ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
         }
         if (setMcsLimit) {
-          System.out.println("TestServiceServer.start() setting mcs limit to 2.");
-          System.out.flush();
           ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(2);
         }
         break;
@@ -215,8 +211,6 @@ public class TestServiceServer {
       default:
         throw new AssertionError("Unknown address type: " + addressType);
     }
-    System.out.println("TestServiceServer.start() calling serverBuilder start.");
-    System.out.flush();
     server = serverBuilder
         .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
         .addService(
@@ -226,8 +220,6 @@ public class TestServiceServer {
         .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
         .build()
         .start();
-    System.out.println("TestServiceServer.start() after calling serverBuilder start.");
-    System.out.flush();
   }
 
   @VisibleForTesting
