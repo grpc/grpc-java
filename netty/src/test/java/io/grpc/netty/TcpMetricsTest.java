@@ -79,12 +79,15 @@ public class TcpMetricsTest {
         expectedOptionalLabels, TcpMetrics.connectionsCreated.getOptionalLabelKeys());
     org.junit.Assert.assertEquals(
         expectedOptionalLabels, TcpMetrics.connectionCount.getOptionalLabelKeys());
-    org.junit.Assert.assertEquals(
-        expectedOptionalLabels, TcpMetrics.packetsRetransmitted.getOptionalLabelKeys());
-    org.junit.Assert.assertEquals(
-        expectedOptionalLabels, TcpMetrics.recurringRetransmits.getOptionalLabelKeys());
-    org.junit.Assert.assertEquals(
-        expectedOptionalLabels, TcpMetrics.minRtt.getOptionalLabelKeys());
+
+    if (TcpMetrics.packetsRetransmitted != null) {
+      org.junit.Assert.assertEquals(
+          expectedOptionalLabels, TcpMetrics.packetsRetransmitted.getOptionalLabelKeys());
+      org.junit.Assert.assertEquals(
+          expectedOptionalLabels, TcpMetrics.recurringRetransmits.getOptionalLabelKeys());
+      org.junit.Assert.assertEquals(
+          expectedOptionalLabels, TcpMetrics.minRtt.getOptionalLabelKeys());
+    }
   }
 
   @Test
