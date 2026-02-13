@@ -34,6 +34,10 @@ final class TcpMetrics {
   static final LongCounterMetricInstrument recurringRetransmits;
   static final DoubleHistogramMetricInstrument minRtt;
 
+  // Note: Metrics like delivery_rate, bytes_sent, packets_sent,
+  // bytes_retransmitted, etc., are not
+  // currently exposed by Netty's EpollTcpInfo.java wrapper around
+  // getSockOpt(TCP_INFO)."
   static {
     MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
     ImmutableList<String> requiredLabels = ImmutableList.of("grpc.target");
@@ -104,6 +108,24 @@ final class TcpMetrics {
       this.target = target;
     }
 
+    private static final long RECORD_INTERVAL_MILLIS;
+
+    static {
+      long interval = 5;
+      try {
+        String flagValue = System.getProperty("io.grpc.netty.tcpMetricsRecordIntervalMinutes");
+        if (flagValue != null) {
+          interval = Long.parseLong(flagValue);
+        }
+      } catch (NumberFormatException e) {
+        // Use default
+      }
+      RECORD_INTERVAL_MILLIS = java.util.concurrent.TimeUnit.MINUTES.toMillis(interval);
+    }
+
+    private static final java.util.Random RANDOM = new java.util.Random();
+    private io.netty.util.concurrent.ScheduledFuture<?> reportTimer;
+
     void channelActive(Channel channel) {
       if (metricRecorder != null && target != null) {
         java.util.List<String> labelValues = getLabelValues(channel);
@@ -111,41 +133,80 @@ final class TcpMetrics {
             Collections.singletonList(target), labelValues);
         metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, 1,
             Collections.singletonList(target), labelValues);
+        scheduleNextReport(channel);
+      }
+    }
+
+    private void scheduleNextReport(final Channel channel) {
+      if (RECORD_INTERVAL_MILLIS <= 0) {
+        return;
+      }
+      if (!channel.isActive()) {
+        return;
+      }
+
+      double jitter = 0.1 + RANDOM.nextDouble(); // 10% to 110%
+      long delayMillis = (long) (RECORD_INTERVAL_MILLIS * jitter);
+
+      try {
+        reportTimer = channel.eventLoop().schedule(new Runnable() {
+          @Override
+          public void run() {
+            if (channel.isActive()) {
+              Tracker.this.recordTcpInfo(channel); // Renamed from channelInactive to recordTcpInfo
+              scheduleNextReport(channel); // Re-arm
+            }
+          }
+        }, delayMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
+      } catch (Throwable t) {
+        // Channel closed, event loop shut down, etc.
       }
     }
 
     void channelInactive(Channel channel) {
+      if (reportTimer != null) {
+        reportTimer.cancel(false);
+      }
       if (metricRecorder != null && target != null) {
         java.util.List<String> labelValues = getLabelValues(channel);
         metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, -1,
             Collections.singletonList(target), labelValues);
-        
-        try {
-          if (channel.getClass().getName().equals("io.netty.channel.epoll.EpollSocketChannel")) {
-            Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo",
-                Class.forName("io.netty.channel.epoll.EpollTcpInfo"));
-            Object info = Class.forName("io.netty.channel.epoll.EpollTcpInfo")
-                .getDeclaredConstructor().newInstance();
-            tcpInfoMethod.invoke(channel, info);
-            
-            Method totalRetransMethod = info.getClass().getMethod("totalRetrans");
-            Method retransmitsMethod = info.getClass().getMethod("retransmits");
-            Method rttMethod = info.getClass().getMethod("rtt");
-            
-            long totalRetrans = (Long) totalRetransMethod.invoke(info);
-            long retransmits = (Long) retransmitsMethod.invoke(info);
-            long rtt = ((Number) rttMethod.invoke(info)).longValue();
-            
-            metricRecorder.addLongCounter(TcpMetrics.packetsRetransmitted, totalRetrans,
-                Collections.singletonList(target), labelValues);
-            metricRecorder.addLongCounter(TcpMetrics.recurringRetransmits, retransmits,
-                Collections.singletonList(target), labelValues);
-            metricRecorder.recordDoubleHistogram(TcpMetrics.minRtt, rtt / 1000000.0,
-                Collections.singletonList(target), labelValues);
-          }
-        } catch (Throwable t) {
-          // Epoll not available or error getting tcp_info, just ignore.
+        // Final collection on close
+        recordTcpInfo(channel);
+      }
+    }
+
+    private void recordTcpInfo(Channel channel) {
+      if (metricRecorder == null || target == null) {
+        return;
+      }
+      java.util.List<String> labelValues = getLabelValues(channel);
+      try {
+        if (channel.getClass().getName().equals("io.netty.channel.epoll.EpollSocketChannel")) {
+          Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo",
+              Class.forName("io.netty.channel.epoll.EpollTcpInfo"));
+          Object info = Class.forName("io.netty.channel.epoll.EpollTcpInfo")
+              .getDeclaredConstructor().newInstance();
+          tcpInfoMethod.invoke(channel, info);
+
+          Method totalRetransMethod = info.getClass().getMethod("totalRetrans");
+          Method retransmitsMethod = info.getClass().getMethod("retransmits");
+          Method rttMethod = info.getClass().getMethod("rtt");
+
+          long totalRetrans = (Long) totalRetransMethod.invoke(info);
+          int retransmits = (Integer) retransmitsMethod.invoke(info);
+          long rtt = (Long) rttMethod.invoke(info);
+
+          metricRecorder.addLongCounter(TcpMetrics.packetsRetransmitted, totalRetrans,
+              Collections.singletonList(target), labelValues);
+          metricRecorder.addLongCounter(TcpMetrics.recurringRetransmits, retransmits,
+              Collections.singletonList(target), labelValues);
+          metricRecorder.recordDoubleHistogram(TcpMetrics.minRtt,
+              rtt / 1000000.0, // Convert microseconds to seconds
+              Collections.singletonList(target), labelValues);
         }
+      } catch (Throwable t) {
+        // Epoll not available or error getting tcp_info, just ignore.
       }
     }
   }

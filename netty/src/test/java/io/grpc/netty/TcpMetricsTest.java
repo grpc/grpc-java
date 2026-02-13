@@ -16,6 +16,8 @@
 
 package io.grpc.netty;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -23,16 +25,20 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
+import io.netty.channel.EventLoop;
+import io.netty.util.concurrent.ScheduledFuture;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -44,11 +50,18 @@ public class TcpMetricsTest {
 
   @Mock private MetricRecorder metricRecorder;
   @Mock private Channel channel;
+  @Mock
+  private EventLoop eventLoop;
+  @Mock
+  private ScheduledFuture<?> scheduledFuture;
 
   private TcpMetrics.Tracker metrics;
 
   @Before
   public void setUp() {
+    when(channel.eventLoop()).thenReturn(eventLoop);
+    when(eventLoop.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
+            .thenAnswer(invocation -> scheduledFuture);
     metrics = new TcpMetrics.Tracker(metricRecorder, "target1");
   }
 
@@ -150,5 +163,40 @@ public class TcpMetricsTest {
         eq(TcpMetrics.connectionCount), eq(-1L), eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
+  }
+
+  @Test
+  public void channelActive_schedulesReportTimer() {
+    when(channel.isActive()).thenReturn(true);
+    metrics.channelActive(channel);
+
+    ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
+    ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
+    verify(eventLoop).schedule(
+            runnableCaptor.capture(), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
+
+    Runnable task = runnableCaptor.getValue();
+    long delay = delayCaptor.getValue();
+
+    // Default RECORD_INTERVAL_MILLIS is 5 minutes (300,000 ms)
+    // Jitter is 10% to 110%, so 30,000 ms to 330,000 ms
+    org.junit.Assert.assertTrue("Delay should be >= 30000 but was " + delay, delay >= 30_000);
+    org.junit.Assert.assertTrue("Delay should be <= 330000 but was " + delay, delay <= 330_000);
+
+    // Run the task to verify rescheduling
+    task.run();
+
+    verify(eventLoop, org.mockito.Mockito.times(2))
+            .schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  public void channelInactive_cancelsReportTimer() {
+    when(channel.isActive()).thenReturn(true);
+    metrics.channelActive(channel);
+
+    metrics.channelInactive(channel);
+
+    verify(scheduledFuture).cancel(false);
   }
 }
