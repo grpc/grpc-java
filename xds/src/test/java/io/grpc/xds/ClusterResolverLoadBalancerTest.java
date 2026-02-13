@@ -36,7 +36,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.testing.EqualsTester;
 import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.UInt32Value;
@@ -61,7 +60,6 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -83,19 +81,13 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancerAccessor;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.util.OutlierDetectionLoadBalancerProvider;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
 import io.grpc.xds.Endpoints.DropOverload;
-import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
-import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
-import io.grpc.xds.LeastRequestLoadBalancer.LeastRequestConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
@@ -105,7 +97,6 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.XdsInternalAttributes;
-import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -202,7 +193,6 @@ public class ClusterResolverLoadBalancerTest {
 
   @Before
   public void setUp() throws Exception {
-    lbRegistry.register(new ClusterResolverLoadBalancerProvider(lbRegistry));
     lbRegistry.register(new RingHashLoadBalancerProvider());
     lbRegistry.register(new WrrLocalityLoadBalancerProvider());
     lbRegistry.register(new FakeLoadBalancerProvider(PRIORITY_POLICY_NAME));
@@ -271,6 +261,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void edsClustersWithRingHashEndpointLbPolicy_oppositePickFirstWeightedShuffling()
+      throws Exception {
+    boolean original = CdsLoadBalancer2.pickFirstWeightedShuffling;
+    CdsLoadBalancer2.pickFirstWeightedShuffling = !CdsLoadBalancer2.pickFirstWeightedShuffling;
+    try {
+      edsClustersWithRingHashEndpointLbPolicy();
+    } finally {
+      CdsLoadBalancer2.pickFirstWeightedShuffling = original;
+    }
+  }
+
+  @Test
   public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
     boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
     LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
@@ -316,15 +318,15 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(addr1.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
     assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr2.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
     assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr3.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
     assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(50 * 60);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x6AAAAAAA /* 5/6 */ : 50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER + "[child1]");
@@ -688,11 +690,10 @@ public class ClusterResolverLoadBalancerTest {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    assertPicker(
-        pickerCaptor.getValue(),
-        Status.UNAVAILABLE.withDescription(
-            "CDS resource " + CLUSTER + " does not exist nodeID: node-id"),
-        null);
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
   @Test
@@ -712,8 +713,10 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).hasSize(0);  // no child LB policy created
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
@@ -741,42 +744,42 @@ public class ClusterResolverLoadBalancerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    Status expectedError = Status.UNAVAILABLE.withDescription(
-        "CDS resource " + CLUSTER + " does not exist nodeID: node-id");
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
+        + "Details: Resource " + CLUSTER + " does not exist nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancer.shutdown).isTrue();
   }
 
   @Test
-  public void edsMissing_handledByChildPolicy() {
+  public void edsMissing_failsRpcs() {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_EDS, ImmutableMap.of());
 
     startXdsDepManager();
-    assertThat(childBalancers).hasSize(1);  // child LB policy created
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.upstreamError).isNotNull();
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription())
-        .isEqualTo("EDS resource " + EDS_SERVICE_NAME + " does not exist nodeID: node-id");
-    assertThat(childBalancer.shutdown).isFalse();
+    assertThat(childBalancers).hasSize(0);  // Graceful switch handles it, so no child policies yet
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    String expectedDescription = "Error retrieving EDS resource " + EDS_SERVICE_NAME
+        + ": NOT_FOUND. Details: Timed out waiting for resource " + EDS_SERVICE_NAME
+        + " from xDS server nodeID: node-id";
+    Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
+    assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
 
   @Test
-  public void logicalDnsLookupFailed_handledByChildPolicy() {
+  public void logicalDnsLookupFailed_failsRpcs() {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         CLUSTER, LOGICAL_DNS_CLUSTER));
     startXdsDepManager(new CdsConfig(CLUSTER), /* forwardTime= */ false);
     FakeNameResolver resolver = assertResolverCreated("/" + DNS_HOST_NAME + ":9000");
     assertThat(childBalancers).isEmpty();
-    resolver.deliverError(Status.UNAVAILABLE.withDescription("OH NO! Who would have guessed?"));
+    Status status = Status.UNAVAILABLE.withDescription("OH NO! Who would have guessed?");
+    resolver.deliverError(status);
 
-    assertThat(childBalancers).hasSize(1);  // child LB policy created
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.upstreamError).isNotNull();
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription())
-        .isEqualTo("OH NO! Who would have guessed?");
-    assertThat(childBalancer.shutdown).isFalse();
+    assertThat(childBalancers).hasSize(0);  // Graceful switch handles it, so no child policies yet
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertPicker(pickerCaptor.getValue(), status, null);
   }
 
   @Test
@@ -869,13 +872,12 @@ public class ClusterResolverLoadBalancerTest {
         EDS_SERVICE_NAME, clusterLoadAssignment));
     startXdsDepManager();
 
-    verify(helper, never()).updateBalancingState(eq(ConnectivityState.TRANSIENT_FAILURE), any());
-    assertThat(childBalancers).hasSize(1);
-    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
-    assertThat(childBalancer.upstreamError).isNotNull();
-    assertThat(childBalancer.upstreamError.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(childBalancer.upstreamError.getDescription())
-        .isEqualTo("No usable endpoint from cluster: " + CLUSTER);
+    assertThat(childBalancers).hasSize(0);  // Graceful switch handles it, so no child policies yet
+    verify(helper).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    Status expectedStatus = Status.UNAVAILABLE
+        .withDescription("No usable endpoint from cluster: " + CLUSTER);
+    assertPicker(pickerCaptor.getValue(), expectedStatus, null);
   }
 
   @Test
@@ -1010,50 +1012,6 @@ public class ClusterResolverLoadBalancerTest {
         (ClusterImplConfig) GracefulSwitchLoadBalancerAccessor.getChildConfig(outlier.childConfig),
         CLUSTER, EDS_SERVICE_NAME, null, null, null, Collections.emptyList(),
         "wrr_locality_experimental");
-  }
-
-  @Test
-  public void config_equalsTester() {
-    ServerInfo lrsServerInfo =
-        ServerInfo.create("lrs.googleapis.com", InsecureChannelCredentials.create());
-    UpstreamTlsContext tlsContext =
-        CommonTlsContextTestsUtil.buildUpstreamTlsContext(
-            "google_cloud_private_spiffe", true);
-    DiscoveryMechanism edsDiscoveryMechanism1 =
-        DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), null, null);
-    io.grpc.xds.EnvoyServerProtoData.OutlierDetection outlierDetection =
-        io.grpc.xds.EnvoyServerProtoData.OutlierDetection.create(
-            100L, 100L, 100L, 100, SuccessRateEjection.create(100, 100, 100, 100),
-            FailurePercentageEjection.create(100, 100, 100, 100));
-    DiscoveryMechanism edsDiscoveryMechanismWithOutlierDetection =
-        DiscoveryMechanism.forEds(CLUSTER, EDS_SERVICE_NAME, lrsServerInfo, 100L, tlsContext,
-            Collections.emptyMap(), outlierDetection, null);
-    Object roundRobin = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-        new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-            GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-                new FakeLoadBalancerProvider("round_robin"), null)));
-    Object leastRequest = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-        new FakeLoadBalancerProvider("wrr_locality_experimental"), new WrrLocalityConfig(
-            GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-                new FakeLoadBalancerProvider("least_request_experimental"),
-                new LeastRequestConfig(3))));
-
-    new EqualsTester()
-        .addEqualityGroup(
-            new ClusterResolverConfig(
-                edsDiscoveryMechanism1, leastRequest, false),
-            new ClusterResolverConfig(
-                edsDiscoveryMechanism1, leastRequest, false))
-        .addEqualityGroup(new ClusterResolverConfig(
-            edsDiscoveryMechanism1, roundRobin, false))
-        .addEqualityGroup(new ClusterResolverConfig(
-            edsDiscoveryMechanism1, leastRequest, true))
-        .addEqualityGroup(new ClusterResolverConfig(
-            edsDiscoveryMechanismWithOutlierDetection,
-            leastRequest,
-            false))
-        .testEquals();
   }
 
   private void startXdsDepManager() {
@@ -1258,7 +1216,6 @@ public class ClusterResolverLoadBalancerTest {
     private final Helper helper;
     private List<EquivalentAddressGroup> addresses;
     private Object config;
-    private Status upstreamError;
     private boolean shutdown;
 
     FakeLoadBalancer(String name, Helper helper) {
@@ -1275,7 +1232,6 @@ public class ClusterResolverLoadBalancerTest {
 
     @Override
     public void handleNameResolutionError(Status error) {
-      upstreamError = error;
     }
 
     @Override

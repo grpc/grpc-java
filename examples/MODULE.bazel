@@ -1,8 +1,8 @@
-bazel_dep(name = "grpc-java", repo_name = "io_grpc_grpc_java", version = "1.78.0-SNAPSHOT")  # CURRENT_GRPC_VERSION
-bazel_dep(name = "grpc-proto", repo_name = "io_grpc_grpc_proto", version = "0.0.0-20240627-ec30f58")
-bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "23.1")
+bazel_dep(name = "grpc-java", version = "1.80.0-SNAPSHOT", repo_name = "io_grpc_grpc_java")  # CURRENT_GRPC_VERSION
+bazel_dep(name = "rules_java", version = "9.3.0")
+bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58", repo_name = "io_grpc_grpc_proto")
+bazel_dep(name = "protobuf", version = "33.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
-bazel_dep(name = "rules_proto", version = "5.3.0-21.7")
 
 # Do not use this override in your own MODULE.bazel. It is unnecessary when
 # using a version from BCR. Be aware the gRPC Java team does not update the
@@ -20,7 +20,6 @@ local_path_override(
 )
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
-
 use_repo(maven, "maven")
 
 maven.install(

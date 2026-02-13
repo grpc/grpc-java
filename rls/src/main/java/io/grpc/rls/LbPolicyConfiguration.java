@@ -245,9 +245,10 @@ final class LbPolicyConfiguration {
       RefCountedChildPolicyWrapper pooledChildPolicyWrapper = childPolicyMap.get(target);
       if (pooledChildPolicyWrapper == null) {
         ChildPolicyWrapper childPolicyWrapper = new ChildPolicyWrapper(
-            target, childPolicy, childLbResolvedAddressFactory, childLbHelperProvider);
+            target, childPolicy, childLbHelperProvider);
         pooledChildPolicyWrapper = RefCountedChildPolicyWrapper.of(childPolicyWrapper);
         childPolicyMap.put(target, pooledChildPolicyWrapper);
+        childPolicyWrapper.start(childLbResolvedAddressFactory);
         return pooledChildPolicyWrapper.getObject();
       } else {
         ChildPolicyWrapper childPolicyWrapper = pooledChildPolicyWrapper.getObject();
@@ -294,7 +295,6 @@ final class LbPolicyConfiguration {
     public ChildPolicyWrapper(
         String target,
         ChildLoadBalancingPolicy childPolicy,
-        final ResolvedAddressFactory childLbResolvedAddressFactory,
         ChildLoadBalancerHelperProvider childLbHelperProvider) {
       this.target = target;
       this.helper = new ChildPolicyReportingHelper(childLbHelperProvider);
@@ -307,6 +307,9 @@ final class LbPolicyConfiguration {
       this.childLbConfig = lbConfig.getConfig();
       helper.getChannelLogger().log(
           ChannelLogLevel.DEBUG, "RLS child lb created. config: {0}", childLbConfig);
+    }
+
+    void start(ResolvedAddressFactory childLbResolvedAddressFactory) {
       helper.getSynchronizationContext().execute(
           new Runnable() {
             @Override

@@ -6,13 +6,13 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.78.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.80.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>examples</name>
   <url>https://github.com/grpc/grpc-java</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.78.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <grpc.version>1.80.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
     <protobuf.version>3.25.8</protobuf.version>
     <protoc.version>3.25.8</protoc.version>
     <!-- required for JDK 8 -->
@@ -58,7 +58,7 @@
     <dependency> <!-- Use newer version than in protobuf-java-util -->
       <groupId>com.google.j2objc</groupId>
       <artifactId>j2objc-annotations</artifactId>
-      <version>3.0.0</version>
+      <version>3.1</version>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -121,6 +121,35 @@
                 <requireUpperBoundDeps/>
               </rules>
             </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- gRPC uses java.util.ServiceLoader, which reads class names from
+        META-INF/services in jars. If you package your application as a "fat"
+        jar that includes dependencies, you need to make sure the packaging tool
+        concatenates duplicate files in META-INF/services. -->
+
+      <!-- If using maven-shade-plugin, use ServicesResourceTransformer, as
+        documented by maven-shade-plugin.
+        https://maven.apache.org/plugins/maven-shade-plugin/examples/resource-transformers.html#ServicesResourceTransformer -->
+
+      <!-- If using maven-assembly-plugin, you need to add the metaInf-services
+        handler to the descriptor, which requires making a copy of
+        jar-with-dependencies. -->
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>3.7.1</version>
+        <configuration>
+          <descriptors>${project.basedir}/maven-assembly-jar-with-dependencies.xml</descriptors>
+        </configuration>
+        <executions>
+          <execution>
+            <id>make-assembly</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>

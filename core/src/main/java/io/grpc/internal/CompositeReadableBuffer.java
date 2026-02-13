@@ -18,12 +18,10 @@ package io.grpc.internal;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Queue;
 import javax.annotation.Nullable;
 
 /**
@@ -39,7 +37,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   private final Deque<ReadableBuffer> readableBuffers;
   private Deque<ReadableBuffer> rewindableBuffers;
   private int readableBytes;
-  private final Queue<ReadableBuffer> buffers = new ArrayDeque<ReadableBuffer>(2);
   private boolean marked;
 
   public CompositeReadableBuffer(int initialCapacity) {
@@ -122,20 +119,6 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
         }
       };
 
-  private static final NoThrowReadOperation<ByteBuffer> BYTE_BUF_OP =
-      new NoThrowReadOperation<ByteBuffer>() {
-        @Override
-        public int read(ReadableBuffer buffer, int length, ByteBuffer dest, int unused) {
-          // Change the limit so that only lengthToCopy bytes are available.
-          int prevLimit = dest.limit();
-          ((Buffer) dest).limit(dest.position() + length);
-          // Write the bytes and restore the original limit.
-          buffer.readBytes(dest);
-          ((Buffer) dest).limit(prevLimit);
-          return 0;
-        }
-      };
-
   private static final ReadOperation<OutputStream> STREAM_OP =
       new ReadOperation<OutputStream>() {
         @Override
@@ -152,38 +135,8 @@ public class CompositeReadableBuffer extends AbstractReadableBuffer {
   }
 
   @Override
-  public void readBytes(ByteBuffer dest) {
-    executeNoThrow(BYTE_BUF_OP, dest.remaining(), dest, 0);
-  }
-
-  @Override
   public void readBytes(OutputStream dest, int length) throws IOException {
     execute(STREAM_OP, length, dest, 0);
-  }
-
-  /**
-   * Reads {@code length} bytes from this buffer and writes them to the destination buffer.
-   * Increments the read position by {@code length}. If the required bytes are not readable, throws
-   * {@link IndexOutOfBoundsException}.
-   *
-   * @param dest the destination buffer to receive the bytes.
-   * @param length the number of bytes to be copied.
-   * @throws IndexOutOfBoundsException if required bytes are not readable
-   */
-  public void readBytes(CompositeReadableBuffer dest, int length) {
-    checkReadable(length);
-    readableBytes -= length;
-
-    while (length > 0) {
-      ReadableBuffer buffer = buffers.peek();
-      if (buffer.readableBytes() > length) {
-        dest.addBuffer(buffer.readBytes(length));
-        length = 0;
-      } else {
-        dest.addBuffer(buffers.poll());
-        length -= buffer.readableBytes();
-      }
-    }
   }
 
   @Override

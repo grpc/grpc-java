@@ -21,7 +21,7 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.78.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.25.8'
 def protocVersion = protobufVersion
 
@@ -50,6 +50,15 @@ protobuf {
         all()*.plugins { grpc {} }
     }
 }
+
+// gRPC uses java.util.ServiceLoader, which reads class names from
+// META-INF/services in jars. If you package your application as a "fat" jar
+// that includes dependencies, you need to make sure the packaging tool
+// concatenates duplicate files in META-INF/services.
+//
+// For the Shadow Gradle Plugin, use call mergeServiceFiles() within the
+// shadowJar task.
+// https://gradleup.com/shadow/configuration/merging/#merging-service-descriptor-files
 
 startScripts.enabled = false
 

@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -139,30 +140,29 @@ public abstract class XdsClient {
 
   /**
    * Watcher interface for a single requested xDS resource.
+   *
+   * <p>Note that we expect that the implementer to:
+   * - Comply with the guarantee to not generate certain statuses by the library:
+   *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
+   *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
+   * - Keep {@link Status} description in one form or another, as it contains valuable debugging
+   *   information.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
   public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
-     * Called when the resource discovery RPC encounters some transient error.
-     *
-     * <p>Note that we expect that the implementer to:
-     * - Comply with the guarantee to not generate certain statuses by the library:
-     *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
-     *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
-     * - Keep {@link Status} description in one form or another, as it contains valuable debugging
-     *   information.
+     * Called to deliver a resource update or an error. If an error is passed after a valid
+     * resource has been delivered, the watcher should stop using the previously delivered
+     * resource.
      */
-    void onError(Status error);
+    void onResourceChanged(StatusOr<T> update);
 
     /**
-     * Called when the requested resource is not available.
-     *
-     * @param resourceName name of the resource requested in discovery request.
-     */
-    void onResourceDoesNotExist(String resourceName);
-
-    void onChanged(T update);
+     * Called to deliver a transient error that should not affect the watcher's use of any
+     * previously received resource.
+     *   */
+    void onAmbientError(Status error);
   }
 
   /**

@@ -214,10 +214,30 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
+    // gRFC A61: if the aggregated connectivity state is TRANSIENT_FAILURE or CONNECTING and
+    // there are no endpoints in CONNECTING state, the ring_hash policy will choose one of
+    // the endpoints in IDLE state (if any) to trigger a connection attempt on
+    if (numReady == 0 && numTF > 0 && numConnecting == 0 && numIdle > 0) {
+      triggerIdleChildConnection();
+    }
+
     RingHashPicker picker =
         new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeaderKey, random);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
+  }
+
+
+  /**
+   * Triggers a connection attempt for the first IDLE child load balancer.
+   */
+  private void triggerIdleChildConnection() {
+    for (ChildLbState child : getChildLbStates()) {
+      if (child.getCurrentState() == ConnectivityState.IDLE) {
+        child.getLb().requestConnection();
+        return;
+      }
+    }
   }
 
   @Override

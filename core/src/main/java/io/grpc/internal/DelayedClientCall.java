@@ -64,6 +64,8 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * order, but also used if an error occurs before {@code realCall} is set.
    */
   private Listener<RespT> listener;
+  // No need to synchronize; start() synchronization provides a happens-before
+  private Metadata startHeaders;
   // Must hold {@code this} lock when setting.
   private ClientCall<ReqT, RespT> realCall;
   @GuardedBy("this")
@@ -161,13 +163,23 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    */
   // When this method returns, passThrough is guaranteed to be true
   public final Runnable setCall(ClientCall<ReqT, RespT> call) {
+    Listener<RespT> savedDelayedListener;
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {
         return null;
       }
       setRealCall(checkNotNull(call, "call"));
+      // start() not yet called
+      if (delayedListener == null) {
+        assert pendingRunnables.isEmpty();
+        pendingRunnables = null;
+        passThrough = true;
+        return null;
+      }
+      savedDelayedListener = this.delayedListener;
     }
+    internalStart(savedDelayedListener);
     return new ContextRunnable(context) {
       @Override
       public void runInContext() {
@@ -176,8 +188,15 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     };
   }
 
+  private void internalStart(Listener<RespT> listener) {
+    Metadata savedStartHeaders = this.startHeaders;
+    this.startHeaders = null;
+    context.run(() -> realCall.start(listener, savedStartHeaders));
+  }
+
   @Override
   public final void start(Listener<RespT> listener, final Metadata headers) {
+    checkNotNull(headers, "headers");
     checkState(this.listener == null, "already started");
     Status savedError;
     boolean savedPassThrough;
@@ -188,6 +207,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       savedPassThrough = passThrough;
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedListener<>(listener);
+        startHeaders = headers;
       }
     }
     if (savedError != null) {
@@ -196,15 +216,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     if (savedPassThrough) {
       realCall.start(listener, headers);
-    } else {
-      final Listener<RespT> finalListener = listener;
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realCall.start(finalListener, headers);
-        }
-      });
-    }
+    } // else realCall.start() will be called by setCall
   }
 
   // When this method returns, passThrough is guaranteed to be true
@@ -253,6 +265,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       if (listenerToClose != null) {
         callExecutor.execute(new CloseListenerRunnable(listenerToClose, status));
       }
+      internalStart(listenerToClose); // listener instance doesn't matter
       drainPendingCalls();
     }
     callCancelled();

@@ -20,6 +20,7 @@ import static android.content.Intent.URI_INTENT_SCHEME;
 import android.content.Intent;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.NameResolver;
+import io.grpc.Uri;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
 import io.grpc.binder.AndroidComponentAddress;
@@ -46,7 +47,17 @@ public final class IntentNameResolverProvider extends NameResolverProvider {
   @Override
   public NameResolver newNameResolver(URI targetUri, final Args args) {
     if (Objects.equals(targetUri.getScheme(), ANDROID_INTENT_SCHEME)) {
-      return new IntentNameResolver(parseUriArg(targetUri), args);
+      return new IntentNameResolver(parseUriArg(targetUri.toString()), args);
+    } else {
+      return null;
+    }
+  }
+
+  @Nullable
+  @Override
+  public NameResolver newNameResolver(Uri targetUri, final Args args) {
+    if (Objects.equals(targetUri.getScheme(), ANDROID_INTENT_SCHEME)) {
+      return new IntentNameResolver(parseUriArg(targetUri.toString()), args);
     } else {
       return null;
     }
@@ -67,9 +78,9 @@ public final class IntentNameResolverProvider extends NameResolverProvider {
     return ImmutableSet.of(AndroidComponentAddress.class);
   }
 
-  private static Intent parseUriArg(URI targetUri) {
+  private static Intent parseUriArg(String targetUri) {
     try {
-      return Intent.parseUri(targetUri.toString(), URI_INTENT_SCHEME);
+      return Intent.parseUri(targetUri, URI_INTENT_SCHEME);
     } catch (URISyntaxException e) {
       throw new IllegalArgumentException(e);
     }

@@ -93,6 +93,10 @@ public class TomcatTransportTest extends AbstractTransportTest {
             .setAsyncSupported(true);
         ctx.addServletMappingDecoded("/*", "TomcatTransportTest");
         tomcatServer.getConnector().addUpgradeProtocol(new Http2Protocol());
+        // Workaround for https://github.com/grpc/grpc-java/issues/12540
+        // Prevent premature OutputBuffer recycling by disabling facade recycling.
+        // This should be revisited once the root cause is fixed.
+        tomcatServer.getConnector().setDiscardFacades(false);
         try {
           tomcatServer.start();
         } catch (LifecycleException e) {

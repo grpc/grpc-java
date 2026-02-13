@@ -1,7 +1,7 @@
 choco install -y pkgconfiglite
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
-set PROTOBUF_VER=26.1
+set PROTOBUF_VER=33.4
 set ABSL_VERSION=20250127.1
 set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 
@@ -30,7 +30,6 @@ del protobuf.zip
 powershell -command "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/abseil/abseil-cpp/archive/refs/tags/%ABSL_VERSION%.zip -OutFile absl.zip }" || exit /b 1
 powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('absl.zip', '.') }" || exit /b 1
 del absl.zip
-rmdir protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
 move abseil-cpp-%ABSL_VERSION% protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
 mkdir protobuf-%PROTOBUF_VER%\build
 pushd protobuf-%PROTOBUF_VER%\build
@@ -51,7 +50,7 @@ for /f "tokens=4 delims=\" %%a in ("%VCINSTALLDIR%") do (
 for /f "tokens=1 delims=." %%a in ("%VisualStudioVersion%") do (
   SET visual_studio_major_version=%%a
 )
-cmake -DABSL_MSVC_STATIC_RUNTIME=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% .. || exit /b 1
+cmake -DCMAKE_CXX_STANDARD=17 -DABSL_MSVC_STATIC_RUNTIME=ON -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=%cd%\protobuf-%PROTOBUF_VER% -DCMAKE_PREFIX_PATH=%cd%\protobuf-%PROTOBUF_VER% -G "Visual Studio %visual_studio_major_version% %VC_YEAR%" %CMAKE_VSARCH% .. || exit /b 1
 cmake --build . --config Release --target install || exit /b 1
 popd
 goto :eof

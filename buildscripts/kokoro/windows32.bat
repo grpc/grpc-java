@@ -25,7 +25,7 @@ cd "%WORKSPACE%"
 
 SET TARGET_ARCH=x86_32
 SET FAIL_ON_WARNINGS=true
-SET PROTOBUF_VER=26.1
+SET PROTOBUF_VER=33.4
 SET PKG_CONFIG_PATH=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\lib\\pkgconfig
 SET VC_PROTOBUF_LIBS=/LIBPATH:%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\lib
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\build\\protobuf-%PROTOBUF_VER%\\include
@@ -66,14 +66,16 @@ for /f "tokens=*" %%a in ('pkg-config --libs protobuf') do (
       set lib=!lib:~2!
       @rem remove spaces
       set lib=!lib: =!
-      @rem Because protobuf is specified as libprotobuf and elsewhere
-      if !lib! NEQ protobuf (
+      set libprefix=!lib:~0,4!
+      if !libprefix!==absl (
         set lib=!lib!.lib
-        if "!libs_list!"=="" (
-          set libs_list=!lib!
-        ) else (
-          set libs_list=!libs_list!,!lib!
-        )
+      ) else (
+        set lib=lib!lib!.lib
+      )
+      if "!libs_list!"=="" (
+        set libs_list=!lib!
+      ) else (
+        set libs_list=!libs_list!,!lib!
       )
     )
   )

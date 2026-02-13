@@ -20,9 +20,9 @@ pluginManagement {
 	// https://github.com/kt3k/coveralls-gradle-plugin/tags
         id "com.github.kt3k.coveralls" version "2.12.2"
 	// https://github.com/GoogleCloudPlatform/appengine-plugins/releases
-        id "com.google.cloud.tools.appengine" version "2.8.0"
+        id "com.google.cloud.tools.appengine" version "2.8.6"
         // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.jib" version "3.4.5"
+        id "com.google.cloud.tools.jib" version "3.5.1"
 	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases

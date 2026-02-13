@@ -69,8 +69,7 @@ public class ServiceProvidersTest {
       Thread.currentThread().setContextClassLoader(rcll);
       assertEquals(
           Available7Provider.class,
-          ServiceProviders.load(
-              ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+          load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -85,8 +84,7 @@ public class ServiceProvidersTest {
           serviceFile,
           "io/grpc/ServiceProvidersTestAbstractProvider-doesNotExist.txt");
       Thread.currentThread().setContextClassLoader(cl);
-      assertNull(ServiceProviders.load(
-          ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
+      assertNull(load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR));
     } finally {
       Thread.currentThread().setContextClassLoader(ccl);
     }
@@ -98,8 +96,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-multipleProvider.txt");
     assertSame(
         Available7Provider.class,
-        ServiceProviders.load(
-            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
 
     List<ServiceProvidersTestAbstractProvider> providers = ServiceProviders.loadAll(
         ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
@@ -116,8 +113,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-unavailableProvider.txt");
     assertEquals(
         Available7Provider.class,
-        ServiceProviders.load(
-            ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
+        load(ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR).getClass());
   }
 
   @Test
@@ -125,7 +121,7 @@ public class ServiceProvidersTest {
     ClassLoader cl = new ReplacingClassLoader(getClass().getClassLoader(), serviceFile,
         "io/grpc/ServiceProvidersTestAbstractProvider-unknownClassProvider.txt");
     try {
-      ServiceProviders.load(
+      ServiceProviders.loadAll(
           ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
       fail("Exception expected");
     } catch (ServiceConfigurationError e) {
@@ -140,7 +136,7 @@ public class ServiceProvidersTest {
     try {
       // Even though there is a working provider, if any providers fail then we should fail
       // completely to avoid returning something unexpected.
-      ServiceProviders.load(
+      ServiceProviders.loadAll(
           ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
       fail("Expected exception");
     } catch (ServiceConfigurationError expected) {
@@ -154,7 +150,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtPriorityProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      ServiceProviders.load(
+      ServiceProviders.loadAll(
           ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
       fail("Expected exception");
     } catch (FailAtPriorityProvider.PriorityException expected) {
@@ -168,7 +164,7 @@ public class ServiceProvidersTest {
         "io/grpc/ServiceProvidersTestAbstractProvider-failAtAvailableProvider.txt");
     try {
       // The exception should be surfaced to the caller
-      ServiceProviders.load(
+      ServiceProviders.loadAll(
           ServiceProvidersTestAbstractProvider.class, NO_HARDCODED, cl, ACCESSOR);
       fail("Expected exception");
     } catch (FailAtAvailableProvider.AvailableException expected) {
@@ -242,6 +238,18 @@ public class ServiceProvidersTest {
             ServiceProvidersTestAbstractProvider.class,
             Collections.<Class<?>>singletonList(RandomClass.class));
     assertFalse(candidates.iterator().hasNext());
+  }
+
+  private static <T> T load(
+      Class<T> klass,
+      Iterable<Class<?>> hardcoded,
+      ClassLoader cl,
+      PriorityAccessor<T> priorityAccessor) {
+    List<T> candidates = ServiceProviders.loadAll(klass, hardcoded, cl, priorityAccessor);
+    if (candidates.isEmpty()) {
+      return null;
+    }
+    return candidates.get(0);
   }
 
   private static class BaseProvider extends ServiceProvidersTestAbstractProvider {

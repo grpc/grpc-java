@@ -151,7 +151,7 @@ public final class S2AProtocolNegotiatorFactory {
       String hostname = getHostNameFromAuthority(grpcHandler.getAuthority());
       checkArgument(!isNullOrEmpty(hostname), "hostname should not be null or empty.");
       return new S2AProtocolNegotiationHandler(
-        grpcHandler, channel, localIdentity, hostname, service, stub);
+          grpcHandler, channel, localIdentity, hostname, service, stub);
     }
 
     @Override

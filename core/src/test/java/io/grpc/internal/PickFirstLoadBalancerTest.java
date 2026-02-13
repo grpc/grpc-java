@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.InternalEquivalentAddressGroup.ATTR_WEIGHT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -49,12 +50,18 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.PickFirstLoadBalancer.PickFirstLoadBalancerConfig;
 import java.net.SocketAddress;
+import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
+import java.util.Random;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -103,8 +110,12 @@ public class PickFirstLoadBalancerTest {
   @Mock // This LoadBalancer doesn't use any of the arg fields, as verified in tearDown().
   private PickSubchannelArgs mockArgs;
 
+  private boolean originalWeightedShuffling;
+
   @Before
   public void setUp() {
+    originalWeightedShuffling = PickFirstLeafLoadBalancer.weightedShuffling;
+
     for (int i = 0; i < 3; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
       servers.add(new EquivalentAddressGroup(addr));
@@ -120,6 +131,7 @@ public class PickFirstLoadBalancerTest {
 
   @After
   public void tearDown() throws Exception {
+    PickFirstLeafLoadBalancer.weightedShuffling = originalWeightedShuffling;
     verifyNoMoreInteractions(mockArgs);
   }
 
@@ -139,6 +151,12 @@ public class PickFirstLoadBalancerTest {
         pickerCaptor.getValue().pickSubchannel(mockArgs));
 
     verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffle_oppositeWeightedShuffling() throws Exception {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffle();
   }
 
   @Test
@@ -185,6 +203,103 @@ public class PickFirstLoadBalancerTest {
   }
 
   @Test
+  public void pickAfterResolved_shuffleImplicitUniform_oppositeWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffleImplicitUniform();
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleImplicitUniform() {
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(new FakeSocketAddress("server1"));
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(new FakeSocketAddress("server2"));
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(new FakeSocketAddress("server3"));
+
+    int[] counts = countAddressSelections(99, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleExplicitUniform_oppositeWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffleExplicitUniform();
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleExplicitUniform() {
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+
+    int[] counts = countAddressSelections(99, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleWeighted_noWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = false;
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 12L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 3L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 1L).build());
+
+    int[] counts = countAddressSelections(100, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleWeighted_weightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = true;
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 12L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 3L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 1L).build());
+
+    int[] counts = countAddressSelections(100, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(75); // 100*12/16
+    assertThat(counts[1]).isWithin(7).of(19); // 100*3/16
+    assertThat(counts[2]).isWithin(7).of(6); // 100*1/16
+  }
+
+  /** Returns int[index_of_eag] array with number of times each eag was selected. */
+  private int[] countAddressSelections(int trials, List<EquivalentAddressGroup> eags) {
+    int[] counts = new int[eags.size()];
+    Random random = new Random(1);
+    for (int i = 0; i < trials; i++) {
+      RecordingHelper helper = new RecordingHelper();
+      PickFirstLoadBalancer lb = new PickFirstLoadBalancer(helper);
+      assertThat(lb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+            .setAddresses(eags)
+            .setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(
+                new PickFirstLoadBalancerConfig(true, random.nextLong()))
+            .build()))
+          .isSameInstanceAs(Status.OK);
+      helper.subchannels.remove().listener.onSubchannelState(
+          ConnectivityStateInfo.forNonError(READY));
+
+      assertThat(helper.state).isEqualTo(READY);
+      Subchannel subchannel = helper.picker.pickSubchannel(mockArgs).getSubchannel();
+      counts[eags.indexOf(subchannel.getAllAddresses().get(0))]++;
+
+      lb.shutdown();
+    }
+    return counts;
+  }
+
+  @Test
   public void requestConnectionPicker() throws Exception {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
@@ -219,7 +334,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockSubchannel).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertSame(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
     inOrder.verify(mockSubchannel).requestConnection();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
@@ -278,7 +393,7 @@ public class PickFirstLoadBalancerTest {
     assertThat(args.getAddresses()).isEqualTo(servers);
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
-    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
 
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
@@ -300,7 +415,7 @@ public class PickFirstLoadBalancerTest {
     verify(mockSubchannel).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    Subchannel subchannel = pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel();
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
     reset(mockHelper);
     when(mockHelper.getSynchronizationContext()).thenReturn(syncContext);
 
@@ -317,7 +432,7 @@ public class PickFirstLoadBalancerTest {
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertEquals(subchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
+    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs).getSubchannel());
 
     verify(mockHelper, atLeast(0)).getSynchronizationContext();  // Don't care
     verifyNoMoreInteractions(mockHelper);
@@ -405,8 +520,7 @@ public class PickFirstLoadBalancerTest {
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     verify(mockSubchannel).requestConnection();
 
-    assertEquals(mockSubchannel, pickerCaptor.getValue().pickSubchannel(mockArgs)
-        .getSubchannel());
+    assertThat(pickerCaptor.getValue().pickSubchannel(mockArgs).hasResult()).isFalse();
 
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
         pickerCaptor.getValue().pickSubchannel(mockArgs));
@@ -487,4 +601,96 @@ public class PickFirstLoadBalancerTest {
       return "FakeSocketAddress-" + name;
     }
   }
+
+  private static class FakeSubchannel extends Subchannel {
+    private final Attributes attributes;
+    private List<EquivalentAddressGroup> eags;
+    private SubchannelStateListener listener;
+
+    public FakeSubchannel(List<EquivalentAddressGroup> eags, Attributes attributes) {
+      this.eags = Collections.unmodifiableList(eags);
+      this.attributes = attributes;
+    }
+
+    @Override
+    public List<EquivalentAddressGroup> getAllAddresses() {
+      return eags;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    @Override
+    public void start(SubchannelStateListener listener) {
+      this.listener = listener;
+    }
+
+    @Override
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
+      this.eags = Collections.unmodifiableList(addrs);
+    }
+
+    @Override
+    public void shutdown() {
+      listener.onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.SHUTDOWN));
+    }
+
+    @Override
+    public void requestConnection() {
+    }
+
+    @Override
+    public String toString() {
+      return "FakeSubchannel@" + hashCode() + "(" + eags + ")";
+    }
+  }
+
+  private class BaseHelper extends Helper {
+    @Override
+    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+      return null;
+    }
+
+    @Override
+    public String getAuthority() {
+      return null;
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      // ignore
+    }
+
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
+    @Override
+    public void refreshNameResolution() {
+      // noop
+    }
+  }
+
+  class RecordingHelper extends BaseHelper {
+    ConnectivityState state;
+    SubchannelPicker picker;
+    final Queue<FakeSubchannel> subchannels = new ArrayDeque<>();
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      this.state = newState;
+      this.picker = newPicker;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      FakeSubchannel subchannel = new FakeSubchannel(args.getAddresses(), args.getAttributes());
+      subchannels.add(subchannel);
+      return subchannel;
+    }
+  }
+
 }

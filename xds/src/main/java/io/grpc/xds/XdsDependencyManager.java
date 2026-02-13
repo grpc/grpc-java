@@ -632,6 +632,9 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
 
     @Nullable
     private StatusOr<T> data;
+    @Nullable
+    @SuppressWarnings("unused")
+    private Status ambientError;
 
 
     private XdsWatcherBase(XdsResourceType<T> type, String resourceName) {
@@ -640,42 +643,39 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
     }
 
     @Override
-    public void onError(Status error) {
-      checkNotNull(error, "error");
+    public void onResourceChanged(StatusOr<T> update) {
       if (cancelled) {
         return;
       }
-      // Don't update configuration on error, if we've already received configuration
-      if (!hasDataValue()) {
-        this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
-            String.format("Error retrieving %s: %s: %s",
-              toContextString(), error.getCode(), error.getDescription())));
-        maybePublishConfig();
-      }
-    }
+      ambientError = null;
+      if (update.hasValue()) {
+        data = update;
+        subscribeToChildren(update.getValue());
+      } else {
+        Status status = update.getStatus();
+        Status translatedStatus = Status.UNAVAILABLE.withDescription(
+            String.format("Error retrieving %s: %s. Details: %s%s",
+                toContextString(),
+                status.getCode(),
+                status.getDescription() != null ? status.getDescription() : "",
+                nodeInfo()));
 
-    @Override
-    public void onResourceDoesNotExist(String resourceName) {
-      if (cancelled) {
-        return;
+        data = StatusOr.fromStatus(translatedStatus);
       }
-
-      checkArgument(this.resourceName.equals(resourceName), "Resource name does not match");
-      this.data = StatusOr.fromStatus(Status.UNAVAILABLE.withDescription(
-          toContextString() + " does not exist" + nodeInfo()));
       maybePublishConfig();
     }
 
     @Override
-    public void onChanged(T update) {
-      checkNotNull(update, "update");
+    public void onAmbientError(Status error) {
       if (cancelled) {
         return;
       }
-
-      this.data = StatusOr.fromValue(update);
-      subscribeToChildren(update);
-      maybePublishConfig();
+      ambientError = error.withDescription(
+          String.format("Ambient error for %s: %s. Details: %s%s",
+              toContextString(),
+              error.getCode(),
+              error.getDescription() != null ? error.getDescription() : "",
+              nodeInfo()));
     }
 
     protected abstract void subscribeToChildren(T update);

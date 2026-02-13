@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.InternalEquivalentAddressGroup.ATTR_WEIGHT;
 import static io.grpc.LoadBalancer.HAS_HEALTH_PRODUCER_LISTENER_KEY;
 import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 import static io.grpc.LoadBalancer.IS_PETIOLE_POLICY;
@@ -70,10 +71,13 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.PickFirstLeafLoadBalancer.PickFirstLeafLoadBalancerConfig;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Queue;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -149,6 +153,7 @@ public class PickFirstLeafLoadBalancerTest {
 
   private String originalHappyEyeballsEnabledValue;
   private String originalSerializeRetriesValue;
+  private boolean originalWeightedShuffling;
 
   private long backoffMillis;
 
@@ -164,6 +169,8 @@ public class PickFirstLeafLoadBalancerTest {
         System.getProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS);
     System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
         Boolean.toString(enableHappyEyeballs));
+
+    originalWeightedShuffling = PickFirstLeafLoadBalancer.weightedShuffling;
 
     for (int i = 1; i <= 5; i++) {
       SocketAddress addr = new FakeSocketAddress("server" + i);
@@ -207,6 +214,7 @@ public class PickFirstLeafLoadBalancerTest {
       System.setProperty(PickFirstLoadBalancerProvider.GRPC_PF_USE_HAPPY_EYEBALLS,
           originalHappyEyeballsEnabledValue);
     }
+    PickFirstLeafLoadBalancer.weightedShuffling = originalWeightedShuffling;
 
     loadBalancer.shutdown();
     verifyNoMoreInteractions(mockArgs);
@@ -240,6 +248,12 @@ public class PickFirstLeafLoadBalancerTest {
         pickerCaptor.getValue().pickSubchannel(mockArgs));
 
     verifyNoMoreInteractions(mockHelper);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffle_oppositeWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffle();
   }
 
   @Test
@@ -303,6 +317,103 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(pickerCaptor.getValue().pickSubchannel(mockArgs),
         pickerCaptor.getValue().pickSubchannel(mockArgs));
     assertNotNull(pickerCaptor.getValue().pickSubchannel(mockArgs));
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleImplicitUniform_oppositeWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffleImplicitUniform();
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleImplicitUniform() {
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(new FakeSocketAddress("server1"));
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(new FakeSocketAddress("server2"));
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(new FakeSocketAddress("server3"));
+
+    int[] counts = countAddressSelections(99, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleExplicitUniform_oppositeWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = !PickFirstLeafLoadBalancer.weightedShuffling;
+    pickAfterResolved_shuffleExplicitUniform();
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleExplicitUniform() {
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 111L).build());
+
+    int[] counts = countAddressSelections(99, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleWeighted_noWeightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = false;
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 12L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 3L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 1L).build());
+
+    int[] counts = countAddressSelections(100, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(33);
+    assertThat(counts[1]).isWithin(7).of(33);
+    assertThat(counts[2]).isWithin(7).of(33);
+  }
+
+  @Test
+  public void pickAfterResolved_shuffleWeighted_weightedShuffling() {
+    PickFirstLeafLoadBalancer.weightedShuffling = true;
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server1"), Attributes.newBuilder().set(ATTR_WEIGHT, 12L).build());
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server2"), Attributes.newBuilder().set(ATTR_WEIGHT, 3L).build());
+    EquivalentAddressGroup eag3 = new EquivalentAddressGroup(
+        new FakeSocketAddress("server3"), Attributes.newBuilder().set(ATTR_WEIGHT, 1L).build());
+
+    int[] counts = countAddressSelections(100, Arrays.asList(eag1, eag2, eag3));
+    assertThat(counts[0]).isWithin(7).of(75); // 100*12/16
+    assertThat(counts[1]).isWithin(7).of(19); // 100*3/16
+    assertThat(counts[2]).isWithin(7).of(6); // 100*1/16
+  }
+
+  /** Returns int[index_of_eag] array with number of times each eag was selected. */
+  private int[] countAddressSelections(int trials, List<EquivalentAddressGroup> eags) {
+    int[] counts = new int[eags.size()];
+    Random random = new Random(1);
+    for (int i = 0; i < trials; i++) {
+      RecordingHelper helper = new RecordingHelper();
+      LoadBalancer lb = new PickFirstLeafLoadBalancer(helper);
+      assertThat(lb.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+            .setAddresses(eags)
+            .setAttributes(affinity)
+            .setLoadBalancingPolicyConfig(
+                new PickFirstLeafLoadBalancerConfig(true, random.nextLong()))
+            .build()))
+          .isSameInstanceAs(Status.OK);
+      helper.subchannels.remove().listener.onSubchannelState(
+          ConnectivityStateInfo.forNonError(READY));
+
+      assertThat(helper.state).isEqualTo(READY);
+      Subchannel subchannel = helper.picker.pickSubchannel(mockArgs).getSubchannel();
+      counts[eags.indexOf(subchannel.getAddresses())]++;
+
+      lb.shutdown();
+    }
+    return counts;
   }
 
   @Test
@@ -2945,13 +3056,7 @@ public class PickFirstLeafLoadBalancerTest {
     }
   }
 
-  private class MockHelperImpl extends LoadBalancer.Helper {
-    private final List<Subchannel> subchannels;
-
-    public MockHelperImpl(List<? extends Subchannel> subchannels) {
-      this.subchannels = new ArrayList<Subchannel>(subchannels);
-    }
-
+  private class BaseHelper extends LoadBalancer.Helper {
     @Override
     public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
       return null;
@@ -2981,6 +3086,14 @@ public class PickFirstLeafLoadBalancerTest {
     public void refreshNameResolution() {
       // noop
     }
+  }
+
+  private class MockHelperImpl extends BaseHelper {
+    private final List<Subchannel> subchannels;
+
+    public MockHelperImpl(List<? extends Subchannel> subchannels) {
+      this.subchannels = new ArrayList<Subchannel>(subchannels);
+    }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
@@ -2995,6 +3108,25 @@ public class PickFirstLeafLoadBalancerTest {
         return subchannel;
       }
       throw new IllegalArgumentException("Unexpected addresses: " + args.getAddresses());
+    }
+  }
+
+  class RecordingHelper extends BaseHelper {
+    ConnectivityState state;
+    SubchannelPicker picker;
+    final Queue<FakeSubchannel> subchannels = new ArrayDeque<>();
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      this.state = newState;
+      this.picker = newPicker;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      FakeSubchannel subchannel = new FakeSubchannel(args.getAddresses(), args.getAttributes());
+      subchannels.add(subchannel);
+      return subchannel;
     }
   }
 }

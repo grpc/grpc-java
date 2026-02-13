@@ -46,6 +46,7 @@ import com.google.common.base.Strings;
 import com.google.common.base.Ticker;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -63,6 +64,7 @@ import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
@@ -122,7 +124,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.GuardedBy;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLHandshakeException;
 import javax.net.ssl.TrustManager;
@@ -1462,7 +1463,7 @@ public class NettyClientTransportTest {
     }
 
     @Override
-    public void transportShutdown(Status s) {}
+    public void transportShutdown(Status s, DisconnectError e) {}
 
     @Override
     public void transportTerminated() {}

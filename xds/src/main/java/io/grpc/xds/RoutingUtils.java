@@ -92,14 +92,23 @@ final class RoutingUtils {
    * </ol>
    */
   private static boolean matchHostName(String hostName, String pattern) {
-    checkArgument(hostName.length() != 0 && !hostName.startsWith(".") && !hostName.endsWith("."),
+    checkArgument(hostName.length() != 0 && !hostName.startsWith("."),
         "Invalid host name");
-    checkArgument(pattern.length() != 0 && !pattern.startsWith(".") && !pattern.endsWith("."),
+    checkArgument(pattern.length() != 0 && !pattern.startsWith("."),
         "Invalid pattern/domain name");
 
     hostName = hostName.toLowerCase(Locale.US);
     pattern = pattern.toLowerCase(Locale.US);
     // hostName and pattern are now in lower case -- domain names are case-insensitive.
+
+    // Strip trailing dot to normalize FQDN (e.g. "example.com.") to a relative form,
+    // as per RFC 1034 Section 3.1 the two are semantically equivalent.
+    if (hostName.endsWith(".")) {
+      hostName = hostName.substring(0, hostName.length() - 1);
+    }
+    if (pattern.endsWith(".")) {
+      pattern = pattern.substring(0, pattern.length() - 1);
+    }
 
     if (!pattern.contains("*")) {
       // Not a wildcard pattern -- hostName and pattern must match exactly.

@@ -702,9 +702,6 @@ final class ProtocolNegotiators {
             Exception ex =
                 unavailableException("Failed ALPN negotiation: Unable to find compatible protocol");
             logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed.", ex);
-            if (handshakeCompleteRunnable.isPresent()) {
-              handshakeCompleteRunnable.get().run();
-            }
             ctx.fireExceptionCaught(ex);
           }
         } else {
@@ -719,10 +716,10 @@ final class ProtocolNegotiators {
                 .withCause(t)
                 .asRuntimeException();
           }
-          if (handshakeCompleteRunnable.isPresent()) {
-            handshakeCompleteRunnable.get().run();
-          }
           ctx.fireExceptionCaught(t);
+        }
+        if (handshakeCompleteRunnable.isPresent()) {
+          handshakeCompleteRunnable.get().run();
         }
       } else {
         super.userEventTriggered0(ctx, evt);

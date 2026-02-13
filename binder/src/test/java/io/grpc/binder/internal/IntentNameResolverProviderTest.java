@@ -30,6 +30,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.binder.ApiConstants;
 import java.net.URI;
 import org.junit.Before;
@@ -70,18 +71,32 @@ public final class IntentNameResolverProviderTest {
 
   @Test
   public void testNoResolverForUnknownScheme_returnsNull() throws Exception {
-    assertThat(provider.newNameResolver(new URI("random://uri"), args)).isNull();
+    assertThat(provider.newNameResolver(Uri.create("random://uri"), args)).isNull();
   }
 
   @Test
   public void testResolutionWithBadUri_throwsIllegalArg() throws Exception {
     assertThrows(
         IllegalArgumentException.class,
-        () -> provider.newNameResolver(new URI("intent:xxx#Intent;e.x=1;end;"), args));
+        () -> provider.newNameResolver(Uri.create("intent:xxx#Intent;e.x=1;end;"), args));
   }
 
   @Test
   public void testResolverForIntentScheme_returnsResolver() throws Exception {
+    Uri uri = Uri.create("intent:#Intent;action=action;end");
+    NameResolver resolver = provider.newNameResolver(uri, args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("localhost");
+    syncContext.execute(() -> resolver.start(mockListener));
+    shadowOf(getMainLooper()).idle();
+    verify(mockListener).onResult2(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddressesOrError()).isNotNull();
+    syncContext.execute(resolver::shutdown);
+    shadowOf(getMainLooper()).idle();
+  }
+
+  @Test
+  public void testResolverForIntentScheme_returnsResolver_javaNetUri() throws Exception {
     URI uri = new URI("intent://authority/path#Intent;action=action;scheme=scheme;end");
     NameResolver resolver = provider.newNameResolver(uri, args);
     assertThat(resolver).isNotNull();
