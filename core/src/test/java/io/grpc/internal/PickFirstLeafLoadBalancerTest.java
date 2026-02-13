@@ -2611,7 +2611,7 @@ public class PickFirstLeafLoadBalancerTest {
     PickResult pickResult = requestingPicker.pickSubchannel(mockArgs);
     assertEquals("RequestConnectionPicker", requestingPicker.getClass().getSimpleName());
     assertEquals(PickResult.withNoResult(), pickResult);
-    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Second pick moves index to addr 3
     pickResult = requestingPicker.pickSubchannel(mockArgs);
@@ -2646,7 +2646,7 @@ public class PickFirstLeafLoadBalancerTest {
       pickResult = requestingPicker2.pickSubchannel(mockArgs);
       assertEquals(PickResult.withNoResult(), pickResult);
     }
-    assertEquals(IDLE, loadBalancer.getConcludedConnectivityState());
+    assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     listeners[0].onSubchannelState(ConnectivityStateInfo.forTransientFailure(error));
     inOrder.verify(mockSubchannel2n2).start(stateListenerCaptor.capture());
