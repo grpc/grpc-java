@@ -370,7 +370,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     checkArgument(maxMessageSize >= 0, "maxMessageSize must be non-negative: %s", maxMessageSize);
     this.maxMessageSize = maxMessageSize;
     this.tcpMetrics = new TcpMetrics.Tracker(metricRecorder, "server");
-
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
     this.maxConnectionIdleManager = maxConnectionIdleManager;
@@ -673,7 +672,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     tcpMetrics.channelInactive(ctx.channel());
-
     try {
       if (keepAliveManager != null) {
         keepAliveManager.onTransportTermination();

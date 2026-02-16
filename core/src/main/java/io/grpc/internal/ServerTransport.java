@@ -44,5 +44,4 @@ public interface ServerTransport extends InternalInstrumented<SocketStats> {
    * outstanding tasks are cancelled when the transport terminates.
    */
   ScheduledExecutorService getScheduledExecutorService();
-
 }

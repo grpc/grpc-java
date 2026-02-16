@@ -46,7 +46,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-
 /**
  * The Netty-based server transport.
  */
