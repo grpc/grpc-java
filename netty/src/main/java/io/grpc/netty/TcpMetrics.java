@@ -16,15 +16,17 @@
 
 package io.grpc.netty;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.LongUpDownCounterMetricInstrument;
+import io.grpc.MetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 final class TcpMetrics {
 
@@ -38,64 +40,133 @@ final class TcpMetrics {
   // bytes_retransmitted, etc., are not
   // currently exposed by Netty's EpollTcpInfo.java wrapper around
   // getSockOpt(TCP_INFO)."
+  /**
+   * Safe metric registration or retrieval for environments where TcpMetrics might
+   * be loaded multiple times (e.g., shaded and unshaded).
+   */
+  private static LongCounterMetricInstrument safelyRegisterLongCounter(
+      MetricInstrumentRegistry registry, String name, String description, String unit,
+      List<String> requiredLabelKeys, List<String> optionalLabelKeys) {
+    try {
+      return registry.registerLongCounter(name, description, unit, requiredLabelKeys,
+          optionalLabelKeys, false);
+    } catch (IllegalStateException e) {
+      if (e.getMessage() != null && e.getMessage().contains("already exists")) {
+        for (MetricInstrument instrument : registry.getMetricInstruments()) {
+          if (instrument.getName().equals(name)
+              && instrument instanceof LongCounterMetricInstrument) {
+            return (LongCounterMetricInstrument) instrument;
+          }
+        }
+      }
+      throw e;
+    }
+  }
+
+  private static LongUpDownCounterMetricInstrument safelyRegisterLongUpDownCounter(
+      MetricInstrumentRegistry registry, String name, String description, String unit,
+      List<String> requiredLabelKeys, List<String> optionalLabelKeys) {
+    try {
+      return registry.registerLongUpDownCounter(name, description, unit, requiredLabelKeys,
+          optionalLabelKeys, false);
+    } catch (IllegalStateException e) {
+      if (e.getMessage() != null && e.getMessage().contains("already exists")) {
+        for (MetricInstrument instrument : registry.getMetricInstruments()) {
+          if (instrument.getName().equals(name)
+              && instrument instanceof LongUpDownCounterMetricInstrument) {
+            return (LongUpDownCounterMetricInstrument) instrument;
+          }
+        }
+      }
+      throw e;
+    }
+  }
+
+  private static DoubleHistogramMetricInstrument safelyRegisterDoubleHistogram(
+      MetricInstrumentRegistry registry, String name, String description, String unit,
+      List<Double> bucketBoundaries, List<String> requiredLabelKeys,
+      List<String> optionalLabelKeys) {
+    try {
+      return registry.registerDoubleHistogram(name, description, unit, bucketBoundaries,
+          requiredLabelKeys, optionalLabelKeys, false);
+    } catch (IllegalStateException e) {
+      if (e.getMessage() != null && e.getMessage().contains("already exists")) {
+        for (MetricInstrument instrument : registry.getMetricInstruments()) {
+          if (instrument.getName().equals(name)
+              && instrument instanceof DoubleHistogramMetricInstrument) {
+            return (DoubleHistogramMetricInstrument) instrument;
+          }
+        }
+      }
+      throw e;
+    }
+  }
+
   static {
     MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
-    ImmutableList<String> requiredLabels = ImmutableList.of("grpc.target");
-    ImmutableList<String> optionalLabels = ImmutableList.of(
+    List<String> requiredLabels = Collections.singletonList("grpc.target");
+    List<String> optionalLabels = Arrays.asList(
         "network.local.address",
         "network.local.port",
         "network.peer.address",
         "network.peer.port"
     );
     
-    connectionsCreated = registry.registerLongCounter(
-        "grpc.tcp.connections_created",
+    connectionsCreated = safelyRegisterLongCounter(registry,
+            "grpc.tcp.connections_created",
         "Number of TCP connections created.",
         "{connection}",
         requiredLabels,
-        optionalLabels,
-        false
+        optionalLabels
     );
 
-    connectionCount = registry.registerLongUpDownCounter(
-        "grpc.tcp.connection_count",
-        "Number of active TCP connections.",
-        "{connection}",
+    connectionCount = safelyRegisterLongUpDownCounter(registry,
+            "grpc.tcp.connection_count",
+        "Number of currently open TCP connections.",
+            "{connection}",
         requiredLabels,
-        optionalLabels,
-        false
+        optionalLabels
     );
 
-    packetsRetransmitted = registry.registerLongCounter(
-        "grpc.tcp.packets_retransmitted",
-        "Total packets sent by TCP except those sent for the first time.",
-        "{packet}",
-        requiredLabels,
-        optionalLabels,
-        false
-    );
+    boolean epollAvailable = false;
+    try {
+      Class<?> epollClass = Class.forName("io.netty.channel.epoll.Epoll");
+      Method isAvailableMethod = epollClass.getDeclaredMethod("isAvailable");
+      epollAvailable = (Boolean) isAvailableMethod.invoke(null);
+    } catch (Throwable t) {
+      // Ignored
+    }
 
-    recurringRetransmits = registry.registerLongCounter(
-        "grpc.tcp.recurring_retransmits",
-        "The number of times the latest TCP packet was retransmitted.",
-        "{packet}",
-        requiredLabels,
-        optionalLabels,
-        false
-    );
+    if (epollAvailable) {
+      packetsRetransmitted = safelyRegisterLongCounter(registry,
+          "grpc.tcp.packets_retransmitted",
+          "Total number of packets retransmitted for a single TCP connection.",
+              "{packet}",
+          requiredLabels,
+          optionalLabels);
 
-    minRtt = registry.registerDoubleHistogram(
-        "grpc.tcp.min_rtt",
-        "TCP's current estimate of minimum round trip time (RTT).",
-        "s",
-        ImmutableList.of(
-           0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 50.0, 100.0, 500.0,
-           1000.0
-        ),
-        requiredLabels,
-        optionalLabels,
-        false
-    );
+      recurringRetransmits = safelyRegisterLongCounter(registry,
+              "grpc.tcp.recurring_retransmits",
+          "Total number of unacknowledged packets to be retransmitted "
+              + "since the last acknowledgment.",
+              "{packet}",
+          requiredLabels,
+          optionalLabels);
+
+      minRtt = safelyRegisterDoubleHistogram(registry,
+              "grpc.tcp.min_rtt",
+          "Minimum RTT observed for a single TCP connection.",
+              "s",
+          Arrays.asList(0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5,
+                  5.0, 10.0, 25.0, 50.0, 100.0, 250.0),
+          requiredLabels,
+          optionalLabels);
+    } else {
+      // Initialize to null if epoll is not available, as these metrics won't be used.
+      packetsRetransmitted = null;
+      recurringRetransmits = null;
+      minRtt = null;
+    }
   }
 
 
