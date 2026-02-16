@@ -30,16 +30,85 @@ import java.util.List;
 
 final class TcpMetrics {
 
-  static final LongCounterMetricInstrument connectionsCreated;
-  static final LongUpDownCounterMetricInstrument connectionCount;
-  static final LongCounterMetricInstrument packetsRetransmitted;
-  static final LongCounterMetricInstrument recurringRetransmits;
-  static final DoubleHistogramMetricInstrument minRtt;
+  private static final Metrics DEFAULT_METRICS;
 
-  // Note: Metrics like delivery_rate, bytes_sent, packets_sent,
-  // bytes_retransmitted, etc., are not
-  // currently exposed by Netty's EpollTcpInfo.java wrapper around
-  // getSockOpt(TCP_INFO)."
+  static {
+    boolean epollAvailable = false;
+    try {
+      Class<?> epollClass = Class.forName("io.netty.channel.epoll.Epoll");
+      Method isAvailableMethod = epollClass.getDeclaredMethod("isAvailable");
+      epollAvailable = (Boolean) isAvailableMethod.invoke(null);
+    } catch (Throwable t) {
+      // Ignored
+    }
+    DEFAULT_METRICS = new Metrics(MetricInstrumentRegistry.getDefaultRegistry(), epollAvailable);
+  }
+
+  static Metrics getDefaultMetrics() {
+    return DEFAULT_METRICS;
+  }
+
+  static final class Metrics {
+    final LongCounterMetricInstrument connectionsCreated;
+    final LongUpDownCounterMetricInstrument connectionCount;
+    final LongCounterMetricInstrument packetsRetransmitted;
+    final LongCounterMetricInstrument recurringRetransmits;
+    final DoubleHistogramMetricInstrument minRtt;
+
+    Metrics(MetricInstrumentRegistry registry, boolean epollAvailable) {
+      List<String> requiredLabels = Collections.singletonList("grpc.target");
+      List<String> optionalLabels = Arrays.asList(
+          "network.local.address",
+          "network.local.port",
+          "network.peer.address",
+          "network.peer.port");
+
+      connectionsCreated = safelyRegisterLongCounter(registry,
+          "grpc.tcp.connections_created",
+          "Number of TCP connections created.",
+          "{connection}",
+          requiredLabels,
+          optionalLabels);
+
+      connectionCount = safelyRegisterLongUpDownCounter(registry,
+          "grpc.tcp.connection_count",
+          "Number of currently open TCP connections.",
+          "{connection}",
+          requiredLabels,
+          optionalLabels);
+
+      if (epollAvailable) {
+        packetsRetransmitted = safelyRegisterLongCounter(registry,
+            "grpc.tcp.packets_retransmitted",
+            "Total number of packets retransmitted for a single TCP connection.",
+            "{packet}",
+            requiredLabels,
+            optionalLabels);
+
+        recurringRetransmits = safelyRegisterLongCounter(registry,
+            "grpc.tcp.recurring_retransmits",
+            "Total number of unacknowledged packets to be retransmitted "
+                + "since the last acknowledgment.",
+            "{packet}",
+            requiredLabels,
+            optionalLabels);
+
+        minRtt = safelyRegisterDoubleHistogram(registry,
+            "grpc.tcp.min_rtt",
+            "Minimum RTT observed for a single TCP connection.",
+            "s",
+            Arrays.asList(0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5,
+                5.0, 10.0, 25.0, 50.0, 100.0, 250.0),
+            requiredLabels,
+            optionalLabels);
+      } else {
+        packetsRetransmitted = null;
+        recurringRetransmits = null;
+        minRtt = null;
+      }
+    }
+  }
+
   /**
    * Safe metric registration or retrieval for environments where TcpMetrics might
    * be loaded multiple times (e.g., shaded and unshaded).
@@ -102,81 +171,30 @@ final class TcpMetrics {
     }
   }
 
-  static {
-    MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
-    List<String> requiredLabels = Collections.singletonList("grpc.target");
-    List<String> optionalLabels = Arrays.asList(
-        "network.local.address",
-        "network.local.port",
-        "network.peer.address",
-        "network.peer.port"
-    );
-    
-    connectionsCreated = safelyRegisterLongCounter(registry,
-            "grpc.tcp.connections_created",
-        "Number of TCP connections created.",
-        "{connection}",
-        requiredLabels,
-        optionalLabels
-    );
-
-    connectionCount = safelyRegisterLongUpDownCounter(registry,
-            "grpc.tcp.connection_count",
-        "Number of currently open TCP connections.",
-            "{connection}",
-        requiredLabels,
-        optionalLabels
-    );
-
-    boolean epollAvailable = false;
-    try {
-      Class<?> epollClass = Class.forName("io.netty.channel.epoll.Epoll");
-      Method isAvailableMethod = epollClass.getDeclaredMethod("isAvailable");
-      epollAvailable = (Boolean) isAvailableMethod.invoke(null);
-    } catch (Throwable t) {
-      // Ignored
-    }
-
-    if (epollAvailable) {
-      packetsRetransmitted = safelyRegisterLongCounter(registry,
-          "grpc.tcp.packets_retransmitted",
-          "Total number of packets retransmitted for a single TCP connection.",
-              "{packet}",
-          requiredLabels,
-          optionalLabels);
-
-      recurringRetransmits = safelyRegisterLongCounter(registry,
-              "grpc.tcp.recurring_retransmits",
-          "Total number of unacknowledged packets to be retransmitted "
-              + "since the last acknowledgment.",
-              "{packet}",
-          requiredLabels,
-          optionalLabels);
-
-      minRtt = safelyRegisterDoubleHistogram(registry,
-              "grpc.tcp.min_rtt",
-          "Minimum RTT observed for a single TCP connection.",
-              "s",
-          Arrays.asList(0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5,
-                  5.0, 10.0, 25.0, 50.0, 100.0, 250.0),
-          requiredLabels,
-          optionalLabels);
-    } else {
-      // Initialize to null if epoll is not available, as these metrics won't be used.
-      packetsRetransmitted = null;
-      recurringRetransmits = null;
-      minRtt = null;
-    }
-  }
-
-
   static final class Tracker {
     private final MetricRecorder metricRecorder;
     private final String target;
+    private final Metrics metrics;
+    private final String epollSocketChannelClassName;
+    private final String epollTcpInfoClassName;
 
     Tracker(MetricRecorder metricRecorder, String target) {
+      this(metricRecorder, target, DEFAULT_METRICS);
+    }
+
+    Tracker(MetricRecorder metricRecorder, String target, Metrics metrics) {
+      this(metricRecorder, target, metrics,
+          "io.netty.channel.epoll.EpollSocketChannel",
+          "io.netty.channel.epoll.EpollTcpInfo");
+    }
+
+    Tracker(MetricRecorder metricRecorder, String target, Metrics metrics,
+        String epollSocketChannelClassName, String epollTcpInfoClassName) {
       this.metricRecorder = metricRecorder;
       this.target = target;
+      this.metrics = metrics;
+      this.epollSocketChannelClassName = epollSocketChannelClassName;
+      this.epollTcpInfoClassName = epollTcpInfoClassName;
     }
 
     private static final long RECORD_INTERVAL_MILLIS;
@@ -200,9 +218,9 @@ final class TcpMetrics {
     void channelActive(Channel channel) {
       if (metricRecorder != null && target != null) {
         java.util.List<String> labelValues = getLabelValues(channel);
-        metricRecorder.addLongCounter(TcpMetrics.connectionsCreated, 1,
+        metricRecorder.addLongCounter(metrics.connectionsCreated, 1,
             Collections.singletonList(target), labelValues);
-        metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, 1,
+        metricRecorder.addLongUpDownCounter(metrics.connectionCount, 1,
             Collections.singletonList(target), labelValues);
         scheduleNextReport(channel);
       }
@@ -240,7 +258,7 @@ final class TcpMetrics {
       }
       if (metricRecorder != null && target != null) {
         java.util.List<String> labelValues = getLabelValues(channel);
-        metricRecorder.addLongUpDownCounter(TcpMetrics.connectionCount, -1,
+        metricRecorder.addLongUpDownCounter(metrics.connectionCount, -1,
             Collections.singletonList(target), labelValues);
         // Final collection on close
         recordTcpInfo(channel);
@@ -253,28 +271,33 @@ final class TcpMetrics {
       }
       java.util.List<String> labelValues = getLabelValues(channel);
       try {
-        if (channel.getClass().getName().equals("io.netty.channel.epoll.EpollSocketChannel")) {
-          Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo",
-              Class.forName("io.netty.channel.epoll.EpollTcpInfo"));
-          Object info = Class.forName("io.netty.channel.epoll.EpollTcpInfo")
-              .getDeclaredConstructor().newInstance();
+        if (channel.getClass().getName().equals(epollSocketChannelClassName)) {
+          Class<?> tcpInfoClass = Class.forName(epollTcpInfoClassName);
+          Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo", tcpInfoClass);
+          Object info = tcpInfoClass.getDeclaredConstructor().newInstance();
           tcpInfoMethod.invoke(channel, info);
 
-          Method totalRetransMethod = info.getClass().getMethod("totalRetrans");
-          Method retransmitsMethod = info.getClass().getMethod("retransmits");
-          Method rttMethod = info.getClass().getMethod("rtt");
+          Method totalRetransMethod = tcpInfoClass.getMethod("totalRetrans");
+          Method retransmitsMethod = tcpInfoClass.getMethod("retransmits");
+          Method rttMethod = tcpInfoClass.getMethod("rtt");
 
           long totalRetrans = (Long) totalRetransMethod.invoke(info);
           int retransmits = (Integer) retransmitsMethod.invoke(info);
           long rtt = (Long) rttMethod.invoke(info);
 
-          metricRecorder.addLongCounter(TcpMetrics.packetsRetransmitted, totalRetrans,
-              Collections.singletonList(target), labelValues);
-          metricRecorder.addLongCounter(TcpMetrics.recurringRetransmits, retransmits,
-              Collections.singletonList(target), labelValues);
-          metricRecorder.recordDoubleHistogram(TcpMetrics.minRtt,
-              rtt / 1000000.0, // Convert microseconds to seconds
-              Collections.singletonList(target), labelValues);
+          if (metrics.packetsRetransmitted != null) {
+            metricRecorder.addLongCounter(metrics.packetsRetransmitted, totalRetrans,
+                Collections.singletonList(target), labelValues);
+          }
+          if (metrics.recurringRetransmits != null) {
+            metricRecorder.addLongCounter(metrics.recurringRetransmits, retransmits,
+                Collections.singletonList(target), labelValues);
+          }
+          if (metrics.minRtt != null) {
+            metricRecorder.recordDoubleHistogram(metrics.minRtt,
+                rtt / 1000000.0, // Convert microseconds to seconds
+                Collections.singletonList(target), labelValues);
+          }
         }
       } catch (Throwable t) {
         // Epoll not available or error getting tcp_info, just ignore.

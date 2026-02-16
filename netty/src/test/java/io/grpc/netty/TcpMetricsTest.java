@@ -65,6 +65,119 @@ public class TcpMetricsTest {
     metrics = new TcpMetrics.Tracker(metricRecorder, "target1");
   }
 
+  @Test
+  public void metricsInitialization_epollUnavailable() {
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), false);
+
+    org.junit.Assert.assertNotNull(metrics.connectionsCreated);
+    org.junit.Assert.assertNotNull(metrics.connectionCount);
+    org.junit.Assert.assertNull(metrics.packetsRetransmitted);
+    org.junit.Assert.assertNull(metrics.recurringRetransmits);
+    org.junit.Assert.assertNull(metrics.minRtt);
+  }
+
+  @Test
+  public void metricsInitialization_epollAvailable() {
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), true);
+
+    org.junit.Assert.assertNotNull(metrics.connectionsCreated);
+    org.junit.Assert.assertNotNull(metrics.connectionCount);
+    org.junit.Assert.assertNotNull(metrics.packetsRetransmitted);
+    org.junit.Assert.assertNotNull(metrics.recurringRetransmits);
+    org.junit.Assert.assertNotNull(metrics.minRtt);
+  }
+
+  @Test
+  public void safelyRegister_collision() {
+    io.grpc.MetricInstrumentRegistry registry = 
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry();
+
+    // Explicitly register one metric to ensure collision path is triggered
+    try {
+      registry.registerLongCounter("grpc.tcp.connections_created", "desc", "unit",
+          Collections.emptyList(), Collections.emptyList(), false);
+    } catch (IllegalStateException e) {
+      // Already exists, which is fine for this test
+    }
+
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(registry, true);
+
+    org.junit.Assert.assertNotNull(metrics.connectionsCreated);
+    org.junit.Assert.assertNotNull(metrics.connectionCount);
+    org.junit.Assert.assertNotNull(metrics.minRtt);
+  }
+
+  public static class FakeWithTcpInfo extends io.netty.channel.embedded.EmbeddedChannel {
+    public void tcpInfo(FakeEpollTcpInfo info) {
+      info.totalRetrans = 123;
+      info.retransmits = 4;
+      info.rtt = 5000;
+    }
+  }
+
+  public static class FakeEpollTcpInfo {
+    long totalRetrans;
+    int retransmits;
+    long rtt;
+
+    public void setValues(long totalRetrans, int retransmits, long rtt) {
+      this.totalRetrans = totalRetrans;
+      this.retransmits = retransmits;
+      this.rtt = rtt;
+    }
+
+    public long totalRetrans() {
+      return totalRetrans;
+    }
+
+    public int retransmits() {
+      return retransmits;
+    }
+
+    public long rtt() {
+      return rtt;
+    }
+  }
+
+  @Test
+  public void tracker_recordTcpInfo_reflectionSuccess() throws Exception {
+    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), true);
+
+    String fakeChannelName = FakeWithTcpInfo.class.getName();
+    String fakeInfoName = FakeEpollTcpInfo.class.getName();
+
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, "target", metrics,
+        fakeChannelName, fakeInfoName);
+
+    FakeWithTcpInfo channel = new FakeWithTcpInfo();
+    channel.writeInbound("dummy");
+
+    tracker.channelInactive(channel);
+
+    verify(recorder).addLongCounter(eq(metrics.packetsRetransmitted), eq(123L), any(), any());
+    verify(recorder).addLongCounter(eq(metrics.recurringRetransmits), eq(4L), any(), any());
+    verify(recorder).recordDoubleHistogram(eq(metrics.minRtt), eq(0.005), any(), any());
+  }
+
+  @Test
+  public void tracker_recordTcpInfo_reflectionFailure() {
+    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), true);
+
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, "target", metrics,
+        "non.existent.Class", "non.existent.Info");
+
+    Channel channel = org.mockito.Mockito.mock(Channel.class);
+    when(channel.isActive()).thenReturn(true);
+
+    // Should catch exception and ignore
+    tracker.channelInactive(channel);
+  }
   
   @Test
   public void registeredMetrics_haveCorrectOptionalLabels() {
@@ -76,17 +189,21 @@ public class TcpMetricsTest {
     );
 
     org.junit.Assert.assertEquals(
-        expectedOptionalLabels, TcpMetrics.connectionsCreated.getOptionalLabelKeys());
+        expectedOptionalLabels,
+        TcpMetrics.getDefaultMetrics().connectionsCreated.getOptionalLabelKeys());
     org.junit.Assert.assertEquals(
-        expectedOptionalLabels, TcpMetrics.connectionCount.getOptionalLabelKeys());
+        expectedOptionalLabels,
+        TcpMetrics.getDefaultMetrics().connectionCount.getOptionalLabelKeys());
 
-    if (TcpMetrics.packetsRetransmitted != null) {
+    if (TcpMetrics.getDefaultMetrics().packetsRetransmitted != null) {
       org.junit.Assert.assertEquals(
-          expectedOptionalLabels, TcpMetrics.packetsRetransmitted.getOptionalLabelKeys());
+          expectedOptionalLabels,
+          TcpMetrics.getDefaultMetrics().packetsRetransmitted.getOptionalLabelKeys());
       org.junit.Assert.assertEquals(
-          expectedOptionalLabels, TcpMetrics.recurringRetransmits.getOptionalLabelKeys());
+          expectedOptionalLabels,
+          TcpMetrics.getDefaultMetrics().recurringRetransmits.getOptionalLabelKeys());
       org.junit.Assert.assertEquals(
-          expectedOptionalLabels, TcpMetrics.minRtt.getOptionalLabelKeys());
+          expectedOptionalLabels, TcpMetrics.getDefaultMetrics().minRtt.getOptionalLabelKeys());
     }
   }
 
@@ -101,11 +218,13 @@ public class TcpMetricsTest {
     metrics.channelActive(channel);
     
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verifyNoMoreInteractions(metricRecorder);
@@ -124,7 +243,8 @@ public class TcpMetricsTest {
     metrics.channelInactive(channel);
     
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.connectionCount), eq(-1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(-1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verifyNoMoreInteractions(metricRecorder);
@@ -139,10 +259,12 @@ public class TcpMetricsTest {
     metrics.channelActive(channel);
     
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
@@ -151,10 +273,12 @@ public class TcpMetricsTest {
   public void channelActive_incrementsCounts() {
     metrics.channelActive(channel);
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.connectionsCreated), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.connectionCount), eq(1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
@@ -163,7 +287,8 @@ public class TcpMetricsTest {
   public void channelInactive_decrementsCount_noEpoll_noError() {
     metrics.channelInactive(channel);
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.connectionCount), eq(-1L), eq(Collections.singletonList("target1")),
+        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(-1L), 
+        eq(Collections.singletonList("target1")),
         eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
