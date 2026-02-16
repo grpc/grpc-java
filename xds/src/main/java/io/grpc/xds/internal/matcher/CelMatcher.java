@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal.matcher;
 
-import com.google.common.annotations.VisibleForTesting;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelValidationException;
 import dev.cel.common.types.SimpleType;
@@ -45,16 +44,6 @@ public final class CelMatcher {
     CelCommon.checkAllowedVariables(ast);
     CelRuntime.Program program = CelCommon.RUNTIME.createProgram(ast);
     return new CelMatcher(program);
-  }
-
-  /**
-   * Compiles the CEL expression string into a CelMatcher.
-   */
-  @VisibleForTesting
-  public static CelMatcher compile(String expression)
-      throws CelValidationException, CelEvaluationException {
-    CelAbstractSyntaxTree ast = CelCommon.COMPILER.compile(expression).getAst();
-    return compile(ast);
   }
 
   /**

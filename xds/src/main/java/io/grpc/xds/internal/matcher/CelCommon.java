@@ -54,8 +54,10 @@ final class CelCommon {
               return false;
             }
             if (func == dev.cel.runtime.CelStandardFunctions.StandardFunction.ADD) {
-              String id = over.toString();
-              return !id.equals("ADD_STRING") && !id.equals("ADD_LIST");
+              return !over.equals(
+                      (Object) dev.cel.runtime.standard.AddOperator.AddOverload.ADD_STRING)
+                  && !over.equals(
+                      (Object) dev.cel.runtime.standard.AddOperator.AddOverload.ADD_LIST);
             }
             return true;
           })

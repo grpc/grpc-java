@@ -288,7 +288,7 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celMatcher_match_mapInput() throws Exception {
-    CelMatcher matcher = CelMatcher.compile("request == 'bar'");
+    CelMatcher matcher = CelEnvironmentTest.compile("request == 'bar'");
     Map<String, String> input = java.util.Collections.singletonMap("request", "bar");
     
     assertThat(matcher.match(input)).isTrue();
@@ -296,7 +296,7 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celMatcher_match_invalidInputType_throws() throws Exception {
-    CelMatcher matcher = CelMatcher.compile("true");
+    CelMatcher matcher = CelEnvironmentTest.compile("true");
     try {
       matcher.match("invalid-input");
       fail("Should throw CelEvaluationException");
@@ -308,7 +308,7 @@ public final class CelEnvironmentTest {
   @Test
   public void celMatcher_compile_nonBooleanAst_throws() throws Exception {
     try {
-      CelMatcher.compile("'not-boolean'");
+      CelEnvironmentTest.compile("'not-boolean'");
       fail("Should throw IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
@@ -456,6 +456,12 @@ public final class CelEnvironmentTest {
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("request.referer").get()).isEqualTo("");
+  }
+
+  public static CelMatcher compile(String expression)
+      throws dev.cel.common.CelValidationException, dev.cel.runtime.CelEvaluationException {
+    dev.cel.common.CelAbstractSyntaxTree ast = CelCommon.COMPILER.compile(expression).getAst();
+    return CelMatcher.compile(ast);
   }
 
   @Test
