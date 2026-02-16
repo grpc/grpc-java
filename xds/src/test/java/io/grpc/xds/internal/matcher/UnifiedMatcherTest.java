@@ -124,7 +124,7 @@ public class UnifiedMatcherTest {
   @Test
   public void celMatcher_throwsIfReturnsString() {
     try {
-      io.grpc.xds.internal.matcher.CelMatcher.compile("'should be bool'");
+      io.grpc.xds.internal.matcher.CelEnvironmentTest.compile("'should be bool'");
       org.junit.Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
