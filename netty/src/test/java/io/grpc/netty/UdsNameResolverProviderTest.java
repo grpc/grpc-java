@@ -75,19 +75,7 @@ public class UdsNameResolverProviderTest {
   public void testUnixRelativePath() {
     UdsNameResolver udsNameResolver =
         udsNameResolverProvider.newNameResolver(URI.create("unix:sock.sock"), args);
-    assertThat(udsNameResolver).isNotNull();
-    udsNameResolver.start(mockListener);
-    verify(mockListener).onResult2(resultCaptor.capture());
-    NameResolver.ResolutionResult result = resultCaptor.getValue();
-    List<EquivalentAddressGroup> list = result.getAddressesOrError().getValue();
-    assertThat(list).isNotNull();
-    assertThat(list).hasSize(1);
-    EquivalentAddressGroup eag = list.get(0);
-    assertThat(eag).isNotNull();
-    List<SocketAddress> addresses = eag.getAddresses();
-    assertThat(addresses).hasSize(1);
-    assertThat(addresses.get(0)).isInstanceOf(DomainSocketAddress.class);
-    DomainSocketAddress domainSocketAddress = (DomainSocketAddress) addresses.get(0);
+    DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("sock.sock");
   }
 
@@ -95,19 +83,7 @@ public class UdsNameResolverProviderTest {
   public void testUnixAbsolutePath() {
     UdsNameResolver udsNameResolver =
         udsNameResolverProvider.newNameResolver(URI.create("unix:/sock.sock"), args);
-    assertThat(udsNameResolver).isNotNull();
-    udsNameResolver.start(mockListener);
-    verify(mockListener).onResult2(resultCaptor.capture());
-    NameResolver.ResolutionResult result = resultCaptor.getValue();
-    List<EquivalentAddressGroup> list = result.getAddressesOrError().getValue();
-    assertThat(list).isNotNull();
-    assertThat(list).hasSize(1);
-    EquivalentAddressGroup eag = list.get(0);
-    assertThat(eag).isNotNull();
-    List<SocketAddress> addresses = eag.getAddresses();
-    assertThat(addresses).hasSize(1);
-    assertThat(addresses.get(0)).isInstanceOf(DomainSocketAddress.class);
-    DomainSocketAddress domainSocketAddress = (DomainSocketAddress) addresses.get(0);
+    DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("/sock.sock");
   }
 
@@ -115,19 +91,7 @@ public class UdsNameResolverProviderTest {
   public void testUnixAbsoluteAlternatePath() {
     UdsNameResolver udsNameResolver =
         udsNameResolverProvider.newNameResolver(URI.create("unix:///sock.sock"), args);
-    assertThat(udsNameResolver).isNotNull();
-    udsNameResolver.start(mockListener);
-    verify(mockListener).onResult2(resultCaptor.capture());
-    NameResolver.ResolutionResult result = resultCaptor.getValue();
-    List<EquivalentAddressGroup> list = result.getAddressesOrError().getValue();
-    assertThat(list).isNotNull();
-    assertThat(list).hasSize(1);
-    EquivalentAddressGroup eag = list.get(0);
-    assertThat(eag).isNotNull();
-    List<SocketAddress> addresses = eag.getAddresses();
-    assertThat(addresses).hasSize(1);
-    assertThat(addresses.get(0)).isInstanceOf(DomainSocketAddress.class);
-    DomainSocketAddress domainSocketAddress = (DomainSocketAddress) addresses.get(0);
+    DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("/sock.sock");
   }
 
@@ -137,7 +101,23 @@ public class UdsNameResolverProviderTest {
       udsNameResolverProvider.newNameResolver(URI.create("unix://localhost/sock.sock"), args);
       fail("exception expected");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo("non-null authority not supported");
+      assertThat(e).hasMessageThat().isEqualTo("authority not supported: localhost");
     }
+  }
+
+  private DomainSocketAddress startAndGetUniqueResolvedAddress(UdsNameResolver udsNameResolver) {
+    assertThat(udsNameResolver).isNotNull();
+    udsNameResolver.start(mockListener);
+    verify(mockListener).onResult2(resultCaptor.capture());
+    NameResolver.ResolutionResult result = resultCaptor.getValue();
+    List<EquivalentAddressGroup> list = result.getAddressesOrError().getValue();
+    assertThat(list).isNotNull();
+    assertThat(list).hasSize(1);
+    EquivalentAddressGroup eag = list.get(0);
+    assertThat(eag).isNotNull();
+    List<SocketAddress> addresses = eag.getAddresses();
+    assertThat(addresses).hasSize(1);
+    assertThat(addresses.get(0)).isInstanceOf(DomainSocketAddress.class);
+    return (DomainSocketAddress) addresses.get(0);
   }
 }
