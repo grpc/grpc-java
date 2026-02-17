@@ -508,6 +508,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     try {
       logger.fine("Network channel is closed");
+      tcpMetrics.channelInactive(ctx.channel());
       Status status = Status.UNAVAILABLE.withDescription("Network closed for unknown reason");
       lifecycleManager.notifyShutdown(status, SimpleDisconnectError.UNKNOWN);
       final Status streamStatus;
