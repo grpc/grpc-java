@@ -29,9 +29,21 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
    */
   protected abstract LoadBalancer delegate();
 
-  @Override
+  /**
+   * Handles newly resolved addresses and metadata attributes from name resolution system.
+   *
+   * @deprecated  As of release 1.69.0,
+   *     use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
+   */
+  @Deprecated
+  @SuppressWarnings("all")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    delegate().handleResolvedAddresses(resolvedAddresses);
+    acceptResolvedAddresses(resolvedAddresses);
+  }
+
+  @Override
+  public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    return delegate().acceptResolvedAddresses(resolvedAddresses);
   }
 
   @Override
