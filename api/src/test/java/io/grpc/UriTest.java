@@ -162,6 +162,30 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_emptyQuery() {
+    Uri uri = Uri.create("scheme:?");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getQuery()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyFragment() {
+    Uri uri = Uri.create("scheme:#");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getFragment()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyUserInfo() {
+    Uri uri = Uri.create("scheme://@host");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("@host");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getUserInfo()).isEmpty();
+    assertThat(uri.toString()).isEqualTo("scheme://@host");
+  }
+
+  @Test
   public void parse_invalidScheme_throws() {
     URISyntaxException e =
         assertThrows(URISyntaxException.class, () -> Uri.parse("1scheme://authority/path"));
