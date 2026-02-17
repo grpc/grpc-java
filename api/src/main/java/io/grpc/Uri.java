@@ -446,9 +446,9 @@ public final class Uri {
     return host;
   }
 
-  /** Returns the "port" component of this URI, or -1 if not present. */
+  /** Returns the "port" component of this URI, or -1 if empty or not present. */
   public int getPort() {
-    return port != null ? Integer.parseInt(port) : -1;
+    return port != null && !port.isEmpty() ? Integer.parseInt(port) : -1;
   }
 
   /** Returns the raw port component of this URI in its originally parsed form. */
@@ -943,10 +943,12 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawPort(String port) {
-      try {
-        Integer.parseInt(port); // Result unused.
-      } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid port", e);
+      if (port != null && !port.isEmpty()) {
+        try {
+          Integer.parseInt(port); // Result unused.
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port", e);
+        }
       }
       this.port = port;
       return this;
