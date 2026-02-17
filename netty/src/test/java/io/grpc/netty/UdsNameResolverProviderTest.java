@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -26,16 +27,20 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
@@ -43,9 +48,17 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link UdsNameResolverProvider}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class UdsNameResolverProviderTest {
   private static final int DEFAULT_PORT = 887;
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -73,24 +86,21 @@ public class UdsNameResolverProviderTest {
 
   @Test
   public void testUnixRelativePath() {
-    UdsNameResolver udsNameResolver =
-        udsNameResolverProvider.newNameResolver(URI.create("unix:sock.sock"), args);
+    UdsNameResolver udsNameResolver = newNameResolver("unix:sock.sock", args);
     DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("sock.sock");
   }
 
   @Test
   public void testUnixAbsolutePath() {
-    UdsNameResolver udsNameResolver =
-        udsNameResolverProvider.newNameResolver(URI.create("unix:/sock.sock"), args);
+    UdsNameResolver udsNameResolver = newNameResolver("unix:/sock.sock", args);
     DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("/sock.sock");
   }
 
   @Test
   public void testUnixAbsoluteAlternatePath() {
-    UdsNameResolver udsNameResolver =
-        udsNameResolverProvider.newNameResolver(URI.create("unix:///sock.sock"), args);
+    UdsNameResolver udsNameResolver = newNameResolver("unix:///sock.sock", args);
     DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
     assertThat(domainSocketAddress.path()).isEqualTo("/sock.sock");
   }
@@ -98,11 +108,35 @@ public class UdsNameResolverProviderTest {
   @Test
   public void testUnixPathWithAuthority() {
     try {
-      udsNameResolverProvider.newNameResolver(URI.create("unix://localhost/sock.sock"), args);
+      newNameResolver("unix://localhost/sock.sock", args);
       fail("exception expected");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo("authority not supported: localhost");
     }
+  }
+
+  @Test
+  public void testUnixAbsolutePathDoesNotIncludeQueryOrFragment() {
+    UdsNameResolver udsNameResolver = newNameResolver("unix:///sock.sock?query#fragment", args);
+    DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
+    assertThat(domainSocketAddress.path()).isEqualTo("/sock.sock");
+  }
+
+  @Test
+  public void testUnixRelativePathDoesNotIncludeQueryOrFragment() {
+    // This test fails without RFC 3986 support because of a bug in the legacy java.net.URI-based
+    // NRP implementation.
+    assume().that(enableRfc3986UrisParam).isTrue();
+
+    UdsNameResolver udsNameResolver = newNameResolver("unix:sock.sock?query#fragment", args);
+    DomainSocketAddress domainSocketAddress = startAndGetUniqueResolvedAddress(udsNameResolver);
+    assertThat(domainSocketAddress.path()).isEqualTo("sock.sock");
+  }
+
+  private UdsNameResolver newNameResolver(String uriString, NameResolver.Args args) {
+    return enableRfc3986UrisParam
+        ? (UdsNameResolver) udsNameResolverProvider.newNameResolver(Uri.create(uriString), args)
+        : udsNameResolverProvider.newNameResolver(URI.create(uriString), args);
   }
 
   private DomainSocketAddress startAndGetUniqueResolvedAddress(UdsNameResolver udsNameResolver) {
