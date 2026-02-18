@@ -56,7 +56,13 @@ dependencies {
             libraries.re2j,
             libraries.auto.value.annotations,
             libraries.protobuf.java.util
-    implementation(libraries.cel) {
+    implementation(libraries.cel.runtime) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
+    implementation(libraries.cel.protobuf) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
+    compileOnly(libraries.cel.compiler) {
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
     def nettyDependency = implementation project(':grpc-netty')
@@ -64,6 +70,7 @@ dependencies {
     testImplementation project(':grpc-api')
     testImplementation project(':grpc-rls')
     testImplementation project(':grpc-inprocess')
+    testImplementation libraries.cel.compiler
     testImplementation testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-util'))

@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.matcher;
 
 import dev.cel.common.CelAbstractSyntaxTree;
-import dev.cel.common.CelValidationException;
 import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
@@ -34,9 +33,12 @@ public final class CelMatcher {
 
   /**
    * Compiles the AST into a CelMatcher.
+   * Throws an Exception if validation or evaluation fails during compilation setup.
    */
   public static CelMatcher compile(CelAbstractSyntaxTree ast)
-      throws CelValidationException, CelEvaluationException {
+      throws Exception { 
+    // CelEvaluationException -> inside cel-runtime -> Allowed in production signatures
+    // CelValidationException -> inside cel-compiler -> Forbidden in production signatures
     if (ast.getResultType() != SimpleType.BOOL) {
       throw new IllegalArgumentException(
           "CEL expression must evaluate to boolean, got: " + ast.getResultType());

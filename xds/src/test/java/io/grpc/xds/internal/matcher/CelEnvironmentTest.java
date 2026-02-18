@@ -153,7 +153,7 @@ public final class CelEnvironmentTest {
   public void celEnvironment_disabledFeatures_throwsValidationException() {
     // String concatenation
     try {
-      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("'a' + 'b'").getAst();
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileAst("'a' + 'b'");
       org.junit.Assert.fail("String concatenation should be disabled");
     } catch (dev.cel.common.CelValidationException e) {
       assertThat(e).hasMessageThat().contains("found no matching overload for '_+_'");
@@ -161,7 +161,7 @@ public final class CelEnvironmentTest {
 
     // List concatenation
     try {
-      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("[1] + [2]").getAst();
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileAst("[1] + [2]");
       org.junit.Assert.fail("List concatenation should be disabled");
     } catch (dev.cel.common.CelValidationException e) {
       assertThat(e).hasMessageThat().contains("found no matching overload for '_+_'");
@@ -169,7 +169,7 @@ public final class CelEnvironmentTest {
 
     // String conversion
     try {
-      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("string(1)").getAst();
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileAst("string(1)");
       org.junit.Assert.fail("String conversion should be disabled");
     } catch (dev.cel.common.CelValidationException e) {
       assertThat(e).hasMessageThat().contains("undeclared reference to 'string'");
@@ -177,7 +177,7 @@ public final class CelEnvironmentTest {
 
     // Comprehensions
     try {
-      io.grpc.xds.internal.matcher.CelCommon.COMPILER.compile("[1, 2, 3].all(x, x > 0)").getAst();
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileAst("[1, 2, 3].all(x, x > 0)");
       org.junit.Assert.fail("Comprehensions should be disabled");
     } catch (dev.cel.common.CelValidationException e) {
       assertThat(e).hasMessageThat().contains("undeclared reference to 'all'");
@@ -288,7 +288,7 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celMatcher_match_mapInput() throws Exception {
-    CelMatcher matcher = CelEnvironmentTest.compile("request == 'bar'");
+    CelMatcher matcher = CelMatcherTestHelper.compile("request == 'bar'");
     Map<String, String> input = java.util.Collections.singletonMap("request", "bar");
     
     assertThat(matcher.match(input)).isTrue();
@@ -296,7 +296,7 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celMatcher_match_invalidInputType_throws() throws Exception {
-    CelMatcher matcher = CelEnvironmentTest.compile("true");
+    CelMatcher matcher = CelMatcherTestHelper.compile("true");
     try {
       matcher.match("invalid-input");
       fail("Should throw CelEvaluationException");
@@ -308,7 +308,7 @@ public final class CelEnvironmentTest {
   @Test
   public void celMatcher_compile_nonBooleanAst_throws() throws Exception {
     try {
-      CelEnvironmentTest.compile("'not-boolean'");
+      CelMatcherTestHelper.compile("'not-boolean'");
       fail("Should throw IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
@@ -456,12 +456,6 @@ public final class CelEnvironmentTest {
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("request.referer").get()).isEqualTo("");
-  }
-
-  public static CelMatcher compile(String expression)
-      throws dev.cel.common.CelValidationException, dev.cel.runtime.CelEvaluationException {
-    dev.cel.common.CelAbstractSyntaxTree ast = CelCommon.COMPILER.compile(expression).getAst();
-    return CelMatcher.compile(ast);
   }
 
   @Test

@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.matcher;
 
 import dev.cel.common.CelAbstractSyntaxTree;
-import dev.cel.common.CelValidationException;
 import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
@@ -34,9 +33,10 @@ public final class CelStringExtractor {
 
   /**
    * Compiles the AST into a CelStringExtractor.
+   * Throws an Exception if validation or evaluation fails during compilation setup.
    */
   public static CelStringExtractor compile(CelAbstractSyntaxTree ast) 
-      throws CelValidationException, CelEvaluationException {
+      throws Exception {
     if (ast.getResultType() != SimpleType.STRING && ast.getResultType() != SimpleType.DYN) {
       throw new IllegalArgumentException(
           "CEL expression must evaluate to string, got: " + ast.getResultType());
@@ -44,15 +44,6 @@ public final class CelStringExtractor {
     CelCommon.checkAllowedVariables(ast);
     CelRuntime.Program program = CelCommon.RUNTIME.createProgram(ast);
     return new CelStringExtractor(program);
-  }
-
-  /**
-   * Compiles the CEL expression string into a CelStringExtractor.
-   */
-  public static CelStringExtractor compile(String expression)
-      throws CelValidationException, CelEvaluationException {
-    CelAbstractSyntaxTree ast = CelCommon.COMPILER.compile(expression).getAst();
-    return compile(ast);
   }
 
   /**

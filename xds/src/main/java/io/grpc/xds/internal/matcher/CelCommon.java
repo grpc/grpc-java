@@ -18,9 +18,6 @@ package io.grpc.xds.internal.matcher;
 
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelOptions;
-import dev.cel.common.types.SimpleType;
-import dev.cel.compiler.CelCompiler;
-import dev.cel.compiler.CelCompilerFactory;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelRuntimeFactory;
 
@@ -33,19 +30,6 @@ final class CelCommon {
       .maxRegexProgramSize(100)
       .build();
 
-  private static final dev.cel.checker.CelStandardDeclarations DECLARATIONS = 
-      dev.cel.checker.CelStandardDeclarations.newBuilder()
-          .filterFunctions((func, over) -> {
-            if (func == dev.cel.checker.CelStandardDeclarations.StandardFunction.STRING) {
-              return false;
-            }
-            if (func == dev.cel.checker.CelStandardDeclarations.StandardFunction.ADD) {
-              String id = over.celOverloadDecl().overloadId();
-              return !id.equals("add_string") && !id.equals("add_list");
-            }
-            return true;
-          })
-          .build();
 
   private static final dev.cel.runtime.CelStandardFunctions FUNCTIONS = 
       dev.cel.runtime.CelStandardFunctions.newBuilder()
@@ -62,13 +46,6 @@ final class CelCommon {
             return true;
           })
           .build();
-
-  static final CelCompiler COMPILER = CelCompilerFactory.standardCelCompilerBuilder()
-      .setStandardEnvironmentEnabled(false)
-      .setStandardDeclarations(DECLARATIONS)
-      .addVar("request", SimpleType.DYN)
-      .setOptions(CEL_OPTIONS)
-      .build();
 
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
       .setStandardEnvironmentEnabled(false)
