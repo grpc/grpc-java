@@ -27,7 +27,6 @@ dependencies {
             libraries.google.auth.oauth2Http,
             libraries.opentelemetry.sdk.extension.autoconfigure,
             libraries.guava.jre // Fix checkUpperBoundDeps using -android
-    compileOnly libraries.cel.compiler
     api project(':grpc-api'),
             project(':grpc-stub'),
             project(':grpc-protobuf'),
