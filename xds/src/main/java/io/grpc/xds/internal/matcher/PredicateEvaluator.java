@@ -18,8 +18,6 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher.MatcherList.Predicate;
-import com.google.protobuf.InvalidProtocolBufferException;
-import dev.cel.common.CelValidationException;
 import dev.cel.runtime.CelEvaluationException;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
@@ -89,8 +87,7 @@ abstract class PredicateEvaluator {
             } else {
               throw new IllegalArgumentException("CelMatcher must have expr_match");
             }
-          } catch (InvalidProtocolBufferException | CelValidationException 
-              | CelEvaluationException e) {
+          } catch (Exception e) {
             throw new IllegalArgumentException("Invalid CelMatcher config", e);
           }
         } else {

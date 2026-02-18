@@ -124,7 +124,7 @@ public class UnifiedMatcherTest {
   @Test
   public void celMatcher_throwsIfReturnsString() {
     try {
-      io.grpc.xds.internal.matcher.CelEnvironmentTest.compile("'should be bool'");
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compile("'should be bool'");
       org.junit.Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
@@ -172,7 +172,7 @@ public class UnifiedMatcherTest {
   @Test
   public void celStringExtractor_throwsIfReturnsBool() {
     try {
-      io.grpc.xds.internal.matcher.CelStringExtractor.compile("true");
+      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileStringExtractor("true");
       org.junit.Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to string");
@@ -774,7 +774,7 @@ public class UnifiedMatcherTest {
       PredicateEvaluator.fromProto(proto);
       org.junit.Assert.fail("Should have thrown");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("CelMatcher must have expr_match");
+      assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
   }
 
@@ -1133,7 +1133,7 @@ public class UnifiedMatcherTest {
       org.junit.Assert.fail(
           "Should have thrown IllegalArgumentException for missing cel_expr_checked");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("CelMatcher must have cel_expr_checked");
+      assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
   }
 
@@ -1155,7 +1155,7 @@ public class UnifiedMatcherTest {
       org.junit.Assert.fail(
           "Should have thrown IllegalArgumentException for using cel_expr_parsed");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().contains("CelMatcher must have cel_expr_checked");
+      assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
   }
 
