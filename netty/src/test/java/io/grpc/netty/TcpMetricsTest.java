@@ -109,13 +109,7 @@ public class TcpMetricsTest {
     org.junit.Assert.assertNotNull(metrics.minRtt);
   }
 
-  public static class FakeWithTcpInfo extends io.netty.channel.embedded.EmbeddedChannel {
-    public void tcpInfo(FakeEpollTcpInfo info) {
-      info.totalRetrans = 123;
-      info.retransmits = 4;
-      info.rtt = 5000;
-    }
-  }
+
 
   public static class FakeEpollTcpInfo {
     long totalRetrans;
@@ -147,13 +141,15 @@ public class TcpMetricsTest {
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
         io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), true);
 
-    String fakeChannelName = FakeWithTcpInfo.class.getName();
+    String fakeChannelName = ConfigurableFakeWithTcpInfo.class.getName();
     String fakeInfoName = FakeEpollTcpInfo.class.getName();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, "target", metrics,
         fakeChannelName, fakeInfoName);
 
-    FakeWithTcpInfo channel = new FakeWithTcpInfo();
+    FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
+    infoSource.setValues(123, 4, 5000);
+    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
     channel.writeInbound("dummy");
 
     tracker.channelInactive(channel);
@@ -161,6 +157,71 @@ public class TcpMetricsTest {
     verify(recorder).addLongCounter(eq(metrics.packetsRetransmitted), eq(123L), any(), any());
     verify(recorder).addLongCounter(eq(metrics.recurringRetransmits), eq(4L), any(), any());
     verify(recorder).recordDoubleHistogram(eq(metrics.minRtt), eq(0.005), any(), any());
+  }
+
+  public static class ConfigurableFakeWithTcpInfo extends
+      io.netty.channel.embedded.EmbeddedChannel {
+    private final FakeEpollTcpInfo infoToCopy;
+
+    public ConfigurableFakeWithTcpInfo(FakeEpollTcpInfo infoToCopy) {
+      this.infoToCopy = infoToCopy;
+    }
+
+    public void tcpInfo(FakeEpollTcpInfo info) {
+      info.totalRetrans = infoToCopy.totalRetrans;
+      info.retransmits = infoToCopy.retransmits;
+      info.rtt = infoToCopy.rtt;
+    }
+  }
+
+  @Test
+  public void tracker_reportsDeltas_correctly() throws Exception {
+    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(
+        io.grpc.MetricInstrumentRegistry.getDefaultRegistry(), true);
+
+    String fakeChannelName = ConfigurableFakeWithTcpInfo.class.getName();
+    String fakeInfoName = FakeEpollTcpInfo.class.getName();
+
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, "target", metrics,
+        fakeChannelName, fakeInfoName);
+
+    FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
+    ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
+    
+    // 10 retransmits total
+    infoSource.setValues(10, 2, 1000);
+    tracker.recordTcpInfo(channel);
+
+    verify(recorder).addLongCounter(eq(metrics.packetsRetransmitted), eq(10L), any(), any());
+
+    // 15 retransmits total (delta 5)
+    infoSource.setValues(15, 0, 1000);
+    tracker.recordTcpInfo(channel);
+
+    verify(recorder).addLongCounter(eq(metrics.packetsRetransmitted), eq(5L), any(), any());
+    
+    // 15 retransmits total (delta 0) - should NOT report
+    tracker.recordTcpInfo(channel);
+    // Verify no new interactions with this specific metric and value
+    // We can't easy verify "no interaction" for specific value without capturing.
+    verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(eq(metrics.packetsRetransmitted),
+        eq(10L), any(), any());
+    verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(eq(metrics.packetsRetransmitted),
+        eq(5L), any(), any());
+    // Total interactions for packetsRetransmitted should be 2
+    verify(recorder, org.mockito.Mockito.times(2)).addLongCounter(eq(metrics.packetsRetransmitted),
+        anyLong(), any(), any());
+
+    // recurringRetransmits should NOT have been reported yet (periodic calls)
+    verify(recorder, org.mockito.Mockito.times(0)).addLongCounter(eq(metrics.recurringRetransmits),
+        anyLong(), any(), any());
+
+    // Close channel - should report recurringRetransmits
+    tracker.channelInactive(channel);
+    verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(eq(metrics.recurringRetransmits),
+        eq(0L), // From last infoSource setValues(15, 0, 1000)
+        any(), any());
   }
 
   @Test

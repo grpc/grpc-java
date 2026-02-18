@@ -486,6 +486,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    tcpMetrics.recordTcpInfo(ctx.channel());
     logger.fine("Network channel being closed by the application.");
     if (ctx.channel().isActive()) { // Ignore notification that the socket was closed
       lifecycleManager.notifyShutdown(

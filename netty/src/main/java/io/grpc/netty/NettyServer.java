@@ -21,6 +21,7 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -68,6 +69,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * Netty-based server implementation.
@@ -138,7 +140,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
       int maxRstCount, long maxRstPeriodNanos,
-      Attributes eagAttributes, InternalChannelz channelz) {
+      Attributes eagAttributes, InternalChannelz channelz,
+      @Nullable MetricRecorder metricRecorder) {
     this.addresses = checkNotNull(addresses, "addresses");
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
@@ -174,6 +177,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
+    this.metricRecorder = metricRecorder;
+  }
+
+  @VisibleForTesting
+  @Nullable
+  MetricRecorder getMetricRecorder() {
+    return metricRecorder;
   }
 
   @Override

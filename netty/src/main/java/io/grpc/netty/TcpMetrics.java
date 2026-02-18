@@ -23,11 +23,18 @@ import io.grpc.MetricInstrument;
 import io.grpc.MetricInstrumentRegistry;
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
 
+/**
+ * Utility for collecting TCP metrics from Netty channels.
+ */
 final class TcpMetrics {
 
   private static final Metrics DEFAULT_METRICS;
@@ -51,9 +58,9 @@ final class TcpMetrics {
   static final class Metrics {
     final LongCounterMetricInstrument connectionsCreated;
     final LongUpDownCounterMetricInstrument connectionCount;
-    final LongCounterMetricInstrument packetsRetransmitted;
-    final LongCounterMetricInstrument recurringRetransmits;
-    final DoubleHistogramMetricInstrument minRtt;
+    @Nullable final LongCounterMetricInstrument packetsRetransmitted;
+    @Nullable final LongCounterMetricInstrument recurringRetransmits;
+    @Nullable final DoubleHistogramMetricInstrument minRtt;
 
     Metrics(MetricInstrumentRegistry registry, boolean epollAvailable) {
       List<String> requiredLabels = Collections.singletonList("grpc.target");
@@ -171,12 +178,32 @@ final class TcpMetrics {
     }
   }
 
+  private static final class ChannelReflectionAccessor {
+    final Method tcpInfoMethod;
+    final Constructor<?> tcpInfoConstructor;
+    final Method totalRetransMethod;
+    final Method retransmitsMethod;
+    final Method rttMethod;
+
+    ChannelReflectionAccessor(
+        Method tcpInfoMethod, Constructor<?> tcpInfoConstructor, Method totalRetransMethod,
+        Method retransmitsMethod, Method rttMethod) {
+      this.tcpInfoMethod = tcpInfoMethod;
+      this.tcpInfoConstructor = tcpInfoConstructor;
+      this.totalRetransMethod = totalRetransMethod;
+      this.retransmitsMethod = retransmitsMethod;
+      this.rttMethod = rttMethod;
+    }
+  }
+
   static final class Tracker {
     private final MetricRecorder metricRecorder;
     private final String target;
     private final Metrics metrics;
     private final String epollSocketChannelClassName;
     private final String epollTcpInfoClassName;
+    private volatile ChannelReflectionAccessor channelReflectionAccessor;
+    private long lastTotalRetrans;
 
     Tracker(MetricRecorder metricRecorder, String target) {
       this(metricRecorder, target, DEFAULT_METRICS);
@@ -196,6 +223,9 @@ final class TcpMetrics {
       this.epollSocketChannelClassName = epollSocketChannelClassName;
       this.epollTcpInfoClassName = epollTcpInfoClassName;
     }
+
+    private static final Map<String, ChannelReflectionAccessor> accessorCache =
+        new HashMap<>();
 
     private static final long RECORD_INTERVAL_MILLIS;
 
@@ -261,43 +291,65 @@ final class TcpMetrics {
         metricRecorder.addLongUpDownCounter(metrics.connectionCount, -1,
             Collections.singletonList(target), labelValues);
         // Final collection on close
-        recordTcpInfo(channel);
+        recordTcpInfo(channel, true);
       }
     }
 
-    private void recordTcpInfo(Channel channel) {
+    void recordTcpInfo(Channel channel) {
+      recordTcpInfo(channel, false);
+    }
+
+    void recordTcpInfo(Channel channel, boolean isClosed) {
       if (metricRecorder == null || target == null) {
         return;
       }
       java.util.List<String> labelValues = getLabelValues(channel);
       try {
-        if (channel.getClass().getName().equals(epollSocketChannelClassName)) {
-          Class<?> tcpInfoClass = Class.forName(epollTcpInfoClassName);
-          Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo", tcpInfoClass);
-          Object info = tcpInfoClass.getDeclaredConstructor().newInstance();
-          tcpInfoMethod.invoke(channel, info);
+        if (channelReflectionAccessor == null) {
+          if (!channel.getClass().getName().equals(epollSocketChannelClassName)) {
+            return;
+          }
+          synchronized (accessorCache) {
+            channelReflectionAccessor = accessorCache.get(epollTcpInfoClassName);
+            if (channelReflectionAccessor == null) {
+              Class<?> tcpInfoClass = Class.forName(epollTcpInfoClassName);
+              Method tcpInfoMethod = channel.getClass().getMethod("tcpInfo", tcpInfoClass);
+              Constructor<?> tcpInfoConstructor = tcpInfoClass.getDeclaredConstructor();
+              Method totalRetransMethod = tcpInfoClass.getMethod("totalRetrans");
+              Method retransmitsMethod = tcpInfoClass.getMethod("retransmits");
+              Method rttMethod = tcpInfoClass.getMethod("rtt");
 
-          Method totalRetransMethod = tcpInfoClass.getMethod("totalRetrans");
-          Method retransmitsMethod = tcpInfoClass.getMethod("retransmits");
-          Method rttMethod = tcpInfoClass.getMethod("rtt");
+              channelReflectionAccessor = new ChannelReflectionAccessor(
+                  tcpInfoMethod, tcpInfoConstructor, totalRetransMethod, retransmitsMethod,
+                  rttMethod);
+              accessorCache.put(epollTcpInfoClassName, channelReflectionAccessor);
+            }
+          }
+        }
 
-          long totalRetrans = (Long) totalRetransMethod.invoke(info);
-          int retransmits = (Integer) retransmitsMethod.invoke(info);
-          long rtt = (Long) rttMethod.invoke(info);
+        Object info = channelReflectionAccessor.tcpInfoConstructor.newInstance();
+        channelReflectionAccessor.tcpInfoMethod.invoke(channel, info);
 
-          if (metrics.packetsRetransmitted != null) {
-            metricRecorder.addLongCounter(metrics.packetsRetransmitted, totalRetrans,
+        long totalRetrans = (Long) channelReflectionAccessor.totalRetransMethod.invoke(info);
+        int retransmits = (Integer) channelReflectionAccessor.retransmitsMethod.invoke(info);
+        long rtt = (Long) channelReflectionAccessor.rttMethod.invoke(info);
+
+        if (metrics.packetsRetransmitted != null) {
+          long delta = totalRetrans - lastTotalRetrans;
+          if (delta > 0) {
+            metricRecorder.addLongCounter(metrics.packetsRetransmitted, delta,
                 Collections.singletonList(target), labelValues);
           }
-          if (metrics.recurringRetransmits != null) {
-            metricRecorder.addLongCounter(metrics.recurringRetransmits, retransmits,
-                Collections.singletonList(target), labelValues);
-          }
-          if (metrics.minRtt != null) {
-            metricRecorder.recordDoubleHistogram(metrics.minRtt,
-                rtt / 1000000.0, // Convert microseconds to seconds
-                Collections.singletonList(target), labelValues);
-          }
+          lastTotalRetrans = totalRetrans;
+        }
+        if (isClosed && metrics.recurringRetransmits != null) {
+          metricRecorder.addLongCounter(metrics.recurringRetransmits, retransmits,
+              Collections.singletonList(target), labelValues);
+        }
+        if (metrics.minRtt != null) {
+          metricRecorder.recordDoubleHistogram(metrics.minRtt,
+              rtt / 1000000.0, // Convert microseconds to seconds
+              Collections.singletonList(target), labelValues);
         }
       } catch (Throwable t) {
         // Epoll not available or error getting tcp_info, just ignore.
