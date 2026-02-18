@@ -111,6 +111,23 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
     assertThat(config.errorUtilizationPenalty).isEqualTo(1.0F);
   }
 
+  @Test
+  public void parseLoadBalancingConfigCustomMetrics() throws IOException {
+    boolean originalEnableCustomConfig = WeightedRoundRobinLoadBalancer.enableCustomConfig;
+    WeightedRoundRobinLoadBalancer.enableCustomConfig = true;
+    try {
+      String lbConfig = "{\"metricNamesForComputingUtilization\" : [\"foo\", \"bar\"]}";
+      ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
+          parseJsonObject(lbConfig));
+      assertThat(configOrError.getConfig()).isNotNull();
+      WeightedRoundRobinLoadBalancerConfig config =
+          (WeightedRoundRobinLoadBalancerConfig) configOrError.getConfig();
+      assertThat(config.metricNamesForComputingUtilization).containsExactly("foo", "bar");
+    } finally {
+      WeightedRoundRobinLoadBalancer.enableCustomConfig = originalEnableCustomConfig;
+    }
+  }
+
 
   @SuppressWarnings("unchecked")
   private static Map<String, ?> parseJsonObject(String json) throws IOException {
