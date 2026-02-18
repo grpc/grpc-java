@@ -424,14 +424,12 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           }
         }
         PickResult result = delegate.pickSubchannel(args);
-        Subchannel subchannel = result.getSubchannel();
-        if (subchannel != null) {
+        if (result.getStatus().isOk() && result.getSubchannel() != null) {
+          Subchannel subchannel = result.getSubchannel();
           if (subchannel instanceof ClusterImplLbHelper.ClusterImplSubchannel) {
             subchannel = ((ClusterImplLbHelper.ClusterImplSubchannel) subchannel).delegate();
             result = result.withSubchannelReplacement(subchannel);
           }
-        }
-        if (result.getStatus().isOk() && result.getSubchannel() != null) {
           if (enableCircuitBreaking) {
             if (inFlights.get() >= maxConcurrentRequests) {
               if (dropStats != null) {

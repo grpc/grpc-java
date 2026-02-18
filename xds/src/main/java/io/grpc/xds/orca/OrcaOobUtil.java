@@ -245,8 +245,8 @@ public final class OrcaOobUtil {
       delegate.updateBalancingState(newState, new OrcaOobPicker(newPicker));
     }
 
-    private static final class OrcaOobPicker extends SubchannelPicker {
-      private final SubchannelPicker delegate;
+    static final class OrcaOobPicker extends SubchannelPicker {
+      final SubchannelPicker delegate;
 
       OrcaOobPicker(SubchannelPicker delegate) {
         this.delegate = delegate;

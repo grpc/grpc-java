@@ -85,6 +85,7 @@ import io.grpc.xds.WeightedRoundRobinLoadBalancer.StaticStrideScheduler;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedChildLbState;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinPicker;
+import io.grpc.xds.orca.OrcaOobUtilAccessor;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
@@ -172,16 +173,7 @@ public class WeightedRoundRobinLoadBalancerTest {
   }
 
   private static WeightedRoundRobinPicker getWrrPicker(SubchannelPicker picker) {
-    if (picker.getClass().getName().endsWith("OrcaOobPicker")) {
-      try {
-        java.lang.reflect.Field f = picker.getClass().getDeclaredField("delegate");
-        f.setAccessible(true);
-        return (WeightedRoundRobinPicker) f.get(picker);
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
-    return (WeightedRoundRobinPicker) picker;
+    return (WeightedRoundRobinPicker) OrcaOobUtilAccessor.getDelegate(picker);
   }
 
   @Before
@@ -225,9 +217,8 @@ public class WeightedRoundRobinLoadBalancerTest {
         .forTransientFailure(Status.UNAVAILABLE));
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    final WeightedRoundRobinPicker weightedPicker =
-        getWrrPicker(pickerCaptor.getValue());
-    weightedPicker.pickSubchannel(mockArgs);
+    final SubchannelPicker picker = pickerCaptor.getValue();
+    picker.pickSubchannel(mockArgs);
   }
 
   @Test
@@ -374,8 +365,8 @@ public class WeightedRoundRobinLoadBalancerTest {
             .setAttributes(affinity).build()));
     verify(helper, times(3)).updateBalancingState(
             eq(ConnectivityState.READY), pickerCaptor2.capture());
-    weightedPicker = getWrrPicker(pickerCaptor2.getAllValues().get(2));
-    pickResult = weightedPicker.pickSubchannel(mockArgs);
+    SubchannelPicker rawPicker = pickerCaptor2.getAllValues().get(2);
+    pickResult = rawPicker.pickSubchannel(mockArgs);
     assertThat(getAddresses(pickResult)).isEqualTo(servers.get(0));
     assertThat(pickResult.getStreamTracerFactory()).isNull();
     OrcaLoadReportRequest golden = OrcaLoadReportRequest.newBuilder().setReportInterval(
