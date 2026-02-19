@@ -160,9 +160,9 @@ message ResponseParameters {
   // the response's compression status.
   BoolValue compressed = 3;
 
-  // Whether to request the server to send the requesting client's socket
+  // Whether to request the server to send the requesting peer's socket
   // address in the response.
-  BoolValue fill_client_socket_address = 4;
+  BoolValue fill_peer_socket_address = 4;
 }
 
 // Server-streaming request.

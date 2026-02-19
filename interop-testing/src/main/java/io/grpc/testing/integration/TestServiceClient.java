@@ -1118,7 +1118,7 @@ public class TestServiceClient {
           asyncStub.fullDuplexCall(responseObserver1);
       StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
           .addResponseParameters(ResponseParameters.newBuilder()
-              .setFillClientSocketAddress(
+              .setFillPeerSocketAddress(
                   Messages.BoolValue.newBuilder().setValue(true).build())
               .build())
           .build();
