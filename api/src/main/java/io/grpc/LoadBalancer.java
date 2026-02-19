@@ -667,7 +667,7 @@ public abstract class LoadBalancer {
      *
      * @since 1.80.0
      */
-    public PickResult withSubchannelReplacement(Subchannel subchannel) {
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
       return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
           status, drop, authorityOverride);
     }
@@ -678,7 +678,7 @@ public abstract class LoadBalancer {
      *
      * @since 1.80.0
      */
-    public PickResult withStreamTracerFactory(
+    public PickResult copyWithStreamTracerFactory(
         @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
     }

@@ -163,7 +163,7 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
         LoadBalancer.PickResult result = delegate.pickSubchannel(args);
         LoadBalancer.Subchannel subchannel = result.getSubchannel();
         if (subchannel instanceof SubchannelImpl) {
-          return result.withSubchannelReplacement(((SubchannelImpl) subchannel).delegate());
+          return result.copyWithSubchannel(((SubchannelImpl) subchannel).delegate());
         }
         return result;
       }

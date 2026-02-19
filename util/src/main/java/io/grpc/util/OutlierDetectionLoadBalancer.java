@@ -446,8 +446,8 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
         if (subchannel instanceof OutlierDetectionSubchannel) {
           subchannel = ((OutlierDetectionSubchannel) subchannel).delegate();
         }
-        return pickResult.withSubchannelReplacement(subchannel)
-            .withStreamTracerFactory(new ResultCountingClientStreamTracerFactory(
+        return pickResult.copyWithSubchannel(subchannel)
+            .copyWithStreamTracerFactory(new ResultCountingClientStreamTracerFactory(
                 tracker,
                 pickResult.getStreamTracerFactory()));
       }

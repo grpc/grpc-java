@@ -67,7 +67,7 @@ public class LoadBalancerTest {
   @Test
   public void pickResult_withSubchannelReplacement() {
     PickResult result = PickResult.withSubchannel(subchannel, tracerFactory)
-        .withSubchannelReplacement(subchannel2);
+        .copyWithSubchannel(subchannel2);
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel2);
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
@@ -77,7 +77,7 @@ public class LoadBalancerTest {
   @Test
   public void pickResult_withStreamTracerFactory() {
     PickResult result = PickResult.withSubchannel(subchannel)
-        .withStreamTracerFactory(tracerFactory);
+        .copyWithStreamTracerFactory(tracerFactory);
     assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
     assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);

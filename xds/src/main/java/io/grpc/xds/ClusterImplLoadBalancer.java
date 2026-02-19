@@ -428,7 +428,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
           Subchannel subchannel = result.getSubchannel();
           if (subchannel instanceof ClusterImplLbHelper.ClusterImplSubchannel) {
             subchannel = ((ClusterImplLbHelper.ClusterImplSubchannel) subchannel).delegate();
-            result = result.withSubchannelReplacement(subchannel);
+            result = result.copyWithSubchannel(subchannel);
           }
           if (enableCircuitBreaking) {
             if (inFlights.get() >= maxConcurrentRequests) {
@@ -455,7 +455,7 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
                   stats, inFlights, result.getStreamTracerFactory());
               ClientStreamTracer.Factory orcaTracerFactory = OrcaPerRequestUtil.getInstance()
                   .newOrcaClientStreamTracerFactory(tracerFactory, new OrcaPerRpcListener(stats));
-              result = result.withStreamTracerFactory(orcaTracerFactory);
+              result = result.copyWithStreamTracerFactory(orcaTracerFactory);
             }
           }
           if (args.getCallOptions().getOption(XdsNameResolver.AUTO_HOST_REWRITE_KEY) != null

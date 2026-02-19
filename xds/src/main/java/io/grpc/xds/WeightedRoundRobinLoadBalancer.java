@@ -511,12 +511,12 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       
       subchannel = ((WrrSubchannel) subchannel).delegate();
       if (!enableOobLoadReport) {
-        return pickResult.withSubchannelReplacement(subchannel)
-            .withStreamTracerFactory(
+        return pickResult.copyWithSubchannel(subchannel)
+            .copyWithStreamTracerFactory(
                 OrcaPerRequestUtil.getInstance().newOrcaClientStreamTracerFactory(
                     reportListeners.get(pick)));
       } else {
-        return pickResult.withSubchannelReplacement(subchannel);
+        return pickResult.copyWithSubchannel(subchannel);
       }
     }
 

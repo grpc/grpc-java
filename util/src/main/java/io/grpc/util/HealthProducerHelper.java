@@ -103,7 +103,7 @@ public final class HealthProducerHelper extends ForwardingLoadBalancerHelper {
       LoadBalancer.PickResult result = delegate.pickSubchannel(args);
       LoadBalancer.Subchannel subchannel = result.getSubchannel();
       if (subchannel instanceof HealthProducerSubchannel) {
-        return result.withSubchannelReplacement(
+        return result.copyWithSubchannel(
             ((HealthProducerSubchannel) subchannel).delegate());
       }
       return result;
