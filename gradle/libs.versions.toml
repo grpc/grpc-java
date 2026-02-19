@@ -56,7 +56,7 @@ google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.41.0
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.9"
 # 2.13.0 requires error_prone_annotations:2.37.0, but we are stuck with 2.36.0
 # checkForUpdates: gson:2.12.+
-gson = "com.google.code.gson:gson:2.12.1"
+gson = "com.google.code.gson:gson:2.13.2"
 guava = "com.google.guava:guava:33.5.0-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = "com.google.guava:guava-testlib:33.5.0-android"
