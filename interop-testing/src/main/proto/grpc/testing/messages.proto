@@ -162,7 +162,7 @@ message ResponseParameters {
 
   // Whether to request the server to send the requesting client's socket
   // address in the response.
-  BoolValue send_client_socket_address_in_response = 4;
+  BoolValue fill_client_socket_address = 4;
 }
 
 // Server-streaming request.

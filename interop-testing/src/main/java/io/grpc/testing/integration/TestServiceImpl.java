@@ -256,7 +256,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
         Iterator<ResponseParameters> responseParametersIterator =
             request.getResponseParametersList().iterator();
         while (responseParametersIterator.hasNext()) {
-          if (responseParametersIterator.next().getSendClientSocketAddressInResponse().getValue()) {
+          if (responseParametersIterator.next().getFillClientSocketAddress().getValue()) {
             return true;
           }
         }
