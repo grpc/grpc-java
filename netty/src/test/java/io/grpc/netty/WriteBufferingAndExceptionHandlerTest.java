@@ -31,11 +31,8 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
@@ -44,7 +41,6 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import java.net.ConnectException;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -384,62 +380,5 @@ public class WriteBufferingAndExceptionHandlerTest {
       assertThat(status.getCode()).isEqualTo(Code.INTERNAL);
       assertThat(status.getDescription()).contains("channelRead() missed");
     }
-  }
-
-  @Test
-  public void handshakeFailure_isPropagatedOnce() throws Exception {
-    AtomicInteger exceptionCount = new AtomicInteger();
-    CountDownLatch latch = new CountDownLatch(1);
-
-    ChannelHandler observer =
-        new ChannelInboundHandlerAdapter() {
-          @Override
-          public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            exceptionCount.incrementAndGet();
-            latch.countDown();
-          }
-        };
-
-    WriteBufferingAndExceptionHandler handler =
-        new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
-
-    LocalAddress addr = new LocalAddress("local");
-
-    ChannelFuture cf =
-        new Bootstrap()
-            .channel(LocalChannel.class)
-            .group(group)
-            .handler(
-                new ChannelInitializer<Channel>() {
-                  @Override
-                  protected void initChannel(Channel ch) {
-                    ch.pipeline().addLast(handler);
-                    ch.pipeline().addLast(observer);
-                  }
-                })
-            .register();
-
-    chan = cf.channel();
-    cf.sync();
-
-    ChannelFuture sf =
-        new ServerBootstrap()
-            .group(group)
-            .channel(LocalServerChannel.class)
-            .childHandler(new ChannelInboundHandlerAdapter() {})
-            .bind(addr);
-    server = sf.channel();
-    sf.sync();
-
-    chan.connect(addr).sync();
-
-    RuntimeException handshakeFailure =
-        Status.UNAVAILABLE.withDescription("handshake failed").asRuntimeException();
-
-    chan.pipeline().fireExceptionCaught(handshakeFailure);
-    chan.pipeline().fireExceptionCaught(new RuntimeException("Second"));
-
-    assertTrue(latch.await(5, TimeUnit.SECONDS));
-    assertThat(exceptionCount.get()).isEqualTo(1);
   }
 }

@@ -124,6 +124,12 @@ class NettyServerHandler extends AbstractNettyHandler {
   private static final boolean DISABLE_CONNECTION_HEADER_CHECK = Boolean.parseBoolean(
       System.getProperty("io.grpc.netty.disableConnectionHeaderCheck", "false"));
 
+  /**
+   * A message that simply passes through the channel without any real processing. It is useful to
+   * check if buffers have been drained and test the health of the channel in a single operation.
+   */
+  static final Object NOOP_MESSAGE = new Object();
+
   private final Http2Connection.PropertyKey streamKey;
   private final ServerTransportListener transportListener;
   private final int maxMessageSize;
@@ -709,6 +715,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       gracefulClose(ctx, (GracefulServerCloseCommand) msg, promise);
     } else if (msg instanceof ForcefulCloseCommand) {
       forcefulClose(ctx, (ForcefulCloseCommand) msg, promise);
+    } else if (msg == NOOP_MESSAGE) {
+      ctx.write(Unpooled.EMPTY_BUFFER, promise);
     } else {
       AssertionError e =
           new AssertionError("Write called for unexpected type: " + msg.getClass().getName());

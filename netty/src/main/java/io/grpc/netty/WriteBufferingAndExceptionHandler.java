@@ -99,8 +99,6 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
     // 4c. active, prev!=null[handlerRemoved]: channel will be closed out-of-band by buffered write.
     // 4d. active, prev!=null[connect]: impossible, channel can't be active after a failed connect.
     if (ctx.channel().isActive() && previousFailure == null) {
-      ctx.fireExceptionCaught(cause);
-
       final class LogOnFailure implements ChannelFutureListener {
         @Override
         public void operationComplete(ChannelFuture future) {
