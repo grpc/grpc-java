@@ -632,9 +632,8 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
-    // TODO(shivaspeaks): We need to deprecate old APIs and create new ones.
-    // Ideally these static methods should start with "of.." instead of "with.."
-    // to have consistency with other classes.
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones, 
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
