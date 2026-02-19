@@ -1125,7 +1125,7 @@ public class TestServiceClient {
       streamObserver1.onNext(request);
       Object responseObj = responseObserver1.take();
       StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
-      String clientSocketAddressInCall1 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall1 = callResponse.getPeerSocketAddress();
       assertThat(clientSocketAddressInCall1).isNotEmpty();
 
       StreamingOutputCallResponseObserver responseObserver2 =
@@ -1134,7 +1134,7 @@ public class TestServiceClient {
           asyncStub.fullDuplexCall(responseObserver2);
       streamObserver2.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver2.take();
-      String clientSocketAddressInCall2 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall2 = callResponse.getPeerSocketAddress();
 
       assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
 
@@ -1146,7 +1146,7 @@ public class TestServiceClient {
           asyncStub.fullDuplexCall(responseObserver3);
       streamObserver3.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver3.take();
-      String clientSocketAddressInCall3 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall3 = callResponse.getPeerSocketAddress();
 
       // This assertion is currently failing because connection scaling when MCS limit has been
       // reached is not yet implemented in gRPC Java.
