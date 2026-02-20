@@ -160,6 +160,18 @@ class NettyServerTransport implements ServerTransport {
     channel.closeFuture().addListener(terminationNotifier);
 
     channel.pipeline().addLast(bufferingHandler);
+
+    channel.writeAndFlush(NettyServerHandler.NOOP_MESSAGE).addListener(new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        if (!future.isSuccess()) {
+          // grpcHandler (NettyServerHandler) may not be in the pipeline yet on early negotiation
+          // failure, so connectionError() can remain null. Notify termination here with the write
+          // failure cause to preserve/log the original transport termination reason.
+          notifyTerminated(future.cause());
+        }
+      }
+    });
   }
 
   @Override

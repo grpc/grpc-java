@@ -1347,6 +1347,25 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     assertFalse(channel().isOpen());
   }
 
+  @Test
+  public void write_noopMessage_writesEmptyBuffer() throws Exception {
+    manualSetUp();
+
+    ChannelPromise promise = newPromise();
+    handler().write(ctx(), NettyServerHandler.NOOP_MESSAGE, promise);
+    channel().flush();
+
+    assertTrue(promise.isSuccess());
+
+    Object outbound = channel().readOutbound();
+    assertTrue(outbound instanceof ByteBuf);
+    ByteBuf buf = (ByteBuf) outbound;
+    assertEquals(0, buf.readableBytes());
+    buf.release();
+
+    assertNull(channel().readOutbound());
+  }
+
   private void madeYouReset(int burstSize) throws Exception {
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
         .thenAnswer((args) -> new TestServerStreamTracer());
