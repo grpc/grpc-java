@@ -17,7 +17,6 @@ android {
                 srcDirs += "${projectDir}/../interop-testing/src/main/java/"
                 setIncludes(["io/grpc/android/integrationtest/**",
                              "io/grpc/testing/integration/AbstractInteropTest.java",
-                             "io/grpc/testing/integration/TestCases.java",
                              "io/grpc/testing/integration/TestServiceImpl.java",
                              "io/grpc/testing/integration/Util.java"])
             }
