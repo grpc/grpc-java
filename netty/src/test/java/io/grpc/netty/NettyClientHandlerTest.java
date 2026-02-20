@@ -1165,7 +1165,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         Attributes.EMPTY,
         "someauthority",
         null,
-        fakeClock().getTicker());
+        fakeClock().getTicker(),
+        new io.grpc.MetricRecorder() {});
   }
 
   @Override

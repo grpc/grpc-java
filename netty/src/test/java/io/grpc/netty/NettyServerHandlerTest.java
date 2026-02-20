@@ -1435,7 +1435,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxRstCount,
         maxRstPeriodNanos,
         Attributes.EMPTY,
-        fakeClock().getTicker());
+        fakeClock().getTicker(),
+        new io.grpc.MetricRecorder() {});
   }
 
   @Override

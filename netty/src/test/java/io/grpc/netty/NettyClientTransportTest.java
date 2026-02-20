@@ -251,6 +251,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
@@ -526,6 +527,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
 
@@ -1148,6 +1150,7 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new io.grpc.MetricRecorder() {} ,
             Ticker.systemTicker());
     transports.add(transport);
     return transport;
@@ -1195,7 +1198,8 @@ public class NettyClientTransportTest {
             MAX_RST_COUNT_DISABLED,
             0,
             Attributes.EMPTY,
-            channelz);
+            channelz,
+            null);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());

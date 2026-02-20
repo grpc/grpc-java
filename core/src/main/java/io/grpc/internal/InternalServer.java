@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
+import io.grpc.MetricRecorder;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.List;
@@ -71,4 +72,9 @@ public interface InternalServer {
    */
   @Nullable List<InternalInstrumented<SocketStats>> getListenSocketStatsList();
 
+  /**
+   * Sets the MetricRecorder for the server. This optional method allows setting
+   * the MetricRecorder after construction but before start().
+   */
+  default void setMetricRecorder(MetricRecorder metricRecorder) {}
 }

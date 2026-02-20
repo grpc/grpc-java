@@ -32,6 +32,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -60,6 +61,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 /**
@@ -116,6 +118,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private int maxRstCount;
   private long maxRstPeriodNanos;
   private Attributes eagAttributes = Attributes.EMPTY;
+  @Nullable private MetricRecorder metricRecorder;
 
   /**
    * Creates a server builder that will bind to the given port.
@@ -703,6 +706,20 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
   }
 
+  /**
+   * Sets the {@link MetricRecorder} to use for recording metrics.
+   *
+   * @param metricRecorder the metric recorder to use
+   * @return this
+   * @since 1.81.0
+   */
+  @CanIgnoreReturnValue
+  public NettyServerBuilder setMetricRecorder(
+      @Nullable MetricRecorder metricRecorder) {
+    this.metricRecorder = metricRecorder;
+    return this;
+  }
+
   NettyServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     assertEventLoopsAndChannelType();
@@ -737,7 +754,8 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         maxRstCount,
         maxRstPeriodNanos,
         eagAttributes,
-        this.serverImplBuilder.getChannelz());
+        this.serverImplBuilder.getChannelz(),
+        metricRecorder);
   }
 
   @VisibleForTesting
