@@ -632,6 +632,8 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones, 
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
@@ -659,6 +661,28 @@ public abstract class LoadBalancer {
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
     }
 
     /**

@@ -22,6 +22,7 @@ import static io.grpc.LoadBalancer.HEALTH_CONSUMER_LISTENER_ARG_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -82,6 +83,31 @@ public final class HealthProducerHelper extends ForwardingLoadBalancerHelper {
   @Override
   protected LoadBalancer.Helper delegate() {
     return delegate;
+  }
+
+  @Override
+  public void updateBalancingState(
+      ConnectivityState newState, LoadBalancer.SubchannelPicker newPicker) {
+    delegate.updateBalancingState(newState, new HealthProducerPicker(newPicker));
+  }
+
+  private static final class HealthProducerPicker extends LoadBalancer.SubchannelPicker {
+    private final LoadBalancer.SubchannelPicker delegate;
+
+    HealthProducerPicker(LoadBalancer.SubchannelPicker delegate) {
+      this.delegate = delegate;
+    }
+
+    @Override
+    public LoadBalancer.PickResult pickSubchannel(LoadBalancer.PickSubchannelArgs args) {
+      LoadBalancer.PickResult result = delegate.pickSubchannel(args);
+      LoadBalancer.Subchannel subchannel = result.getSubchannel();
+      if (subchannel instanceof HealthProducerSubchannel) {
+        return result.copyWithSubchannel(
+            ((HealthProducerSubchannel) subchannel).delegate());
+      }
+      return result;
+    }
   }
 
   // The parent subchannel in the health check producer LB chain. It duplicates subchannel state to
