@@ -90,7 +90,7 @@ public final class MatcherParser {
         return Matchers.StringMatcher.forSafeRegEx(
                 Pattern.compile(proto.getSafeRegex().getRegex()));
       case CONTAINS:
-        return Matchers.StringMatcher.forContains(proto.getContains());
+        return Matchers.StringMatcher.forContains(proto.getContains(), proto.getIgnoreCase());
       case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException(
