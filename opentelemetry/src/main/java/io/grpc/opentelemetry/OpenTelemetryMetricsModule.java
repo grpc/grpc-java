@@ -49,6 +49,7 @@ import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
+import io.opentelemetry.context.propagation.ContextPropagators;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -100,24 +101,28 @@ final class OpenTelemetryMetricsModule {
   private final boolean localityEnabled;
   private final boolean backendServiceEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
+  private final ContextPropagators aggregators;
   @Nullable
   private final TargetFilter targetAttributeFilter;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
-                             Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
-    this(stopwatchSupplier, resource, optionalLabels, plugins, null);
+      Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
+      ContextPropagators aggregators) {
+    this(stopwatchSupplier, resource, optionalLabels, plugins, aggregators, null);
   }
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
       OpenTelemetryMetricsResource resource,
       Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
+      ContextPropagators aggregators,
       @Nullable TargetFilter targetAttributeFilter) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
     this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
+    this.aggregators = checkNotNull(aggregators, "aggregators");
     this.targetAttributeFilter = targetAttributeFilter;
   }
 
@@ -159,8 +164,7 @@ final class OpenTelemetryMetricsModule {
     return isGeneratedMethod ? fullMethodName : "other";
   }
 
-  private static Context otelContextWithBaggage() {
-    Baggage baggage = BAGGAGE_KEY.get();
+  private static Context otelContextWithBaggage(Baggage baggage) {
     if (baggage == null) {
       return Context.current();
     }
@@ -282,7 +286,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
-      Context otelContext = otelContextWithBaggage();
+      Context otelContext = otelContextWithBaggage(BAGGAGE_KEY.get());
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
@@ -448,7 +452,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedCall() {
-      Context otelContext = otelContextWithBaggage();
+      Context otelContext = otelContextWithBaggage(BAGGAGE_KEY.get());
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -553,13 +557,15 @@ final class OpenTelemetryMetricsModule {
     private final Stopwatch stopwatch;
     private volatile long outboundWireSize;
     private volatile long inboundWireSize;
+    private final Context otelContext;
 
     ServerTracer(OpenTelemetryMetricsModule module, String fullMethodName,
-        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins) {
+        List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins, Context otelContext) {
       this.module = checkNotNull(module, "module");
       this.fullMethodName = fullMethodName;
       this.streamPlugins = checkNotNull(streamPlugins, "streamPlugins");
       this.stopwatch = module.stopwatchSupplier.get().start();
+      this.otelContext = checkNotNull(otelContext, "otelContext");
     }
 
     @Override
@@ -606,7 +612,6 @@ final class OpenTelemetryMetricsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      Context otelContext = otelContextWithBaggage();
       if (streamClosedUpdater != null) {
         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
           return;
@@ -657,7 +662,10 @@ final class OpenTelemetryMetricsModule {
         }
         streamPlugins = Collections.unmodifiableList(streamPluginsMutable);
       }
-      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins);
+      Context context = aggregators.getTextMapPropagator().extract(
+          Context.current(), headers, MetadataGetter.getInstance());
+      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins,
+          context);
     }
   }
 
