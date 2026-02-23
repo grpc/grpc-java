@@ -74,22 +74,22 @@ public class SecretGrpclbNameResolverProviderTest {
 
   @Test
   public void invalidDnsName() throws Exception {
-    testInvalidUri(new URI("dns", null, "/[invalid]", null));
+    testInvalidUri(URI.create("dns:/%5Binvalid%5D"));
   }
 
   @Test
   public void validIpv6() throws Exception {
-    testValidUri(new URI("dns", null, "/[::1]", null));
+    testValidUri(URI.create("dns:/%5B::1%5D"));
   }
 
   @Test
   public void validDnsNameWithoutPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com", null));
+    testValidUri(URI.create("dns:/foo.googleapis.com"));
   }
 
   @Test
   public void validDnsNameWithPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null));
+    testValidUri(URI.create("dns:/foo.googleapis.com:456"));
   }
 
   private void testInvalidUri(URI uri) {
