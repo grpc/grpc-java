@@ -101,28 +101,28 @@ final class OpenTelemetryMetricsModule {
   private final boolean localityEnabled;
   private final boolean backendServiceEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
-  private final ContextPropagators aggregators;
+  private final ContextPropagators contextPropagators;
   @Nullable
   private final TargetFilter targetAttributeFilter;
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
       Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
-      ContextPropagators aggregators) {
-    this(stopwatchSupplier, resource, optionalLabels, plugins, aggregators, null);
+      ContextPropagators contextPropagators) {
+    this(stopwatchSupplier, resource, optionalLabels, plugins, contextPropagators, null);
   }
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
       OpenTelemetryMetricsResource resource,
       Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins,
-      ContextPropagators aggregators,
-      @Nullable TargetFilter targetAttributeFilter) {
+      ContextPropagators contextPropagators,
+          @Nullable TargetFilter targetAttributeFilter) {
     this.resource = checkNotNull(resource, "resource");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
     this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
-    this.aggregators = checkNotNull(aggregators, "aggregators");
+    this.contextPropagators = checkNotNull(contextPropagators, "contextPropagators");
     this.targetAttributeFilter = targetAttributeFilter;
   }
 
@@ -580,7 +580,7 @@ final class OpenTelemetryMetricsModule {
               METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
       if (module.resource.serverCallCountCounter() != null) {
-        module.resource.serverCallCountCounter().add(1, attribute);
+        module.resource.serverCallCountCounter().add(1, attribute, otelContext);
       }
     }
 
@@ -662,7 +662,7 @@ final class OpenTelemetryMetricsModule {
         }
         streamPlugins = Collections.unmodifiableList(streamPluginsMutable);
       }
-      Context context = aggregators.getTextMapPropagator().extract(
+      Context context = contextPropagators.getTextMapPropagator().extract(
           Context.current(), headers, MetadataGetter.getInstance());
       return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins,
           context);
@@ -725,3 +725,4 @@ final class OpenTelemetryMetricsModule {
     }
   }
 }
+
