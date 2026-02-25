@@ -155,6 +155,7 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+  boolean registryProvided;
   @Nullable
   NameResolverProvider nameResolverProvider;
 
@@ -343,6 +344,7 @@ public final class ManagedChannelImplBuilder
     }
     if (nameResolverRegistry != null) {
       this.nameResolverRegistry = nameResolverRegistry;
+      this.registryProvided = true;
     }
     if (nameResolverProvider != null) {
       this.nameResolverProvider = nameResolverProvider;
@@ -467,6 +469,8 @@ public final class ManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
+    Preconditions.checkState(!registryProvided,
+        "nameResolverRegistry is already set, which forbids the use of NameResolverFactory");
     if (resolverFactory != null) {
       NameResolverRegistry reg = new NameResolverRegistry();
       if (resolverFactory instanceof NameResolverProvider) {
@@ -483,6 +487,7 @@ public final class ManagedChannelImplBuilder
 
   ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
     this.nameResolverRegistry = resolverRegistry;
+    this.registryProvided = true;
     return this;
   }
 
@@ -918,7 +923,9 @@ public final class ManagedChannelImplBuilder
       // the provider's default scheme (if provider is specified).
       String scheme = (provider != null)
           ? provider.getDefaultScheme()
-          : nameResolverRegistry.getDefaultScheme();
+          : (nameResolverProvider != null
+              ? nameResolverProvider.getDefaultScheme()
+              : nameResolverRegistry.getDefaultScheme());
       try {
         targetUri = new URI(scheme, "", "/" + target, null);
       } catch (URISyntaxException e) {
@@ -926,7 +933,11 @@ public final class ManagedChannelImplBuilder
         throw new IllegalArgumentException(e);
       }
       if (provider == null) {
-        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+        if (nameResolverProvider != null) {
+          provider = nameResolverProvider;
+        } else {
+          provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+        }
       }
     }
 
