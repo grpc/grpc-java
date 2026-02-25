@@ -31,7 +31,6 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
@@ -1929,8 +1928,9 @@ public class OpenTelemetryMetricsModuleTest {
   public void serverMetricsShouldRecordContextWithBaggage() {
     // Mocks
     DoubleHistogram serverCallDurationCounter = mock(DoubleHistogram.class);
-    OpenTelemetryMetricsResource resource = mock(OpenTelemetryMetricsResource.class);
-    when(resource.serverCallDurationCounter()).thenReturn(serverCallDurationCounter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryMetricsResource.builder()
+            .serverCallDurationCounter(serverCallDurationCounter)
+            .build();
 
     // ContextPropagators with Baggage
     ContextPropagators propagators = ContextPropagators.create(
@@ -1974,13 +1974,14 @@ public class OpenTelemetryMetricsModuleTest {
     LongCounter serverCallCountCounter = mock(LongCounter.class);
     LongHistogram serverTotalSentCompressedMessageSizeCounter = mock(LongHistogram.class);
     LongHistogram serverTotalReceivedCompressedMessageSizeCounter = mock(LongHistogram.class);
-    OpenTelemetryMetricsResource resource = mock(OpenTelemetryMetricsResource.class);
-    when(resource.serverCallDurationCounter()).thenReturn(serverCallDurationCounter);
-    when(resource.serverCallCountCounter()).thenReturn(serverCallCountCounter);
-    when(resource.serverTotalSentCompressedMessageSizeCounter())
-            .thenReturn(serverTotalSentCompressedMessageSizeCounter);
-    when(resource.serverTotalReceivedCompressedMessageSizeCounter())
-            .thenReturn(serverTotalReceivedCompressedMessageSizeCounter);
+    OpenTelemetryMetricsResource resource = OpenTelemetryMetricsResource.builder()
+            .serverCallDurationCounter(serverCallDurationCounter)
+            .serverCallCountCounter(serverCallCountCounter)
+            .serverTotalSentCompressedMessageSizeCounter(
+                    serverTotalSentCompressedMessageSizeCounter)
+            .serverTotalReceivedCompressedMessageSizeCounter(
+                    serverTotalReceivedCompressedMessageSizeCounter)
+            .build();
 
     // Setup Propagators
     ContextPropagators propagators = ContextPropagators.create(W3CBaggagePropagator.getInstance());
