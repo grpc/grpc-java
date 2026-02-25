@@ -125,43 +125,7 @@ abstract class PredicateEvaluator {
     
     private static Matchers.StringMatcher fromStringMatcherProto(
         com.github.xds.type.matcher.v3.StringMatcher proto) {
-      if (proto.hasExact()) {
-        return Matchers.StringMatcher.forExact(proto.getExact(), proto.getIgnoreCase());
-      }
-      if (proto.hasPrefix()) {
-        String prefix = proto.getPrefix();
-        if (prefix.isEmpty()) {
-          throw new IllegalArgumentException(
-              "StringMatcher prefix (match_pattern) must be non-empty");
-        }
-        return Matchers.StringMatcher.forPrefix(prefix, proto.getIgnoreCase());
-      }
-      if (proto.hasSuffix()) {
-        String suffix = proto.getSuffix();
-        if (suffix.isEmpty()) {
-          throw new IllegalArgumentException(
-              "StringMatcher suffix (match_pattern) must be non-empty");
-        }
-        return Matchers.StringMatcher.forSuffix(suffix, proto.getIgnoreCase());
-      }
-      if (proto.hasContains()) {
-        String contains = proto.getContains();
-        if (contains.isEmpty()) {
-          throw new IllegalArgumentException(
-              "StringMatcher contains (match_pattern) must be non-empty");
-        }
-        return Matchers.StringMatcher.forContains(contains, proto.getIgnoreCase());
-      }
-      if (proto.hasSafeRegex()) {
-        String regex = proto.getSafeRegex().getRegex();
-        if (regex.isEmpty()) {
-          throw new IllegalArgumentException(
-              "StringMatcher regex (match_pattern) must be non-empty");
-        }
-        return Matchers.StringMatcher.forSafeRegEx(
-            com.google.re2j.Pattern.compile(regex));
-      }
-      throw new IllegalArgumentException("Unknown StringMatcher match pattern");
+      return io.grpc.xds.internal.MatcherParser.parseStringMatcher(proto);
     }
   }
   

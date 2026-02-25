@@ -97,4 +97,36 @@ public final class MatcherParser {
                 "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
     }
   }
+  
+  /** Translate StringMatcher xDS proto to internal StringMatcher. */
+  public static Matchers.StringMatcher parseStringMatcher(
+            com.github.xds.type.matcher.v3.StringMatcher proto) {
+    switch (proto.getMatchPatternCase()) {
+      case EXACT:
+        return Matchers.StringMatcher.forExact(proto.getExact(), proto.getIgnoreCase());
+      case PREFIX:
+        return Matchers.StringMatcher.forPrefix(
+            checkNonEmpty(proto.getPrefix(), "prefix"), proto.getIgnoreCase());
+      case SUFFIX:
+        return Matchers.StringMatcher.forSuffix(
+            checkNonEmpty(proto.getSuffix(), "suffix"), proto.getIgnoreCase());
+      case CONTAINS:
+        return Matchers.StringMatcher.forContains(
+            checkNonEmpty(proto.getContains(), "contains"), proto.getIgnoreCase());
+      case SAFE_REGEX:
+        String regex = checkNonEmpty(proto.getSafeRegex().getRegex(), "regex");
+        return Matchers.StringMatcher.forSafeRegEx(Pattern.compile(regex));
+      default:
+        throw new IllegalArgumentException(
+            "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
+    }
+  }
+
+  private static String checkNonEmpty(String value, String name) {
+    if (value.isEmpty()) {
+      throw new IllegalArgumentException("StringMatcher " + name 
+          + " (match_pattern) must be non-empty");
+    }
+    return value;
+  }
 }
