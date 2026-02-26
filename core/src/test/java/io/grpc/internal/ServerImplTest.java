@@ -723,6 +723,8 @@ public class ServerImplTest {
     final Attributes.Key<String> key1 = Attributes.Key.create("test-key1");
     final Attributes.Key<String> key2 = Attributes.Key.create("test-key2");
     final Attributes.Key<String> key3 = Attributes.Key.create("test-key3");
+    final Attributes.Key<InternalServer> transportServerKey =
+        ServerImpl.TRANSPORT_SERVER_ATTR;
     final AtomicReference<Attributes> filter1TerminationCallbackArgument =
         new AtomicReference<>();
     final AtomicReference<Attributes> filter2TerminationCallbackArgument =
@@ -732,9 +734,8 @@ public class ServerImplTest {
     builder.addTransportFilter(new ServerTransportFilter() {
         @Override
         public Attributes transportReady(Attributes attrs) {
-          assertEquals(Attributes.newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
-              .build(), attrs);
+          assertEquals(remoteAddr, attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+          assertNotNull(attrs.get(transportServerKey));
           readyCallbackCalled.incrementAndGet();
           return attrs.toBuilder()
               .set(key1, "yalayala")
@@ -751,11 +752,10 @@ public class ServerImplTest {
     builder.addTransportFilter(new ServerTransportFilter() {
         @Override
         public Attributes transportReady(Attributes attrs) {
-          assertEquals(Attributes.newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
-              .set(key1, "yalayala")
-              .set(key2, "blabla")
-              .build(), attrs);
+          assertEquals(remoteAddr, attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+          assertNotNull(attrs.get(transportServerKey));
+          assertEquals("yalayala", attrs.get(key1));
+          assertEquals("blabla", attrs.get(key2));
           readyCallbackCalled.incrementAndGet();
           return attrs.toBuilder()
               .set(key1, "ouch")
@@ -769,12 +769,6 @@ public class ServerImplTest {
           filter2TerminationCallbackArgument.set(attrs);
         }
       });
-    Attributes expectedTransportAttrs = Attributes.newBuilder()
-        .set(key1, "ouch")
-        .set(key2, "blabla")
-        .set(key3, "puff")
-        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr)
-        .build();
 
     createAndStartServer();
     ServerTransportListener transportListener
@@ -782,13 +776,17 @@ public class ServerImplTest {
     Attributes transportAttrs = transportListener.transportReady(Attributes.newBuilder()
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr).build());
 
-    assertEquals(expectedTransportAttrs, transportAttrs);
+    assertEquals(remoteAddr, transportAttrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+    assertNotNull(transportAttrs.get(transportServerKey));
+    assertEquals("ouch", transportAttrs.get(key1));
+    assertEquals("blabla", transportAttrs.get(key2));
+    assertEquals("puff", transportAttrs.get(key3));
 
     server.shutdown();
     server.awaitTermination();
 
-    assertEquals(expectedTransportAttrs, filter1TerminationCallbackArgument.get());
-    assertEquals(expectedTransportAttrs, filter2TerminationCallbackArgument.get());
+    assertEquals(transportAttrs, filter1TerminationCallbackArgument.get());
+    assertEquals(transportAttrs, filter2TerminationCallbackArgument.get());
     assertEquals(2, readyCallbackCalled.get());
     assertEquals(2, terminationCallbackCalled.get());
   }

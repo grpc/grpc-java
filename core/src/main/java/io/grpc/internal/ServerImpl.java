@@ -94,6 +94,8 @@ import java.util.logging.Logger;
 public final class ServerImpl extends io.grpc.Server implements InternalInstrumented<ServerStats> {
   private static final Logger log = Logger.getLogger(ServerImpl.class.getName());
   private static final ServerStreamListener NOOP_LISTENER = new NoopListener();
+  static final Attributes.Key<InternalServer> TRANSPORT_SERVER_ATTR =
+      Attributes.Key.create("io.grpc.Grpc.TRANSPORT_ATTR_SERVER_TRANSPORT");
 
   private final InternalLogId logId;
   private final ObjectPool<? extends Executor> executorPool;
@@ -437,6 +439,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     public Attributes transportReady(Attributes attributes) {
       handshakeTimeoutFuture.cancel(false);
       handshakeTimeoutFuture = null;
+
+      final Attributes.Builder builder = attributes.toBuilder();
+      builder.set(TRANSPORT_SERVER_ATTR, transportServer);
+      attributes = builder.build();
 
       for (ServerTransportFilter filter : transportFilters) {
         attributes = Preconditions.checkNotNull(filter.transportReady(attributes),
