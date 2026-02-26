@@ -54,6 +54,7 @@ import io.grpc.StaticTestingClassLoader;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.ResolvedNameResolver;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
@@ -386,7 +387,7 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     try {
-      ManagedChannel unused = grpcCleanupRule.register(builder.build());
+      grpcCleanupRule.register(builder.build());
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e)
@@ -409,7 +410,7 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     // should not fail
-    ManagedChannel unused = grpcCleanupRule.register(builder.build());
+    grpcCleanupRule.register(builder.build());
   }
 
   @Test
@@ -803,6 +804,7 @@ public class ManagedChannelImplBuilderTest {
   private static class CustomSocketAddress extends SocketAddress {}
 
   @Test
+  @SuppressWarnings("deprecation")
   public void nameResolverFactory_notAllowedAfterRegistry() {
     NameResolverRegistry registry = new NameResolverRegistry();
     builder.nameResolverRegistry(registry);
@@ -870,7 +872,7 @@ public class ManagedChannelImplBuilderTest {
       }
     };
 
-    ManagedChannelImplBuilder.ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
         target, registry, explicitProvider);
 
     // Should prefer explicit provider if scheme matches?
@@ -913,7 +915,7 @@ public class ManagedChannelImplBuilderTest {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(registryProvider);
 
-    ManagedChannelImplBuilder.ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
         target, registry, null);
 
     assertThat(resolved.provider).isSameInstanceAs(registryProvider);
