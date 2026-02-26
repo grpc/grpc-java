@@ -632,17 +632,23 @@ final class OpenTelemetryMetricsModule {
       }
       io.opentelemetry.api.common.Attributes attributes = builder.build();
 
+      Context ctxToRecord = otelContext;
+      Baggage currentBaggage = BAGGAGE_KEY.get();
+      if (currentBaggage != null && !currentBaggage.isEmpty()) {
+        ctxToRecord = ctxToRecord.with(currentBaggage);
+      }
+
       if (module.resource.serverCallDurationCounter() != null) {
         module.resource.serverCallDurationCounter()
-            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes, otelContext);
+            .record(elapsedTimeNanos * SECONDS_PER_NANO, attributes, ctxToRecord);
       }
       if (module.resource.serverTotalSentCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalSentCompressedMessageSizeCounter()
-            .record(outboundWireSize, attributes, otelContext);
+            .record(outboundWireSize, attributes, ctxToRecord);
       }
       if (module.resource.serverTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalReceivedCompressedMessageSizeCounter()
-            .record(inboundWireSize, attributes, otelContext);
+            .record(inboundWireSize, attributes, ctxToRecord);
       }
     }
   }
