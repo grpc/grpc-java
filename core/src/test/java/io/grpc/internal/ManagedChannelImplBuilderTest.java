@@ -48,11 +48,13 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.StaticTestingClassLoader;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
+import io.grpc.internal.ManagedChannelImplBuilder.ResolvedNameResolver;
 import io.grpc.internal.ManagedChannelImplBuilder.UnsupportedClientTransportFactoryBuilder;
 import io.grpc.testing.GrpcCleanupRule;
 import java.net.InetSocketAddress;
@@ -385,7 +387,7 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     try {
-      ManagedChannel unused = grpcCleanupRule.register(builder.build());
+      grpcCleanupRule.register(builder.build());
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e)
@@ -408,7 +410,7 @@ public class ManagedChannelImplBuilderTest {
     builder = new ManagedChannelImplBuilder(DUMMY_AUTHORITY_VALID,
         mockClientTransportFactoryBuilder, new FixedPortProvider(DUMMY_PORT));
     // should not fail
-    ManagedChannel unused = grpcCleanupRule.register(builder.build());
+    grpcCleanupRule.register(builder.build());
   }
 
   @Test
@@ -800,4 +802,109 @@ public class ManagedChannelImplBuilderTest {
   }
 
   private static class CustomSocketAddress extends SocketAddress {}
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithIpTarget() {
+    String target = "127.0.0.1:8080";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getDefaultScheme()).thenReturn("dns");
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved;
+    resolved = ManagedChannelImplBuilder
+        .getNameResolverProvider(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("dns:///127.0.0.1:8080");
+  }
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithInvalidUri() {
+    String target = "::1";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getDefaultScheme()).thenReturn("dns");
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved;
+    resolved = ManagedChannelImplBuilder
+        .getNameResolverProvider(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("dns:///::1");
+  }
+
+  @Test
+  public void getNameResolverProvider_explicitProviderWithValidUri() {
+    String target = "dns:///localhost";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "dns";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+        target, registry, explicitProvider);
+
+    // Should prefer explicit provider if scheme matches?
+    // Current logic: provider passed to getNameResolverProvider is prioritized for
+    // SCHEME determination for fallback
+    // BUT for valid URI, it logic matches URI scheme.
+    // If explicit provider is passed, it is used if target not valid URI.
+    // If target IS valid URI, it checks if provider != null.
+    // Wait, the code:
+    // if (provider == null) { ... }
+    // If explicit 'provider' arg is NOT null, logic uses it?
+    // Let's re-read ManagedChannelImplBuilder.getNameResolverProvider
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+  }
+
+  @Test
+  public void getNameResolverProvider_registryFallback() {
+    String target = "dns:///localhost";
+    final NameResolverProvider registryProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "dns";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(registryProvider);
+
+    ResolvedNameResolver resolved = ManagedChannelImplBuilder.getNameResolverProvider(
+        target, registry, null);
+
+    assertThat(resolved.provider).isSameInstanceAs(registryProvider);
+  }
 }

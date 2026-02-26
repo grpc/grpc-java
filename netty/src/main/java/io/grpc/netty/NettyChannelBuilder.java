@@ -38,6 +38,8 @@ import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
@@ -207,10 +209,20 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   NettyChannelBuilder(
       String target, ChannelCredentials channelCreds, CallCredentials callCreds,
       ProtocolNegotiator.ClientFactory negotiator) {
+    this(target, channelCreds, callCreds, negotiator, null, null);
+  }
+
+  NettyChannelBuilder(
+      String target, ChannelCredentials channelCreds, CallCredentials callCreds,
+      ProtocolNegotiator.ClientFactory negotiator,
+      NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     managedChannelImplBuilder = new ManagedChannelImplBuilder(
         target, channelCreds, callCreds,
         new NettyChannelTransportFactoryBuilder(),
-        new NettyChannelDefaultPortProvider());
+        new NettyChannelDefaultPortProvider(),
+        nameResolverRegistry,
+        nameResolverProvider);
     this.protocolNegotiatorFactory = checkNotNull(negotiator, "negotiator");
     this.freezeProtocolNegotiatorFactory = true;
   }
@@ -707,6 +719,8 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     this.transportTracerFactory = transportTracerFactory;
     return this;
   }
+
+
 
   static Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
     return Collections.singleton(InetSocketAddress.class);

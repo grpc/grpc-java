@@ -156,6 +156,9 @@ public final class ManagedChannelImplBuilder
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
+  @Nullable
+  NameResolverProvider nameResolverProvider;
+
   final List<ClientTransportFilter> transportFilters = new ArrayList<>();
 
   final String target;
@@ -308,6 +311,49 @@ public final class ManagedChannelImplBuilder
   }
 
   /**
+   * Creates a new managed channel builder with a target string, which can be
+   * either a valid {@link io.grpc.NameResolver}-compliant URI, or an authority
+   * string. Transport
+   * implementors must provide client transport factory builder, and may set
+   * custom channel default
+   * port provider.
+   *
+   * @param channelCreds         The ChannelCredentials provided by the user.
+   *                             These may be used when
+   *                             creating derivative channels.
+   * @param nameResolverRegistry the registry used to look up name resolvers.
+   * @param nameResolverProvider the provider used to look up name resolvers.
+   */
+  public ManagedChannelImplBuilder(
+      String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
+      ClientTransportFactoryBuilder clientTransportFactoryBuilder,
+      @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider,
+      @Nullable NameResolverRegistry nameResolverRegistry,
+      @Nullable NameResolverProvider nameResolverProvider) {
+    this.target = checkNotNull(target, "target");
+    this.channelCredentials = channelCreds;
+    this.callCredentials = callCreds;
+    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder,
+        "clientTransportFactoryBuilder");
+    this.directServerAddress = null;
+
+    if (channelBuilderDefaultPortProvider != null) {
+      this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
+    } else {
+      this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
+    }
+    if (nameResolverRegistry != null) {
+      this.nameResolverRegistry = nameResolverRegistry;
+    }
+    if (nameResolverProvider != null) {
+      this.nameResolverProvider = nameResolverProvider;
+    }
+
+    // TODO(dnvindhya): Move configurator to all the individual builders
+    InternalConfiguratorRegistry.configureChannelBuilder(this);
+  }
+
+  /**
    * Returns a target string for the SocketAddress. It is only used as a placeholder, because
    * DirectAddressNameResolverProvider will not actually try to use it. However, it must be a valid
    * URI.
@@ -422,6 +468,7 @@ public final class ManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
+
     if (resolverFactory != null) {
       NameResolverRegistry reg = new NameResolverRegistry();
       if (resolverFactory instanceof NameResolverProvider) {
@@ -724,7 +771,7 @@ public final class ManagedChannelImplBuilder
     ResolvedNameResolver resolvedResolver =
         InternalFeatureFlags.getRfc3986UrisEnabled()
             ? getNameResolverProviderRfc3986(target, nameResolverRegistry)
-            : getNameResolverProvider(target, nameResolverRegistry);
+            : getNameResolverProvider(target, nameResolverRegistry, nameResolverProvider);
     resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
         this,
@@ -845,7 +892,8 @@ public final class ManagedChannelImplBuilder
 
   @VisibleForTesting
   static ResolvedNameResolver getNameResolverProvider(
-      String target, NameResolverRegistry nameResolverRegistry) {
+      String target, NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     NameResolverProvider provider = null;
@@ -860,19 +908,34 @@ public final class ManagedChannelImplBuilder
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      provider = nameResolverProvider;
+      if (provider == null) {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
-    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
-      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the registry.
+    if (!URI_PATTERN.matcher(target).matches()) {
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with
+      // the default scheme from the registry (if provider is not specified) or
+      // the provider's default scheme (if provider is specified).
+      String scheme = (provider != null)
+          ? provider.getDefaultScheme()
+          : (nameResolverProvider != null
+              ? nameResolverProvider.getDefaultScheme()
+              : nameResolverRegistry.getDefaultScheme());
       try {
-        targetUri = new URI(nameResolverRegistry.getDefaultScheme(), "", "/" + target, null);
+        targetUri = new URI(scheme, "", "/" + target, null);
       } catch (URISyntaxException e) {
-        // Should not be possible.
+        // Should not happen because we just validated the URI.
         throw new IllegalArgumentException(e);
       }
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      if (provider == null) {
+        if (nameResolverProvider != null) {
+          provider = nameResolverProvider;
+        } else {
+          provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+        }
+      }
     }
 
     if (provider == null) {

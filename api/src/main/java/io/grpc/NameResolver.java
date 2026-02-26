@@ -191,7 +191,7 @@ public abstract class NameResolver {
      */
     public NameResolver newNameResolver(Uri targetUri, final Args args) {
       // Not every io.grpc.Uri can be converted but in the ordinary ManagedChannel creation flow,
-      // any IllegalArgumentException thrown here would happened anyway, just earlier. That's
+      // any IllegalArgumentException thrown here would have happened anyway, just earlier. That's
       // because parse/toString is transparent so java.net.URI#create here sees the original target
       // string just like it did before the io.grpc.Uri migration.
       //
