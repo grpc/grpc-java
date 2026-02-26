@@ -155,7 +155,7 @@ public final class ManagedChannelImplBuilder
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
-  boolean registryProvided;
+
   @Nullable
   NameResolverProvider nameResolverProvider;
 
@@ -344,7 +344,6 @@ public final class ManagedChannelImplBuilder
     }
     if (nameResolverRegistry != null) {
       this.nameResolverRegistry = nameResolverRegistry;
-      this.registryProvided = true;
     }
     if (nameResolverProvider != null) {
       this.nameResolverProvider = nameResolverProvider;
@@ -469,8 +468,7 @@ public final class ManagedChannelImplBuilder
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
         directServerAddress);
-    Preconditions.checkState(!registryProvided,
-        "nameResolverRegistry is already set, which forbids the use of NameResolverFactory");
+
     if (resolverFactory != null) {
       NameResolverRegistry reg = new NameResolverRegistry();
       if (resolverFactory instanceof NameResolverProvider) {
@@ -487,7 +485,6 @@ public final class ManagedChannelImplBuilder
 
   ManagedChannelImplBuilder nameResolverRegistry(NameResolverRegistry resolverRegistry) {
     this.nameResolverRegistry = resolverRegistry;
-    this.registryProvided = true;
     return this;
   }
 

@@ -804,19 +804,6 @@ public class ManagedChannelImplBuilderTest {
   private static class CustomSocketAddress extends SocketAddress {}
 
   @Test
-  @SuppressWarnings("deprecation")
-  public void nameResolverFactory_notAllowedAfterRegistry() {
-    NameResolverRegistry registry = new NameResolverRegistry();
-    builder.nameResolverRegistry(registry);
-    try {
-      builder.nameResolverFactory(mock(NameResolver.Factory.class));
-      fail("Should throw");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains("nameResolverRegistry is already set");
-    }
-  }
-
-  @Test
   public void getNameResolverProvider_explicitProviderWithIpTarget() {
     String target = "127.0.0.1:8080";
     NameResolverRegistry registry = new NameResolverRegistry();
