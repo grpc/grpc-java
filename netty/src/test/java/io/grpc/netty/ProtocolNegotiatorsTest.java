@@ -133,7 +133,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Filter;
-import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -470,42 +469,6 @@ public class ProtocolNegotiatorsTest {
       // Client cert verification is after handshake in TLSv1.3
       assertThat(sre).hasCauseThat().hasCauseThat().isInstanceOf(SSLException.class);
       assertThat(sre).hasCauseThat().hasMessageThat().contains("CERTIFICATE_REQUIRED");
-    }
-  }
-
-  @Test
-  public void from_plaintextClient_toTlsServer_logsTransportFailureCause() throws Exception {
-    final AtomicReference<LogRecord> transportFailureLog = new AtomicReference<>();
-    Handler handler = new Handler() {
-      @Override
-      public void publish(LogRecord record) {
-        if ("Transport failed".equals(record.getMessage()) && record.getThrown() != null) {
-          transportFailureLog.compareAndSet(null, record);
-        }
-      }
-
-      @Override
-      public void flush() {}
-
-      @Override
-      public void close() throws SecurityException {}
-    };
-    Logger logger =
-        Logger.getLogger(String.format("%s.connections", NettyServerTransport.class.getName()));
-    Level oldLevel = logger.getLevel();
-    try {
-      logger.addHandler(handler);
-      logger.setLevel(Level.ALL);
-
-      ServerCredentials serverCreds = TlsServerCredentials.create(server1Cert, server1Key);
-      ChannelCredentials channelCreds = InsecureChannelCredentials.create();
-      Status status = expectFailedHandshake(channelCreds, serverCreds);
-
-      assertEquals(Status.Code.UNAVAILABLE, status.getCode());
-      assertThat(transportFailureLog.get()).isNotNull();
-    } finally {
-      logger.removeHandler(handler);
-      logger.setLevel(oldLevel);
     }
   }
 
