@@ -16,13 +16,8 @@
 
 package io.grpc.xds.internal.matcher;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
-import com.google.protobuf.InvalidProtocolBufferException;
-import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
-import io.grpc.Metadata;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import javax.annotation.Nullable;
 
@@ -31,90 +26,18 @@ import javax.annotation.Nullable;
  */
 public abstract class UnifiedMatcher {
 
-  // Supported Extension Type URLs per gRFC A106
-  private static final String TYPE_URL_HTTP_HEADER_INPUT =
-      "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
-  private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
-      "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
   static final int MAX_RECURSION_DEPTH = 16;
-
+ 
   @Nullable
   public abstract MatchResult match(MatchContext context, int depth);
 
-  static MatchInput<MatchContext> resolveInput(TypedExtensionConfig config) {
+  static MatchInput resolveInput(TypedExtensionConfig config) {
     String typeUrl = config.getTypedConfig().getTypeUrl();
-    try {
-      if (typeUrl.equals(TYPE_URL_HTTP_HEADER_INPUT)) {
-        HttpRequestHeaderMatchInput proto = config.getTypedConfig()
-            .unpack(HttpRequestHeaderMatchInput.class);
-        return new HeaderMatchInput(proto.getHeaderName());
-      } else if (typeUrl.equals(TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT)) {
-        return new MatchInput<MatchContext>() {
-          @Override
-          public Object apply(MatchContext context) {
-            return new GrpcCelEnvironment(context);
-          }
-        };
-      }
-    } catch (InvalidProtocolBufferException e) {
-      throw new IllegalArgumentException("Invalid input config: " + typeUrl, e);
+    MatchInputProvider provider = MatchInputRegistry.getDefaultRegistry().getProvider(typeUrl);
+    if (provider == null) {
+      throw new IllegalArgumentException("Unsupported input type: " + typeUrl);
     }
-    throw new IllegalArgumentException("Unsupported input type: " + typeUrl);
-  }
-
-  private static final class HeaderMatchInput implements MatchInput<MatchContext> {
-    private final String headerName;
-    
-    HeaderMatchInput(String headerName) {
-      this.headerName = checkNotNull(headerName, "headerName");
-      if (headerName.isEmpty() || headerName.length() >= 16384) {
-        throw new IllegalArgumentException(
-            "Header name length must be in range [1, 16384): " + headerName.length());
-      }
-      if (!headerName.equals(headerName.toLowerCase(java.util.Locale.ROOT))) {
-        throw new IllegalArgumentException("Header name must be lowercase: " + headerName);
-      }
-      try {
-        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
-        } else {
-          Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-        }
-      } catch (IllegalArgumentException e) {
-        throw new IllegalArgumentException("Invalid header name: " + headerName, e);
-      }
-    }
-    
-    @Override
-    public String apply(MatchContext context) {
-      if ("te".equals(headerName)) {
-        return null;
-      }
-      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        Iterable<byte[]> values = context.getMetadata().getAll(
-            Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
-        if (values == null) {
-          return null;
-        }
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        for (byte[] value : values) {
-          if (!first) {
-            sb.append(",");
-          }
-          first = false;
-          sb.append(com.google.common.io.BaseEncoding.base64().encode(value));
-        }
-        return sb.toString();
-      }
-      Metadata metadata = context.getMetadata();
-      Iterable<String> values = metadata.getAll(
-          Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
-      if (values == null) {
-        return null;
-      }
-      return String.join(",", values);
-    }
+    return provider.getInput(config);
   }
 
   /**

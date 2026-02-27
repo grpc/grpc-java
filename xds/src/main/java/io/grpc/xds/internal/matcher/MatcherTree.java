@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
 final class MatcherTree extends UnifiedMatcher {
   private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
       "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
-  private final MatchInput<MatchContext> input;
+  private final MatchInput input;
   @Nullable private final Map<String, OnMatch> exactMatchMap;
   @Nullable private final Map<String, OnMatch> prefixMatchMap;
   @Nullable private final OnMatch onNoMatch;
