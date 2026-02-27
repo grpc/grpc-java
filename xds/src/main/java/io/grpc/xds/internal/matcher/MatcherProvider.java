@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,25 +16,19 @@
 
 package io.grpc.xds.internal.matcher;
 
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
-import javax.annotation.Nullable;
+import com.github.xds.core.v3.TypedExtensionConfig;
 
 /**
- * Interface for extracting values from a match context (e.g. HTTP headers).
+ * Provider interface for creating {@link Matcher} instances.
  */
-public interface MatchInput {
+public interface MatcherProvider {
   /**
-   * Extracts the value from the context.
-   * @param context the context (e.g. Metadata, Attributes)
-   * @return the extracted value, or null if not found.
+   * Returns the corresponding {@link Matcher} for the given config.
    */
-  @Nullable
-  Object apply(MatchContext context);
+  Matcher getMatcher(TypedExtensionConfig config);
 
   /**
-   * Returns the type of value extracted by this input.
+   * Returns the type URL supported by this provider.
    */
-  default Class<?> outputType() {
-    return Object.class;
-  }
+  String typeUrl();
 }

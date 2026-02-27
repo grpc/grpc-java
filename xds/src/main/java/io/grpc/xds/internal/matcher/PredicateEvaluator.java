@@ -18,19 +18,12 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher.MatcherList.Predicate;
-import dev.cel.runtime.CelEvaluationException;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.Nullable;
 
 abstract class PredicateEvaluator {
-  private static final String TYPE_URL_CEL_MATCHER =
-      "type.googleapis.com/xds.type.matcher.v3.CelMatcher";
-  private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
-      "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
-
   abstract boolean evaluate(MatchContext context);
   
   static PredicateEvaluator fromProto(Predicate proto) {
@@ -48,9 +41,8 @@ abstract class PredicateEvaluator {
   }
 
   private static final class SinglePredicateEvaluator extends PredicateEvaluator {
-    private final MatchInput<MatchContext> input;
-    @Nullable private final Matchers.StringMatcher stringMatcher;
-    @Nullable private final CelMatcher celMatcher;
+    private final MatchInput input;
+    private final Matcher matcher;
     
     SinglePredicateEvaluator(Predicate.SinglePredicate proto) {
       if (!proto.hasInput()) {
@@ -59,68 +51,44 @@ abstract class PredicateEvaluator {
       this.input = UnifiedMatcher.resolveInput(proto.getInput());
       
       if (proto.hasValueMatch()) {
-        if (proto.getInput().getTypedConfig().getTypeUrl()
-            .equals(TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT)) {
-          throw new IllegalArgumentException(
-              "HttpAttributesCelMatchInput cannot be used with StringMatcher");
-        }
-        this.stringMatcher = fromStringMatcherProto(proto.getValueMatch());
-        this.celMatcher = null;
-      } else if (proto.hasCustomMatch()) {
-        this.stringMatcher = null;
-        TypedExtensionConfig customConfig = proto.getCustomMatch();
-        if (customConfig.getTypedConfig().getTypeUrl().equals(TYPE_URL_CEL_MATCHER)) {
-          try {
-            com.github.xds.type.matcher.v3.CelMatcher celProto = customConfig.getTypedConfig()
-                .unpack(com.github.xds.type.matcher.v3.CelMatcher.class);
-            if (celProto.hasExprMatch()) {
-              com.github.xds.type.v3.CelExpression expr = celProto.getExprMatch();
-              if (expr.hasCelExprChecked()) {
-                dev.cel.common.CelAbstractSyntaxTree ast = 
-                    dev.cel.common.CelProtoAbstractSyntaxTree.fromCheckedExpr(
-                        expr.getCelExprChecked()).getAst();
-                this.celMatcher = CelMatcher.compile(ast);
-              } else {
-                throw new IllegalArgumentException(
-                    "CelMatcher must have cel_expr_checked");
-              }
-            } else {
-              throw new IllegalArgumentException("CelMatcher must have expr_match");
+        Matchers.StringMatcher stringMatcher = fromStringMatcherProto(proto.getValueMatch());
+        this.matcher = new Matcher() {
+          @Override
+          public boolean match(Object value) {
+            if (value instanceof String) {
+              return stringMatcher.matches((String) value);
             }
-          } catch (Exception e) {
-            throw new IllegalArgumentException("Invalid CelMatcher config", e);
+            return false;
           }
-        } else {
+
+          @Override
+          public Class<?> inputType() {
+            return String.class;
+          }
+        };
+      } else if (proto.hasCustomMatch()) {
+        TypedExtensionConfig customConfig = proto.getCustomMatch();
+        MatcherProvider provider = MatcherRegistry.getDefaultRegistry()
+            .getMatcherProvider(customConfig.getTypedConfig().getTypeUrl());
+        if (provider == null) {
           throw new IllegalArgumentException("Unsupported custom_match matcher: " 
               + customConfig.getTypedConfig().getTypeUrl());
         }
-        if (this.celMatcher != null && !proto.getInput().getTypedConfig().getTypeUrl()
-            .equals(TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT)) {
-          throw new IllegalArgumentException(
-              "CelMatcher can only be used with HttpAttributesCelMatchInput");
-        }
+        this.matcher = provider.getMatcher(customConfig);
       } else {
         throw new IllegalArgumentException(
             "SinglePredicate must have either value_match or custom_match");
       }
+
+      if (!input.outputType().isAssignableFrom(matcher.inputType()) 
+          && !matcher.inputType().isAssignableFrom(input.outputType())) {
+        throw new IllegalArgumentException("Type mismatch: input " + input.outputType().getName() 
+            + " not compatible with matcher " + matcher.inputType().getName());
+      }
     }
     
     @Override boolean evaluate(MatchContext context) {
-      Object value = input.apply(context);
-      if (stringMatcher != null) {
-        if (value instanceof String) {
-          return stringMatcher.matches((String) value);
-        }
-        return false;
-      }
-      if (celMatcher != null) {
-        try {
-          return celMatcher.match(value);
-        } catch (CelEvaluationException e) {
-          return false;
-        }
-      }
-      return false; 
+      return matcher.match(input.apply(context));
     }
     
     private static Matchers.StringMatcher fromStringMatcherProto(
