@@ -50,7 +50,8 @@ dependencies {
             project(':grpc-inprocess'),
             project(':grpc-core'),
             libraries.mockito.core,
-            libraries.okhttp
+            libraries.okhttp,
+            libraries.cel.compiler
 
     signature (libraries.signature.java) {
         artifact {
