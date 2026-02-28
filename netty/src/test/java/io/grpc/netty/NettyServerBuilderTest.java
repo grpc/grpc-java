@@ -189,4 +189,15 @@ public class NettyServerBuilderTest {
 
     builder.assertEventLoopsAndChannelType();
   }
+
+  @Test
+  public void setMetricRecorder_propagatedToServer() throws Exception {
+    io.grpc.MetricRecorder recorder = mock(io.grpc.MetricRecorder.class);
+    builder.setMetricRecorder(recorder);
+
+    NettyServer server = builder.buildTransportServers(
+        ImmutableList.<ServerStreamTracer.Factory>of());
+
+    assertThat(server.getMetricRecorder()).isSameInstanceAs(recorder);
+  }
 }
