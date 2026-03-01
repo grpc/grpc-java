@@ -65,6 +65,7 @@ import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
+import io.opentelemetry.context.Scope;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
@@ -1245,7 +1246,8 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
@@ -1313,7 +1315,8 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList());
+        fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
@@ -1378,7 +1381,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
-        emptyList());
+        emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
@@ -1447,7 +1451,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
-        emptyList());
+        emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
 
@@ -1630,10 +1635,61 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
+  public void clientBaggagePropagationToMetrics() {
+    // Create module and tracer factory
+    // We use a custom resource with a mock counter to check the Context passed to
+    // record()
+    DoubleHistogram mockClientAttemptDurationCounter = org.mockito.Mockito
+        .mock(DoubleHistogram.class);
+    OpenTelemetryMetricsResource customResource = OpenTelemetryMetricsResource.builder()
+        .clientAttemptDurationCounter(mockClientAttemptDurationCounter)
+        .build();
+
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), customResource, emptyList(), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
+
+    // Define the test baggage and create a Context with it
+    Baggage testBaggage = Baggage.builder()
+        .put("user-id", "42")
+        .build();
+    io.opentelemetry.context.Context otelContext = io.opentelemetry.context.Context
+        .current().with(testBaggage);
+
+    // Create Tracer Factory within the Scope of the Context (simulating
+    // application thread)
+    CallAttemptsTracerFactory tracerFactory;
+    try (Scope scope = otelContext.makeCurrent()) {
+      tracerFactory = new CallAttemptsTracerFactory(
+          module, "target", method.getFullMethodName(), emptyList());
+    }
+
+    // 4. Create a stream tracer (simulating an attempt)
+    ClientStreamTracer.StreamInfo streamInfo = ClientStreamTracer.StreamInfo.newBuilder().build();
+    ClientStreamTracer tracer = tracerFactory.newClientStreamTracer(streamInfo, new Metadata());
+
+    // 5. Trigger metric recording
+    tracer.streamClosed(Status.OK);
+
+    // Verify the record call and capture the OTel Context
+    verify(mockClientAttemptDurationCounter).record(
+        anyDouble(),
+        any(io.opentelemetry.api.common.Attributes.class),
+        contextCaptor.capture());
+
+    // Assert on the captured OTel Context
+    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
+    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
+
+    assertEquals("42", capturedBaggage.getEntryValue("user-id"));
+  }
+
+  @Test
   public void serverBaggagePropagationToMetrics() {
     // 1. Create module and tracer factory using the mock resource
     OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
     ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
     ServerStreamTracer tracer =
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
@@ -1802,13 +1858,15 @@ public class OpenTelemetryMetricsModuleTest {
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource) {
     return new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
   }
 
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource, TargetFilter filter) {
     return new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(), filter);
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(), filter,
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
@@ -1848,7 +1906,8 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetry otel = openTelemetryTesting.getOpenTelemetry();
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(otel);
     OpenTelemetryMetricsModule metricsModule = new OpenTelemetryMetricsModule(
-        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(),
+        openTelemetryTesting.getOpenTelemetry().getPropagators());
 
     // 2. Create Server with *both* tracer factories
     server = InProcessServerBuilder.forName(serverName)
