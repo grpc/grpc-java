@@ -38,7 +38,8 @@ message CheckedExpr {
   //   declaration. For instance, if `a.b.c` is represented by
   //   `select(select(id(a), b), c)`, and `a.b` resolves to a declaration,
   //   while `c` is a field selection, then the reference is attached to the
-  //   nested select expression (but not to the id or or the outer select).
+  //   nested select expression (but not to the id or the outer select).
+  //   todo: Agravator change in the origin repo instead
   //   In turn, if `a` resolves to a declaration and `b.c` are field selections,
   //   the reference is attached to the ident expression.
   // - Every Call expression has an entry here, identifying the function being
