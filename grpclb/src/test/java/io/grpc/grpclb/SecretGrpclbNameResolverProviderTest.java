@@ -24,15 +24,19 @@ import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.internal.DnsNameResolverProvider;
 import io.grpc.internal.GrpcUtil;
 import java.net.URI;
+import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /** Unit tests for {@link SecretGrpclbNameResolverProvider}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class SecretGrpclbNameResolverProviderTest {
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -53,6 +57,13 @@ public class SecretGrpclbNameResolverProviderTest {
   private SecretGrpclbNameResolverProvider.Provider provider =
       new SecretGrpclbNameResolverProvider.Provider();
 
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Test
   public void isAvailable() {
     assertThat(provider.isAvailable()).isTrue();
@@ -66,43 +77,49 @@ public class SecretGrpclbNameResolverProviderTest {
   }
 
   @Test
-  public void newNameResolver() {
-    assertThat(provider.newNameResolver(URI.create("dns:///localhost:443"), args))
+  public void newNameResolverReturnsCorrectType() {
+    assertThat(newNameResolver("dns:///localhost:443", args))
         .isInstanceOf(GrpclbNameResolver.class);
-    assertThat(provider.newNameResolver(URI.create("notdns:///localhost:443"), args)).isNull();
+    assertThat(newNameResolver("notdns:///localhost:443", args)).isNull();
   }
 
   @Test
   public void invalidDnsName() throws Exception {
-    testInvalidUri(new URI("dns", null, "/[invalid]", null));
+    testInvalidUri("dns:/%5Binvalid%5D");
   }
 
   @Test
   public void validIpv6() throws Exception {
-    testValidUri(new URI("dns", null, "/[::1]", null));
+    testValidUri("dns:/%5B::1%5D");
   }
 
   @Test
   public void validDnsNameWithoutPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com", null));
+    testValidUri("dns:/foo.googleapis.com");
   }
 
   @Test
   public void validDnsNameWithPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null));
+    testValidUri("dns:/foo.googleapis.com:456");
   }
 
-  private void testInvalidUri(URI uri) {
+  private void testInvalidUri(String uri) {
     try {
-      provider.newNameResolver(uri, args);
+      newNameResolver(uri, args);
       fail("Should have failed");
     } catch (IllegalArgumentException e) {
       // expected
     }
   }
 
-  private void testValidUri(URI uri) {
-    GrpclbNameResolver resolver = provider.newNameResolver(uri, args);
+  private void testValidUri(String uri) {
+    NameResolver resolver = newNameResolver(uri, args);
     assertThat(resolver).isNotNull();
+  }
+
+  private NameResolver newNameResolver(String uriString, NameResolver.Args args) {
+    return enableRfc3986UrisParam
+        ? provider.newNameResolver(Uri.create(uriString), args)
+        : provider.newNameResolver(URI.create(uriString), args);
   }
 }

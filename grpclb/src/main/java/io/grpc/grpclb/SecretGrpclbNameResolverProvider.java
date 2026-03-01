@@ -19,14 +19,17 @@ package io.grpc.grpclb;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import io.grpc.InternalServiceProviders;
+import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * A provider for {@code io.grpc.grpclb.GrpclbNameResolver}.
@@ -57,24 +60,44 @@ final class SecretGrpclbNameResolverProvider {
         .isAndroid(SecretGrpclbNameResolverProvider.class.getClassLoader());
 
     @Override
+    public NameResolver newNameResolver(Uri targetUri, final NameResolver.Args args) {
+      if (SCHEME.equals(targetUri.getScheme())) {
+        List<String> pathSegments = targetUri.getPathSegments();
+        Preconditions.checkArgument(
+            !pathSegments.isEmpty(),
+            "expected 1 path segment in target %s but found %s",
+            targetUri,
+            pathSegments);
+        return newNameResolver(targetUri.getAuthority(), pathSegments.get(0), args);
+      } else {
+        return null;
+      }
+    }
+
+    @Override
     public GrpclbNameResolver newNameResolver(URI targetUri, Args args) {
+      // TODO(jdcormie): Remove once RFC 3986 migration is complete.
       if (SCHEME.equals(targetUri.getScheme())) {
         String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
         Preconditions.checkArgument(
             targetPath.startsWith("/"),
             "the path component (%s) of the target (%s) must start with '/'",
             targetPath, targetUri);
-        String name = targetPath.substring(1);
-        return new GrpclbNameResolver(
-            targetUri.getAuthority(),
-            name,
-            args,
-            GrpcUtil.SHARED_CHANNEL_EXECUTOR,
-            Stopwatch.createUnstarted(),
-            IS_ANDROID);
+        return newNameResolver(targetUri.getAuthority(), targetPath.substring(1), args);
       } else {
         return null;
       }
+    }
+
+    private GrpclbNameResolver newNameResolver(
+        String authority, String domainNameToResolve, final NameResolver.Args args) {
+      return new GrpclbNameResolver(
+          authority,
+          domainNameToResolve,
+          args,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          Stopwatch.createUnstarted(),
+          IS_ANDROID);
     }
 
     @Override
