@@ -23,7 +23,6 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
 
-/** Helper for compiling CEL strings to CelMatcher in tests, removing compiler dep from prod. */
 public final class CelMatcherTestHelper {
   private static final dev.cel.checker.CelStandardDeclarations DECLARATIONS = 
       dev.cel.checker.CelStandardDeclarations.newBuilder()

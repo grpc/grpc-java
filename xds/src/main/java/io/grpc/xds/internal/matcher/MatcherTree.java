@@ -16,22 +16,31 @@
 
 package io.grpc.xds.internal.matcher;
 
+import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 final class MatcherTree extends UnifiedMatcher {
   private static final String TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT =
       "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
   private final MatchInput input;
-  @Nullable private final Map<String, OnMatch> exactMatchMap;
-  @Nullable private final Map<String, OnMatch> prefixMatchMap;
-  @Nullable private final OnMatch onNoMatch;
+  @Nullable 
+  private final Map<String, OnMatch> exactMatchMap;
+  @Nullable 
+  private final Map<String, OnMatch> prefixMatchMap;
+  @Nullable 
+  private final OnMatch onNoMatch;
   
   MatcherTree(Matcher.MatcherTree proto, @Nullable Matcher.OnMatch onNoMatchProto,
-      java.util.function.Predicate<String> actionValidator) {
+      Predicate<String> actionValidator) {
     if (!proto.hasInput()) {
       throw new IllegalArgumentException("MatcherTree must have input");
     }
@@ -97,11 +106,38 @@ final class MatcherTree extends UnifiedMatcher {
     if (exactMatchMap != null) {
       OnMatch match = exactMatchMap.get(value);
       if (match != null) {
-        return match.evaluate(context, depth);
+        MatchResult result = match.evaluate(context, depth);
+        
+        List<TypedExtensionConfig> accumulated = 
+            new ArrayList<>(result.keepMatchingActions);
+
+        if (result.matched && !match.keepMatching) {
+          return MatchResult.create(result.action, accumulated);
+        }
+        
+        if (result.matched) { // && keepMatching=true
+          if (result.action != null) {
+            accumulated.add(result.action);
+          }
+        } else {
+          if (!match.keepMatching) {
+            return MatchResult.noMatch(accumulated);
+          }
+        }
+        
+        // If keepMatching=true, OR (matched=true and keepMatching=true), then continue to onNoMatch
+        if (onNoMatch != null) {
+          MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+          accumulated.addAll(noMatchResult.keepMatchingActions);
+          if (noMatchResult.matched) {
+            return MatchResult.create(noMatchResult.action, accumulated);
+          }
+        }
+        return MatchResult.noMatch(accumulated);
       }
       return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
     } else if (prefixMatchMap != null) {
-      java.util.List<String> matchingPrefixes = new java.util.ArrayList<>();
+      List<String> matchingPrefixes = new ArrayList<>();
       for (String prefix : prefixMatchMap.keySet()) {
         if (value.startsWith(prefix)) {
           matchingPrefixes.add(prefix);
@@ -113,38 +149,47 @@ final class MatcherTree extends UnifiedMatcher {
       }
 
       // Sort by length descending (longest first)
-      java.util.Collections.sort(matchingPrefixes, new java.util.Comparator<String>() {
+      Collections.sort(matchingPrefixes, new Comparator<String>() {
         @Override
         public int compare(String s1, String s2) {
           return Integer.compare(s2.length(), s1.length());
         }
       });
       
-      boolean matchedAtLeastOnce = false;
-      java.util.List<com.github.xds.core.v3.TypedExtensionConfig> accumulatedActions = 
-          new java.util.ArrayList<>();
-          
+      List<TypedExtensionConfig> accumulatedActions = 
+          new ArrayList<>();
+      
       for (String prefix : matchingPrefixes) {
         OnMatch onMatch = prefixMatchMap.get(prefix);
         MatchResult result = onMatch.evaluate(context, depth);
-        if (result.matched) {
-          matchedAtLeastOnce = true;
-          accumulatedActions.addAll(result.actions);
+        accumulatedActions.addAll(result.keepMatchingActions);
+        
+        if (result.matched && !onMatch.keepMatching) {
+          return MatchResult.create(result.action, accumulatedActions);
+        }
+        
+        if (result.matched) { // AND keepMatching=true
+          if (result.action != null) {
+            accumulatedActions.add(result.action);
+          }
+        } else {
           if (!onMatch.keepMatching) {
-            return MatchResult.create(accumulatedActions);
+            return MatchResult.noMatch(accumulatedActions);
           }
         }
+        
+        // If keepMatching=true, we continue regardless of inner match result.
       }
       
-      if (matchedAtLeastOnce) {
-        return MatchResult.create(accumulatedActions);
+      // If we fall through, we either found no matches or all matches had keepMatching=true.
+      if (onNoMatch != null) {
+        MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+        accumulatedActions.addAll(noMatchResult.keepMatchingActions);
+        if (noMatchResult.matched) {
+          return MatchResult.create(noMatchResult.action, accumulatedActions);
+        }
       }
-      // If we found matching prefixes but none of them resulted in a match (nested logic failed),
-      // we still "found a key" in the tree structure.
-      // According to the test "matcherTree_exactMatch_shouldNotFallBackToOnNoMatch_ifKeyFound",
-      // finding a key prevents onNoMatch.
-      // So we return noMatch() here, NOT onNoMatch.evaluate().
-      return MatchResult.noMatch();
+      return MatchResult.noMatch(accumulatedActions);
     }
     
     return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();

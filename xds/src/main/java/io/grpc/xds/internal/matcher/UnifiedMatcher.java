@@ -19,6 +19,7 @@ package io.grpc.xds.internal.matcher;
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 /**
@@ -47,7 +48,7 @@ public abstract class UnifiedMatcher {
    * @param actionValidator a predicate that returns true if the action type URL is supported
    */
   public static UnifiedMatcher fromProto(Matcher proto,
-      java.util.function.Predicate<String> actionValidator) {
+      Predicate<String> actionValidator) {
     checkRecursionDepth(proto, 0);
     Matcher.OnMatch onNoMatch = proto.hasOnNoMatch() ? proto.getOnNoMatch() : null;
     if (proto.hasMatcherList()) {
@@ -98,10 +99,11 @@ public abstract class UnifiedMatcher {
   }
   
   private static final class NoOpMatcher extends UnifiedMatcher {
-    @Nullable private final OnMatch onNoMatch;
+    @Nullable 
+    private final OnMatch onNoMatch;
     
     NoOpMatcher(@Nullable Matcher.OnMatch onNoMatchProto,
-        java.util.function.Predicate<String> actionValidator) {
+        Predicate<String> actionValidator) {
       if (onNoMatchProto != null) {
         this.onNoMatch = new OnMatch(onNoMatchProto, actionValidator);
       } else {

@@ -17,14 +17,17 @@
 package io.grpc.xds.internal.matcher;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
+import com.github.xds.type.matcher.v3.RegexMatcher;
+import com.github.xds.type.matcher.v3.StringMatcher;
+import com.google.common.io.BaseEncoding;
 import com.google.protobuf.Any;
+import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -43,13 +46,11 @@ public class UnifiedMatcherTest {
         .setOnMatch(Matcher.OnMatch.newBuilder()
             .setMatcher(Matcher.newBuilder())) // nested matcher that doesn't match
         .build();
-
     Matcher.MatcherList.FieldMatcher fm2 = Matcher.MatcherList.FieldMatcher.newBuilder()
         .setPredicate(createHeaderMatchPredicate("h", "v"))
         .setOnMatch(Matcher.OnMatch.newBuilder()
             .setAction(TypedExtensionConfig.newBuilder().setName("action2")))
         .build();
-
     Matcher proto = Matcher.newBuilder()
         .setMatcherList(Matcher.MatcherList.newBuilder()
             .addMatchers(fm1)
@@ -59,8 +60,9 @@ public class UnifiedMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isFalse();
@@ -75,7 +77,7 @@ public class UnifiedMatcherTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("key").build())))
             .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
                 .putMap("found", Matcher.OnMatch.newBuilder().setMatcher(nestedNoMatch).build())))
@@ -84,12 +86,14 @@ public class UnifiedMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("key", "found"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("key", "found"))
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isFalse();
-    assertThat(result.actions).isEmpty();
+    assertThat(result.action).isNull();
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
@@ -98,9 +102,9 @@ public class UnifiedMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
             .setTypedConfig(Any.pack(
-                io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                HttpRequestHeaderMatchInput.newBuilder()
                 .setHeaderName("key").build())))
-        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+        .setValueMatch(StringMatcher.newBuilder()
             .setContains("WoRlD")
             .setIgnoreCase(true))
         .build();
@@ -108,8 +112,9 @@ public class UnifiedMatcherTest {
     PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("key", "hello world"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("key", "hello world"))
+        .build();
     
     assertThat(evaluator.evaluate(context)).isTrue();
   }
@@ -124,23 +129,25 @@ public class UnifiedMatcherTest {
             .setAndMatcher(Matcher.MatcherList.Predicate.PredicateList.newBuilder()
                 .addPredicate(h1).addPredicate(h2)).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
   }
 
   @Test
   public void andMatcher_oneFalse_fails() {
     Matcher.MatcherList.Predicate h1 = createHeaderMatchPredicate("h", "v");
-    Matcher.MatcherList.Predicate h2 = createHeaderMatchPredicate("h", "x"); // fail
+    Matcher.MatcherList.Predicate h2 = createHeaderMatchPredicate("h", "x");
     
     PredicateEvaluator eval = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder()
             .setAndMatcher(Matcher.MatcherList.Predicate.PredicateList.newBuilder()
                 .addPredicate(h1).addPredicate(h2)).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     assertThat(eval.evaluate(context)).isFalse();
   }
 
@@ -154,8 +161,9 @@ public class UnifiedMatcherTest {
             .setOrMatcher(Matcher.MatcherList.Predicate.PredicateList.newBuilder()
                 .addPredicate(h1).addPredicate(h2)).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
   }
 
@@ -166,11 +174,14 @@ public class UnifiedMatcherTest {
         Matcher.MatcherList.Predicate.newBuilder()
             .setNotMatcher(h1).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     assertThat(eval.evaluate(context)).isFalse();
 
-    when(context.getMetadata()).thenReturn(metadataWith("h", "x"));
+    context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "x"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
   }
 
@@ -178,19 +189,20 @@ public class UnifiedMatcherTest {
   public void matchInput_headerName_binary() {
     String headerName = "test-bin";
     byte[] bytes = new byte[] {1, 2, 3};
-    String expected = com.google.common.io.BaseEncoding.base64().encode(bytes);
+    String expected = BaseEncoding.base64().encode(bytes);
     
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER), bytes);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
     
-    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
-        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+    HttpRequestHeaderMatchInput proto = 
+        HttpRequestHeaderMatchInput.newBuilder()
         .setHeaderName(headerName).build();
     MatchInput input = UnifiedMatcher.resolveInput(
         TypedExtensionConfig.newBuilder()
-            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+            .setTypedConfig(Any.pack(proto)).build());
     
     assertThat(input.apply(context)).isEqualTo(expected);
   }
@@ -200,36 +212,38 @@ public class UnifiedMatcherTest {
     String headerName = "test-bin";
     byte[] v1 = new byte[] {1, 2, 3};
     byte[] v2 = new byte[] {4, 5, 6};
-    String expected = com.google.common.io.BaseEncoding.base64().encode(v1) + "," 
-        + com.google.common.io.BaseEncoding.base64().encode(v2);
+    String expected = BaseEncoding.base64().encode(v1) + "," 
+        + BaseEncoding.base64().encode(v2);
     
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER), v1);
     metadata.put(Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER), v2);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
     
-    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
-        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+    HttpRequestHeaderMatchInput proto = 
+        HttpRequestHeaderMatchInput.newBuilder()
         .setHeaderName(headerName).build();
     MatchInput input = UnifiedMatcher.resolveInput(
         TypedExtensionConfig.newBuilder()
-            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+            .setTypedConfig(Any.pack(proto)).build());
     
     assertThat(input.apply(context)).isEqualTo(expected);
   }
 
   @Test
   public void matchInput_headerName_binary_missing() {
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(new Metadata());
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(new Metadata())
+        .build();
     
-    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
-        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+    HttpRequestHeaderMatchInput proto = 
+        HttpRequestHeaderMatchInput.newBuilder()
         .setHeaderName("missing-bin").build();
     MatchInput input = UnifiedMatcher.resolveInput(
         TypedExtensionConfig.newBuilder()
-            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+            .setTypedConfig(Any.pack(proto)).build());
     
     assertThat(input.apply(context)).isNull();
   }
@@ -241,15 +255,16 @@ public class UnifiedMatcherTest {
     // "te" is technically ASCII.
     metadata.put(
         Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER), "trailers");
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
 
-    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput proto = 
-        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+    HttpRequestHeaderMatchInput proto = 
+        HttpRequestHeaderMatchInput.newBuilder()
         .setHeaderName("te").build();
     MatchInput input = UnifiedMatcher.resolveInput(
         TypedExtensionConfig.newBuilder()
-            .setTypedConfig(com.google.protobuf.Any.pack(proto)).build());
+            .setTypedConfig(Any.pack(proto)).build());
     
     assertThat(input.apply(context)).isNull();
   }
@@ -261,11 +276,12 @@ public class UnifiedMatcherTest {
             .setAction(TypedExtensionConfig.newBuilder().setName("no-match-action")))
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcher.match(mock(MatchContext.class), 0);
+    MatchResult result = matcher.match(MatchContext.newBuilder().build(), 0);
     
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("no-match-action");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("no-match-action");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
@@ -274,8 +290,8 @@ public class UnifiedMatcherTest {
         .setOnNoMatch(Matcher.OnMatch.newBuilder()
             .setAction(TypedExtensionConfig.newBuilder().setName("action")))
         .build();
-    java.util.List<TypedExtensionConfig> actions = 
-        MatcherRunner.checkMatch(proto, mock(MatchContext.class));
+    List<TypedExtensionConfig> actions = 
+        MatcherRunner.checkMatch(proto, MatchContext.newBuilder().build());
     assertThat(actions).hasSize(1);
     assertThat(actions.get(0).getName()).isEqualTo("action");
   }
@@ -284,8 +300,8 @@ public class UnifiedMatcherTest {
   public void matcherRunner_checkMatch_returnsNullOnNoMatch() {
     Matcher proto = Matcher.newBuilder()
         .build();
-    java.util.List<TypedExtensionConfig> actions = 
-        MatcherRunner.checkMatch(proto, mock(MatchContext.class));
+    List<TypedExtensionConfig> actions = 
+        MatcherRunner.checkMatch(proto, MatchContext.newBuilder().build());
     assertThat(actions).isNull();
   }
 
@@ -295,20 +311,23 @@ public class UnifiedMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
              .setTypedConfig(Any.pack(
-                 io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                 HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("k").build())))
-        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
-            .setSafeRegex(com.github.xds.type.matcher.v3.RegexMatcher.newBuilder()
+        .setValueMatch(StringMatcher.newBuilder()
+            .setSafeRegex(RegexMatcher.newBuilder()
                 .setRegex("v.*"))) // v followed by anything
         .build();
     PredicateEvaluator eval = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("k", "val"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("k", "val"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
 
-    when(context.getMetadata()).thenReturn(metadataWith("k", "xal"));
+    context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("k", "xal"))
+        .build();
     assertThat(eval.evaluate(context)).isFalse();
   }
 
@@ -318,19 +337,22 @@ public class UnifiedMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
              .setTypedConfig(Any.pack(
-                 io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                 HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("k").build())))
-        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+        .setValueMatch(StringMatcher.newBuilder()
             .setSuffix("tail"))
         .build();
     PredicateEvaluator eval = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("k", "detail"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("k", "detail"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
 
-    when(context.getMetadata()).thenReturn(metadataWith("k", "detai"));
+    context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("k", "detai"))
+        .build();
     assertThat(eval.evaluate(context)).isFalse();
   }
 
@@ -340,16 +362,17 @@ public class UnifiedMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
              .setTypedConfig(Any.pack(
-                 io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                 HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("k").build())))
-        .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+        .setValueMatch(StringMatcher.newBuilder()
             .setPrefix("pre"))
         .build();
     PredicateEvaluator eval = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("k", "prefix"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("k", "prefix"))
+        .build();
     assertThat(eval.evaluate(context)).isTrue();
   }
 
@@ -375,21 +398,23 @@ public class UnifiedMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of("h1", Metadata.ASCII_STRING_MARSHALLER), "v");
     metadata.put(Metadata.Key.of("h2", Metadata.ASCII_STRING_MARSHALLER), "v");
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(2); // Both actions
-    assertThat(result.actions.get(0).getName()).isEqualTo("action1");
-    assertThat(result.actions.get(1).getName()).isEqualTo("action2");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("action2");
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
   }
 
   @Test
-  public void onNoMatchShouldNotExecuteWhenKeepMatchingTrueAndMatchFound() {
+  public void matcherList_keepMatching_fallsThroughToOnNoMatch() {
     Matcher.MatcherList.FieldMatcher fm1 = Matcher.MatcherList.FieldMatcher.newBuilder()
         .setPredicate(createHeaderMatchPredicate("h1", "v"))
         .setOnMatch(Matcher.OnMatch.newBuilder()
@@ -405,13 +430,17 @@ public class UnifiedMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h1", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h1", "v"))
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("action1");
+    // onNoMatch IS executed because m1 had keepMatching=true and we reached end of list
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("no-match");
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
   }
 
   @Test
@@ -430,14 +459,16 @@ public class UnifiedMatcherTest {
         .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(fm1).addMatchers(fm2))
         .build();
         
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h2", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h2", "v"))
+        .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("action2");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("action2");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
@@ -460,13 +491,17 @@ public class UnifiedMatcherTest {
         .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(fm1).addMatchers(fm2))
         .build();
         
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(2);
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("action2");
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
   }
 
   @Test
@@ -488,17 +523,19 @@ public class UnifiedMatcherTest {
         .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(fm1))
         .build();
     
-    MatchContext context = mock(MatchContext.class);
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of("h1", Metadata.ASCII_STRING_MARSHALLER), "v");
     metadata.put(Metadata.Key.of("h2", Metadata.ASCII_STRING_MARSHALLER), "v");
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("action2");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("action2");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
   
   @Test
@@ -507,7 +544,7 @@ public class UnifiedMatcherTest {
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     
     // Manually calling with depth > 16
-    MatchResult result = matcher.match(mock(MatchContext.class), 17);
+    MatchResult result = matcher.match(MatchContext.newBuilder().build(), 17);
     assertThat(result.matched).isFalse();
   }
 
@@ -524,10 +561,7 @@ public class UnifiedMatcherTest {
         .build();
     
     UnifiedMatcher matcherList = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    
-    // Manually pass depth 17 to trigger the 'depth > MAX_RECURSION_DEPTH' check
-    MatchResult result = matcherList.match(context, 17);
+    MatchResult result = matcherList.match(MatchContext.newBuilder().build(), 17);
     assertThat(result.matched).isFalse();
   }
 
@@ -561,18 +595,19 @@ public class UnifiedMatcherTest {
         .build();
         
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("h", "v"));
-    
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
+
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(3);
-    assertThat(result.actions.get(0).getName()).isEqualTo("a1");
-    assertThat(result.actions.get(1).getName()).isEqualTo("a2");
-    assertThat(result.actions.get(2).getName()).isEqualTo("a3");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("a3");
+    
+    assertThat(result.keepMatchingActions).hasSize(2);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("a1");
+    assertThat(result.keepMatchingActions.get(1).getName()).isEqualTo("a2");
   }
-
-  // Helpers
 
   private static Matcher.MatcherList.Predicate createHeaderMatchPredicate(
       String name, String value) {
@@ -580,9 +615,9 @@ public class UnifiedMatcherTest {
         .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName(name).build())))
-            .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+            .setValueMatch(StringMatcher.newBuilder()
                 .setExact(value)))
         .build();
   }

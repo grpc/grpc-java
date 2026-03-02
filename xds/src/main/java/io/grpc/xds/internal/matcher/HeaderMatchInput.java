@@ -51,7 +51,7 @@ final class HeaderMatchInput implements MatchInput {
   }
     
   @Override
-  public Object apply(MatchContext context) {
+  public String apply(MatchContext context) {
     if ("te".equals(headerName)) {
       return null;
     }
@@ -88,7 +88,7 @@ final class HeaderMatchInput implements MatchInput {
 
   static final class Provider implements MatchInputProvider {
     @Override
-    public MatchInput getInput(TypedExtensionConfig config) {
+    public HeaderMatchInput getInput(TypedExtensionConfig config) {
       try {
         HttpRequestHeaderMatchInput proto = config.getTypedConfig()
             .unpack(HttpRequestHeaderMatchInput.class);

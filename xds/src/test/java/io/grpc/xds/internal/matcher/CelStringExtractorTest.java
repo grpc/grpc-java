@@ -76,7 +76,7 @@ public final class CelStringExtractorTest {
       CelMatcherTestHelper.compileStringExtractor("invalid syntax ???");
       fail("Should throw CelValidationException");
     } catch (Exception e) {
-      // Expected (CelValidationException or similar)
+      // Expected
     }
   }
 

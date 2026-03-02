@@ -18,8 +18,13 @@ package io.grpc.xds.internal.matcher;
 
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelOptions;
+import dev.cel.common.ast.CelReference;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelRuntimeFactory;
+import dev.cel.runtime.CelStandardFunctions;
+import dev.cel.runtime.CelStandardFunctions.StandardFunction;
+import dev.cel.runtime.standard.AddOperator.AddOverload;
+import java.util.Map;
 
 /**
  * Shared utilities for CEL-based matchers and extractors.
@@ -31,17 +36,16 @@ final class CelCommon {
       .build();
 
 
-  private static final dev.cel.runtime.CelStandardFunctions FUNCTIONS = 
-      dev.cel.runtime.CelStandardFunctions.newBuilder()
+  private static final CelStandardFunctions FUNCTIONS = 
+      CelStandardFunctions.newBuilder()
           .filterFunctions((func, over) -> {
-            if (func == dev.cel.runtime.CelStandardFunctions.StandardFunction.STRING) {
+            if (func == StandardFunction.STRING) {
               return false;
             }
-            if (func == dev.cel.runtime.CelStandardFunctions.StandardFunction.ADD) {
-              return !over.equals(
-                      (Object) dev.cel.runtime.standard.AddOperator.AddOverload.ADD_STRING)
-                  && !over.equals(
-                      (Object) dev.cel.runtime.standard.AddOperator.AddOverload.ADD_LIST);
+            if (func == StandardFunction.ADD) {
+              // TODO: fix this, remove (object) casting when we upgrade to 0.12.0
+              return !over.equals((Object) AddOverload.ADD_STRING)
+                  && !over.equals((Object) AddOverload.ADD_LIST);
             }
             return true;
           })
@@ -56,9 +60,9 @@ final class CelCommon {
   private CelCommon() {}
 
   static void checkAllowedVariables(CelAbstractSyntaxTree ast) {
-    for (java.util.Map.Entry<Long, dev.cel.common.ast.CelReference> entry : 
+    for (Map.Entry<Long, CelReference> entry : 
         ast.getReferenceMap().entrySet()) {
-      dev.cel.common.ast.CelReference ref = entry.getValue();
+      CelReference ref = entry.getValue();
       // If overload_id is empty, it's a variable reference or type name.
       // We only support "request".
       if (!ref.value().isPresent() && ref.overloadIds().isEmpty()) {

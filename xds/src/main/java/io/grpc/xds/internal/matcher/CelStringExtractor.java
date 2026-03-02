@@ -20,6 +20,7 @@ import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
+import dev.cel.runtime.CelVariableResolver;
 
 /**
  * Executes compiled CEL expressions that extract a string.
@@ -52,8 +53,8 @@ public final class CelStringExtractor {
    */
   public String extract(Object input) throws CelEvaluationException {
     Object result;
-    if (input instanceof dev.cel.runtime.CelVariableResolver) {
-      result = program.eval((dev.cel.runtime.CelVariableResolver) input);
+    if (input instanceof CelVariableResolver) {
+      result = program.eval((CelVariableResolver) input);
     } else if (input instanceof java.util.Map) {
       @SuppressWarnings("unchecked")
       java.util.Map<String, ?> mapInput = (java.util.Map<String, ?>) input;

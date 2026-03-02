@@ -18,6 +18,8 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher.MatcherList.Predicate;
+import com.github.xds.type.matcher.v3.StringMatcher;
+import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.ArrayList;
@@ -55,10 +57,15 @@ abstract class PredicateEvaluator {
         this.matcher = new Matcher() {
           @Override
           public boolean match(Object value) {
-            if (value instanceof String) {
-              return stringMatcher.matches((String) value);
+            if (value == null) {
+              return false;
             }
-            return false;
+            if (!(value instanceof String)) {
+              throw new IllegalArgumentException(
+                  "StringMatcher expected a String input, but received: " 
+                  + value.getClass().getName());
+            }
+            return stringMatcher.matches((String) value);
           }
 
           @Override
@@ -80,20 +87,20 @@ abstract class PredicateEvaluator {
             "SinglePredicate must have either value_match or custom_match");
       }
 
-      if (!input.outputType().isAssignableFrom(matcher.inputType()) 
-          && !matcher.inputType().isAssignableFrom(input.outputType())) {
-        throw new IllegalArgumentException("Type mismatch: input " + input.outputType().getName() 
+      if (!input.outputType().equals(matcher.inputType())) {
+        throw new IllegalArgumentException("Type mismatch: input " + input.outputType().getName()
             + " not compatible with matcher " + matcher.inputType().getName());
       }
     }
     
-    @Override boolean evaluate(MatchContext context) {
+    @Override 
+    boolean evaluate(MatchContext context) {
       return matcher.match(input.apply(context));
     }
     
     private static Matchers.StringMatcher fromStringMatcherProto(
-        com.github.xds.type.matcher.v3.StringMatcher proto) {
-      return io.grpc.xds.internal.MatcherParser.parseStringMatcher(proto);
+        StringMatcher proto) {
+      return MatcherParser.parseStringMatcher(proto);
     }
   }
   
@@ -110,7 +117,8 @@ abstract class PredicateEvaluator {
       }
     }
     
-    @Override boolean evaluate(MatchContext context) {
+    @Override 
+    boolean evaluate(MatchContext context) {
       for (PredicateEvaluator e : evaluators) {
         if (e.evaluate(context)) {
           return true;
@@ -133,7 +141,8 @@ abstract class PredicateEvaluator {
       }
     }
     
-    @Override boolean evaluate(MatchContext context) {
+    @Override 
+    boolean evaluate(MatchContext context) {
       for (PredicateEvaluator e : evaluators) {
         if (!e.evaluate(context)) {
           return false;
@@ -150,7 +159,8 @@ abstract class PredicateEvaluator {
       this.evaluator = PredicateEvaluator.fromProto(proto);
     }
     
-    @Override boolean evaluate(MatchContext context) {
+    @Override 
+    boolean evaluate(MatchContext context) {
       return !evaluator.evaluate(context);
     }
   }

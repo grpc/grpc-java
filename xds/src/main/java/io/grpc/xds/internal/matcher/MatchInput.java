@@ -34,7 +34,5 @@ public interface MatchInput {
   /**
    * Returns the type of value extracted by this input.
    */
-  default Class<?> outputType() {
-    return Object.class;
-  }
+  Class<?> outputType();
 }

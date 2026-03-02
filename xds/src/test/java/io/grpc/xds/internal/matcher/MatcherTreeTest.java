@@ -17,14 +17,15 @@
 package io.grpc.xds.internal.matcher;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
+import com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput;
 import com.github.xds.type.matcher.v3.Matcher;
 import com.google.protobuf.Any;
+import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,7 +38,7 @@ public class MatcherTreeTest {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder().build();
     try {
       new MatcherTree(proto, null, s -> true);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("MatcherTree must have input");
     }
@@ -47,12 +48,12 @@ public class MatcherTreeTest {
   public void matcherTree_unsupportedCelInput_throws() {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-            Any.pack(com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+            Any.pack(HttpAttributesCelMatchInput
                 .getDefaultInstance())))
         .build();
     try {
       new MatcherTree(proto, null, s -> true);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("HttpAttributesCelMatchInput cannot be used with MatcherTree");
@@ -63,13 +64,13 @@ public class MatcherTreeTest {
   public void matcherTree_emptyMaps_throws() {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("path").build())))
         .setExactMatchMap(Matcher.MatcherTree.MatchMap.getDefaultInstance())
         .build();
     try {
       new MatcherTree(proto, null, s -> true);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("MatcherTree exact_match_map must contain at least one entry");
@@ -80,7 +81,7 @@ public class MatcherTreeTest {
   public void matcherTree_maxRecursionDepth_returnsNoMatch() {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-            Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+            Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                 .setHeaderName("path").build())))
         .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("val", Matcher.OnMatch.newBuilder()
@@ -88,7 +89,7 @@ public class MatcherTreeTest {
         .build();
     
     MatcherTree tree = new MatcherTree(proto, null, s -> true);
-    MatchContext context = mock(MatchContext.class);
+    MatchContext context = MatchContext.newBuilder().build();
     MatchResult result = tree.match(context, 17);
     assertThat(result.matched).isFalse();
   }
@@ -98,7 +99,7 @@ public class MatcherTreeTest {
     
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-            Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+            Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                 .setHeaderName("foo").build())))
         .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("val", Matcher.OnMatch.newBuilder()
@@ -110,21 +111,22 @@ public class MatcherTreeTest {
             .setAction(TypedExtensionConfig.newBuilder().setName("fallback")).build(), 
         s -> true);
 
-    MatchContext context = mock(MatchContext.class);
-    
-    when(context.getMetadata()).thenReturn(new io.grpc.Metadata()); // No headers
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(new Metadata())
+        .build();
     
     MatchResult result = tree.match(context, 0);
     assertThat(result.matched).isTrue(); // onNoMatch matched
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("fallback");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("fallback");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
   public void matcherTree_noExactMatch_fallsBackToOnNoMatch() {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("foo").build())))
         .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("val", Matcher.OnMatch.newBuilder()
@@ -136,22 +138,24 @@ public class MatcherTreeTest {
         .build();
     MatcherTree tree = new MatcherTree(proto, onNoMatch, s -> true);
 
-    MatchContext context = mock(MatchContext.class);
-    io.grpc.Metadata metadata = new io.grpc.Metadata();
-    metadata.put(io.grpc.Metadata.Key.of("foo", io.grpc.Metadata.ASCII_STRING_MARSHALLER), "other");
-    when(context.getMetadata()).thenReturn(metadata);
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "other");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
 
     MatchResult result = tree.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("fallback");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("fallback");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
   public void matcherTree_prefixFoundButNestedFailed_returnNoMatch_notOnNoMatch() {
     Matcher.MatcherTree nestedProto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("bar").build())))
         .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("baz", Matcher.OnMatch.newBuilder()
@@ -160,7 +164,7 @@ public class MatcherTreeTest {
 
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("path").build())))
         .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("/prefix", Matcher.OnMatch.newBuilder()
@@ -174,19 +178,20 @@ public class MatcherTreeTest {
         
     MatcherTree tree = new MatcherTree(proto, onNoMatch, s -> true);
     
-    MatchContext context = mock(MatchContext.class);
-    io.grpc.Metadata metadata = new io.grpc.Metadata();
-    metadata.put(io.grpc.Metadata.Key.of("path", io.grpc.Metadata.ASCII_STRING_MARSHALLER),
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER),
         "/prefix/foo");
-    metadata.put(io.grpc.Metadata.Key.of("bar", io.grpc.Metadata.ASCII_STRING_MARSHALLER), "wrong");
-    when(context.getMetadata()).thenReturn(metadata);
+    metadata.put(Metadata.Key.of("bar", Metadata.ASCII_STRING_MARSHALLER), "wrong");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
     
     MatchResult result = tree.match(context, 0);
     
     assertThat(result.matched).isFalse();
-    // Verify it isn't the onNoMatch action
-    if (!result.actions.isEmpty()) {
-      assertThat(result.actions.get(0).getName()).isNotEqualTo("should-not-be-called");
+    assertThat(result.action).isNull();
+    if (!result.keepMatchingActions.isEmpty()) {
+      assertThat(result.keepMatchingActions.get(0).getName()).isNotEqualTo("should-not-be-called");
     }
   }
 
@@ -197,10 +202,10 @@ public class MatcherTreeTest {
           .setMatcherTree(Matcher.MatcherTree.newBuilder()
               .setInput(TypedExtensionConfig.newBuilder()
                   .setTypedConfig(Any.pack(
-                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      HttpRequestHeaderMatchInput.newBuilder()
                           .setHeaderName("key").build()))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("must have either exact_match_map or prefix_match_map");
@@ -214,11 +219,11 @@ public class MatcherTreeTest {
           .setMatcherTree(Matcher.MatcherTree.newBuilder()
               .setInput(TypedExtensionConfig.newBuilder()
                   .setTypedConfig(Any.pack(
-                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      HttpRequestHeaderMatchInput.newBuilder()
                           .setHeaderName("key").build())))
               .setCustomMatch(TypedExtensionConfig.newBuilder().setName("custom")))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("does not support custom_match");
     }
@@ -230,7 +235,7 @@ public class MatcherTreeTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("x-key").build())))
             .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
                 .putMap("foo", Matcher.OnMatch.newBuilder()
@@ -242,14 +247,15 @@ public class MatcherTreeTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);    
-    MatchContext context = mock(MatchContext.class);
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of("x-key", Metadata.ASCII_STRING_MARSHALLER), "foo");
-    when(context.getMetadata()).thenReturn(headers);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(headers)
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions.get(0).getName()).isEqualTo("matched_foo");
+    assertThat(result.action.getName()).isEqualTo("matched_foo");
   }
 
   @Test
@@ -258,7 +264,7 @@ public class MatcherTreeTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("path").build())))
             .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
                 .putMap("/api", Matcher.OnMatch.newBuilder()
@@ -270,15 +276,16 @@ public class MatcherTreeTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/api/v1/users");
-    when(context.getMetadata()).thenReturn(headers);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(headers)
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
     // Longest prefix wins
-    assertThat(result.actions.get(0).getName()).isEqualTo("apiv1");
+    assertThat(result.action.getName()).isEqualTo("apiv1");
   }
 
   @Test
@@ -291,7 +298,7 @@ public class MatcherTreeTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("path").build())))
             .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
                 .putMap("/prefix", Matcher.OnMatch.newBuilder()
@@ -303,18 +310,23 @@ public class MatcherTreeTest {
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
 
-    MatchContext context = mock(MatchContext.class);
     Metadata metadata = new Metadata();
     metadata.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/prefix/something");
-    when(context.getMetadata()).thenReturn(metadata);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
     // Correct behavior per gRFC A106: onNoMatch is ONLY for when no match is found.
-    // Since we found "A1", onNoMatch ("A2") should NOT be executed.
-    // keepMatching=true simply means we return with matched=true and let the parent decide.
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
+    // If we only find keepMatching actions, and onNoMatch matches, we get onNoMatch action.
+    
+    result = matcher.match(context, 0);
+    assertThat(result.matched).isTrue();
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("A2");
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
   }
 
   @Test
@@ -338,13 +350,14 @@ public class MatcherTreeTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("path").build())))
             .setPrefixMatchMap(map))
         .build();
 
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(metadataWith("path", "/abc"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("path", "/abc"))
+        .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto, (t) -> true);
     MatchResult result = matcher.match(context, 0);
 
@@ -353,10 +366,12 @@ public class MatcherTreeTest {
     // 1. /abc matches -> A1. keep=true.
     // 2. /ab matches  -> A2. keep=true.
     // 3. /a matches   -> A3. keep=false -> STOP.
-    assertThat(result.actions).hasSize(3);
-    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
-    assertThat(result.actions.get(1).getName()).isEqualTo("A2");
-    assertThat(result.actions.get(2).getName()).isEqualTo("A3");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("A3");
+    
+    assertThat(result.keepMatchingActions).hasSize(2);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+    assertThat(result.keepMatchingActions.get(1).getName()).isEqualTo("A2");
   }
 
   @Test
@@ -371,20 +386,21 @@ public class MatcherTreeTest {
         .setMatcherTree(Matcher.MatcherTree.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                    HttpRequestHeaderMatchInput.newBuilder()
                         .setHeaderName("x-user-segment").build())))
             .setPrefixMatchMap(map))
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto, (t) -> true);
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(
-        metadataWith("x-user-segment", "grpc.channelz.v1.Channelz/GetTopChannels"));
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("x-user-segment", "grpc.channelz.v1.Channelz/GetTopChannels"))
+        .build();
     MatchResult result = matcher.match(context, 0);
 
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("longer_prefix");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("longer_prefix");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   @Test
@@ -394,13 +410,13 @@ public class MatcherTreeTest {
           .setMatcherTree(Matcher.MatcherTree.newBuilder()
               .setInput(TypedExtensionConfig.newBuilder()
                   .setTypedConfig(Any.pack(
-                      com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                      HttpAttributesCelMatchInput
                           .getDefaultInstance())))
               .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
                   .putMap("key", Matcher.OnMatch.newBuilder()
                       .setAction(TypedExtensionConfig.newBuilder().setName("action")).build())))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      Assert.fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("HttpAttributesCelMatchInput cannot be used with MatcherTree");
@@ -411,7 +427,7 @@ public class MatcherTreeTest {
   public void matcherTree_prefixMap_noMatch_shouldFallbackToOnNoMatch() {
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-             Any.pack(io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
                  .setHeaderName("path").build())))
         .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
             .putMap("/a", Matcher.OnMatch.newBuilder()
@@ -422,16 +438,18 @@ public class MatcherTreeTest {
         .setAction(TypedExtensionConfig.newBuilder().setName("actionB")).build();
     MatcherTree tree = new MatcherTree(proto, onNoMatch, s -> true);
 
-    MatchContext context = mock(MatchContext.class);
-    io.grpc.Metadata metadata = new io.grpc.Metadata();
+    Metadata metadata = new Metadata();
     metadata.put(
-        io.grpc.Metadata.Key.of("path", io.grpc.Metadata.ASCII_STRING_MARSHALLER), "/b");
-    when(context.getMetadata()).thenReturn(metadata);
+        Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/b");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
 
     MatchResult result = tree.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("actionB");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("actionB");
+    assertThat(result.keepMatchingActions).isEmpty();
   }
 
   private Metadata metadataWith(String key, String value) {

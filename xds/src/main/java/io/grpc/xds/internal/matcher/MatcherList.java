@@ -21,14 +21,16 @@ import com.github.xds.type.matcher.v3.Matcher;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 final class MatcherList extends UnifiedMatcher {
   private final List<FieldMatcher> matchers;
-  @Nullable private final OnMatch onNoMatch;
+  @Nullable 
+  private final OnMatch onNoMatch;
 
   MatcherList(Matcher.MatcherList proto, @Nullable Matcher.OnMatch onNoMatchProto,
-      java.util.function.Predicate<String> actionValidator) {
+      Predicate<String> actionValidator) {
     if (proto.getMatchersCount() == 0) {
       throw new IllegalArgumentException("MatcherList must contain at least one FieldMatcher");
     }
@@ -50,37 +52,35 @@ final class MatcherList extends UnifiedMatcher {
     }
 
     List<TypedExtensionConfig> accumulated = new ArrayList<>();
-    boolean matchedAtLeastOnce = false;
     for (FieldMatcher matcher : matchers) {
       if (matcher.matches(context)) {
         MatchResult result = matcher.onMatch.evaluate(context, depth);
-        if (result.matched) {
-          accumulated.addAll(result.actions);
-          matchedAtLeastOnce = true;
-        }
+        accumulated.addAll(result.keepMatchingActions);
         
-        if (!matcher.onMatch.keepMatching) {
-          if (!matchedAtLeastOnce) {
-            return MatchResult.noMatch();
+        if (result.matched) {
+          if (matcher.onMatch.keepMatching) {
+            if (result.action != null) {
+              accumulated.add(result.action);
+            }
+          } else {
+            return MatchResult.create(result.action, accumulated);
           }
-          break;
+        } else {
+          if (!matcher.onMatch.keepMatching) {
+            return MatchResult.noMatch(accumulated);
+          }
         }
       }
     }
     
-    if (!matchedAtLeastOnce) {
-      if (onNoMatch != null) {
-        MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
-        if (noMatchResult.matched) {
-          accumulated.addAll(noMatchResult.actions);
-          matchedAtLeastOnce = true;
-        }
+    if (onNoMatch != null) {
+      MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+      accumulated.addAll(noMatchResult.keepMatchingActions);
+      if (noMatchResult.matched) {
+        return MatchResult.create(noMatchResult.action, accumulated);
       }
     }
-    if (matchedAtLeastOnce) {
-      return MatchResult.create(accumulated);
-    }
-    return MatchResult.noMatch();
+    return MatchResult.noMatch(accumulated);
   }
   
   private static final class FieldMatcher {
@@ -88,7 +88,7 @@ final class MatcherList extends UnifiedMatcher {
     private final OnMatch onMatch;
     
     FieldMatcher(Matcher.MatcherList.FieldMatcher proto, 
-        java.util.function.Predicate<String> actionValidator) {
+        Predicate<String> actionValidator) {
       this.predicate = PredicateEvaluator.fromProto(proto.getPredicate());
       this.onMatch = new OnMatch(proto.getOnMatch(), actionValidator);
     }
