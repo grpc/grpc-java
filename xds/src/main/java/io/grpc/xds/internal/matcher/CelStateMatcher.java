@@ -17,6 +17,8 @@
 package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
+import com.github.xds.type.matcher.v3.CelMatcher; // Proto
+import com.github.xds.type.v3.CelExpression;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelProtoAbstractSyntaxTree;
 import dev.cel.runtime.CelEvaluationException;
@@ -25,9 +27,9 @@ import dev.cel.runtime.CelEvaluationException;
  * Matcher for CEL expressions handling xDS CEL Matcher extension.
  */
 final class CelStateMatcher implements Matcher {
-  private final CelMatcher compiledEndpoint;
+  private final io.grpc.xds.internal.matcher.CelMatcher compiledEndpoint;
 
-  CelStateMatcher(CelMatcher compiledEndpoint) {
+  CelStateMatcher(io.grpc.xds.internal.matcher.CelMatcher compiledEndpoint) {
     this.compiledEndpoint = compiledEndpoint;
   }
 
@@ -47,21 +49,22 @@ final class CelStateMatcher implements Matcher {
 
   static final class Provider implements MatcherProvider {
     @Override
-    public Matcher getMatcher(TypedExtensionConfig config) {
+    public CelStateMatcher getMatcher(TypedExtensionConfig config) {
       try {
-        com.github.xds.type.matcher.v3.CelMatcher celProto = config.getTypedConfig()
-            .unpack(com.github.xds.type.matcher.v3.CelMatcher.class);
+        CelMatcher celProto = config.getTypedConfig()
+            .unpack(CelMatcher.class);
         if (!celProto.hasExprMatch()) {
           throw new IllegalArgumentException("CelMatcher must have expr_match");
         }
-        com.github.xds.type.v3.CelExpression expr = celProto.getExprMatch();
+        CelExpression expr = celProto.getExprMatch();
         if (!expr.hasCelExprChecked()) {
           throw new IllegalArgumentException("CelMatcher must have cel_expr_checked");
         }
         CelAbstractSyntaxTree ast = 
             CelProtoAbstractSyntaxTree.fromCheckedExpr(
                 expr.getCelExprChecked()).getAst();
-        CelMatcher compiled = CelMatcher.compile(ast);
+        io.grpc.xds.internal.matcher.CelMatcher compiled = 
+            io.grpc.xds.internal.matcher.CelMatcher.compile(ast);
         
         return new CelStateMatcher(compiled);
       } catch (Exception e) {

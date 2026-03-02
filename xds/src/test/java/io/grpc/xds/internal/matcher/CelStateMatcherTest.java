@@ -17,20 +17,24 @@
 package io.grpc.xds.internal.matcher;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.junit.Assert.fail;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.CelMatcher;
+import com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput;
 import com.github.xds.type.matcher.v3.Matcher;
+import com.github.xds.type.matcher.v3.StringMatcher;
 import com.github.xds.type.v3.CelExpression;
 import com.github.xds.type.v3.CelExtractString;
 import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelProtoAbstractSyntaxTree;
 import dev.cel.common.types.SimpleType;
 import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
+import dev.cel.expr.ParsedExpr;
+import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
 import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import org.junit.BeforeClass;
@@ -72,7 +76,7 @@ public class CelStateMatcherTest {
         .build();
     try {
       UnifiedMatcher.resolveInput(config);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Unsupported input type");
     }
@@ -85,7 +89,7 @@ public class CelStateMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                    HttpAttributesCelMatchInput
                         .getDefaultInstance())))
             .setCustomMatch(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(celMatcher)))
@@ -101,27 +105,31 @@ public class CelStateMatcherTest {
             .setAction(TypedExtensionConfig.newBuilder().setName("no-match")))
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getPath()).thenReturn("/good");
-    when(context.getMetadata()).thenReturn(new Metadata());
-
-    when(context.getId()).thenReturn("123");
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/good")
+        .setMetadata(new Metadata())
+        .setId("123")
+        .build();
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    TypedExtensionConfig action = result.actions.get(0);
+    TypedExtensionConfig action = result.action;
     assertThat(action.getName()).isEqualTo("action1");
     
-    when(context.getPath()).thenReturn("/bad");
+    context = MatchContext.newBuilder()
+        .setPath("/bad")
+        .setMetadata(new Metadata())
+        .setId("123")
+        .build();
     result = matcher.match(context, 0);
-    TypedExtensionConfig noMatchAction = result.actions.get(0);
+    TypedExtensionConfig noMatchAction = result.action;
     assertThat(noMatchAction.getName()).isEqualTo("no-match");
   }
 
   @Test
   public void celMatcher_throwsIfReturnsString() {
     try {
-      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compile("'should be bool'");
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      CelMatcherTestHelper.compile("'should be bool'");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to boolean");
     } catch (Exception e) {
@@ -136,7 +144,7 @@ public class CelStateMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                    HttpAttributesCelMatchInput
                         .getDefaultInstance())))
             .setCustomMatch(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(celMatcher)))
@@ -153,21 +161,22 @@ public class CelStateMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getPath()).thenReturn("not-an-int");
-    when(context.getMetadata()).thenReturn(new Metadata());
-    when(context.getId()).thenReturn("1");
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("not-an-int")
+        .setMetadata(new Metadata())
+        .setId("1")
+        .build();
 
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions.get(0).getName()).isEqualTo("no-match");
+    assertThat(result.action.getName()).isEqualTo("no-match");
   }
 
   @Test
   public void celStringExtractor_throwsIfReturnsBool() {
     try {
-      io.grpc.xds.internal.matcher.CelMatcherTestHelper.compileStringExtractor("true");
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      CelMatcherTestHelper.compileStringExtractor("true");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("must evaluate to string");
     } catch (Exception e) {
@@ -182,7 +191,7 @@ public class CelStateMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(
-                    com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                    HttpAttributesCelMatchInput
                         .getDefaultInstance())))
             .setCustomMatch(TypedExtensionConfig.newBuilder()
                 .setTypedConfig(Any.pack(celMatcher)))
@@ -199,15 +208,16 @@ public class CelStateMatcherTest {
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getPath()).thenReturn("/");
     Metadata headers = new Metadata();
     headers.put(Metadata.Key.of("x-test", Metadata.ASCII_STRING_MARSHALLER), "value");
-    when(context.getMetadata()).thenReturn(headers);
-    when(context.getId()).thenReturn("123");
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/")
+        .setMetadata(headers)
+        .setId("123")
+        .build();
 
     MatchResult result = matcher.match(context, 0);
-    TypedExtensionConfig action = result.actions.get(0);
+    TypedExtensionConfig action = result.action;
     assertThat(action.getName()).isEqualTo("matched");
   }
 
@@ -221,7 +231,7 @@ public class CelStateMatcherTest {
                     .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
                         .setInput(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(
-                                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                                HttpAttributesCelMatchInput
                                     .getDefaultInstance())))
                         .setCustomMatch(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(celMatcher)))))
@@ -232,14 +242,15 @@ public class CelStateMatcherTest {
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     
-    MatchContext context = mock(MatchContext.class);
-    when(context.getPath()).thenReturn("/path/without/query");
-    when(context.getMetadata()).thenReturn(new Metadata());
-    when(context.getId()).thenReturn("123");
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/path/without/query")
+        .setMetadata(new Metadata())
+        .setId("123")
+        .build();
     
     MatchResult result = matcher.match(context, 0);
     assertThat(result.matched).isTrue();
-    assertThat(result.actions.get(0).getName()).isEqualTo("matched");
+    assertThat(result.action.getName()).isEqualTo("matched");
   }
 
   @Test
@@ -258,7 +269,7 @@ public class CelStateMatcherTest {
                     .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
                         .setInput(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(
-                                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                                HttpAttributesCelMatchInput
                                     .getDefaultInstance())))
                         .setCustomMatch(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(celMatcher)))))
@@ -269,28 +280,29 @@ public class CelStateMatcherTest {
         .build();
 
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchContext context = mock(MatchContext.class);
-    when(context.getMetadata()).thenReturn(new Metadata());
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(new Metadata())
+        .build();
     MatchResult result = matcher.match(context, 0);
 
     assertThat(result.matched).isTrue();
-    assertThat(result.actions).hasSize(1);
-    assertThat(result.actions.get(0).getName()).isEqualTo("no-match");
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("no-match");
   }
 
   @Test
   public void celMatcher_missingExprMatch_throws() {
-    com.github.xds.type.matcher.v3.CelMatcher celProto = 
-        com.github.xds.type.matcher.v3.CelMatcher.getDefaultInstance();
+    CelMatcher celProto = 
+        CelMatcher.getDefaultInstance();
     Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.newBuilder()
         .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
             .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
-                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+                HttpAttributesCelMatchInput.getDefaultInstance())))
             .setCustomMatch(TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(celProto))))
         .build();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
@@ -306,12 +318,12 @@ public class CelStateMatcherTest {
                       .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
                           .setInput(TypedExtensionConfig.newBuilder()
                               .setTypedConfig(Any.pack(
-                                  com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                                  HttpAttributesCelMatchInput
                                       .getDefaultInstance())))
-                          .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher.newBuilder()
+                          .setValueMatch(StringMatcher.newBuilder()
                               .setExact("any"))))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("Type mismatch");
@@ -320,10 +332,10 @@ public class CelStateMatcherTest {
 
   @Test
   public void celMatcher_wrongInput_throws() {
-    io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput inputProto =
-        io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+    HttpRequestHeaderMatchInput inputProto =
+        HttpRequestHeaderMatchInput.newBuilder()
         .setHeaderName("test").build();
-    com.github.xds.type.matcher.v3.CelMatcher celMatcherProto = createCelMatcher("true");
+    CelMatcher celMatcherProto = createCelMatcher("true");
 
     try {
       UnifiedMatcher.fromProto(Matcher.newBuilder()
@@ -339,7 +351,7 @@ public class CelStateMatcherTest {
                    .setOnMatch(Matcher.OnMatch.newBuilder()
                        .setAction(TypedExtensionConfig.newBuilder().setName("action")))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for incompatible input");
+      fail("Should have thrown IllegalArgumentException for incompatible input");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("Type mismatch");
@@ -348,15 +360,15 @@ public class CelStateMatcherTest {
 
   @Test
   public void celMatcher_withoutCelExprChecked_throws() {
-    com.github.xds.type.matcher.v3.CelMatcher celMatcherParsed = 
-        com.github.xds.type.matcher.v3.CelMatcher.newBuilder()
-        .setExprMatch(com.github.xds.type.v3.CelExpression.newBuilder()
-            .setCelExprParsed(dev.cel.expr.ParsedExpr.getDefaultInstance()))
+    CelMatcher celMatcherParsed = 
+        CelMatcher.newBuilder()
+        .setExprMatch(CelExpression.newBuilder()
+            .setCelExprParsed(ParsedExpr.getDefaultInstance()))
         .build();
 
     try {
       UnifiedMatcher.fromProto(wrapInMatcher(celMatcherParsed));
-      org.junit.Assert.fail(
+      fail(
           "Should have thrown IllegalArgumentException for missing cel_expr_checked");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
@@ -365,11 +377,11 @@ public class CelStateMatcherTest {
 
   @Test
   public void celMatcher_withCelExprString_throws() {
-    dev.cel.expr.ParsedExpr parsedExpr = 
-        dev.cel.expr.ParsedExpr.getDefaultInstance();
-    com.github.xds.type.matcher.v3.CelMatcher celMatcherParsed = 
-        com.github.xds.type.matcher.v3.CelMatcher.newBuilder()
-        .setExprMatch(com.github.xds.type.v3.CelExpression.newBuilder()
+    ParsedExpr parsedExpr = 
+        ParsedExpr.getDefaultInstance();
+    CelMatcher celMatcherParsed = 
+        CelMatcher.newBuilder()
+        .setExprMatch(CelExpression.newBuilder()
             .setCelExprParsed(parsedExpr)
             .build())
         .build();
@@ -377,14 +389,14 @@ public class CelStateMatcherTest {
 
     try {
       UnifiedMatcher.fromProto(proto);
-      org.junit.Assert.fail(
+      fail(
           "Should have thrown IllegalArgumentException for using cel_expr_parsed");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
   }
 
-  private Matcher wrapInMatcher(com.github.xds.type.matcher.v3.CelMatcher celMatcher) {
+  private Matcher wrapInMatcher(CelMatcher celMatcher) {
     return Matcher.newBuilder()
         .setMatcherList(Matcher.MatcherList.newBuilder()
             .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
@@ -392,7 +404,7 @@ public class CelStateMatcherTest {
                     .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
                         .setInput(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(
-                                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput
+                                HttpAttributesCelMatchInput
                                     .getDefaultInstance())))
                         .setCustomMatch(TypedExtensionConfig.newBuilder()
                             .setTypedConfig(Any.pack(celMatcher))
@@ -405,9 +417,9 @@ public class CelStateMatcherTest {
   @Test
   public void singlePredicate_invalidCelMatcherProto_throws() {
     TypedExtensionConfig config = TypedExtensionConfig.newBuilder()
-        .setTypedConfig(com.google.protobuf.Any.newBuilder()
+        .setTypedConfig(Any.newBuilder()
             .setTypeUrl("type.googleapis.com/xds.type.matcher.v3.CelMatcher")
-            .setValue(com.google.protobuf.ByteString.copyFromUtf8("invalid"))
+            .setValue(ByteString.copyFromUtf8("invalid"))
             .build())
         .build();
 
@@ -415,14 +427,14 @@ public class CelStateMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
             .setTypedConfig(Any.pack(
-                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+                HttpAttributesCelMatchInput.getDefaultInstance())))
         .setCustomMatch(config)
         .build();
     
     try {
       PredicateEvaluator.fromProto(
           Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid CelMatcher config");
     }
@@ -435,7 +447,7 @@ public class CelStateMatcherTest {
         Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder()
             .setTypedConfig(Any.pack(
-                com.github.xds.type.matcher.v3.HttpAttributesCelMatchInput.getDefaultInstance())))
+                HttpAttributesCelMatchInput.getDefaultInstance())))
         .setCustomMatch(TypedExtensionConfig.newBuilder()
             .setTypedConfig(Any.pack(createCelMatcher("1/0 == 0"))))
         .build();
@@ -443,6 +455,6 @@ public class CelStateMatcherTest {
     PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
         
-    assertThat(evaluator.evaluate(mock(MatchContext.class))).isFalse();
+    assertThat(evaluator.evaluate(MatcherRunner.MatchContext.newBuilder().build())).isFalse();
   }
 }

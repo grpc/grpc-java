@@ -28,7 +28,7 @@ final class HttpAttributesCelMatchInput implements MatchInput {
   private HttpAttributesCelMatchInput() {}
 
   @Override
-  public Object apply(MatchContext context) {
+  public GrpcCelEnvironment apply(MatchContext context) {
     return new GrpcCelEnvironment(context);
   }
 
@@ -39,7 +39,7 @@ final class HttpAttributesCelMatchInput implements MatchInput {
 
   static final class Provider implements MatchInputProvider {
     @Override
-    public MatchInput getInput(TypedExtensionConfig config) {
+    public HttpAttributesCelMatchInput getInput(TypedExtensionConfig config) {
       return INSTANCE;
     }
 
