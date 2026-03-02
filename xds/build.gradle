@@ -62,7 +62,6 @@ dependencies {
     implementation(libraries.cel.protobuf) {
         exclude group: 'com.google.protobuf', module: 'protobuf-java'
     }
-    implementation "org.antlr:antlr4-runtime:4.9.1"
     def nettyDependency = implementation project(':grpc-netty')
 
     testImplementation project(':grpc-api')

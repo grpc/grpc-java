@@ -43,9 +43,8 @@ final class CelCommon {
               return false;
             }
             if (func == StandardFunction.ADD) {
-              // TODO: fix this, remove (object) casting when we upgrade to 0.12.0
-              return !over.equals((Object) AddOverload.ADD_STRING)
-                  && !over.equals((Object) AddOverload.ADD_LIST);
+              return !over.equals(AddOverload.ADD_STRING)
+                  && !over.equals(AddOverload.ADD_LIST);
             }
             return true;
           })

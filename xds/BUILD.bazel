@@ -43,7 +43,6 @@ java_library(
         artifact("com.google.re2j:re2j"),
         artifact("dev.cel:runtime"),
         artifact("dev.cel:protobuf"),
-        artifact("org.antlr:antlr4-runtime"),
         artifact("io.netty:netty-buffer"),
         artifact("io.netty:netty-codec"),
         artifact("io.netty:netty-common"),
