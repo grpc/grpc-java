@@ -27,6 +27,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.truth:truth:1.4.5",
     "dev.cel:runtime:0.12.0",
     "dev.cel:protobuf:0.12.0",
+    "dev.cel:common:0.12.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
     "io.netty:netty-buffer:4.1.130.Final",
