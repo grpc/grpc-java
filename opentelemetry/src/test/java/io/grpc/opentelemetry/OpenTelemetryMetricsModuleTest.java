@@ -84,7 +84,6 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class OpenTelemetryMetricsModuleTest {
-  // ... existing code ...
 
   private static final CallOptions.Key<String> CUSTOM_OPTION =
       CallOptions.Key.createWithDefault("option1", "default");
