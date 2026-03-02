@@ -104,7 +104,7 @@ final class OpenTelemetryMetricsModule {
 
   OpenTelemetryMetricsModule(Supplier<Stopwatch> stopwatchSupplier,
                              OpenTelemetryMetricsResource resource,
-      Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
+                             Collection<String> optionalLabels, List<OpenTelemetryPlugin> plugins) {
     this(stopwatchSupplier, resource, optionalLabels, plugins, null);
   }
 
