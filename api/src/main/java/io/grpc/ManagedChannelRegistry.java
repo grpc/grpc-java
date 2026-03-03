@@ -158,7 +158,6 @@ public final class ManagedChannelRegistry {
     return newChannelBuilder(NameResolverRegistry.getDefaultRegistry(), target, creds);
   }
 
-  @VisibleForTesting
   ManagedChannelBuilder<?> newChannelBuilder(NameResolverRegistry nameResolverRegistry,
       String target, ChannelCredentials creds) {
     NameResolverProvider nameResolverProvider = null;
@@ -198,7 +197,7 @@ public final class ManagedChannelRegistry {
         continue;
       }
       ManagedChannelProvider.NewChannelBuilderResult result
-          = provider.newChannelBuilder(target, creds);
+          = provider.newChannelBuilder(target, creds, nameResolverRegistry, nameResolverProvider);
       if (result.getChannelBuilder() != null) {
         return result.getChannelBuilder();
       }
