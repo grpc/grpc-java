@@ -393,18 +393,21 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
       }
 
       /**
-       * Returns the utilization value computed from the specified metric names. If the application
-       * utilization is present and valid, it is returned. Otherwise, the maximum of the custom
-       * metrics specified is returned. If none of the custom metrics are present, the CPU
+       * Returns the utilization value computed from the specified metric names. If the custom
+       * metrics are present and valid, the maximum of the custom metrics is returned. Otherwise,
+       * if application utilization is > 0, it is returned. If neither are present, the CPU
        * utilization is returned.
        */
       private double getUtilization(MetricReport report, ImmutableList<String> metricNames) {
+        OptionalDouble customUtil = getCustomMetricUtilization(report, metricNames);
+        if (customUtil.isPresent()) {
+          return customUtil.getAsDouble();
+        }
         double appUtil = report.getApplicationUtilization();
         if (appUtil > 0) {
           return appUtil;
         }
-        return getCustomMetricUtilization(report, metricNames)
-            .orElse(report.getCpuUtilization());
+        return report.getCpuUtilization();
       }
 
       /**
