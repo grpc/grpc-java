@@ -1334,7 +1334,7 @@ public class WeightedRoundRobinLoadBalancerTest {
 
 
   @Test
-  public void customMetric_priority_appUtilStillPreferred() {
+  public void customMetric_priority_overAppUtil() {
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
         .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
     wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
@@ -1359,6 +1359,42 @@ public class WeightedRoundRobinLoadBalancerTest {
     MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0.8, 0.1, 1, 0,
         new HashMap<>(), new HashMap<>(), namedMetrics);
     listener.onLoadReport(report);
+    // Custom metrics now take priority over app_util
+    // qps=1, util=0.5 -> weight=2.0
+    fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
+    verify(mockMetricRecorder).recordDoubleHistogram(
+        argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(2.0), any(),
+        any());
+  }
+
+  @Test
+  public void customMetric_invalid_fallbackToAppUtil() {
+    weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
+        .setMetricNamesForComputingUtilization(ImmutableList.of("named_metrics.cost")).build();
+    wrr = new WeightedRoundRobinLoadBalancer(helper, fakeClock.getDeadlineTicker());
+
+    syncContext.execute(
+        () -> wrr.acceptResolvedAddresses(ResolvedAddresses.newBuilder().setAddresses(servers)
+            .setLoadBalancingPolicyConfig(weightedConfig).setAttributes(affinity).build()));
+
+    Iterator<Subchannel> it = subchannels.values().iterator();
+    Subchannel readySubchannel = it.next();
+    getSubchannelStateListener(readySubchannel)
+        .onSubchannelState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
+
+    WeightedChildLbState weightedChild =
+        (WeightedChildLbState) wrr.getChildLbStates().iterator().next();
+    WeightedChildLbState.OrcaReportListener listener = weightedChild.getOrCreateOrcaListener(
+        weightedConfig.errorUtilizationPenalty, weightedConfig.metricNamesForComputingUtilization);
+
+    // custom metric is NaN, App util = 0.8
+    Map<String, Double> namedMetrics = new HashMap<>();
+    namedMetrics.put("cost", Double.NaN);
+    MetricReport report = InternalCallMetricRecorder.createMetricReport(0.1, 0.8, 0.1, 1, 0,
+        new HashMap<>(), new HashMap<>(), namedMetrics);
+    listener.onLoadReport(report);
+
+    // Should fallback to App Util (0.8)
     // qps=1, util=0.8 -> weight=1.25
     fakeClock.forwardTime(1100, TimeUnit.MILLISECONDS);
     verify(mockMetricRecorder).recordDoubleHistogram(
