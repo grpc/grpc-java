@@ -89,9 +89,6 @@ import java.util.logging.Logger;
  *  See related documentation: https://cloud.google.com/service-mesh/legacy/load-balancing-apis/proxyless-configure-advanced-traffic-management#custom-lb-config
  */
 final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
-  @VisibleForTesting
-  static boolean enableCustomConfig =
-      Boolean.parseBoolean(System.getenv("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS"));
 
   private static final LongCounterMetricInstrument RR_FALLBACK_COUNTER;
   private static final LongCounterMetricInstrument ENDPOINT_WEIGHT_NOT_YET_USEABLE_COUNTER;
@@ -335,8 +332,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
         ImmutableList<String> metricNamesForComputingUtilization) {
       if (orcaReportListener != null
           && orcaReportListener.errorUtilizationPenalty == errorUtilizationPenalty
-          && Objects.equals(orcaReportListener.metricNamesForComputingUtilization,
-              metricNamesForComputingUtilization)) {
+          && orcaReportListener.metricNamesForComputingUtilization
+              .equals(metricNamesForComputingUtilization)) {
         return orcaReportListener;
       }
       orcaReportListener =

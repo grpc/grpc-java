@@ -24,6 +24,7 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import java.util.List;
@@ -105,10 +106,9 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     if (errorUtilizationPenalty != null) {
       configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
     }
-    if (metricNamesForComputingUtilization != null) {
-      if (WeightedRoundRobinLoadBalancer.enableCustomConfig) {
-        configBuilder.setMetricNamesForComputingUtilization(metricNamesForComputingUtilization);
-      }
+    if (metricNamesForComputingUtilization != null
+        && GrpcUtil.getFlag("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS", false)) {
+      configBuilder.setMetricNamesForComputingUtilization(metricNamesForComputingUtilization);
     }
     return ConfigOrError.fromConfig(configBuilder.build());
   }
