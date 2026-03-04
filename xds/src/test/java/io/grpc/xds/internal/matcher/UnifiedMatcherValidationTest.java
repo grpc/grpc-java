@@ -453,4 +453,36 @@ public class UnifiedMatcherValidationTest {
       assertThat(e).hasMessageThat().contains("Unknown StringMatcher match pattern");
     }
   }
+  
+  @Test
+  public void headerName_empty_throws() {
+    IllegalArgumentException e = org.junit.Assert.assertThrows(IllegalArgumentException.class, () ->
+        new HeaderMatchInput(""));
+    assertThat(e).hasMessageThat().contains("Header name length must be in range [1, 16384)");
+  }
+
+  @Test
+  public void headerName_tooLong_throws() {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 16384; i++) {
+      sb.append("a");
+    }
+    String longHeader = sb.toString();
+    IllegalArgumentException e = org.junit.Assert.assertThrows(IllegalArgumentException.class, () ->
+        new HeaderMatchInput(longHeader));
+    assertThat(e).hasMessageThat().contains("Header name length must be in range [1, 16384)");
+  }
+
+  @Test
+  public void headerName_uppercase_throws() {
+    IllegalArgumentException e = org.junit.Assert.assertThrows(IllegalArgumentException.class, () ->
+        new HeaderMatchInput("X-Custom-Header"));
+    assertThat(e).hasMessageThat().contains("Header name must be lowercase");
+  }
+
+  @Test
+  public void headerName_valid() {
+    HeaderMatchInput input = new HeaderMatchInput("x-custom-header");
+    assertThat(input).isNotNull();
+  }
 }
