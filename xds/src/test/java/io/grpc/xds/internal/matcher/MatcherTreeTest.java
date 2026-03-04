@@ -452,6 +452,113 @@ public class MatcherTreeTest {
     assertThat(result.keepMatchingActions).isEmpty();
   }
 
+  @Test
+  public void matcherTree_exactMatch_keepMatching_aggregate() {
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherTree(Matcher.MatcherTree.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(
+                    HttpRequestHeaderMatchInput.newBuilder()
+                        .setHeaderName("key").build())))
+            .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                .putMap("val", Matcher.OnMatch.newBuilder()
+                    .setAction(TypedExtensionConfig.newBuilder().setName("A1"))
+                    .setKeepMatching(true).build())))
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("A2")))
+        .build();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("key", Metadata.ASCII_STRING_MARSHALLER), "val");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
+
+    MatchResult result = matcher.match(context, 0);
+    assertThat(result.matched).isTrue();
+    // exact match matched (A1), keepMatching=true -> continue to onNoMatch (A2)
+    // onNoMatch matched -> A2 is the terminal action
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("A2");
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+  }
+
+  @Test
+  public void matcherTree_exactMatch_keepMatching_nestedMatcher_fails() {
+    // Exact match "val" -> Nested Matcher (always fails), keepMatching=true
+    // Because keepMatching=true, we should fallback to onNoMatch
+    
+    Matcher.MatcherTree nestedProto = Matcher.MatcherTree.newBuilder()
+        .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
+             Any.pack(HttpRequestHeaderMatchInput.newBuilder()
+                 .setHeaderName("bar").build())))
+        .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+            .putMap("foo", Matcher.OnMatch.newBuilder()
+                .setAction(TypedExtensionConfig.newBuilder().setName("n/a")).build()))
+        .build();
+
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherTree(Matcher.MatcherTree.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(
+                    HttpRequestHeaderMatchInput.newBuilder()
+                        .setHeaderName("key").build())))
+            .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                .putMap("val", Matcher.OnMatch.newBuilder()
+                    .setMatcher(Matcher.newBuilder().setMatcherTree(nestedProto))
+                    .setKeepMatching(true).build())))
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("A2")))
+        .build();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("key", Metadata.ASCII_STRING_MARSHALLER), "val");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
+
+    MatchResult result = matcher.match(context, 0);
+    assertThat(result.matched).isTrue();
+    // nested matcher failed, but allowed to continue because keepMatching=true
+    assertThat(result.action).isNotNull();
+    assertThat(result.action.getName()).isEqualTo("A2");
+    assertThat(result.keepMatchingActions).isEmpty();
+  }
+
+  @Test
+  public void matcherTree_prefixMatch_keepMatching_aggregate_noOnNoMatch() {
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherTree(Matcher.MatcherTree.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(
+                    HttpRequestHeaderMatchInput.newBuilder()
+                        .setHeaderName("key").build())))
+            .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                .putMap("/prefix", Matcher.OnMatch.newBuilder()
+                    .setAction(TypedExtensionConfig.newBuilder().setName("A1"))
+                    .setKeepMatching(true).build())))
+        // No onNoMatch configured
+        .build();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+
+    Metadata metadata = new Metadata();
+    // "/prefix/val" matches "/prefix" -> A1, keepMatching=true
+    metadata.put(Metadata.Key.of("key", Metadata.ASCII_STRING_MARSHALLER), "/prefix/val");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .build();
+
+    MatchResult result = matcher.match(context, 0);
+    assertThat(result.matched).isFalse();
+    assertThat(result.action).isNull();
+    
+    assertThat(result.keepMatchingActions).hasSize(1);
+    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+  }
+
   private Metadata metadataWith(String key, String value) {
     Metadata m = new Metadata();
     m.put(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER), value);
