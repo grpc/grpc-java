@@ -128,7 +128,11 @@ public final class ConnectionSpec {
   public void apply(SSLSocket sslSocket, boolean isFallback) {
     ConnectionSpec specToApply = supportedSpec(sslSocket, isFallback);
 
-    sslSocket.setEnabledProtocols(specToApply.tlsVersions);
+    String[] tlsVersionsToEnable = specToApply.tlsVersions;
+    // null means "use default set".
+    if (tlsVersionsToEnable != null) {
+      sslSocket.setEnabledProtocols(tlsVersionsToEnable);
+    }
 
     String[] cipherSuitesToEnable = specToApply.cipherSuites;
     // null means "use default set".
