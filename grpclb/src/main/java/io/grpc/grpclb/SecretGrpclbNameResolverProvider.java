@@ -64,7 +64,7 @@ final class SecretGrpclbNameResolverProvider {
       if (SCHEME.equals(targetUri.getScheme())) {
         List<String> pathSegments = targetUri.getPathSegments();
         Preconditions.checkArgument(
-            !pathSegments.isEmpty(),
+            pathSegments.size() == 1,
             "expected 1 path segment in target %s but found %s",
             targetUri,
             pathSegments);
