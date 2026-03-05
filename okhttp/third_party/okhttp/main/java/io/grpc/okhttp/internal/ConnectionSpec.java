@@ -173,8 +173,12 @@ public final class ConnectionSpec {
       }
     }
 
-    String[] protocolsToSelectFrom = sslSocket.getEnabledProtocols();
-    String[] protocolsToEnable = Util.intersect(String.class, tlsVersions, protocolsToSelectFrom);
+    String[] protocolsToEnable = null;
+    if (tlsVersions != null) {
+      String[] protocolsToSelectFrom = sslSocket.getEnabledProtocols();
+      protocolsToEnable = Util.intersect(String.class, tlsVersions, protocolsToSelectFrom);
+    }
+
     return new Builder(this)
         .cipherSuites(cipherSuitesToEnable)
         .tlsVersions(protocolsToEnable)
