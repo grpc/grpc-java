@@ -17,6 +17,8 @@
 package io.grpc.grpclb;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
@@ -101,6 +103,22 @@ public class SecretGrpclbNameResolverProviderTest {
   @Test
   public void validDnsNameWithPort() throws Exception {
     testValidUri("dns:/foo.googleapis.com:456");
+  }
+
+  @Test
+  public void newNameResolver_rejectsExtraPathSegments() {
+    assume().that(enableRfc3986UrisParam).isTrue();
+    IllegalArgumentException iae =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> newNameResolver("dns:///localhost:443/extras", args));
+    assertThat(iae).hasMessageThat().contains("expected 1 path segment in target");
+  }
+
+  @Test
+  public void newNameResolver_toleratesExtraPathSegments() {
+    assume().that(enableRfc3986UrisParam).isFalse();
+    newNameResolver("dns:///localhost:443/extras", args);
   }
 
   private void testInvalidUri(String uri) {
