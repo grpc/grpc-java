@@ -58,7 +58,8 @@ public interface InternalServer {
   /**
    * Returns the first listen socket stats of this server. May return {@code null}.
    */
-  @Nullable InternalInstrumented<SocketStats> getListenSocketStats();
+  @Nullable
+  InternalInstrumented<SocketStats> getListenSocketStats();
 
   /**
    * Returns a list of listening socket addresses.  May change after {@link #start(ServerListener)}
@@ -69,6 +70,7 @@ public interface InternalServer {
   /**
    * Returns a list of listen socket stats of this server. May return {@code null}.
    */
-  @Nullable List<InternalInstrumented<SocketStats>> getListenSocketStatsList();
+  @Nullable
+  List<InternalInstrumented<SocketStats>> getListenSocketStatsList();
 
 }

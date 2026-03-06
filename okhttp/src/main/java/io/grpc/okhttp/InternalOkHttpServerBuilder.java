@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.TransportTracer;
@@ -29,8 +30,9 @@ import java.util.List;
 @Internal
 public final class InternalOkHttpServerBuilder {
   public static InternalServer buildTransportServers(OkHttpServerBuilder builder,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return builder.buildTransportServers(streamTracerFactories);
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      MetricRecorder metricRecorder) {
+    return builder.buildTransportServers(streamTracerFactories, metricRecorder);
   }
 
   public static void setTransportTracerFactory(OkHttpServerBuilder builder,

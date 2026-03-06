@@ -32,6 +32,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -164,8 +165,9 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
     @Override
     public InternalServer buildClientTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      return buildTransportServers(streamTracerFactories);
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        io.grpc.MetricRecorder metricRecorder) {
+      return buildTransportServers(streamTracerFactories, metricRecorder);
     }
   }
 
@@ -703,8 +705,10 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
   }
 
+  @VisibleForTesting
   NettyServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      io.grpc.MetricRecorder metricRecorder) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
@@ -737,7 +741,8 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         maxRstCount,
         maxRstPeriodNanos,
         eagAttributes,
-        this.serverImplBuilder.getChannelz());
+        this.serverImplBuilder.getChannelz(),
+        metricRecorder);
   }
 
   @VisibleForTesting
@@ -757,6 +762,13 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   @CanIgnoreReturnValue
   NettyServerBuilder setTransportTracerFactory(TransportTracer.Factory transportTracerFactory) {
     this.transportTracerFactory = transportTracerFactory;
+    return this;
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public NettyServerBuilder addMetricSink(MetricSink metricSink) {
+    serverImplBuilder.addMetricSink(metricSink);
     return this;
   }
 

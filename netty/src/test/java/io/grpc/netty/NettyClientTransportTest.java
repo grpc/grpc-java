@@ -37,6 +37,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +57,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.Marshaller;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -251,6 +253,8 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new MetricRecorder() {
+            },
             Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
@@ -526,6 +530,8 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new MetricRecorder() {
+            },
             Ticker.systemTicker());
     transports.add(transport);
 
@@ -1148,6 +1154,8 @@ public class NettyClientTransportTest {
             new SocketPicker(),
             new FakeChannelLogger(),
             false,
+            new MetricRecorder() {
+            },
             Ticker.systemTicker());
     transports.add(transport);
     return transport;
@@ -1195,7 +1203,8 @@ public class NettyClientTransportTest {
             MAX_RST_COUNT_DISABLED,
             0,
             Attributes.EMPTY,
-            channelz);
+            channelz,
+            mock(MetricRecorder.class));
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());

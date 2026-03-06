@@ -18,6 +18,7 @@ package io.grpc.servlet;
 
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -71,8 +72,11 @@ public class TomcatTransportTest extends AbstractTransportTest {
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
+      final ServletServerBuilder builder = new ServletServerBuilder();
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServers(streamTracerFactories);
+          builder.buildTransportServers(
+              streamTracerFactories, new MetricRecorder() {
+              });
 
       @Override
       public void start(ServerListener listener) throws IOException {

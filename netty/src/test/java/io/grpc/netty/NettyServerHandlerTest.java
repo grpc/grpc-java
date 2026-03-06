@@ -59,6 +59,7 @@ import com.google.common.truth.Truth;
 import io.grpc.Attributes;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -1416,7 +1417,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxRstCount,
         maxRstPeriodNanos,
         Attributes.EMPTY,
-        fakeClock().getTicker());
+        fakeClock().getTicker(),
+        new MetricRecorder() {});
   }
 
   @Override

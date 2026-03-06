@@ -27,6 +27,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -387,7 +388,8 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   }
 
   InternalServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      MetricRecorder metricRecorder) {
     return new OkHttpServer(this, streamTracerFactories, serverImplBuilder.getChannelz());
   }
 
