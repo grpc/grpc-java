@@ -294,6 +294,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     if (newState == IDLE && subchannelData.state == READY) {
+      numTf = 0;
       helper.refreshNameResolution();
     }
 
@@ -336,9 +337,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         shutdownRemaining(subchannelData);
         addressIndex.seekTo(getAddress(subchannelData.subchannel));
         rawConnectivityState = READY;
-        // Reset for clarity, but isPassComplete() prevents any counts currently present from being
-        // read until they point they no longer matter
-        numTf = 0;
         updateHealthCheckedState(subchannelData);
         break;
 
@@ -370,10 +368,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
           // Refresh Name Resolution, but only when all 3 conditions are met
           // * We are at the end of addressIndex
-          // * have had status reported for all subchannels.
-          // * And one of the following conditions:
-          //    * Have had enough TF reported since we completed first pass
-          //    * Just completed the first pass (in which case enough TF have been reported)
+          // * Have had status reported for all subchannels.
+          // * Have had enough TF reported since the last refresh
           if (numTf >= addressIndex.size()) {
             numTf = 0;
             helper.refreshNameResolution();
