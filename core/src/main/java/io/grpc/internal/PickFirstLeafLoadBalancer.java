@@ -69,7 +69,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
   private int numTf = 0;
-  private boolean firstPass = true;
   @Nullable
   private ScheduledHandle scheduleConnectionTask = null;
   private ConnectivityState rawConnectivityState = IDLE;
@@ -119,9 +118,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         return unavailableStatus;
       }
     }
-
-    // Since we have a new set of addresses, we are again at first pass
-    firstPass = true;
 
     List<EquivalentAddressGroup> cleanServers = deDupAddresses(servers);
 
@@ -298,6 +294,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     }
 
     if (newState == IDLE && subchannelData.state == READY) {
+      numTf = 0;
       helper.refreshNameResolution();
     }
 
@@ -344,6 +341,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         break;
 
       case TRANSIENT_FAILURE:
+        numTf++;
+
         // If we are looking at current channel, request a connection if possible
         if (addressIndex.isValid()
             && subchannels.get(addressIndex.getCurrentAddress()) == subchannelData) {
@@ -369,12 +368,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
           // Refresh Name Resolution, but only when all 3 conditions are met
           // * We are at the end of addressIndex
-          // * have had status reported for all subchannels.
-          // * And one of the following conditions:
-          //    * Have had enough TF reported since we completed first pass
-          //    * Just completed the first pass
-          if (++numTf >= addressIndex.size() || firstPass) {
-            firstPass = false;
+          // * Have had status reported for all subchannels.
+          // * Have had enough TF reported since the last refresh
+          if (numTf >= addressIndex.size()) {
             numTf = 0;
             helper.refreshNameResolution();
           }
