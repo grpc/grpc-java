@@ -496,7 +496,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN || reconnectTask != null) {
       return;
     }
 

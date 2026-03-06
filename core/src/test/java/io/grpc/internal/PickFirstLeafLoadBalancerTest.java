@@ -1446,6 +1446,11 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
 
+    if (serializeRetries) {
+      inOrder.verify(mockSubchannel3, never()).start(stateListenerCaptor.capture());
+      fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    }
+
     // subchannel 3 still attempts a connection even though we stay in transient failure
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
     inOrder.verify(mockSubchannel3).start(stateListenerCaptor.capture());
