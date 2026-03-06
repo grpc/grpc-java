@@ -55,13 +55,16 @@ final class TlsServerHandshakerSocketFactory implements HandshakerSocketFactory 
     SSLSocket sslSocket = (SSLSocket) socket;
     sslSocket.setUseClientMode(false);
     connectionSpec.apply(sslSocket, false);
-    Protocol expectedProtocol = Protocol.HTTP_2;
-    String negotiatedProtocol = OkHttpProtocolNegotiator.get().negotiate(
-        sslSocket,
-        null,
-        connectionSpec.supportsTlsExtensions() ? Collections.singletonList(expectedProtocol) : null);
-    if (!expectedProtocol.toString().equals(negotiatedProtocol)) {
-      throw new IOException("Expected NPN/ALPN " + expectedProtocol + ": " + negotiatedProtocol);
+    if (connectionSpec.supportsTlsExtensions()) {
+      Protocol expectedProtocol = Protocol.HTTP_2;
+      String negotiatedProtocol = OkHttpProtocolNegotiator.get().negotiate(
+          sslSocket,
+          null,
+          Collections.singletonList(expectedProtocol)
+      );
+      if (!expectedProtocol.toString().equals(negotiatedProtocol)) {
+        throw new IOException("Expected NPN/ALPN " + expectedProtocol + ": " + negotiatedProtocol);
+      }
     }
     attributes = result.attributes.toBuilder()
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
