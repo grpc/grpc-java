@@ -18,10 +18,13 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -74,7 +77,7 @@ public class ServerImplBuilderTest {
           @Override
           public InternalServer buildClientTransportServers(
               List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-              io.grpc.MetricRecorder metricRecorder) {
+              MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });
@@ -127,6 +130,13 @@ public class ServerImplBuilderTest {
     builder.setStatsEnabled(false);
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
     assertThat(factories).containsExactly(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void addMetricSink_addsToSinks() {
+    MetricSink mockSink = mock(MetricSink.class);
+    builder.addMetricSink(mockSink);
+    assertThat(builder.metricSinks).containsExactly(mockSink);
   }
 
   @Test

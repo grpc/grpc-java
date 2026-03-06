@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,8 +27,7 @@ import java.util.List;
 @Internal
 public final class InternalTcpMetrics {
 
-  private InternalTcpMetrics() {
-  }
+  private InternalTcpMetrics() {}
 
   private static final List<String> OPTIONAL_LABELS = Arrays.asList(
       "network.local.address",
@@ -67,7 +66,8 @@ public final class InternalTcpMetrics {
           "{connection}",
           Collections.emptyList(),
           OPTIONAL_LABELS,
-          false);
+          false
+      );
 
   public static final LongCounterMetricInstrument PACKETS_RETRANSMITTED_INSTRUMENT = 
       MetricInstrumentRegistry
@@ -78,7 +78,8 @@ public final class InternalTcpMetrics {
           "{packet}",
           Collections.emptyList(),
           OPTIONAL_LABELS,
-          false);
+          false
+      );
 
   public static final LongCounterMetricInstrument RECURRING_RETRANSMITS_INSTRUMENT = 
       MetricInstrumentRegistry
@@ -90,7 +91,8 @@ public final class InternalTcpMetrics {
           "{timeout}",
           Collections.emptyList(),
           OPTIONAL_LABELS,
-          false);
+          false
+      );
 
   private static List<Double> getMinRttBuckets() {
     List<Double> buckets = new ArrayList<>(100);

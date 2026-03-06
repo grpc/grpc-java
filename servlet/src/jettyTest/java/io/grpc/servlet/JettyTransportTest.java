@@ -18,6 +18,7 @@ package io.grpc.servlet;
 
 import io.grpc.InternalChannelz;
 import io.grpc.InternalInstrumented;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -60,7 +61,7 @@ public class JettyTransportTest extends AbstractTransportTest {
     return new InternalServer() {
       final InternalServer delegate =
           new ServletServerBuilder().buildTransportServers(
-              streamTracerFactories, new io.grpc.MetricRecorder() {
+              streamTracerFactories, new MetricRecorder() {
               });
 
       @Override

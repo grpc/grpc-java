@@ -436,6 +436,16 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract Server build();
 
   /**
+   * Adds a metric sink to the server.
+   *
+   * @param metricSink the metric sink to add.
+   * @return this
+   */
+  public T addMetricSink(MetricSink metricSink) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Returns the correctly typed version of the builder.
    */
   private T thisT() {

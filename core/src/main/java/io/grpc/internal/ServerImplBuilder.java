@@ -165,6 +165,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   /**
    * Adds a MetricSink to the server.
    */
+  @Override
   public ServerImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metricSink"));
     return this;

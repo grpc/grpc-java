@@ -57,6 +57,7 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.ClientStreamListener;
@@ -1166,7 +1167,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         "someauthority",
         null,
         fakeClock().getTicker(),
-        new io.grpc.MetricRecorder() {});
+        new MetricRecorder() {});
   }
 
   @Override

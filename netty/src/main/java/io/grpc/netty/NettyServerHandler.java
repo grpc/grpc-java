@@ -670,6 +670,12 @@ class NettyServerHandler extends AbstractNettyHandler {
    * Handler for the Channel shutting down.
    */
   @Override
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    tcpMetrics.channelActive(ctx.channel());
+    super.channelActive(ctx);
+  }
+
+  @Override
   public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     tcpMetrics.channelInactive(ctx.channel());
     try {

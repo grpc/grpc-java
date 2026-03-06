@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import io.grpc.InsecureServerCredentials;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -63,8 +64,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer);
     return InternalOkHttpServerBuilder
-        .buildTransportServers(builder, streamTracerFactories, new io.grpc.MetricRecorder() {
-        });
+        .buildTransportServers(builder, streamTracerFactories, new MetricRecorder() {});
   }
 
   @Override

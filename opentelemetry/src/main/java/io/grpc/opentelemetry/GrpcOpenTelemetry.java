@@ -136,7 +136,7 @@ public final class GrpcOpenTelemetry {
     return optionalLabels;
   }
 
-  MetricSink getSink() {
+  public MetricSink getSink() {
     return sink;
   }
 

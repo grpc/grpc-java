@@ -92,7 +92,8 @@ public interface ClientTransportFactory extends Closeable {
     private Attributes eagAttributes = Attributes.EMPTY;
     @Nullable private String userAgent;
     @Nullable private HttpConnectProxiedSocketAddress connectProxiedSocketAddr;
-    @Nullable private MetricRecorder metricRecorder;
+    private MetricRecorder metricRecorder = new MetricRecorder() {
+    };
 
     public ChannelLogger getChannelLogger() {
       return channelLogger;
@@ -103,13 +104,12 @@ public interface ClientTransportFactory extends Closeable {
       return this;
     }
 
-    @Nullable
     public MetricRecorder getMetricRecorder() {
       return metricRecorder;
     }
 
-    public ClientTransportOptions setMetricRecorder(@Nullable MetricRecorder metricRecorder) {
-      this.metricRecorder = metricRecorder;
+    public ClientTransportOptions setMetricRecorder(MetricRecorder metricRecorder) {
+      this.metricRecorder = Preconditions.checkNotNull(metricRecorder, "metricRecorder");
       return this;
     }
 

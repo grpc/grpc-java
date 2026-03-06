@@ -65,6 +65,7 @@ import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallExecutorSupplier;
@@ -207,7 +208,7 @@ public class ServerImplTest {
           @Override
           public InternalServer buildClientTransportServers(
               List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-              io.grpc.MetricRecorder metricRecorder) {
+              MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });

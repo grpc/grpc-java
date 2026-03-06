@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import io.grpc.ServerStreamTracer;
+import io.grpc.MetricRecorder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
@@ -44,9 +44,8 @@ public class NettyServerBuilderTest {
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
     NettyServer server = builder.buildTransportServers(
-        ImmutableList.<ServerStreamTracer.Factory>of(),
-        new io.grpc.MetricRecorder() {
-        });
+        ImmutableList.of(),
+        new MetricRecorder() {});
 
     assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
@@ -193,11 +192,11 @@ public class NettyServerBuilderTest {
   }
 
   @Test
-  public void metricRecorder_propagatedToServer() throws Exception {
-    io.grpc.MetricRecorder recorder = mock(io.grpc.MetricRecorder.class);
+  public void metricRecorder_propagatedToServer() {
+    MetricRecorder recorder = mock(MetricRecorder.class);
 
     NettyServer server = builder.buildTransportServers(
-        ImmutableList.<ServerStreamTracer.Factory>of(), recorder);
+        ImmutableList.of(), recorder);
 
     assertThat(server.getMetricRecorder()).isSameInstanceAs(recorder);
   }

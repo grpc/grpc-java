@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -50,8 +51,10 @@ public class TcpMetricsTest {
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
-  @Mock private MetricRecorder metricRecorder;
-  @Mock private Channel channel;
+  @Mock
+  private MetricRecorder metricRecorder;
+  @Mock
+  private Channel channel;
   @Mock
   private EventLoop eventLoop;
   @Mock
@@ -118,7 +121,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_recordTcpInfo_reflectionSuccess() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
@@ -142,7 +145,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
@@ -177,7 +180,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
@@ -220,7 +223,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_periodicRecord_reportsDeltaForTotalRetrans() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
@@ -270,7 +273,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
@@ -322,7 +325,7 @@ public class TcpMetricsTest {
 
   @Test
   public void tracker_reportsDeltas_correctly() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     String fakeChannelName = ConfigurableFakeWithTcpInfo.class.getName();
@@ -349,6 +352,8 @@ public class TcpMetricsTest {
         eq(5L), any(), any());
 
     // 15 retransmits total (delta 0) - should NOT report
+    // also set retransmits to 1
+    infoSource.setValues(15, 1, 1000);
     tracker.recordTcpInfo(channel);
     // Verify no new interactions with this specific metric and value
     // We can't easily verify "no interaction" for specific value without capturing.
@@ -372,13 +377,13 @@ public class TcpMetricsTest {
     tracker.channelInactive(channel);
     verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(
         eq(Objects.requireNonNull(metrics.recurringRetransmits)),
-            eq(0L), // From last infoSource setValues(15, 0, 1000)
+        eq(1L), // From last infoSource setValues(15, 1, 1000)
         any(), any());
   }
 
   @Test
   public void tracker_recordTcpInfo_reflectionFailure() {
-    MetricRecorder recorder = org.mockito.Mockito.mock(MetricRecorder.class);
+    MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
