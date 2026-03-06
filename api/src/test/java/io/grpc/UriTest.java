@@ -162,6 +162,42 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_emptyQuery() {
+    Uri uri = Uri.create("scheme:?");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getQuery()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyFragment() {
+    Uri uri = Uri.create("scheme:#");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getFragment()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyUserInfo() {
+    Uri uri = Uri.create("scheme://@host");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("@host");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getUserInfo()).isEmpty();
+    assertThat(uri.toString()).isEqualTo("scheme://@host");
+  }
+
+  @Test
+  public void parse_emptyPort() {
+    Uri uri = Uri.create("scheme://host:");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("host:");
+    assertThat(uri.getRawAuthority()).isEqualTo("host:");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getPort()).isEqualTo(-1);
+    assertThat(uri.getRawPort()).isEqualTo("");
+    assertThat(uri.toString()).isEqualTo("scheme://host:");
+  }
+
+  @Test
   public void parse_invalidScheme_throws() {
     URISyntaxException e =
         assertThrows(URISyntaxException.class, () -> Uri.parse("1scheme://authority/path"));
@@ -233,13 +269,6 @@ public final class UriTest {
     URISyntaxException e =
         assertThrows(URISyntaxException.class, () -> Uri.parse("http://[::1%25foo\\bar]"));
     assertThat(e).hasMessageThat().contains("Invalid character in scope");
-  }
-
-  @Test
-  public void parse_emptyPort_throws() {
-    URISyntaxException e =
-        assertThrows(URISyntaxException.class, () -> Uri.parse("scheme://user@host:/path"));
-    assertThat(e).hasMessageThat().contains("Invalid port");
   }
 
   @Test

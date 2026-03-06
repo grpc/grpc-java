@@ -408,7 +408,7 @@ public class OutlierDetectionLoadBalancerTest {
     // Make sure that we can pick the single READY subchannel.
     SubchannelPicker picker = pickerCaptor.getAllValues().get(2);
     PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
-    Subchannel s = ((OutlierDetectionSubchannel) pickResult.getSubchannel()).delegate();
+    Subchannel s = pickResult.getSubchannel();
     if (s instanceof HealthProducerHelper.HealthProducerSubchannel) {
       s = ((HealthProducerHelper.HealthProducerSubchannel) s).delegate();
     }

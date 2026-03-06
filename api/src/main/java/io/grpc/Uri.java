@@ -148,6 +148,15 @@ import javax.annotation.Nullable;
  * itself. RFC 9844 claims to obsolete RFC 6874 because web browsers would not support it. This
  * class implements RFC 6874 anyway, mostly to avoid creating a barrier to migration away from
  * {@link java.net.URI}.
+ *
+ * <p>Some URI components, e.g. scheme, are required while others may or may not be present, e.g.
+ * authority. {@link Uri} is careful to preserve the distinction between an absent string component
+ * (getter returns null) and one with an empty value (getter returns ""). {@link java.net.URI} makes
+ * this distinction too, *except* when it comes to the authority and host components: {@link
+ * java.net.URI#getAuthority()} and {@link java.net.URI#getHost()} return null when an authority is
+ * absent, e.g. <code>file:/path</code> as expected. But these methods surprisingly also return null
+ * when the authority is the empty string, e.g.<code>file:///path</code>. {@link Uri}'s getters
+ * correctly return null and "" in these cases, respectively, as one would expect.
  */
 @Internal
 public final class Uri {
@@ -437,9 +446,9 @@ public final class Uri {
     return host;
   }
 
-  /** Returns the "port" component of this URI, or -1 if not present. */
+  /** Returns the "port" component of this URI, or -1 if empty or not present. */
   public int getPort() {
-    return port != null ? Integer.parseInt(port) : -1;
+    return port != null && !port.isEmpty() ? Integer.parseInt(port) : -1;
   }
 
   /** Returns the raw port component of this URI in its originally parsed form. */
@@ -934,10 +943,12 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawPort(String port) {
-      try {
-        Integer.parseInt(port); // Result unused.
-      } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid port", e);
+      if (port != null && !port.isEmpty()) {
+        try {
+          Integer.parseInt(port); // Result unused.
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port", e);
+        }
       }
       this.port = port;
       return this;
