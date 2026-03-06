@@ -355,7 +355,7 @@ public abstract class NameResolver {
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
-    @Nullable private final MetricRecorder metricRecorder;
+    private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
@@ -497,7 +497,6 @@ public abstract class NameResolver {
     /**
      * Returns the {@link MetricRecorder} that the channel uses to record metrics.
      */
-    @Nullable
     public MetricRecorder getMetricRecorder() {
       return metricRecorder;
     }

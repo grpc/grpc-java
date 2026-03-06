@@ -387,7 +387,8 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   }
 
   InternalServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      io.grpc.MetricRecorder metricRecorder) {
     return new OkHttpServer(this, streamTracerFactories, serverImplBuilder.getChannelz());
   }
 

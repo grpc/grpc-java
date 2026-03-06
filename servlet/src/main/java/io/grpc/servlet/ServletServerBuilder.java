@@ -159,7 +159,8 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
 
   @VisibleForTesting
   InternalServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      io.grpc.MetricRecorder metricRecorder) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();

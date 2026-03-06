@@ -161,7 +161,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             Attributes.EMPTY,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
     final SettableFuture<Void> serverShutdownCalled = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -218,7 +218,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             Attributes.EMPTY,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -298,7 +298,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             Attributes.EMPTY,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -366,7 +366,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             Attributes.EMPTY,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
 
     assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
     assertThat(ns.getListenSocketAddresses()).isEqualTo(addresses);
@@ -447,7 +447,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             eagAttributes,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -501,7 +501,7 @@ public class NettyServerTest {
             0,
             0, // ignore
             Attributes.EMPTY,
-            channelz);
+            channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override
@@ -649,7 +649,7 @@ public class NettyServerTest {
         0,
         0, // ignore
         Attributes.EMPTY,
-        channelz);
+        channelz, org.mockito.Mockito.mock(io.grpc.MetricRecorder.class));
   }
 
   private static class NoopServerTransportListener implements ServerTransportListener {

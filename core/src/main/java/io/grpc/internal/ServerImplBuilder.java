@@ -31,6 +31,9 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder;
+import io.grpc.MetricSink;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCallExecutorSupplier;
@@ -80,6 +83,7 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   final List<ServerTransportFilter> transportFilters = new ArrayList<>();
   final List<ServerInterceptor> interceptors = new ArrayList<>();
   private final List<ServerStreamTracer.Factory> streamTracerFactories = new ArrayList<>();
+  final List<MetricSink> metricSinks = new ArrayList<>();
   private final ClientTransportServersBuilder clientTransportServersBuilder;
   HandlerRegistry fallbackRegistry = DEFAULT_FALLBACK_REGISTRY;
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
@@ -104,7 +108,8 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
    */
   public interface ClientTransportServersBuilder {
     InternalServer buildClientTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories);
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        MetricRecorder metricRecorder);
   }
 
   /**
@@ -154,6 +159,14 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
   @Override
   public ServerImplBuilder intercept(ServerInterceptor interceptor) {
     interceptors.add(checkNotNull(interceptor, "interceptor"));
+    return this;
+  }
+
+  /**
+   * Adds a MetricSink to the server.
+   */
+  public ServerImplBuilder addMetricSink(MetricSink metricSink) {
+    metricSinks.add(checkNotNull(metricSink, "metricSink"));
     return this;
   }
 
@@ -241,8 +254,11 @@ public final class ServerImplBuilder extends ServerBuilder<ServerImplBuilder> {
 
   @Override
   public Server build() {
+    MetricRecorder metricRecorder = new MetricRecorderImpl(metricSinks,
+        MetricInstrumentRegistry.getDefaultRegistry());
     return new ServerImpl(this,
-        clientTransportServersBuilder.buildClientTransportServers(getTracerFactories()),
+        clientTransportServersBuilder.buildClientTransportServers(
+                getTracerFactories(), metricRecorder),
         Context.ROOT);
   }
 

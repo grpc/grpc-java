@@ -58,11 +58,13 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected InternalServer newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    return OkHttpServerBuilder
+    OkHttpServerBuilder builder = OkHttpServerBuilder
         .forPort(port, InsecureServerCredentials.create())
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
-        .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories);
+        .setTransportTracerFactory(fakeClockTransportTracer);
+    return InternalOkHttpServerBuilder
+        .buildTransportServers(builder, streamTracerFactories, new io.grpc.MetricRecorder() {
+        });
   }
 
   @Override

@@ -59,7 +59,9 @@ public class JettyTransportTest extends AbstractTransportTest {
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
       final InternalServer delegate =
-              new ServletServerBuilder().buildTransportServers(streamTracerFactories);
+          new ServletServerBuilder().buildTransportServers(
+              streamTracerFactories, new io.grpc.MetricRecorder() {
+              });
 
       @Override
       public void start(ServerListener listener) throws IOException {

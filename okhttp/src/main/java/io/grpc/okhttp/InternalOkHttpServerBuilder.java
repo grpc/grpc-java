@@ -29,8 +29,9 @@ import java.util.List;
 @Internal
 public final class InternalOkHttpServerBuilder {
   public static InternalServer buildTransportServers(OkHttpServerBuilder builder,
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-    return builder.buildTransportServers(streamTracerFactories);
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      io.grpc.MetricRecorder metricRecorder) {
+    return builder.buildTransportServers(streamTracerFactories, metricRecorder);
   }
 
   public static void setTransportTracerFactory(OkHttpServerBuilder builder,

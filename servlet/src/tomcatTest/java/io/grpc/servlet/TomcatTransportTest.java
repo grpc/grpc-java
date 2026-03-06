@@ -71,8 +71,11 @@ public class TomcatTransportTest extends AbstractTransportTest {
   @Override
   protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
     return new InternalServer() {
+      final ServletServerBuilder builder = new ServletServerBuilder();
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServers(streamTracerFactories);
+          builder.buildTransportServers(
+              streamTracerFactories, new io.grpc.MetricRecorder() {
+              });
 
       @Override
       public void start(ServerListener listener) throws IOException {

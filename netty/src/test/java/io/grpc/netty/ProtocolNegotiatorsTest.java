@@ -389,7 +389,10 @@ public class ProtocolNegotiatorsTest {
         .buildTransportFactory();
     InternalServer server = NettyServerBuilder
         .forPort(0, serverCreds)
-        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
+        .buildTransportServers(
+            Collections.<ServerStreamTracer.Factory>emptyList(),
+            new io.grpc.MetricRecorder() {
+            });
     server.start(serverListener);
 
     ManagedClientTransport.Listener clientTransportListener =

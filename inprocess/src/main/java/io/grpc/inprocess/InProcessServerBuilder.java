@@ -120,7 +120,8 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override
       public InternalServer buildClientTransportServers(
-          List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+          List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+          io.grpc.MetricRecorder metricRecorder) {
         return buildTransportServers(streamTracerFactories);
       }
     }

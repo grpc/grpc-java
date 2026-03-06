@@ -71,7 +71,8 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", 0))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories, new io.grpc.MetricRecorder() {
+        });
   }
 
   @Override
@@ -81,7 +82,8 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", port))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories, new io.grpc.MetricRecorder() {
+        });
   }
 
   @Override

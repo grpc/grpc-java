@@ -43,8 +43,10 @@ public class NettyServerBuilderTest {
   @Test
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
-    NettyServer server =
-        builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
+    NettyServer server = builder.buildTransportServers(
+        ImmutableList.<ServerStreamTracer.Factory>of(),
+        new io.grpc.MetricRecorder() {
+        });
 
     assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
@@ -188,5 +190,15 @@ public class NettyServerBuilderTest {
     InternalNettyServerBuilder.useNioTransport(builder);
 
     builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void metricRecorder_propagatedToServer() throws Exception {
+    io.grpc.MetricRecorder recorder = mock(io.grpc.MetricRecorder.class);
+
+    NettyServer server = builder.buildTransportServers(
+        ImmutableList.<ServerStreamTracer.Factory>of(), recorder);
+
+    assertThat(server.getMetricRecorder()).isSameInstanceAs(recorder);
   }
 }

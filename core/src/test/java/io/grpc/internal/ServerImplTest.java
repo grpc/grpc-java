@@ -206,7 +206,8 @@ public class ServerImplTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              io.grpc.MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });

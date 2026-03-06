@@ -73,7 +73,8 @@ public class ServerImplBuilderTest {
         new ClientTransportServersBuilder() {
           @Override
           public InternalServer buildClientTransportServers(
-              List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+              List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+              io.grpc.MetricRecorder metricRecorder) {
             throw new UnsupportedOperationException();
           }
         });
@@ -139,7 +140,7 @@ public class ServerImplBuilderTest {
     public void run() {
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).hasSize(2);
@@ -169,7 +170,7 @@ public class ServerImplBuilderTest {
           }));
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).containsExactly(DUMMY_USER_TRACER);
@@ -192,7 +193,7 @@ public class ServerImplBuilderTest {
       InternalConfiguratorRegistry.setConfigurators(Collections.emptyList());
       ServerImplBuilder builder =
           new ServerImplBuilder(
-              streamTracerFactories -> {
+              (streamTracerFactories, metricRecorder) -> {
                 throw new UnsupportedOperationException();
               });
       assertThat(builder.getTracerFactories()).isEmpty();
