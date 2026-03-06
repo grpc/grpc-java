@@ -1647,13 +1647,15 @@ public class OpenTelemetryMetricsModuleTest {
     io.grpc.Context grpcContext = io.grpc.Context.current()
         .withValue(OpenTelemetryConstants.BAGGAGE_KEY, testBaggage);
 
-    // 3. Attach the gRPC context, trigger metric recording, and detach
     io.grpc.Context previousContext = grpcContext.attach();
     try {
-      tracer.streamClosed(Status.OK);
+      tracer.filterContext(grpcContext);
     } finally {
       grpcContext.detach(previousContext);
     }
+
+    // 3. Trigger metric recording
+    tracer.streamClosed(Status.OK);
 
     // 4. Verify the record call and capture the OTel Context
     verify(mockServerCallDurationHistogram).record(
