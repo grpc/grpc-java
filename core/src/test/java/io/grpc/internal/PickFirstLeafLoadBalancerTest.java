@@ -1940,6 +1940,7 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    inOrder.verify(mockHelper).createSubchannel(any());
     inOrder.verify(mockSubchannel1).start(stateListenerCaptor.capture());
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
@@ -1949,6 +1950,7 @@ public class PickFirstLeafLoadBalancerTest {
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
 
     // Second connection attempt is unsuccessful
+    inOrder.verify(mockHelper).createSubchannel(any());
     inOrder.verify(mockSubchannel2).start(stateListenerCaptor.capture());
     assertEquals(CONNECTING, loadBalancer.getConcludedConnectivityState());
     SubchannelStateListener stateListener2 = stateListenerCaptor.getValue();
@@ -1961,10 +1963,11 @@ public class PickFirstLeafLoadBalancerTest {
     loadBalancer.acceptResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(oldServers).setAttributes(affinity).build());
 
-    // Verify that no new subchannels were created or started
-    verify(mockHelper, times(2)).createSubchannel(createArgsCaptor.capture());
-    verify(mockSubchannel1, times(1)).start(stateListenerCaptor.capture());
-    verify(mockSubchannel2, times(1)).start(stateListenerCaptor.capture());
+    // Verify that no new subchannels were created or started, nor resolver refresh
+    inOrder.verify(mockHelper, never()).createSubchannel(createArgsCaptor.capture());
+    inOrder.verify(mockSubchannel1, never()).start(stateListenerCaptor.capture());
+    inOrder.verify(mockSubchannel2, never()).start(stateListenerCaptor.capture());
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
     assertEquals(TRANSIENT_FAILURE, loadBalancer.getConcludedConnectivityState());
 
     // No new connections are requested, subchannels responsible for completing their own backoff
@@ -1972,7 +1975,12 @@ public class PickFirstLeafLoadBalancerTest {
     verify(mockHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(mockHelper);
 
-    // First connection attempt is successful
+    // Second connection is unsuccessful (e.g., retry after backoff), and there is no name resolver
+    // refresh
+    stateListener2.onSubchannelState(ConnectivityStateInfo.forTransientFailure(CONNECTION_ERROR));
+    inOrder.verify(mockHelper, never()).refreshNameResolution();
+
+    // First connection is successful
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(READY));
     assertEquals(READY, loadBalancer.getConcludedConnectivityState());
     inOrder.verify(mockSubchannel2).shutdown();
