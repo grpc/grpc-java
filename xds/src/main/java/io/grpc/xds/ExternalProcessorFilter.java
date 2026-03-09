@@ -30,7 +30,6 @@ import java.util.concurrent.ScheduledExecutorService;
 public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
-  ManagedChannel extProcChannel;
   final String filterInstanceName;
   public ExternalProcessorFilter(String name) {
     filterInstanceName = checkNotNull(name, "name");
@@ -201,6 +200,7 @@ public class ExternalProcessorFilter implements Filter {
       private boolean headersSent = false;
       private Metadata requestHeaders;
       private final java.util.Queue<Runnable> pendingActions = new java.util.concurrent.ConcurrentLinkedQueue<>();
+      private ReqT lastRequestMessage;
 
       protected ExtProcClientCall(ClientCall<ReqT, RespT> delegate,
                                   ExternalProcessorGrpc.ExternalProcessorStub stub,
@@ -285,16 +285,21 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        try (InputStream is = method.streamRequest(message)) {
-          // Correctly convert InputStream to byte array using Guava
-          byte[] bodyBytes = ByteStreams.toByteArray(is);
+        if (lastRequestMessage != null) {
+          sendRequestBodyToExtProc(lastRequestMessage, false);
+        }
+        lastRequestMessage = message;
+      }
 
+      private void sendRequestBodyToExtProc(ReqT message, boolean endOfStream) {
+        try (InputStream is = method.streamRequest(message)) {
+          byte[] bodyBytes = ByteStreams.toByteArray(is);
           requestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
               .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
                   .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
+                  .setEndOfStream(endOfStream)
                   .build())
               .build());
-          // The external processor is now responsible for the message. We don't send it from here.
         } catch (IOException e) {
           delegate().cancel("Failed to serialize message for External Processor", e);
         }
@@ -346,6 +351,11 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void halfClose() {
+        if (lastRequestMessage != null) {
+          sendRequestBodyToExtProc(lastRequestMessage, true);
+          lastRequestMessage = null;
+        }
+
         // Event: Client Half-Close
         requestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
             .setRequestTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder().build())
@@ -358,10 +368,11 @@ public class ExternalProcessorFilter implements Filter {
       private final MethodDescriptor<?, RespT> method;
       private final ClientCall<?, RespT> callDelegate; // The actual RPC call
       private io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream;
-      Metadata savedHeaders;
-      Metadata savedTrailers;
-      io.grpc.Status savedStatus;
+      private Metadata savedHeaders;
+      private Metadata savedTrailers;
+      private io.grpc.Status savedStatus;
       private final java.util.Queue<RespT> messageQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
+      private RespT lastMessage;
 
       protected ExtProcListener(ClientCall.Listener<RespT> delegate, ClientCall<?, RespT> callDelegate, MethodDescriptor<?, RespT> method) {
         super(delegate);
@@ -385,16 +396,41 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onMessage(RespT message) {
+        if (lastMessage != null) {
+          sendResponseBodyToExtProc(lastMessage, false);
+        }
+        lastMessage = message;
+        messageQueue.add(message);
+      }
+
+      @Override
+      public void onClose(io.grpc.Status status, Metadata trailers) {
+        this.savedStatus = status;
+        this.savedTrailers = trailers;
+
+        if (lastMessage != null) {
+          sendResponseBodyToExtProc(lastMessage, true);
+          lastMessage = null;
+        }
+
+        // Event 6: Server Trailers with ACTUAL data
+        stream.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
+            .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
+                .setTrailers(toHeaderMap(savedTrailers)) // Map the captured trailers here
+                .build())
+            .build());
+      }
+
+      private void sendResponseBodyToExtProc(RespT message, boolean endOfStream) {
         try (java.io.InputStream is = method.streamResponse(message)) {
           // Use Guava to convert the server's response message to bytes
           byte[] bodyBytes = ByteStreams.toByteArray(is);
-
-          messageQueue.add(message);
 
           // Event 5: Server Message (Response Body) sent to Ext Proc
           stream.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
               .setResponseBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
                   .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
+                  .setEndOfStream(endOfStream)
                   .build())
               .build());
 
@@ -413,19 +449,6 @@ public class ExternalProcessorFilter implements Filter {
           // This triggers the client's StreamObserver.onError()
           super.onClose(io.grpc.Status.INTERNAL.withDescription("Failed to process server response"), new Metadata());
         }
-      }
-
-      @Override
-      public void onClose(io.grpc.Status status, Metadata trailers) {
-        this.savedStatus = status;
-        this.savedTrailers = trailers;
-
-        // Event 6: Server Trailers with ACTUAL data
-        stream.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
-            .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
-                .setTrailers(toHeaderMap(savedTrailers)) // Map the captured trailers here
-                .build())
-            .build());
       }
 
       /**
