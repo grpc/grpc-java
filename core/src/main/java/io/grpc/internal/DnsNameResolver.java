@@ -100,7 +100,7 @@ public class DnsNameResolver extends NameResolver {
    * not installed, the ttl value is {@code null} which falls back to {@link
    * #DEFAULT_NETWORK_CACHE_TTL_SECONDS gRPC default value}.
    *
-   * <p>For android, gRPC doesn't attempt to cache; this property value will be ignored.
+   * <p>For android, gRPC uses a fixed value; this property value will be ignored.
    */
   @VisibleForTesting
   static final String NETWORKADDRESS_CACHE_TTL_PROPERTY = "networkaddress.cache.ttl";
@@ -451,12 +451,14 @@ public class DnsNameResolver extends NameResolver {
 
   /**
    * Returns value of network address cache ttl property if not Android environment. For android,
-   * DnsNameResolver does not cache the dns lookup result.
+   * DnsNameResolver uses a fixed value.
    */
   private static long getNetworkAddressCacheTtlNanos(boolean isAndroid) {
     if (isAndroid) {
-      // on Android, ignore dns cache.
-      return 0;
+      // On Android, use fixed value. If the network used changes this value shouldn't matter, as
+      // channel.enterIdle() should be called and this name resolver instance will be discarded. The
+      // new name resolver instance will then re-request.
+      return TimeUnit.SECONDS.toNanos(DEFAULT_NETWORK_CACHE_TTL_SECONDS);
     }
 
     String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
