@@ -8,7 +8,6 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
@@ -18,7 +17,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import java.io.ByteArrayInputStream;
