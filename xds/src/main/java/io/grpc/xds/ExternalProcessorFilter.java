@@ -8,6 +8,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
@@ -202,6 +203,7 @@ public class ExternalProcessorFilter implements Filter {
       private final java.util.Queue<Runnable> pendingActions = new java.util.concurrent.ConcurrentLinkedQueue<>();
       private ReqT lastRequestMessage;
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
+      final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
 
       protected ExtProcClientCall(ClientCall<ReqT, RespT> delegate,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
@@ -272,7 +274,23 @@ public class ExternalProcessorFilter implements Filter {
             }
           }
 
-          @Override public void onCompleted() {}
+          @Override
+          public void onCompleted() {
+            if (extProcStreamCompleted.compareAndSet(false, true)) {
+              // The ext_proc server has gracefully closed the stream.
+              // Unblock any part of the interceptor that is currently waiting.
+              if (!headersSent) {
+                headersSent = true;
+                delegate().start(wrappedListener, requestHeaders);
+                drainQueue();
+              }
+              if (lastRequestMessage != null) {
+                super.sendMessage(lastRequestMessage);
+                lastRequestMessage = null;
+              }
+              wrappedListener.unblockAfterStreamComplete();
+            }
+          }
         });
 
         wrappedListener.setStream(requestObserver);
@@ -286,6 +304,15 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void sendMessage(ReqT message) {
+        if (extProcStreamCompleted.get()) {
+          if (lastRequestMessage != null) {
+            super.sendMessage(lastRequestMessage);
+            lastRequestMessage = null;
+          }
+          super.sendMessage(message);
+          return;
+        }
+
         if (!headersSent) {
           // If headers haven't been cleared by ext_proc yet, buffer the whole action
           pendingActions.add(() -> sendMessage(message));
@@ -299,6 +326,9 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendRequestBodyToExtProc(ReqT message, boolean endOfStream) {
+        if (extProcStreamCompleted.get()) {
+          return;
+        }
         try (InputStream is = method.streamRequest(message)) {
           byte[] bodyBytes = ByteStreams.toByteArray(is);
           requestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
@@ -358,6 +388,15 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void halfClose() {
+        if (extProcStreamCompleted.get()) {
+          if (lastRequestMessage != null) {
+            super.sendMessage(lastRequestMessage);
+            lastRequestMessage = null;
+          }
+          super.halfClose();
+          return;
+        }
+
         if (lastRequestMessage != null) {
           sendRequestBodyToExtProc(lastRequestMessage, true);
           lastRequestMessage = null;
@@ -394,6 +433,10 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onHeaders(Metadata headers) {
+        if (call.extProcStreamCompleted.get()) {
+          super.onHeaders(headers);
+          return;
+        }
         this.savedHeaders = headers;
         stream.onNext(ProcessingRequest.newBuilder()
             .setResponseHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders.newBuilder()
@@ -406,6 +449,15 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onMessage(RespT message) {
+        if (call.extProcStreamCompleted.get()) {
+          if (lastMessage != null) {
+            super.onMessage(lastMessage);
+            lastMessage = null;
+          }
+          super.onMessage(message);
+          return;
+        }
+
         if (lastMessage != null) {
           sendResponseBodyToExtProc(lastMessage, false);
         }
@@ -423,6 +475,15 @@ public class ExternalProcessorFilter implements Filter {
           super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
           return;
         }
+        if (call.extProcStreamCompleted.get()) {
+          if (lastMessage != null) {
+            super.onMessage(lastMessage);
+            lastMessage = null;
+          }
+          super.onClose(status, trailers);
+          return;
+        }
+
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
@@ -440,6 +501,9 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendResponseBodyToExtProc(RespT message, boolean endOfStream) {
+        if (call.extProcStreamCompleted.get()) {
+          return;
+        }
         try (java.io.InputStream is = method.streamResponse(message)) {
           // Use Guava to convert the server's response message to bytes
           byte[] bodyBytes = ByteStreams.toByteArray(is);
@@ -479,6 +543,20 @@ public class ExternalProcessorFilter implements Filter {
       void proceedWithNextMessage() {
         RespT msg = messageQueue.poll();
         if (msg != null) super.onMessage(msg);
+      }
+
+      void unblockAfterStreamComplete() {
+        // This is called when the ext_proc stream is gracefully completed.
+        // We need to flush any pending state that is waiting for a response from ext_proc.
+        if (savedHeaders != null) {
+          proceedWithHeaders();
+        }
+        while (messageQueue.peek() != null) {
+          proceedWithNextMessage();
+        }
+        if (savedStatus != null) {
+          proceedWithClose();
+        }
       }
     }
 
