@@ -1448,7 +1448,7 @@ public class PickFirstLeafLoadBalancerTest {
 
     if (serializeRetries) {
       inOrder.verify(mockSubchannel3, never()).start(stateListenerCaptor.capture());
-      fakeClock.forwardTime(1, TimeUnit.SECONDS);
+      forwardTimeByBackoffDelay();
     }
 
     // subchannel 3 still attempts a connection even though we stay in transient failure
