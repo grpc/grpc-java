@@ -21,6 +21,7 @@ import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import javax.annotation.Nullable;
@@ -236,7 +237,6 @@ public class ExternalProcessorFilter implements Filter {
             // 2. Client Message (Request Body)
             else if (response.hasRequestBody()) {
               handleRequestBodyResponse(response.getRequestBody());
-              drainQueue();
             }
             // 3. We don't send request trailers in gRPC for half close.
             // 4. Server Headers
@@ -294,21 +294,37 @@ public class ExternalProcessorFilter implements Filter {
                   .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
                   .build())
               .build());
-
-          // 3. Queue the ACTUAL delegate call.
-          // We use super.sendMessage to bypass this interceptor's logic and move to the next call in the chain.
-          pendingActions.add(() -> super.sendMessage(message));
+          // The external processor is now responsible for the message. We don't send it from here.
         } catch (IOException e) {
           delegate().cancel("Failed to serialize message for External Processor", e);
         }
       }
 
       private void handleRequestBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse) {
-        // If ExtProc modified the body, you would deserialize it here.
-        // For simplicity, we assume the original message is sent if no BodyMutation exists.
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
-          // Logic to deserialize modified bytes back to ReqT would go here
+          io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
+          if (mutation.hasBody()) {
+            byte[] mutatedBody = mutation.getBody().toByteArray();
+            try (InputStream is = new ByteArrayInputStream(mutatedBody)) {
+              ReqT mutatedMessage = method.parseRequest(is);
+              super.sendMessage(mutatedMessage);
+            } catch (IOException e) {
+              delegate().cancel("Failed to parse mutated message from External Processor", e);
+            }
+          } else if (mutation.getClearBody()) {
+            // "clear_body" means we should send an empty message.
+            try (InputStream is = new ByteArrayInputStream(new byte[0])) {
+              ReqT emptyMessage = method.parseRequest(is);
+              super.sendMessage(emptyMessage);
+            } catch (IOException e) {
+              // This should not happen with an empty stream.
+              delegate().cancel("Failed to create empty message", e);
+            }
+          }
+          // If body mutation is present but has no body and clear_body is false, do nothing.
+          // This means the processor chose to drop the message.
         }
+        // If no response is present, the processor chose to drop the message.
       }
 
       private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExternalProcessorInterceptor.ExtProcListener<RespT> listener) {
