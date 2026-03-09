@@ -15,15 +15,17 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import javax.annotation.Nullable;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.Nullable;
 
 public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
@@ -72,7 +74,7 @@ public class ExternalProcessorFilter implements Filter {
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
-                                                  @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
+      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
     return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig, overrideConfig, scheduler);
   }
 
@@ -96,7 +98,7 @@ public class ExternalProcessorFilter implements Filter {
     private final ScheduledExecutorService scheduler;
 
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
-                                 @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
+        @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
       this.filterConfig = filterConfig;
       this.overrideConfig = overrideConfig;
       this.scheduler = scheduler;
@@ -199,10 +201,11 @@ public class ExternalProcessorFilter implements Filter {
       private Metadata requestHeaders;
       private final java.util.Queue<Runnable> pendingActions = new java.util.concurrent.ConcurrentLinkedQueue<>();
       private ReqT lastRequestMessage;
+      final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
 
       protected ExtProcClientCall(ClientCall<ReqT, RespT> delegate,
-                                  ExternalProcessorGrpc.ExternalProcessorStub stub,
-                                  MethodDescriptor<ReqT, RespT> method) {
+          ExternalProcessorGrpc.ExternalProcessorStub stub,
+          MethodDescriptor<ReqT, RespT> method) {
         super(delegate);
         this.stub = stub;
         this.method = method;
@@ -211,7 +214,7 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
         this.requestHeaders = headers;
-        ExternalProcessorInterceptor.ExtProcListener<RespT> wrappedListener = new ExternalProcessorInterceptor.ExtProcListener<>(responseListener, delegate(), method);
+        ExternalProcessorInterceptor.ExtProcListener<ReqT, RespT> wrappedListener = new ExternalProcessorInterceptor.ExtProcListener<>(responseListener, delegate(), method, this);
 
         requestObserver = stub.process(new io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse>() {
           @Override
@@ -262,7 +265,13 @@ public class ExternalProcessorFilter implements Filter {
             }
           }
 
-          @Override public void onError(Throwable t) { delegate().cancel("ExtProc failed", t); }
+          @Override
+          public void onError(Throwable t) {
+            if (extProcStreamFailed.compareAndSet(false, true)) {
+              delegate().cancel("External processor stream failed", t);
+            }
+          }
+
           @Override public void onCompleted() {}
         });
 
@@ -330,7 +339,7 @@ public class ExternalProcessorFilter implements Filter {
         // If no response is present, the processor chose to drop the message.
       }
 
-      private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExternalProcessorInterceptor.ExtProcListener<RespT> listener) {
+      private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExternalProcessorInterceptor.ExtProcListener<ReqT, RespT> listener) {
         // Pass the (potentially modified) message to the real listener
         listener.proceedWithNextMessage();
       }
@@ -362,9 +371,10 @@ public class ExternalProcessorFilter implements Filter {
       }
     }
 
-    private static class ExtProcListener<RespT> extends io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT> {
+    private static class ExtProcListener<ReqT, RespT> extends ForwardingClientCallListener.SimpleForwardingClientCallListener<RespT> {
       private final MethodDescriptor<?, RespT> method;
       private final ClientCall<?, RespT> callDelegate; // The actual RPC call
+      private final ExtProcClientCall<ReqT, RespT> call;
       private io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream;
       private Metadata savedHeaders;
       private Metadata savedTrailers;
@@ -372,10 +382,12 @@ public class ExternalProcessorFilter implements Filter {
       private final java.util.Queue<RespT> messageQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
       private RespT lastMessage;
 
-      protected ExtProcListener(ClientCall.Listener<RespT> delegate, ClientCall<?, RespT> callDelegate, MethodDescriptor<?, RespT> method) {
+      protected ExtProcListener(ClientCall.Listener<RespT> delegate, ClientCall<?, RespT> callDelegate,
+                                MethodDescriptor<?, RespT> method, ExtProcClientCall<ReqT, RespT> call) {
         super(delegate);
         this.method = method;
         this.callDelegate = callDelegate;
+        this.call = call;
       }
 
       void setStream(io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream) { this.stream = stream; }
@@ -403,6 +415,14 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onClose(io.grpc.Status status, Metadata trailers) {
+        if (call.extProcStreamFailed.get()) {
+          // The ext_proc stream died, which caused delegate().cancel() to be called, leading here.
+          // The incoming status will be CANCELLED. We must not attempt to forward the server's
+          // response trailers to the now-dead ext_proc stream. Instead, we close the
+          // application's call with UNAVAILABLE as per the gRFC.
+          super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
+          return;
+        }
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
