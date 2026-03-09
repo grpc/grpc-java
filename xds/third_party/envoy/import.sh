@@ -107,9 +107,9 @@ envoy/extensions/transport_sockets/tls/v3/secret.proto
 envoy/extensions/transport_sockets/tls/v3/tls.proto
 envoy/service/auth/v3/attribute_context.proto
 envoy/service/auth/v3/external_auth.proto
-envoy/service/ext_proc/v3/external_processor.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
+envoy/service/ext_proc/v3/external_processor.proto
 envoy/service/load_stats/v3/lrs.proto
 envoy/service/rate_limit_quota/v3/rlqs.proto
 envoy/service/status/v3/csds.proto
