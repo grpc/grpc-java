@@ -196,6 +196,7 @@ public final class GrpcOpenTelemetry {
       serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
     }
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    serverBuilder.addMetricSink(sink);
   }
 
   @VisibleForTesting

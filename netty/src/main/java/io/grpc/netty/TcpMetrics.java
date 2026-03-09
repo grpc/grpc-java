@@ -56,6 +56,8 @@ final class TcpMetrics {
     } catch (Error e) {
       log.log(Level.FINE, "Failed to load native Epoll library", e);
     }
+    log.log(Level.INFO, "Epoll available during static init of TcpMetrics:"
+        + "{0}", epollAvailable);
     DEFAULT_METRICS = new Metrics(epollAvailable);
   }
 
@@ -198,8 +200,15 @@ final class TcpMetrics {
     }
 
     private void recordTcpInfo(Channel channel, boolean isClose) {
-      if (epollSocketChannelClass == null
-          || !epollSocketChannelClass.isInstance(channel)) {
+      if (epollSocketChannelClass == null) {
+        log.log(Level.FINE, "Skipping recordTcpInfo because"
+            + "epollSocketChannelClass is null");
+        return;
+      }
+      if (!epollSocketChannelClass.isInstance(channel)) {
+        log.log(Level.FINE, "Skipping recordTcpInfo because channel is not an"
+            + "instance of epollSocketChannelClass: {0}", channel.getClass()
+            .getName());
         return;
       }
       List<String> labelValues = getLabelValues(channel);
