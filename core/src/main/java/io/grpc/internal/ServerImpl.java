@@ -143,7 +143,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       InternalServer transportServer,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
-
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");

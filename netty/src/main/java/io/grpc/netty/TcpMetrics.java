@@ -151,14 +151,12 @@ final class TcpMetrics {
     private ScheduledFuture<?> reportTimer;
 
     void channelActive(Channel channel) {
-      if (metricRecorder != null) {
-        List<String> labelValues = getLabelValues(channel);
-        metricRecorder.addLongCounter(metrics.connectionsCreated, 1,
-            Collections.emptyList(), labelValues);
-        metricRecorder.addLongUpDownCounter(metrics.connectionCount, 1,
-            Collections.emptyList(), labelValues);
-        scheduleNextReport(channel, true);
-      }
+      List<String> labelValues = getLabelValues(channel);
+      metricRecorder.addLongCounter(metrics.connectionsCreated, 1,
+          Collections.emptyList(), labelValues);
+      metricRecorder.addLongUpDownCounter(metrics.connectionCount, 1,
+          Collections.emptyList(), labelValues);
+      scheduleNextReport(channel, true);
     }
 
     private void scheduleNextReport(final Channel channel, boolean isInitial) {
@@ -188,13 +186,11 @@ final class TcpMetrics {
       if (reportTimer != null) {
         reportTimer.cancel(false);
       }
-      if (metricRecorder != null) {
-        List<String> labelValues = getLabelValues(channel);
-        metricRecorder.addLongUpDownCounter(metrics.connectionCount, -1,
-            Collections.emptyList(), labelValues);
-        // Final collection on close
-        recordTcpInfo(channel, true);
-      }
+      List<String> labelValues = getLabelValues(channel);
+      metricRecorder.addLongUpDownCounter(metrics.connectionCount, -1,
+          Collections.emptyList(), labelValues);
+      // Final collection on close
+      recordTcpInfo(channel, true);
     }
 
     void recordTcpInfo(Channel channel) {
@@ -202,7 +198,7 @@ final class TcpMetrics {
     }
 
     private void recordTcpInfo(Channel channel, boolean isClose) {
-      if (metricRecorder == null || epollSocketChannelClass == null
+      if (epollSocketChannelClass == null
           || !epollSocketChannelClass.isInstance(channel)) {
         return;
       }
