@@ -112,9 +112,9 @@ public class ExternalProcessorFilter implements Filter {
         Channel next) {
 
       ExternalProcessorGrpc.ExternalProcessorStub stub = getExternalProcessorStub(filterConfig.externalProcessor.getGrpcService());
-
+      ExternalProcessor config = filterConfig.externalProcessor;
       // Wrap the outgoing call to intercept client events
-      return new ExtProcClientCall<>(next.newCall(method, callOptions), stub, method);
+      return new ExtProcClientCall<>(next.newCall(method, callOptions), stub, method, config);
     }
 
     // --- SHARED UTILITY METHODS ---
@@ -196,6 +196,7 @@ public class ExternalProcessorFilter implements Filter {
     private static class ExtProcClientCall<ReqT, RespT> extends SimpleForwardingClientCall<ReqT, RespT> {
       private final ExternalProcessorGrpc.ExternalProcessorStub stub;
       private final MethodDescriptor<ReqT, RespT> method;
+      private final ExternalProcessor config;
       private io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> requestObserver;
 
       private boolean headersSent = false;
@@ -206,10 +207,12 @@ public class ExternalProcessorFilter implements Filter {
 
       protected ExtProcClientCall(ClientCall<ReqT, RespT> delegate,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
-          MethodDescriptor<ReqT, RespT> method) {
+          MethodDescriptor<ReqT, RespT> method,
+          ExternalProcessor config) {
         super(delegate);
         this.stub = stub;
         this.method = method;
+        this.config = config;
       }
 
       @Override
@@ -268,23 +271,18 @@ public class ExternalProcessorFilter implements Filter {
 
           @Override
           public void onError(Throwable t) {
-            if (extProcStreamFailed.compareAndSet(false, true)) {
-              delegate().cancel("External processor stream failed", t);
+            if (config.getFailureModeAllow()) {
+              handleFailOpen(wrappedListener);
+            } else {
+              if (extProcStreamFailed.compareAndSet(false, true)) {
+                delegate().cancel("External processor stream failed", t);
+              }
             }
           }
 
           @Override
           public void onCompleted() {
-            if (extProcStreamCompleted.compareAndSet(false, true)) {
-              // The ext_proc server has gracefully closed the stream.
-              // Unblock any part of the interceptor that is currently waiting.
-              if (!headersSent) {
-                headersSent = true;
-                delegate().start(wrappedListener, requestHeaders);
-                drainQueue();
-              }
-              wrappedListener.unblockAfterStreamComplete();
-            }
+            handleFailOpen(wrappedListener);
           }
         });
 
@@ -381,6 +379,19 @@ public class ExternalProcessorFilter implements Filter {
         delegate().cancel("Rejected by ExtProc", null);
         listener.onClose(status, new Metadata());
         requestObserver.onCompleted();
+      }
+
+      private void handleFailOpen(ExtProcListener<ReqT, RespT> listener) {
+        if (extProcStreamCompleted.compareAndSet(false, true)) {
+          // The ext_proc stream is gone. "Fail open" means we proceed with the RPC
+          // without any more processing.
+          if (!headersSent) {
+            headersSent = true;
+            delegate().start(listener, requestHeaders);
+            drainQueue();
+          }
+          listener.unblockAfterStreamComplete();
+        }
       }
     }
 
