@@ -31,11 +31,17 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
+  // The map of xDS server info to its corresponding gRPC xDS transport.
+  // This enables reusing and sharing the same underlying gRPC channel.
+  private static final Map<Bootstrapper.ServerInfo, GrpcXdsTransport> xdsServerInfoToTransportMap =
+      new ConcurrentHashMap<>();
 
   GrpcXdsTransportFactory(CallCredentials callCredentials) {
     this.callCredentials = callCredentials;
@@ -43,12 +49,25 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo, callCredentials);
+    return xdsServerInfoToTransportMap.compute(
+        serverInfo,
+        (info, transport) -> {
+          if (transport == null) {
+            transport = new GrpcXdsTransport(serverInfo, callCredentials);
+          }
+          ++transport.refCount;
+          return transport;
+        });
   }
 
   @VisibleForTesting
   public XdsTransport createForTest(ManagedChannel channel) {
-    return new GrpcXdsTransport(channel, callCredentials);
+    return new GrpcXdsTransport(channel, callCredentials, null);
+  }
+
+  @VisibleForTesting
+  static boolean hasTransport(Bootstrapper.ServerInfo serverInfo) {
+    return xdsServerInfoToTransportMap.containsKey(serverInfo);
   }
 
   @VisibleForTesting
@@ -56,6 +75,9 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     private final ManagedChannel channel;
     private final CallCredentials callCredentials;
+    private final Bootstrapper.ServerInfo serverInfo;
+    // Must only be accessed within the provided atomic methods of ConcurrentHashMap.
+    private int refCount = 0;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
       this(serverInfo, null);
@@ -63,7 +85,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     @VisibleForTesting
     public GrpcXdsTransport(ManagedChannel channel) {
-      this(channel, null);
+      this(channel, null, null);
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
@@ -73,12 +95,17 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
           .keepAliveTime(5, TimeUnit.MINUTES)
           .build();
       this.callCredentials = callCredentials;
+      this.serverInfo = serverInfo;
     }
 
     @VisibleForTesting
-    public GrpcXdsTransport(ManagedChannel channel, CallCredentials callCredentials) {
+    public GrpcXdsTransport(
+        ManagedChannel channel,
+        CallCredentials callCredentials,
+        Bootstrapper.ServerInfo serverInfo) {
       this.channel = checkNotNull(channel, "channel");
       this.callCredentials = callCredentials;
+      this.serverInfo = serverInfo;
     }
 
     @Override
@@ -98,7 +125,19 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     @Override
     public void shutdown() {
-      channel.shutdown();
+      if (serverInfo == null) {
+        channel.shutdown();
+        return;
+      }
+      xdsServerInfoToTransportMap.computeIfPresent(
+          serverInfo,
+          (info, transport) -> {
+            if (--transport.refCount == 0) { // Prefix decrement and return the updated value.
+              transport.channel.shutdown();
+              return null; // Remove mapping.
+            }
+            return transport;
+          });
     }
 
     private class XdsStreamingCall<ReqT, RespT> implements

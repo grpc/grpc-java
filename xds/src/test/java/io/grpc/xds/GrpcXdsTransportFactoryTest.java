@@ -118,6 +118,68 @@ public class GrpcXdsTransportFactoryTest {
     xdsTransport.shutdown();
   }
 
+  @Test
+  public void refCountedXdsTransport_sameXdsServerAddress_returnsExistingTransport() {
+    Bootstrapper.ServerInfo xdsServerInfo =
+        Bootstrapper.ServerInfo.create(
+            "localhost:" + server.getPort(), InsecureChannelCredentials.create());
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    // Verify calling create() for the first time creates a new GrpcXdsTransport instance.
+    // The ref count was previously 0 and now is 1.
+    XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo);
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo)).isTrue();
+    // Verify calling create() for the second time to the same xDS server address returns the same
+    // GrpcXdsTransport instance. The ref count was previously 1 and now is 2.
+    XdsTransportFactory.XdsTransport transport2 = xdsTransportFactory.create(xdsServerInfo);
+    assertThat(transport1).isSameInstanceAs(transport2);
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo)).isTrue();
+    // Verify calling shutdown() for the first time does not shut down the GrpcXdsTransport
+    // instance. The ref count was previously 2 and now is 1.
+    transport1.shutdown();
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo)).isTrue();
+    // Verify calling shutdown() for the second time shuts down and cleans up the
+    // GrpcXdsTransport instance. The ref count was previously 1 and now is 0.
+    transport2.shutdown();
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo)).isFalse();
+  }
+
+  @Test
+  public void refCountedXdsTransport_differentXdsServerAddress_returnsDifferentTransport()
+      throws Exception {
+    // Create and start a second xDS server on a different port.
+    Server server2 =
+        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+            .addService(echoAdsService())
+            .build()
+            .start();
+    Bootstrapper.ServerInfo xdsServerInfo1 =
+        Bootstrapper.ServerInfo.create(
+            "localhost:" + server.getPort(), InsecureChannelCredentials.create());
+    Bootstrapper.ServerInfo xdsServerInfo2 =
+        Bootstrapper.ServerInfo.create(
+            "localhost:" + server2.getPort(), InsecureChannelCredentials.create());
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    // Verify calling create() to the first xDS server creates a new GrpcXdsTransport instance.
+    // The ref count was previously 0 and now is 1.
+    XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo1);
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo1)).isTrue();
+    // Verify calling create() to the second xDS server creates a different GrpcXdsTransport
+    // instance. The ref count was previously 0 and now is 1.
+    XdsTransportFactory.XdsTransport transport2 = xdsTransportFactory.create(xdsServerInfo2);
+    assertThat(transport1).isNotSameInstanceAs(transport2);
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo2)).isTrue();
+    // Verify calling shutdown() shuts down and cleans up the GrpcXdsTransport instance for
+    // the first xDS server. The ref count was previously 1 and now is 0.
+    transport1.shutdown();
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo1)).isFalse();
+    // Verify calling shutdown() shuts down and cleans up the GrpcXdsTransport instance for
+    // the second xDS server. The ref count was previously 1 and now is 0.
+    transport2.shutdown();
+    assertThat(GrpcXdsTransportFactory.hasTransport(xdsServerInfo2)).isFalse();
+    // Clean up the second xDS server.
+    server2.shutdown();
+  }
+
   private static class FakeEventHandler implements
       XdsTransportFactory.EventHandler<DiscoveryResponse> {
     private final BlockingQueue<DiscoveryResponse> respQ = new LinkedBlockingQueue<>();
