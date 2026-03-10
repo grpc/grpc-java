@@ -3,15 +3,16 @@ gRPC-Java - An RPC library and framework
 
 | Resource | Link |
 |--------|------|
-| Homepage | https://grpc.io |
-| Mailing List | grpc-io@googlegroups.com |
+| Homepage | [grpc.io](https://grpc.io) |
+| Mailing List | [grpc-io@googlegroups.com](mailto:grpc-io@googlegroups.com) |
 
 [![Join the chat at https://gitter.im/grpc/grpc](https://badges.gitter.im/grpc/grpc.svg)](https://gitter.im/grpc/grpc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![GitHub Actions Linux Testing](https://github.com/grpc/grpc-java/actions/workflows/testing.yml/badge.svg?branch=master)](https://github.com/grpc/grpc-java/actions/workflows/testing.yml?branch=master)
 [![Line Coverage Status](https://coveralls.io/repos/grpc/grpc-java/badge.svg?branch=master&service=github)](https://coveralls.io/github/grpc/grpc-java?branch=master)
 [![Branch-adjusted Line Coverage Status](https://codecov.io/gh/grpc/grpc-java/branch/master/graph/badge.svg)](https://codecov.io/gh/grpc/grpc-java)
 
-## Supported Platforms
+Supported Platforms
+-------------------
 
 gRPC-Java supports Java 8 and later. Android minSdkVersion 23 (Marshmallow) and
 later are supported with [Java 8 language desugaring][android-java-8].
@@ -44,7 +45,7 @@ are standalone projects that showcase the usage of gRPC.
 Download
 --------
 
-Download [the JARs]: https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.79.0. Or for Maven with non-Android, add to your `pom.xml`:
+Download [the JARs](https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.79.0). Or for Maven with non-Android, add to your `pom.xml`:
 ```xml
 <dependency>
   <groupId>io.grpc</groupId>
@@ -234,7 +235,7 @@ The Stub layer is what is exposed to most developers and provides type-safe
 bindings to whatever datamodel/IDL/interface you are adapting. gRPC comes with
 a [plugin](https://github.com/google/grpc-java/blob/master/compiler) to the
 protocol-buffers compiler that generates Stub interfaces out of `.proto` files,
-but bindings to other data models or IDLs are supported and encouraged.
+but bindings to other datamodels/IDL are supported and encouraged.
 
 ### Channel
 
