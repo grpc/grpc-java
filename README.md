@@ -235,7 +235,7 @@ The Stub layer is what is exposed to most developers and provides type-safe
 bindings to whatever datamodel/IDL/interface you are adapting. gRPC comes with
 a [plugin](https://github.com/google/grpc-java/blob/master/compiler) to the
 protocol-buffers compiler that generates Stub interfaces out of `.proto` files,
-but bindings to other datamodels/IDL are supported and encouraged.
+but bindings to other datamodel/IDL are easy and encouraged.
 
 ### Channel
 
