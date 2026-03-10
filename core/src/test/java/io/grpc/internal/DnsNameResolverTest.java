@@ -684,7 +684,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve_addressFailure_neverLookUpServiceConfig() throws Exception {
+  public void resolve_addressFailure_stillLookUpServiceConfig() throws Exception {
     DnsNameResolver.enableTxt = true;
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
@@ -703,7 +703,7 @@ public class DnsNameResolverTest {
     Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
-    verify(mockResourceResolver, never()).resolveTxt(anyString());
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + name);
 
     assertEquals(0, fakeClock.numPendingTasks());
     // A retry should be scheduled
