@@ -12,6 +12,7 @@ import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -220,11 +221,17 @@ public class ExternalProcessorFilter implements Filter {
         this.requestHeaders = headers;
         ExternalProcessorInterceptor.ExtProcListener<ReqT, RespT> wrappedListener = new ExternalProcessorInterceptor.ExtProcListener<>(responseListener, delegate(), method, this);
 
-        requestObserver = stub.process(new io.grpc.stub.StreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse>() {
+        requestObserver = stub.process(new io.grpc.stub.StreamObserver<ProcessingResponse>() {
           @Override
           public void onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse response) {
             if (response.hasImmediateResponse()) {
               handleImmediateResponse(response.getImmediateResponse(), responseListener);
+              return;
+            }
+
+            if (response.getRequestDrain()) {
+              handleFailOpen(wrappedListener);
+              requestObserver.onCompleted();
               return;
             }
 
@@ -535,7 +542,21 @@ public class ExternalProcessorFilter implements Filter {
 
     @VisibleForTesting
     ExternalProcessorGrpc.ExternalProcessorStub getExternalProcessorStub(GrpcService service) {
-      return null; // Implementation needed
+      // TODO: Implement actual stub creation based on the GrpcService configuration.
+      // This will likely involve creating a ManagedChannel and then a stub from it.
+      // For now, returning null as a placeholder.
+      //
+      // This method needs to create a ManagedChannel based on the GrpcService configuration.
+      // The GrpcService contains information like target URI, timeout, and optionally
+      // a Google gRPC service config.
+      // For a full implementation, you would typically use a ManagedChannelBuilder
+      // to construct the channel and then create a stub from it.
+      // Example (simplified, actual implementation would need more details from GrpcService):
+      // ManagedChannel channel = ManagedChannelBuilder.forTarget(service.getEnvoyGrpc().getClusterName())
+      //     .usePlaintext() // Or use TLS based on configuration
+      //     .build();
+      // return ExternalProcessorGrpc.newStub(channel);
+      return null;
     }
   }
 }
