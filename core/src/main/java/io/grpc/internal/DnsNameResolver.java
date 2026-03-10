@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Verify;
 import com.google.common.base.VerifyException;
-import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.ProxiedSocketAddress;
@@ -262,22 +261,19 @@ public class DnsNameResolver extends NameResolver {
   /**
    * Main logic of name resolution.
    */
-  protected InternalResolutionResult doResolve(boolean forceTxt) {
-    InternalResolutionResult result = new InternalResolutionResult();
+  protected ResolutionResult doResolve() {
+    ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
     try {
-      result.addresses = resolveAddresses();
+      resultBuilder.setAddressesOrError(StatusOr.fromValue(resolveAddresses()));
     } catch (Exception e) {
       logger.log(Level.FINE, "Address resolution failure", e);
-      if (!forceTxt) {
-        result.error =
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e);
-        return result;
-      }
+      resultBuilder.setAddressesOrError(StatusOr.fromStatus(
+          Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e)));
     }
     if (enableTxt) {
-      result.config = resolveServiceConfig();
+      resultBuilder.setServiceConfig(resolveServiceConfig());
     }
-    return result;
+    return resultBuilder.build();
   }
 
   private final class Resolve implements Runnable {
@@ -292,38 +288,22 @@ public class DnsNameResolver extends NameResolver {
       if (logger.isLoggable(Level.FINER)) {
         logger.finer("Attempting DNS resolution of " + host);
       }
-      InternalResolutionResult result = null;
+      ResolutionResult result = null;
       try {
         EquivalentAddressGroup proxiedAddr = detectProxy();
-        ResolutionResult.Builder resolutionResultBuilder = ResolutionResult.newBuilder();
         if (proxiedAddr != null) {
           if (logger.isLoggable(Level.FINER)) {
             logger.finer("Using proxy address " + proxiedAddr);
           }
-          resolutionResultBuilder.setAddressesOrError(
-              StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
+          result = ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(proxiedAddr)))
+              .build();
         } else {
-          result = doResolve(false);
-          if (result.error != null) {
-            InternalResolutionResult finalResult = result;
-            syncContext.execute(() ->
-                savedListener.onResult2(ResolutionResult.newBuilder()
-                    .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
-                    .build()));
-            return;
-          }
-          if (result.addresses != null) {
-            resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(result.addresses));
-          }
-          if (result.config != null) {
-            resolutionResultBuilder.setServiceConfig(result.config);
-          }
-          if (result.attributes != null) {
-            resolutionResultBuilder.setAttributes(result.attributes);
-          }
+          result = doResolve();
         }
+        ResolutionResult savedResult = result;
         syncContext.execute(() -> {
-          savedListener.onResult2(resolutionResultBuilder.build());
+          savedListener.onResult2(savedResult);
         });
       } catch (IOException e) {
         syncContext.execute(() ->
@@ -333,7 +313,7 @@ public class DnsNameResolver extends NameResolver {
                         Status.UNAVAILABLE.withDescription(
                             "Unable to resolve host " + host).withCause(e))).build()));
       } finally {
-        final boolean succeed = result != null && result.error == null;
+        final boolean succeed = result != null && result.getAddressesOrError().hasValue();
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -531,18 +511,6 @@ public class DnsNameResolver extends NameResolver {
           "key '%s' missing in '%s'", choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY));
     }
     return sc;
-  }
-
-  /**
-   * Used as a DNS-based name resolver's internal representation of resolution result.
-   */
-  protected static final class InternalResolutionResult {
-    private Status error;
-    private List<EquivalentAddressGroup> addresses;
-    private ConfigOrError config;
-    public Attributes attributes;
-
-    private InternalResolutionResult() {}
   }
 
   /**
