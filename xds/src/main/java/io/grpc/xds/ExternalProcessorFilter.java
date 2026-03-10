@@ -285,7 +285,7 @@ public class ExternalProcessorFilter implements Filter {
                 drainQueue();
               }
               if (lastRequestMessage != null) {
-                super.sendMessage(lastRequestMessage);
+                delegate().sendMessage(lastRequestMessage);
                 lastRequestMessage = null;
               }
               wrappedListener.unblockAfterStreamComplete();
