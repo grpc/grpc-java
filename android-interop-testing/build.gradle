@@ -29,7 +29,7 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
-    compileSdkVersion 34
+    compileSdkVersion 35
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"

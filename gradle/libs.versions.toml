@@ -6,9 +6,14 @@ android-annotations = "com.google.android:annotations:4.1.1.4"
 # 1.9.1+ uses Kotlin and requires Android Gradle Plugin 9+
 # checkForUpdates: androidx-annotation:1.9.0
 androidx-annotation = "androidx.annotation:annotation:1.9.0"
-androidx-core = "androidx.core:core:1.17.0"
-androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.10.0"
-androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.10.0"
+# 1.16.0+ requires AGP 8.6.0+
+# checkForUpdates: androidx-core:1.15.+
+androidx-core = "androidx.core:core:1.15.0"
+# 2.9+ requires AGP 8.1.1+
+# checkForUpdates: androidx-lifecycle-common:2.8.+
+androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.7"
+# checkForUpdates: androidx-lifecycle-service:2.8.+
+androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.8.7"
 androidx-test-core = "androidx.test:core:1.7.0"
 androidx-test-ext-junit = "androidx.test.ext:junit:1.3.0"
 androidx-test-rules = "androidx.test:rules:1.7.0"
