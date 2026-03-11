@@ -5,7 +5,8 @@
         android:name="androidx.test.runner.AndroidJUnitRunner"
         android:targetPackage="io.grpc.android.integrationtest" />
 
-    <application>
+    <application
+        android:name="android.support.multidex.MultiDexApplication" >
     </application>
 
 </manifest>
