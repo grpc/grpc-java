@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.InternalTcpMetrics;
 import io.grpc.LongCounterMetricInstrument;
@@ -29,7 +30,6 @@ import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -58,9 +58,10 @@ final class TcpMetrics {
     }
     log.log(Level.INFO, "Epoll available during static init of TcpMetrics:"
         + "{0}", epollAvailable);
-    DEFAULT_METRICS = new Metrics(epollAvailable);
+    DEFAULT_METRICS = new Metrics();
   }
 
+  @VisibleForTesting
   static Metrics getDefaultMetrics() {
     return DEFAULT_METRICS;
   }
@@ -72,19 +73,12 @@ final class TcpMetrics {
     final LongCounterMetricInstrument recurringRetransmits;
     final DoubleHistogramMetricInstrument minRtt;
 
-    Metrics(boolean epollAvailable) {
+    Metrics() {
       connectionsCreated = InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT;
       connectionCount = InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT;
-
-      if (epollAvailable) {
-        packetsRetransmitted = InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT;
-        recurringRetransmits = InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT;
-        minRtt = InternalTcpMetrics.MIN_RTT_INSTRUMENT;
-      } else {
-        packetsRetransmitted = null;
-        recurringRetransmits = null;
-        minRtt = null;
-      }
+      packetsRetransmitted = InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT;
+      recurringRetransmits = InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT;
+      minRtt = InternalTcpMetrics.MIN_RTT_INSTRUMENT;
     }
   }
 
@@ -171,17 +165,12 @@ final class TcpMetrics {
           : 0.9 + ThreadLocalRandom.current().nextDouble() * 0.2; // 90% to 110%
       long rearmingDelay = (long) (RECORD_INTERVAL_MILLIS * jitter);
 
-      try {
-        reportTimer = channel.eventLoop().schedule(() -> {
-          if (channel.isActive()) {
-            Tracker.this.recordTcpInfo(channel, false);
-            scheduleNextReport(channel, false); // Re-arm
-          }
-        }, rearmingDelay, TimeUnit.MILLISECONDS);
-      } catch (RejectedExecutionException e) {
-        log.log(Level.FINE, "Failed to schedule next TCP metrics report", e);
-        // The event loop is likely shutting down. We can safely ignore this.
-      }
+      reportTimer = channel.eventLoop().schedule(() -> {
+        if (channel.isActive()) {
+          Tracker.this.recordTcpInfo(channel, false);
+          scheduleNextReport(channel, false); // Re-arm
+        }
+      }, rearmingDelay, TimeUnit.MILLISECONDS);
     }
 
     void channelInactive(Channel channel) {
@@ -226,25 +215,19 @@ final class TcpMetrics {
         return;
       }
 
-      if (metrics.packetsRetransmitted != null) {
-        long deltaTotal = totalRetrans - lastTotalRetrans;
-        if (deltaTotal > 0) {
-          metricRecorder.addLongCounter(metrics.packetsRetransmitted, deltaTotal,
-              Collections.emptyList(), labelValues);
-          lastTotalRetrans = totalRetrans;
-        }
+      long deltaTotal = totalRetrans - lastTotalRetrans;
+      if (deltaTotal > 0) {
+        metricRecorder.addLongCounter(metrics.packetsRetransmitted, deltaTotal,
+            Collections.emptyList(), labelValues);
+        lastTotalRetrans = totalRetrans;
       }
-      if (metrics.recurringRetransmits != null && isClose) {
-        if (retransmits > 0) {
-          metricRecorder.addLongCounter(metrics.recurringRetransmits, retransmits,
-              Collections.emptyList(), labelValues);
-        }
-      }
-      if (metrics.minRtt != null) {
-        metricRecorder.recordDoubleHistogram(metrics.minRtt,
-            rtt / 1000000.0, // Convert microseconds to seconds
+      if (isClose && retransmits > 0) {
+        metricRecorder.addLongCounter(metrics.recurringRetransmits, retransmits,
             Collections.emptyList(), labelValues);
       }
+      metricRecorder.recordDoubleHistogram(metrics.minRtt,
+          rtt / 1000000.0, // Convert microseconds to seconds
+          Collections.emptyList(), labelValues);
     }
   }
 

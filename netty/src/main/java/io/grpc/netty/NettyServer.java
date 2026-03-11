@@ -69,7 +69,6 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * Netty-based server implementation.
@@ -178,11 +177,9 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelz = Preconditions.checkNotNull(channelz);
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
-    this.metricRecorder = metricRecorder;
   }
 
   @VisibleForTesting
-  @Nullable
   MetricRecorder getMetricRecorder() {
     return metricRecorder;
   }

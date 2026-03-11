@@ -71,19 +71,8 @@ public class TcpMetricsTest {
   }
 
   @Test
-  public void metricsInitialization_epollUnavailable() {
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(false);
-
-    org.junit.Assert.assertNotNull(metrics.connectionsCreated);
-    org.junit.Assert.assertNotNull(metrics.connectionCount);
-    org.junit.Assert.assertNull(metrics.packetsRetransmitted);
-    org.junit.Assert.assertNull(metrics.recurringRetransmits);
-    org.junit.Assert.assertNull(metrics.minRtt);
-  }
-
-  @Test
-  public void metricsInitialization_epollAvailable() {
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+  public void metricsInitialization() {
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     org.junit.Assert.assertNotNull(metrics.connectionsCreated);
     org.junit.Assert.assertNotNull(metrics.connectionCount);
@@ -122,7 +111,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_recordTcpInfo_reflectionSuccess() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
         ConfigurableFakeWithTcpInfo.class.getName(),
@@ -146,7 +135,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
         ConfigurableFakeWithTcpInfo.class.getName(),
@@ -181,7 +170,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
         ConfigurableFakeWithTcpInfo.class.getName(),
@@ -224,7 +213,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_periodicRecord_reportsDeltaForTotalRetrans() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
         ConfigurableFakeWithTcpInfo.class.getName(),
@@ -274,7 +263,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
         ConfigurableFakeWithTcpInfo.class.getName(),
@@ -326,7 +315,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_reportsDeltas_correctly() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     String fakeChannelName = ConfigurableFakeWithTcpInfo.class.getName();
     String fakeInfoName = FakeEpollTcpInfo.class.getName();
@@ -384,7 +373,7 @@ public class TcpMetricsTest {
   @Test
   public void tracker_recordTcpInfo_reflectionFailure() {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics(true);
+    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
     TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
             "non.existent.Class", "non.existent.Info");
