@@ -16,8 +16,6 @@
 
 package io.grpc.xds.orca;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.github.xds.data.orca.v3.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
@@ -62,8 +60,8 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   private final MetricRecorder metricRecorder;
 
   @VisibleForTesting
-  OrcaMetricReportingServerInterceptor(MetricRecorder metricRecorder) {
-    this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
+  OrcaMetricReportingServerInterceptor(@Nullable MetricRecorder metricRecorder) {
+    this.metricRecorder = metricRecorder;
   }
 
   public static OrcaMetricReportingServerInterceptor getInstance() {
