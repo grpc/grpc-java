@@ -485,8 +485,14 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExternalProcessorInterceptor.ExtProcListener<ReqT, RespT> listener) {
-        // Pass the (potentially modified) message to the real listener
-        listener.proceedWithNextMessage();
+        if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
+          io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
+          if (mutation.hasBody()) {
+            listener.onExternalBody(mutation.getBody());
+          } else if (mutation.getClearBody()) {
+            listener.onExternalBody(com.google.protobuf.ByteString.EMPTY);
+          }
+        }
       }
 
       private void drainQueue() {
@@ -523,7 +529,6 @@ public class ExternalProcessorFilter implements Filter {
       private Metadata savedHeaders;
       private Metadata savedTrailers;
       private io.grpc.Status savedStatus;
-      private final java.util.Queue<RespT> messageQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
       protected ExtProcListener(ClientCall.Listener<RespT> delegate, ClientCall<?, RespT> callDelegate,
                                 MethodDescriptor<?, RespT> method, ExtProcClientCall<ReqT, RespT> call) {
@@ -565,8 +570,6 @@ public class ExternalProcessorFilter implements Filter {
         
         if (call.config.getObservabilityMode()) {
           super.onMessage(message);
-        } else {
-          messageQueue.add(message);
         }
       }
 
@@ -646,9 +649,15 @@ public class ExternalProcessorFilter implements Filter {
         super.onClose(savedStatus, savedTrailers);
       }
 
-      void proceedWithNextMessage() {
-        RespT msg = messageQueue.poll();
-        if (msg != null) super.onMessage(msg);
+      void onExternalBody(com.google.protobuf.ByteString body) {
+        try (InputStream is = body.newInput()) {
+           RespT message = method.parseResponse(is);
+           super.onMessage(message);
+        } catch (Exception e) {
+           // This will happen if the ext_proc server sends invalid protobuf data.
+           // We should probably fail the call.
+           super.onClose(Status.INTERNAL.withDescription("Failed to parse response from ext_proc").withCause(e), new Metadata());
+        }
       }
 
       void unblockAfterStreamComplete() {
@@ -657,9 +666,7 @@ public class ExternalProcessorFilter implements Filter {
         if (savedHeaders != null) {
           proceedWithHeaders();
         }
-        while (messageQueue.peek() != null) {
-          proceedWithNextMessage();
-        }
+        // No message queue to flush anymore.
         if (savedStatus != null) {
           proceedWithClose();
         }
