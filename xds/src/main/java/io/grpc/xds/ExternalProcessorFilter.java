@@ -290,6 +290,17 @@ public class ExternalProcessorFilter implements Filter {
             }
             // 2. Client Message (Request Body)
             else if (response.hasRequestBody()) {
+              if (response.getRequestBody().hasResponse()
+                  && response.getRequestBody().getResponse().hasBodyMutation()
+                  && response.getRequestBody().getResponse().getBodyMutation().hasStreamedResponse()
+                  && response.getRequestBody().getResponse().getBodyMutation().getStreamedResponse().getGrpcMessageCompressed()) {
+                io.grpc.StatusRuntimeException ex = io.grpc.Status.INTERNAL
+                    .withDescription("gRPC message compression not supported in ext_proc")
+                    .asRuntimeException();
+                requestObserver.onError(ex);
+                onError(ex);
+                return;
+              }
               handleRequestBodyResponse(response.getRequestBody());
             }
             // 3. We don't send request trailers in gRPC for half close.
@@ -302,6 +313,17 @@ public class ExternalProcessorFilter implements Filter {
             }
             // 5. Server Message (Response Body)
             else if (response.hasResponseBody()) {
+              if (response.getResponseBody().hasResponse()
+                  && response.getResponseBody().getResponse().hasBodyMutation()
+                  && response.getResponseBody().getResponse().getBodyMutation().hasStreamedResponse()
+                  && response.getResponseBody().getResponse().getBodyMutation().getStreamedResponse().getGrpcMessageCompressed()) {
+                io.grpc.StatusRuntimeException ex = io.grpc.Status.INTERNAL
+                    .withDescription("gRPC message compression not supported in ext_proc")
+                    .asRuntimeException();
+                requestObserver.onError(ex);
+                onError(ex);
+                return;
+              }
               handleResponseBodyResponse(response.getResponseBody(), wrappedListener);
             }
             // 6. Response Trailers Handshake Result
