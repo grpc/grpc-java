@@ -30,8 +30,11 @@ checkstyle = "com.puppycrawl.tools:checkstyle:10.26.1"
 checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
-cronet-api = "org.chromium.net:cronet-api:143.7445.0"
-cronet-embedded = "org.chromium.net:cronet-embedded:143.7445.0"
+# 141.7340.3+ requires Java 17+
+# checkForUpdates: cronet-api:119.6045.31
+cronet-api = "org.chromium.net:cronet-api:119.6045.31"
+# checkForUpdates: cronet-embedded:119.6045.31
+cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.45.0"
 # 2.32.0+ requires Java 17+
 # checkForUpdates: errorprone-core:2.31.+
