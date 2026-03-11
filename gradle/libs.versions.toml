@@ -6,9 +6,13 @@ android-annotations = "com.google.android:annotations:4.1.1.4"
 # 1.9.1+ uses Kotlin and requires Android Gradle Plugin 9+
 # checkForUpdates: androidx-annotation:1.9.0
 androidx-annotation = "androidx.annotation:annotation:1.9.0"
+# 1.14.x doesn't exist.
+# 1.15.0+ requires compileSdkVersion 35 which officially requires AGP 8.6.0+.
+# It might work before then, but AGP 7.4.1 fails with:
+#   RES_TABLE_TYPE_TYPE entry offsets overlap actual entry data.
 # 1.16.0+ requires AGP 8.6.0+
-# checkForUpdates: androidx-core:1.15.+
-androidx-core = "androidx.core:core:1.15.0"
+# checkForUpdates: androidx-core:1.13.+
+androidx-core = "androidx.core:core:1.13.1"
 # 2.9+ requires AGP 8.1.1+
 # checkForUpdates: androidx-lifecycle-common:2.8.+
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.7"
