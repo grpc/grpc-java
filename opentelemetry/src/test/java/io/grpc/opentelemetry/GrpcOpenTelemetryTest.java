@@ -98,6 +98,7 @@ public class GrpcOpenTelemetryTest {
     grpcOpenTelemetry.configureServerBuilder(mockServerBuiler);
     verify(mockServerBuiler, times(2)).addStreamTracerFactory(any());
     verify(mockServerBuiler).intercept(any());
+    verify(mockServerBuiler).addMetricSink(any());
     verifyNoMoreInteractions(mockServerBuiler);
 
     ManagedChannelBuilder<?> mockChannelBuilder = mock(ManagedChannelBuilder.class);
