@@ -10,6 +10,7 @@ import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
@@ -75,6 +76,15 @@ public class ExternalProcessorFilter implements Filter {
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
       }
+
+      ProcessingMode mode = externalProcessor.getProcessingMode();
+      if (mode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+        return ConfigOrError.fromError("Invalid request_body_mode: " + mode.getRequestBodyMode() + ". Only GRPC is supported.");
+      }
+      if (mode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+        return ConfigOrError.fromError("Invalid response_body_mode: " + mode.getResponseBodyMode() + ". Only GRPC is supported.");
+      }
+
       return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(externalProcessor));
     }
 
