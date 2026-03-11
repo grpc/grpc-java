@@ -19,9 +19,12 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.xds.internal.grpcservice.GrpcServiceChannelCreator;
+import io.grpc.xds.internal.grpcservice.GrpcServiceChannelCreatorImpl;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,8 +36,16 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
+  // TODO: Make final after the need to replace with a mock from unit tests is removed.
+  GrpcServiceChannelCreator grpcServiceChannelCreator;
+  ManagedChannel grpcServiceChannel;
+  ExternalProcessorGrpc.ExternalProcessorStub externalProcessorStub;
+  private final Object lock = new Object();
+  private GrpcService lastGrpcServiceConfig;
+
   public ExternalProcessorFilter(String name) {
     filterInstanceName = checkNotNull(name, "name");
+    grpcServiceChannelCreator = new GrpcServiceChannelCreatorImpl();
   }
 
   static final class Provider implements Filter.Provider {
@@ -77,7 +88,26 @@ public class ExternalProcessorFilter implements Filter {
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
-    return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig, overrideConfig, scheduler);
+    return new ExternalProcessorInterceptor(this, (ExternalProcessorFilterConfig) filterConfig, overrideConfig, scheduler);
+  }
+
+  ExternalProcessorGrpc.ExternalProcessorStub getExternalProcessorStub(ExternalProcessor config) {
+    GrpcService newServiceConfig = config.getGrpcService();
+    synchronized (lock) {
+      // TODO: gRFC only mentions we should recreate channel if target or channel creds changed
+      // but other fields in grpc service config also do seem relevant to warrant channel
+      // recreation.
+      if (grpcServiceChannel == null || !newServiceConfig.equals(lastGrpcServiceConfig)) {
+        if (grpcServiceChannel != null) {
+          // Shutdown the old channel if the config has changed
+          grpcServiceChannel.shutdown();
+        }
+        grpcServiceChannel = grpcServiceChannelCreator.create(newServiceConfig);
+        externalProcessorStub = ExternalProcessorGrpc.newStub(grpcServiceChannel);
+        lastGrpcServiceConfig = newServiceConfig;
+      }
+      return externalProcessorStub;
+    }
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -95,12 +125,15 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
+    private final ExternalProcessorFilter filter;
     private final ExternalProcessorFilterConfig filterConfig;
     private final FilterConfig overrideConfig;
     private final ScheduledExecutorService scheduler;
 
-    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
+    ExternalProcessorInterceptor(ExternalProcessorFilter filter,
+        ExternalProcessorFilterConfig filterConfig,
         @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
+      this.filter = filter;
       this.filterConfig = filterConfig;
       this.overrideConfig = overrideConfig;
       this.scheduler = scheduler;
@@ -111,8 +144,7 @@ public class ExternalProcessorFilter implements Filter {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-
-      ExternalProcessorGrpc.ExternalProcessorStub stub = getExternalProcessorStub(filterConfig.externalProcessor.getGrpcService());
+      ExternalProcessorGrpc.ExternalProcessorStub stub = filter.getExternalProcessorStub(filterConfig.externalProcessor);
       ExternalProcessor config = filterConfig.externalProcessor;
       // Wrap the outgoing call to intercept client events
       return new ExtProcClientCall<>(next.newCall(method, callOptions), stub, method, config);
@@ -538,25 +570,6 @@ public class ExternalProcessorFilter implements Filter {
           proceedWithClose();
         }
       }
-    }
-
-    @VisibleForTesting
-    ExternalProcessorGrpc.ExternalProcessorStub getExternalProcessorStub(GrpcService service) {
-      // TODO: Implement actual stub creation based on the GrpcService configuration.
-      // This will likely involve creating a ManagedChannel and then a stub from it.
-      // For now, returning null as a placeholder.
-      //
-      // This method needs to create a ManagedChannel based on the GrpcService configuration.
-      // The GrpcService contains information like target URI, timeout, and optionally
-      // a Google gRPC service config.
-      // For a full implementation, you would typically use a ManagedChannelBuilder
-      // to construct the channel and then create a stub from it.
-      // Example (simplified, actual implementation would need more details from GrpcService):
-      // ManagedChannel channel = ManagedChannelBuilder.forTarget(service.getEnvoyGrpc().getClusterName())
-      //     .usePlaintext() // Or use TLS based on configuration
-      //     .build();
-      // return ExternalProcessorGrpc.newStub(channel);
-      return null;
     }
   }
 }
