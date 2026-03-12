@@ -19,8 +19,8 @@ package io.grpc.android.integrationtest;
 import static org.junit.Assert.assertEquals;
 
 import android.net.LocalSocketAddress.Namespace;
-import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
