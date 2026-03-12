@@ -91,6 +91,7 @@ class LoadBalancerConfigFactory {
   static final String SHUFFLE_ADDRESS_LIST_FIELD_NAME = "shuffleAddressList";
 
   static final String ERROR_UTILIZATION_PENALTY = "errorUtilizationPenalty";
+  static final String METRIC_NAMES_FOR_COMPUTING_UTILIZATION = "metricNamesForComputingUtilization";
 
   /**
    * Factory method for creating a new {link LoadBalancerConfigConverter} for a given xDS {@link
@@ -134,11 +135,9 @@ class LoadBalancerConfigFactory {
    * the given config values.
    */
   private static ImmutableMap<String, ?> buildWrrConfig(String blackoutPeriod,
-                                                        String weightExpirationPeriod,
-                                                        String oobReportingPeriod,
-                                                        Boolean enableOobLoadReport,
-                                                        String weightUpdatePeriod,
-                                                        Float errorUtilizationPenalty) {
+      String weightExpirationPeriod, String oobReportingPeriod, Boolean enableOobLoadReport,
+      String weightUpdatePeriod, Float errorUtilizationPenalty,
+      ImmutableList<String> metricNamesForComputingUtilization) {
     ImmutableMap.Builder<String, Object> configBuilder = ImmutableMap.builder();
     if (blackoutPeriod != null) {
       configBuilder.put(BLACK_OUT_PERIOD, blackoutPeriod);
@@ -157,6 +156,10 @@ class LoadBalancerConfigFactory {
     }
     if (errorUtilizationPenalty != null) {
       configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
+    }
+    if (metricNamesForComputingUtilization != null
+        && !metricNamesForComputingUtilization.isEmpty()) {
+      configBuilder.put(METRIC_NAMES_FOR_COMPUTING_UTILIZATION, metricNamesForComputingUtilization);
     }
     return ImmutableMap.of(WeightedRoundRobinLoadBalancerProvider.SCHEME,
         configBuilder.buildOrThrow());
@@ -284,7 +287,7 @@ class LoadBalancerConfigFactory {
     }
 
     private static ImmutableMap<String, ?> convertWeightedRoundRobinConfig(
-            ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
+        ClientSideWeightedRoundRobin wrr) throws ResourceInvalidException {
       try {
         return buildWrrConfig(
             wrr.hasBlackoutPeriod() ? Durations.toString(wrr.getBlackoutPeriod()) : null,
@@ -293,7 +296,8 @@ class LoadBalancerConfigFactory {
             wrr.hasOobReportingPeriod() ? Durations.toString(wrr.getOobReportingPeriod()) : null,
             wrr.hasEnableOobLoadReport() ? wrr.getEnableOobLoadReport().getValue() : null,
             wrr.hasWeightUpdatePeriod() ? Durations.toString(wrr.getWeightUpdatePeriod()) : null,
-            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null);
+            wrr.hasErrorUtilizationPenalty() ? wrr.getErrorUtilizationPenalty().getValue() : null,
+            ImmutableList.copyOf(wrr.getMetricNamesForComputingUtilizationList()));
       } catch (IllegalArgumentException ex) {
         throw new ResourceInvalidException("Invalid duration in weighted round robin config: "
             + ex.getMessage());
