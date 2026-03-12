@@ -40,6 +40,18 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   private final CallCredentials callCredentials;
   // The map of xDS server info to its corresponding gRPC xDS transport.
   // This enables reusing and sharing the same underlying gRPC channel.
+  //
+  // NOTE: ConcurrentHashMap is used as a per-entry lock and all reads and writes must be a mutation
+  // via the ConcurrentHashMap APIs to acquire the per-entry lock in order to ensure thread safety
+  // for reference counting of each GrpcXdsTransport instance.
+  //
+  // WARNING: ServerInfo includes ChannelCredentials, which is compared by reference equality.
+  // This means every BootstrapInfo would have non-equal copies of ServerInfo, even if they all
+  // represent the same xDS server configuration. For gRPC name resolution with the `xds` and
+  // `google-c2p` scheme, this transport sharing works as expected as it internally reuses a single
+  // BootstrapInfo instance. Otherwise, new transports would be created for each ServerInfo despite
+  // them possibly representing the same xDS server configuration and defeating the purpose of
+  // transport sharing.
   private static final Map<Bootstrapper.ServerInfo, GrpcXdsTransport> xdsServerInfoToTransportMap =
       new ConcurrentHashMap<>();
 
@@ -76,7 +88,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     private final ManagedChannel channel;
     private final CallCredentials callCredentials;
     private final Bootstrapper.ServerInfo serverInfo;
-    // Must only be accessed within the provided atomic methods of ConcurrentHashMap.
+    // Must only be accessed via the ConcurrentHashMap APIs which act as the locking methods.
     private int refCount = 0;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
