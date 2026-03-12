@@ -30,6 +30,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
 import java.util.concurrent.BlockingQueue;
@@ -37,12 +38,15 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class GrpcXdsTransportFactoryTest {
+
+  @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   private Server server;
 
@@ -144,10 +148,11 @@ public class GrpcXdsTransportFactoryTest {
       throws Exception {
     // Create and start a second xDS server on a different port.
     Server server2 =
-        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
-            .addService(echoAdsService())
-            .build()
-            .start();
+        grpcCleanupRule.register(
+            Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+                .addService(echoAdsService())
+                .build()
+                .start());
     Bootstrapper.ServerInfo xdsServerInfo1 =
         Bootstrapper.ServerInfo.create(
             "localhost:" + server.getPort(), InsecureChannelCredentials.create());
@@ -168,8 +173,6 @@ public class GrpcXdsTransportFactoryTest {
     // Calling shutdown() shuts down the GrpcXdsTransport instance for the second xDS server.
     // The ref count was previously 1 and now is 0.
     transport2.shutdown();
-    // Clean up the second xDS server.
-    server2.shutdown();
   }
 
   private static class FakeEventHandler implements
