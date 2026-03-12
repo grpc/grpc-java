@@ -573,13 +573,12 @@ final class OpenTelemetryMetricsModule {
       boolean isSampledToLocalTracing = callInfo.getMethodDescriptor().isSampledToLocalTracing();
       isGeneratedMethod = isSampledToLocalTracing;
 
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
-          .put(METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
-
-      io.opentelemetry.api.common.Attributes attributes = builder.build();
+      io.opentelemetry.api.common.Attributes attribute =
+          io.opentelemetry.api.common.Attributes.of(
+              METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
       if (module.resource.serverCallCountCounter() != null) {
-        module.resource.serverCallCountCounter().add(1, attributes, otelContext);
+        module.resource.serverCallCountCounter().add(1, attribute, otelContext);
       }
     }
 
@@ -626,7 +625,6 @@ final class OpenTelemetryMetricsModule {
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod))
           .put(STATUS_KEY, status.getCode().toString());
-
       for (OpenTelemetryPlugin.ServerStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
       }

@@ -262,8 +262,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
     Metadata headers = new Metadata();
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, headers);
@@ -430,8 +430,8 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetrics, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
@@ -499,7 +499,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-                    method.getFullMethodName(), emptyList(), Context.root());
+            method.getFullMethodName(), emptyList(), Context.root());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
 
@@ -956,7 +956,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-                    method.getFullMethodName(), emptyList(), Context.root());
+            method.getFullMethodName(), emptyList(), Context.root());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1044,7 +1044,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-                    method.getFullMethodName(), emptyList(), Context.root());
+            method.getFullMethodName(), emptyList(), Context.root());
 
     // Create a StreamInfo specifically for hedged attempts
     final ClientStreamTracer.StreamInfo hedgedStreamInfo =
@@ -1125,7 +1125,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
-                    method.getFullMethodName(), emptyList(), Context.root());
+            method.getFullMethodName(), emptyList(), Context.root());
     fakeClock.forwardTime(3000, MILLISECONDS);
     Status status = Status.DEADLINE_EXCEEDED.withDescription("5 seconds");
     callAttemptsTracerFactory.callEnded(status);
@@ -1234,8 +1234,8 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1304,8 +1304,8 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.locality"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1370,8 +1370,8 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1440,8 +1440,8 @@ public class OpenTelemetryMetricsModuleTest {
         fakeClock.getStopwatchSupplier(), resource, Arrays.asList("grpc.lb.backend_service"),
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-            new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
-                    Context.root());
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList(),
+            Context.root());
 
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
