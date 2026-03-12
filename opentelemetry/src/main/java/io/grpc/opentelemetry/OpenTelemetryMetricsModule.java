@@ -558,10 +558,11 @@ final class OpenTelemetryMetricsModule {
     @Override
     public io.grpc.Context filterContext(io.grpc.Context context) {
       Baggage baggage = BAGGAGE_KEY.get(context);
-      if (baggage == null) {
-        throw new IllegalStateException("Baggage from OpenTelemetryTracingModule is missing");
+      if (baggage != null) {
+        otelContext = Context.current().with(baggage);
+      } else {
+        otelContext = Context.current();
       }
-      otelContext = Context.current().with(baggage);
       return context;
     }
 
