@@ -19,9 +19,9 @@ package io.grpc.android.integrationtest;
 import static org.junit.Assert.assertEquals;
 
 import android.net.LocalSocketAddress.Namespace;
-import androidx.test.InstrumentationRegistry;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.rule.ActivityTestRule;
+import androidx.test.ext.junit.rules.ActivityScenarioRule;
+import androidx.test.platform.app.InstrumentationRegistry;
 import io.grpc.Grpc;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Server;
@@ -60,8 +60,8 @@ public class UdsChannelInteropTest {
   // Ensures Looper is initialized for tests running on API level 15. Otherwise instantiating an
   // AsyncTask throws an exception.
   @Rule
-  public ActivityTestRule<TesterActivity> activityRule =
-      new ActivityTestRule<TesterActivity>(TesterActivity.class);
+  public ActivityScenarioRule<TesterActivity> activityRule =
+      new ActivityScenarioRule<>(TesterActivity.class);
 
   @Before
   public void setUp() throws IOException {
