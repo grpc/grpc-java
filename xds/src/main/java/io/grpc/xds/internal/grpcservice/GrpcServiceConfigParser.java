@@ -33,7 +33,6 @@ import io.grpc.Status;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.XdsChannelCredentials;
-import io.grpc.xds.internal.XdsHeaderValidator;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
@@ -88,17 +87,16 @@ public final class GrpcServiceConfigParser {
     for (io.envoyproxy.envoy.config.core.v3.HeaderValue header : grpcServiceProto
         .getInitialMetadataList()) {
       String key = header.getKey();
+      HeaderValue headerValue;
       if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        if (!XdsHeaderValidator.isValid(key, header.getRawValue().size())) {
-          throw new GrpcServiceParseException("Invalid initial metadata header: " + key);
-        }
-        initialMetadata.add(HeaderValue.create(key, header.getRawValue()));
+        headerValue = HeaderValue.create(key, header.getRawValue());
       } else {
-        if (!XdsHeaderValidator.isValid(key, header.getValue().length())) {
-          throw new GrpcServiceParseException("Invalid initial metadata header: " + key);
-        }
-        initialMetadata.add(HeaderValue.create(key, header.getValue()));
+        headerValue = HeaderValue.create(key, header.getValue());
       }
+      if (HeaderValueValidationUtils.shouldIgnore(headerValue)) {
+        throw new GrpcServiceParseException("Invalid initial metadata header: " + key);
+      }
+      initialMetadata.add(headerValue);
     }
     builder.initialMetadata(initialMetadata.build());
 
