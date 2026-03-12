@@ -78,11 +78,6 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   }
 
   @VisibleForTesting
-  static boolean hasTransport(Bootstrapper.ServerInfo serverInfo) {
-    return xdsServerInfoToTransportMap.containsKey(serverInfo);
-  }
-
-  @VisibleForTesting
   static class GrpcXdsTransport implements XdsTransport {
 
     private final ManagedChannel channel;
