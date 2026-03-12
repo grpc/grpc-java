@@ -18,7 +18,6 @@ package io.grpc.xds.internal.headermutations;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 
 /** A collection of header mutations for both request and response headers. */
 @AutoValue
