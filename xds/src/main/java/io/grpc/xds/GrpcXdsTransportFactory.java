@@ -35,6 +35,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * A factory for creating gRPC-based transports for xDS communication.
+ *
+ * <p>WARNING: This class reuses channels when possible, based on the provided {@link
+ * Bootstrapper.ServerInfo} with important considerations. The {@link Bootstrapper.ServerInfo}
+ * includes {@link ChannelCredentials}, which is compared by reference equality. This means every
+ * {@link Bootstrapper.BootstrapInfo} would have non-equal copies of {@link
+ * Bootstrapper.ServerInfo}, even if they all represent the same xDS server configuration. For gRPC
+ * name resolution with the {@code xds} and {@code google-c2p} scheme, this transport sharing works
+ * as expected as it internally reuses a single {@link Bootstrapper.BootstrapInfo} instance.
+ * Otherwise, new transports would be created for each {@link Bootstrapper.ServerInfo} despite them
+ * possibly representing the same xDS server configuration and defeating the purpose of transport
+ * sharing.
+ */
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
@@ -44,14 +58,6 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   // NOTE: ConcurrentHashMap is used as a per-entry lock and all reads and writes must be a mutation
   // via the ConcurrentHashMap APIs to acquire the per-entry lock in order to ensure thread safety
   // for reference counting of each GrpcXdsTransport instance.
-  //
-  // WARNING: ServerInfo includes ChannelCredentials, which is compared by reference equality.
-  // This means every BootstrapInfo would have non-equal copies of ServerInfo, even if they all
-  // represent the same xDS server configuration. For gRPC name resolution with the `xds` and
-  // `google-c2p` scheme, this transport sharing works as expected as it internally reuses a single
-  // BootstrapInfo instance. Otherwise, new transports would be created for each ServerInfo despite
-  // them possibly representing the same xDS server configuration and defeating the purpose of
-  // transport sharing.
   private static final Map<Bootstrapper.ServerInfo, GrpcXdsTransport> xdsServerInfoToTransportMap =
       new ConcurrentHashMap<>();
 
