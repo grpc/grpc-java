@@ -294,20 +294,14 @@ public final class ManagedChannelImplBuilder
       String target, @Nullable ChannelCredentials channelCreds, @Nullable CallCredentials callCreds,
       ClientTransportFactoryBuilder clientTransportFactoryBuilder,
       @Nullable ChannelBuilderDefaultPortProvider channelBuilderDefaultPortProvider) {
-    this.target = checkNotNull(target, "target");
-    this.channelCredentials = channelCreds;
-    this.callCredentials = callCreds;
-    this.clientTransportFactoryBuilder = checkNotNull(clientTransportFactoryBuilder,
-        "clientTransportFactoryBuilder");
-    this.directServerAddress = null;
-
-    if (channelBuilderDefaultPortProvider != null) {
-      this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
-    } else {
-      this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
-    }
-    // TODO(dnvindhya): Move configurator to all the individual builders
-    InternalConfiguratorRegistry.configureChannelBuilder(this);
+    this(
+        target,
+        channelCreds,
+        callCreds,
+        clientTransportFactoryBuilder,
+        channelBuilderDefaultPortProvider,
+        null,
+        null);
   }
 
   /**
@@ -337,17 +331,15 @@ public final class ManagedChannelImplBuilder
         "clientTransportFactoryBuilder");
     this.directServerAddress = null;
 
-    if (channelBuilderDefaultPortProvider != null) {
-      this.channelBuilderDefaultPortProvider = channelBuilderDefaultPortProvider;
-    } else {
-      this.channelBuilderDefaultPortProvider = new ManagedChannelDefaultPortProvider();
-    }
-    if (nameResolverRegistry != null) {
-      this.nameResolverRegistry = nameResolverRegistry;
-    }
-    if (nameResolverProvider != null) {
-      this.nameResolverProvider = nameResolverProvider;
-    }
+    this.channelBuilderDefaultPortProvider =
+        channelBuilderDefaultPortProvider != null
+            ? channelBuilderDefaultPortProvider
+            : new ManagedChannelDefaultPortProvider();
+    this.nameResolverRegistry =
+        nameResolverRegistry != null
+            ? nameResolverRegistry
+            : NameResolverRegistry.getDefaultRegistry();
+    this.nameResolverProvider = nameResolverProvider;
 
     // TODO(dnvindhya): Move configurator to all the individual builders
     InternalConfiguratorRegistry.configureChannelBuilder(this);
@@ -908,33 +900,32 @@ public final class ManagedChannelImplBuilder
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverProvider;
-      if (provider == null) {
+      // Use the explicit provider if its scheme matches the target URI.
+      if (nameResolverProvider != null
+          && targetUri.getScheme().equals(nameResolverProvider.getDefaultScheme())) {
+        provider = nameResolverProvider;
+      } else {
         provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
       }
     }
 
-    if (!URI_PATTERN.matcher(target).matches()) {
+    if (provider == null && !URI_PATTERN.matcher(target).matches()) {
       // It doesn't look like a URI target. Maybe it's an authority string. Try with
       // the default scheme from the registry (if provider is not specified) or
       // the provider's default scheme (if provider is specified).
-      String scheme = (provider != null)
-          ? provider.getDefaultScheme()
-          : (nameResolverProvider != null
-              ? nameResolverProvider.getDefaultScheme()
-              : nameResolverRegistry.getDefaultScheme());
+      String scheme = nameResolverProvider != null
+          ? nameResolverProvider.getDefaultScheme()
+          : nameResolverRegistry.getDefaultScheme();
       try {
         targetUri = new URI(scheme, "", "/" + target, null);
       } catch (URISyntaxException e) {
-        // Should not happen because we just validated the URI.
+        // Should not be possible
         throw new IllegalArgumentException(e);
       }
-      if (provider == null) {
-        if (nameResolverProvider != null) {
-          provider = nameResolverProvider;
-        } else {
-          provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
-        }
+      if (nameResolverProvider != null) {
+        provider = nameResolverProvider;
+      } else {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
       }
     }
 

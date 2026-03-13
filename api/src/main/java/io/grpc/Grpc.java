@@ -105,9 +105,7 @@ public final class Grpc {
    * Creates a channel builder with a target string, credentials, and a specific
    * name resolver registry.
    *
-   * <p>This method uses the {@link ManagedChannelRegistry#getDefaultRegistry()} to
-   * find an appropriate underlying transport provider based on the target and credentials.
-   * The provided {@code nameResolverRegistry} is used to resolve the target address
+   * <p>The provided {@code nameResolverRegistry} is used to resolve the target address
    * into physical addresses (e.g., DNS or custom schemes).
    *
    * @param target the target URI for the channel, such as {@code "localhost:8080"}
@@ -118,8 +116,9 @@ public final class Grpc {
    * @return a {@link ManagedChannelBuilder} instance configured with the given parameters
    * @throws IllegalArgumentException if no provider is available for the given target
    *     or credentials
-   * @since 1.79.0
+   * @since 1.81.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12694")
   public static ManagedChannelBuilder<?> newChannelBuilder(
       String target,
       ChannelCredentials creds,

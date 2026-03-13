@@ -87,7 +87,7 @@ public abstract class ManagedChannelProvider {
    *
    * <p>This method allows for fine-grained control over name resolution by providing
    * both a {@link NameResolverRegistry} and a specific {@link NameResolverProvider}.
-   * Unlike the public factory methods, this returns a {@link NewChannelBuilderResult},
+   * This returns a {@link NewChannelBuilderResult},
    * which may contain an error string if the provided credentials or target are
    * not supported by this provider.
    *
