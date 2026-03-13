@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLEngine;
@@ -40,59 +41,97 @@ import javax.net.ssl.X509ExtendedKeyManager;
 /**
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
+ *
+ * <p>The key material alias increments on every credential load (e.g. {@code "key-1"},
+ * {@code "key-2"}, ...), ensuring the same alias always maps to the same key material. This is
+ * required by Netty's {@code OpenSslCachingX509KeyManagerFactory} to correctly cache key
+ * material and create a new cache entry on cert reload.
+ *
+ * <p>When using {@code SslProvider.OPENSSL}, wrap this key manager in Netty's
+ * {@code OpenSslCachingX509KeyManagerFactory} to avoid per-handshake key material encoding
+ * overhead, e.g. {@code new OpenSslCachingX509KeyManagerFactory(
+ * new KeyManagerFactoryWrapper(advancedTlsKeyManager))}, and pass the factory to
+ * {@code SslContextBuilder} instead of the key manager directly.
  */
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
   // Minimum allowed period for refreshing files with credential information.
-  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1 ;
+  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1;
+  // Prefix for the key material alias; revision counter appended on each credential load.
+  static final String ALIAS_PREFIX = "key-";
+
+  private final AtomicInteger revision = new AtomicInteger(0);
+  private final int revisionWarningThreshold;
   // The credential information to be sent to peers to prove our identity.
   private volatile KeyInfo keyInfo;
 
+  public AdvancedTlsX509KeyManager() {
+    // Netty's default OpenSslCachingX509KeyManagerFactory maxCachedEntries.
+    this(1024);
+  }
+
+  /**
+   * Creates a key manager with a custom revision warning threshold.
+   * @param revisionWarningThreshold the number of credential loads after which a warning is logged.
+   *     Only relevant when using {@code SslProvider.OPENSSL} with
+   *     {@code OpenSslCachingX509KeyManagerFactory}.
+   */
+  public AdvancedTlsX509KeyManager(int revisionWarningThreshold) {
+    this.revisionWarningThreshold = revisionWarningThreshold;
+  }
+
+  private String alias() {
+    KeyInfo info = this.keyInfo;
+    if (info == null) {
+      return null;
+    }
+    return info.alias;
+  }
+
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    if (alias.equals("default")) {
-      return this.keyInfo.key;
-    }
-    return null;
+    KeyInfo info = this.keyInfo;
+    return info != null && info.alias.equals(alias) ? info.key : null;
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    if (alias.equals("default")) {
-      return Arrays.copyOf(this.keyInfo.certs, this.keyInfo.certs.length);
-    }
-    return null;
+    KeyInfo info = this.keyInfo;
+    return info != null && info.alias.equals(alias)
+        ? Arrays.copyOf(info.certs, info.certs.length) : null;
   }
 
   @Override
   public String[] getClientAliases(String keyType, Principal[] issuers) {
-    return new String[] {"default"};
+    String alias = alias();
+    return alias != null ? new String[] {alias} : null;
   }
 
   @Override
   public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String chooseEngineClientAlias(String[] keyType, Principal[] issuers, SSLEngine engine) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String[] getServerAliases(String keyType, Principal[] issuers) {
-    return new String[] {"default"};
+    String alias = alias();
+    return alias != null ? new String[] {alias} : null;
   }
 
   @Override
   public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String chooseEngineServerAlias(String keyType, Principal[] issuers,
       SSLEngine engine) {
-    return "default";
+    return alias();
   }
 
   /**
@@ -116,7 +155,15 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param key  the private key that is going to be used
    */
   public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key) {
-    this.keyInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"));
+    // When using SslProvider.OPENSSL with OpenSslCachingX509KeyManagerFactory, its cache stops
+    // accepting new aliases once maxCachedEntries is reached (default: 1024). Beyond this,
+    // handshakes still succeed but per-handshake re-encoding overhead resumes.
+    if (revision.get() >= revisionWarningThreshold) {
+      log.warning("AdvancedTlsX509KeyManager: revision counter has reached "
+          + revisionWarningThreshold);
+    }
+    this.keyInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"),
+        ALIAS_PREFIX + revision.incrementAndGet());
   }
 
   /**
@@ -218,10 +265,12 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     // The private key and the cert chain we will use to send to peers to prove our identity.
     final X509Certificate[] certs;
     final PrivateKey key;
+    final String alias;
 
-    public KeyInfo(X509Certificate[] certs, PrivateKey key) {
+    public KeyInfo(X509Certificate[] certs, PrivateKey key, String alias) {
       this.certs = certs;
       this.key = key;
+      this.alias = alias;
     }
   }
 
@@ -309,4 +358,3 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     void close();
   }
 }
-
