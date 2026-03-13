@@ -30,7 +30,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
 import io.grpc.ChildChannelConfigurer;
-import io.grpc.ChildChannelConfigurers;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -130,14 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  /**
-   * Stores the user-provided configuration function for internal child channels.
-   *
-   * <p>This is intended for use by gRPC internal components
-   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
-   * guaranteed to be not null (defaults to no-op).
-   */
-  private ChildChannelConfigurer childChannelConfigurer =  ChildChannelConfigurers.noOp();
+  private ChildChannelConfigurer childChannelConfigurer = builder -> { };
 
   XdsServerWrapper(
       String listenerAddress,
@@ -238,7 +230,7 @@ final class XdsServerWrapper extends Server {
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
           "#server", bootstrapInfo, new MetricRecorder() {},
-          null, this);
+          childChannelConfigurer);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -264,18 +256,6 @@ final class XdsServerWrapper extends Server {
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
   }
 
-  /**
-   * Retrieves the user-provided configuration function for internal child channels.
-   *
-   * <p>This method is intended for use by gRPC internal components (NameResolvers, LoadBalancers)
-   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
-   *
-   * @return the ChildChannelConfigurer, guaranteed to be not null (defaults to no-op).
-   */
-  @Override
-  public ChildChannelConfigurer getChildChannelConfigurer() {
-    return childChannelConfigurer;
-  }
 
   @Override
   public Server shutdown() {

@@ -26,7 +26,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
 import io.grpc.ChildChannelConfigurer;
-import io.grpc.ChildChannelConfigurers;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
@@ -60,7 +59,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
-  private ChildChannelConfigurer childChannelConfigurer = ChildChannelConfigurers.noOp();
+  private ChildChannelConfigurer childChannelConfigurer = builder -> { };
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;

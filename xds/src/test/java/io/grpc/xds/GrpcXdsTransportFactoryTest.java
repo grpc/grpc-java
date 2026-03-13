@@ -34,7 +34,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -102,7 +101,7 @@ public class GrpcXdsTransportFactoryTest {
   @Test
   public void callApis() throws Exception {
     XdsTransportFactory.XdsTransport xdsTransport =
-        new GrpcXdsTransportFactory(null, null, null)
+        new GrpcXdsTransportFactory(null, null)
             .create(
                 Bootstrapper.ServerInfo.create(
                     "localhost:" + server.getPort(), InsecureChannelCredentials.create()));
@@ -162,15 +161,10 @@ public class GrpcXdsTransportFactoryTest {
     // Create Configurer that adds the interceptor
     ChildChannelConfigurer configurer = (builder) -> builder.intercept(mockInterceptor);
 
-    // Mock Parent Channel
-    ManagedChannel mockParentChannel = mock(ManagedChannel.class);
-    when(mockParentChannel.getChildChannelConfigurer()).thenReturn(configurer);
-
     // Create Factory
     GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
         null,
-        mockParentChannel,
-        null);
+        configurer);
 
     // Create Transport
     XdsTransportFactory.XdsTransport transport = factory.create(
@@ -196,27 +190,55 @@ public class GrpcXdsTransportFactoryTest {
   }
 
   @Test
-  public void useParentServerConfig() {
-    // 1. Mock Server and Configurer
-    Server mockServer = mock(Server.class);
+  public void useChildChannelConfigurer() {
+    // Mock Configurer
     ChildChannelConfigurer mockConfigurer = mock(ChildChannelConfigurer.class);
-    when(mockServer.getChildChannelConfigurer()).thenReturn(mockConfigurer);
 
-    // 2. Create Factory with Parent Server
+    // Create Factory
     GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
         null, // CallCredentials
-        null, // Parent Channel
-        mockServer);
+        mockConfigurer);
 
-    // 3. Create Transport (triggers channel creation)
+    // Create Transport (triggers channel creation)
     XdsTransportFactory.XdsTransport transport = factory.create(
         Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
 
-    // 4. Verify Configurer was accessed and applied
-    verify(mockServer).getChildChannelConfigurer();
+    // Verify Configurer was accessed and applied
     verify(mockConfigurer).accept(any(ManagedChannelBuilder.class));
 
     transport.shutdown();
+  }
+
+  @Test
+  public void verifyConfigApplied_maxInboundMessageSize() {
+    // Create a mock Builder
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+
+    // Create Configurer that modifies message size
+    ChildChannelConfigurer configurer = (builder) -> builder.maxInboundMessageSize(1024);
+
+    // Apply configurer to builder
+    configurer.accept(mockBuilder);
+
+    // Verify builder was modified
+    verify(mockBuilder).maxInboundMessageSize(1024);
+  }
+
+  @Test
+  public void verifyConfigApplied_interceptors() {
+    ClientInterceptor interceptor1 = mock(ClientInterceptor.class);
+    ClientInterceptor interceptor2 = mock(ClientInterceptor.class);
+
+    ChildChannelConfigurer configurer = builder -> {
+      builder.intercept(interceptor1);
+      builder.intercept(interceptor2);
+    };
+
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+    configurer.accept(mockBuilder);
+
+    verify(mockBuilder).intercept(interceptor1);
+    verify(mockBuilder).intercept(interceptor2);
   }
 }
 

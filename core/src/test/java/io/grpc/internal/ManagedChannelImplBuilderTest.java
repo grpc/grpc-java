@@ -766,6 +766,13 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
+  public void childChannelConfigurer_setsField() {
+    ChildChannelConfigurer configurer = mock(ChildChannelConfigurer.class);
+    assertSame(builder, builder.childChannelConfigurer(configurer));
+    assertSame(configurer, builder.childChannelConfigurer);
+  }
+
+  @Test
   public void childChannelConfigurer_propagatesMetricsAndInterceptors_xdsTarget() {
     // Setup Mocks
     when(mockClientTransportFactory.getScheduledExecutorService())
@@ -812,14 +819,14 @@ public class ManagedChannelImplBuilderTest {
     // Verify that newNameResolver was called
     verify(mockNameResolverFactory).newNameResolver(any(), any());
 
-    // Extract the parent channel from Args
+    // Extract the childChannelConfigurer from Args
     NameResolver.Args args = argsCaptor.getValue();
-    ManagedChannel parentChannelInArgs = args.getParentChannel();
-    assertNotNull("Parent channel should be present in NameResolver.Args",
-        parentChannelInArgs);
+    ChildChannelConfigurer childChannelConfigurerInArgs = args.getChildChannelConfigurer();
+    assertNotNull("Child channel configurer should be present in NameResolver.Args",
+        childChannelConfigurerInArgs);
 
-    // Verify the configurer on the parent channel is the one we passed
-    assertThat(parentChannelInArgs.getChildChannelConfigurer()).isSameInstanceAs(configurer);
+    // Verify the configurer is the one we passed
+    assertThat(childChannelConfigurerInArgs).isSameInstanceAs(configurer);
 
     // Verify the configurer logically applies (by running it on a mock)
     ManagedChannelBuilder<?> mockChildBuilder = mock(ManagedChannelBuilder.class);

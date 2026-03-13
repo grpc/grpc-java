@@ -424,21 +424,6 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
     throw new UnsupportedOperationException();
   }
 
-  /**
-   * Configures this builder using settings derived from an existing parent server.
-   *
-   * <p>This method is typically used by internal components when creating
-   * child channels to ensure they inherit relevant configuration (like the
-   * {@link ChildChannelConfigurer}) from the parent.
-   *
-   * @param parentServer the server to inherit configuration from
-   * @return this
-   * @since 1.79.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T configureChannel(Server parentServer) {
-    throw new UnsupportedOperationException();
-  }
 
   /**
    * Sets a configurer that will be applied to all internal child channels created by this server.

@@ -323,7 +323,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
-    @Nullable private final ManagedChannel parentChannel;
+    @Nullable private final ChildChannelConfigurer childChannelConfigurer;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -338,7 +338,7 @@ public abstract class NameResolver {
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
-      this.parentChannel = builder.parentChannel;
+      this.childChannelConfigurer = builder.childChannelConfigurer;
     }
 
     /**
@@ -438,11 +438,14 @@ public abstract class NameResolver {
     }
 
     /**
-     * Returns the parent {@link ManagedChannel} served by this NameResolver.
+     * Returns the configurer for child channels.
+     *
+     * @since 1.81.0
      */
+    @Nullable
     @Internal
-    public ManagedChannel getParentChannel() {
-      return parentChannel;
+    public ChildChannelConfigurer getChildChannelConfigurer() {
+      return childChannelConfigurer;
     }
 
     /**
@@ -554,7 +557,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
-      private ManagedChannel parentChannel;
+      private ChildChannelConfigurer childChannelConfigurer;
 
       Builder() {
       }
@@ -671,12 +674,12 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@link Args#parentChannel}. This is an optional field.
+       * See {@link Args#getChildChannelConfigurer()}. This is an optional field.
        *
-       * @since 1.79.0
+       * @since 1.81.0
        */
-      public Builder setParentChannel(ManagedChannel parentChannel) {
-        this.parentChannel = parentChannel;
+      public Builder setChildChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+        this.childChannelConfigurer = childChannelConfigurer;
         return this;
       }
 

@@ -41,7 +41,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ChildChannelConfigurer;
-import io.grpc.ChildChannelConfigurers;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -156,14 +155,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
 
-  /**
-   * Stores the user-provided configuration function for internal child channels.
-   *
-   * <p>This is intended for use by gRPC internal components
-   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
-   * guaranteed to be not null (defaults to no-op).
-   */
-  private ChildChannelConfigurer childChannelConfigurer =  ChildChannelConfigurers.noOp();
+  private ChildChannelConfigurer childChannelConfigurer = builder -> {};
 
   private final InternalLogId logId;
   private final String target;
@@ -614,7 +606,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
             .setNameResolverRegistry(builder.nameResolverRegistry)
-            .setParentChannel(this);
+            .setChildChannelConfigurer(this.childChannelConfigurer);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -698,10 +690,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
    *
    * @return the ChildChannelConfigurer, guaranteed to be not null (defaults to no-op).
    */
-  @Override
-  public ChildChannelConfigurer getChildChannelConfigurer() {
-    return childChannelConfigurer;
-  }
 
   @VisibleForTesting
   static NameResolver getNameResolver(
@@ -1592,8 +1580,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       // Note that we follow the global configurator pattern and try to fuse the configurations as
       // soon as the builder gets created
-      ManagedChannel parentChannel = ManagedChannelImpl.this;
-      builder.configureChannel(parentChannel);
+      builder.childChannelConfigurer(childChannelConfigurer);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

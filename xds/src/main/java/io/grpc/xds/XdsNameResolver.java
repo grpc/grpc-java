@@ -31,6 +31,7 @@ import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -39,7 +40,6 @@ import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricRecorder;
@@ -184,7 +184,7 @@ final class XdsNameResolver extends NameResolver {
       checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.xdsClientPool = new BootstrappingXdsClientPool(
           xdsClientPoolFactory, target, bootstrapOverride, metricRecorder,
-          nameResolverArgs.getParentChannel());
+          nameResolverArgs.getChildChannelConfigurer());
     }
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
@@ -1056,19 +1056,19 @@ final class XdsNameResolver extends NameResolver {
     private final @Nullable Map<String, ?> bootstrapOverride;
     private final @Nullable MetricRecorder metricRecorder;
     private ObjectPool<XdsClient> xdsClientPool;
-    private ManagedChannel parentChannel;
+    private ChildChannelConfigurer childChannelConfigurer;
 
     BootstrappingXdsClientPool(
         XdsClientPoolFactory xdsClientPoolFactory,
         String target,
         @Nullable Map<String, ?> bootstrapOverride,
         @Nullable MetricRecorder metricRecorder,
-        @Nullable ManagedChannel parentChannel) {
+        @Nullable ChildChannelConfigurer childChannelConfigurer) {
       this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.target = checkNotNull(target, "target");
       this.bootstrapOverride = bootstrapOverride;
       this.metricRecorder = metricRecorder;
-      this.parentChannel = parentChannel;
+      this.childChannelConfigurer = childChannelConfigurer;
     }
 
     @Override
@@ -1081,8 +1081,8 @@ final class XdsNameResolver extends NameResolver {
           bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
         }
         this.xdsClientPool =
-            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder, parentChannel,
-                null);
+            xdsClientPoolFactory.getOrCreate(
+                target, bootstrapInfo, metricRecorder, childChannelConfigurer);
       }
       return xdsClientPool.getObject();
     }

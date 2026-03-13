@@ -3775,7 +3775,6 @@ public class ManagedChannelImplTest {
     assertEquals(SHUTDOWN, getStats(channel).state);
     assertEquals(SHUTDOWN, getStats(oobChannel).state);
   }
-
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();
@@ -5144,115 +5143,5 @@ public class ManagedChannelImplTest {
         .fromServiceConfig(rawServiceConfig, true, 3, 4, policySelection);
   }
 
-  @Test
-  public void getChildChannelConfigurer_returnsConfiguredValue() {
-    ManagedChannelImplBuilder builder = new ManagedChannelImplBuilder(TARGET,
-        new ClientTransportFactoryBuilder() {
-          @Override
-          public ClientTransportFactory buildClientTransportFactory() {
-            return mockTransportFactory;
-          }
-        },
-        new FixedPortProvider(DEFAULT_PORT));
 
-    when(mockTransportFactory.getSupportedSocketAddressTypes())
-        .thenReturn(Collections.singleton(InetSocketAddress.class));
-
-    ManagedChannel channel = builder
-        .nameResolverFactory(new FakeNameResolverFactory(
-            Collections.singletonList(URI.create(TARGET)),
-            Collections.emptyList(),
-            true,
-            null))
-        .childChannelConfigurer(mockChildChannelConfigurer)
-        .build();
-
-    assertThat(channel.getChildChannelConfigurer()).isSameInstanceAs(mockChildChannelConfigurer);
-    channel.shutdownNow();
-  }
-
-  @Test
-  public void configureChannel_propagatesConfigurerToNewBuilder_endToEnd() {
-    when(mockTransportFactory.getSupportedSocketAddressTypes())
-        .thenReturn(Collections.singleton(InetSocketAddress.class));
-
-    // 1. Setup Interceptor
-    final AtomicInteger interceptorCalls = new AtomicInteger(0);
-    final ClientInterceptor trackingInterceptor = new ClientInterceptor() {
-      @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-        interceptorCalls.incrementAndGet();
-        return next.newCall(method, callOptions);
-      }
-    };
-
-    // 2. Setup Configurer
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
-      @Override
-      public void accept(ManagedChannelBuilder<?> builder) {
-        builder.intercept(trackingInterceptor);
-      }
-    };
-
-    // 3. Create Parent Channel
-    ManagedChannelImplBuilder parentBuilder = new ManagedChannelImplBuilder("fake://parent-target",
-        new ClientTransportFactoryBuilder() {
-          @Override
-          public ClientTransportFactory buildClientTransportFactory() {
-            return mockTransportFactory;
-          }
-        },
-        new FixedPortProvider(DEFAULT_PORT));
-
-    ManagedChannel parentChannel = parentBuilder
-        // MATCH THE CONSTRUCTOR SIGNATURE: (List<URI>, List<EAG>, boolean, Status)
-        .nameResolverFactory(new FakeNameResolverFactory(
-            Collections.singletonList(URI.create("fake://parent-target")),
-            Collections.emptyList(),
-            true,
-            null))
-        .childChannelConfigurer(configurer)
-        .build();
-
-    // 4. Create Child Channel Builder
-    ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder("fake://child-target",
-        new ClientTransportFactoryBuilder() {
-          @Override
-          public ClientTransportFactory buildClientTransportFactory() {
-            return mockTransportFactory;
-          }
-        },
-        new FixedPortProvider(DEFAULT_PORT));
-
-    childBuilder.configureChannel(parentChannel);
-
-    // Ensure child also has a resolver factory
-    childBuilder.nameResolverFactory(new FakeNameResolverFactory(
-        Collections.singletonList(URI.create("fake://child-target")),
-        Collections.emptyList(),
-        true,
-        null));
-
-    ManagedChannel childChannel = childBuilder.build();
-
-    // 5. Verification
-    ClientCall<String, Integer> call = childChannel.newCall(
-        MethodDescriptor.<String, Integer>newBuilder()
-            .setType(MethodDescriptor.MethodType.UNARY)
-            .setFullMethodName("service/method")
-            .setRequestMarshaller(new StringMarshaller())
-            .setResponseMarshaller(new IntegerMarshaller())
-            .build(),
-        CallOptions.DEFAULT);
-
-    call.start(new ClientCall.Listener<Integer>() {
-    }, new Metadata());
-
-    assertThat(interceptorCalls.get())
-        .isEqualTo(1);
-
-    childChannel.shutdownNow();
-    parentChannel.shutdownNow();
-  }
 }

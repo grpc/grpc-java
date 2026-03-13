@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.ChannelCredentials;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Grpc;
@@ -29,7 +30,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
@@ -38,20 +38,18 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
-  private final ManagedChannel parentChannel;
-  private final Server parentServer;
+  private final ChildChannelConfigurer childChannelConfigurer;
 
 
-  GrpcXdsTransportFactory(CallCredentials callCredentials, ManagedChannel parentChannel,
-                          Server parentServer) {
+  GrpcXdsTransportFactory(CallCredentials callCredentials,
+                          ChildChannelConfigurer childChannelConfigurer) {
     this.callCredentials = callCredentials;
-    this.parentChannel = parentChannel;
-    this.parentServer = parentServer;
+    this.childChannelConfigurer = childChannelConfigurer;
   }
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo, callCredentials, parentChannel, parentServer);
+    return new GrpcXdsTransport(serverInfo, callCredentials, childChannelConfigurer);
   }
 
   @VisibleForTesting
@@ -84,15 +82,13 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials,
-                            ManagedChannel parentChannel, Server parentServer) {
+                            ChildChannelConfigurer childChannelConfigurer) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES);
-      if (parentChannel != null) {
-        channelBuilder.configureChannel(parentChannel);
-      } else if (parentServer != null) {
-        channelBuilder.configureChannel(parentServer);
+      if (childChannelConfigurer != null) {
+        childChannelConfigurer.accept(channelBuilder);
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;

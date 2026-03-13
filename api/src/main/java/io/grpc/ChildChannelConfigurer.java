@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,8 +60,8 @@ public interface ChildChannelConfigurer extends Consumer<ManagedChannelBuilder<?
    * before {@link ManagedChannelBuilder#build()} is called.
    *
    * <p>Note: The provided {@code builder} is generic (`?`). Implementations should use
-   * universal configuration methods (like {@code intercept()}, {@code userAgent()}) rather
-   * than casting to specific implementation types.
+   * universal configuration methods (like {@code intercept()}, {@code userAgent()}) on the
+   * builder rather than casting it to specific implementation types.
    *
    * @param builder the mutable channel builder for the new child channel
    */

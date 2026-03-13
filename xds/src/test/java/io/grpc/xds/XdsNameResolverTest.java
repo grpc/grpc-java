@@ -29,7 +29,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -50,6 +49,7 @@ import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
+import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -59,7 +59,6 @@ import io.grpc.InternalConfigSelector;
 import io.grpc.InternalConfigSelector.Result;
 import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -71,7 +70,6 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
 import io.grpc.ProxyDetector;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
@@ -2501,7 +2499,7 @@ public class XdsNameResolverTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ManagedChannel parentChannel, Server parentServer) {
+        ChildChannelConfigurer childChannelConfigurer) {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override
@@ -2957,17 +2955,16 @@ public class XdsNameResolverTest {
 
   @Test
   public void start_passesParentChannelToClientPoolFactory() {
-    // Create a mock Parent Channel
-    ManagedChannel mockParentChannel = mock(ManagedChannel.class);
+    ChildChannelConfigurer mockChildChannelConfigurer = mock(ChildChannelConfigurer.class);
 
-    // Build NameResolver.Args containing the parent channel
+    // Build NameResolver.Args containing the child channel configurer
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(mock(ProxyDetector.class))
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(serviceConfigParser)
         .setChannelLogger(mock(ChannelLogger.class))
-        .setParentChannel(mockParentChannel)
+        .setChildChannelConfigurer(mockChildChannelConfigurer)
         .build();
 
     // Mock the XdsClientPoolFactory
@@ -2982,8 +2979,7 @@ public class XdsNameResolverTest {
         anyString(),
         any(BootstrapInfo.class),
         any(MetricRecorder.class),
-        any(ManagedChannel.class),
-        any()))
+        any(ChildChannelConfigurer.class)))
         .thenReturn(mockObjectPool);
 
     XdsNameResolver resolver = new XdsNameResolver(
@@ -3004,13 +3000,11 @@ public class XdsNameResolverTest {
     // Start the resolver (this triggers the factory call)
     resolver.start(mockListener);
 
-    // Ensure the factory's getOrCreate method was called with parent channel
     verify(mockPoolFactory).getOrCreate(
         eq(AUTHORITY),
         any(BootstrapInfo.class),
         eq(metricRecorder),
-        eq(mockParentChannel),
-        isNull());
+        eq(mockChildChannelConfigurer));
 
     resolver.shutdown();
   }

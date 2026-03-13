@@ -324,7 +324,7 @@ public class XdsServerBuilderTest {
     buildBuilder(null);
     builder.overrideBootstrapForTest(b);
     xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
-    Future<Throwable> unused = startServerAsync();
+    Future<?> unused = startServerAsync();
     assertThat(xdsClientPoolFactory.savedBootstrapInfo.node().getId())
         .isEqualTo(XdsServerTestHelper.BOOTSTRAP_INFO.node().getId());
   }
@@ -336,20 +336,17 @@ public class XdsServerBuilderTest {
     @SuppressWarnings("unchecked")
     ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
     when(mockPool.getObject()).thenReturn(xdsClient);
-    when(mockPoolFactory.getOrCreate(any(), any(), any(), any(), any())).thenReturn(mockPool);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
 
     buildBuilder(null);
     builder.childChannelConfigurer(mockConfigurer);
     builder.xdsClientPoolFactory(mockPoolFactory);
     xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
 
-    Future<Throwable> unused = startServerAsync();
+    Future<?> unused = startServerAsync();
 
     // Verify getOrCreate called with the server instance
     verify(mockPoolFactory).getOrCreate(
-        any(), any(), any(), org.mockito.ArgumentMatchers.<io.grpc.ManagedChannel>isNull(),
-        org.mockito.ArgumentMatchers.eq(xdsServer));
-
-    assertThat(xdsServer.getChildChannelConfigurer()).isSameInstanceAs(mockConfigurer);
+        any(), any(), any(), org.mockito.ArgumentMatchers.eq(mockConfigurer));
   }
 }

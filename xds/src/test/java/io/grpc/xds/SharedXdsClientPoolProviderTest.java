@@ -28,7 +28,11 @@ import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallCredentials;
+import io.grpc.ChildChannelConfigurer;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Metadata;
@@ -208,7 +212,7 @@ public class SharedXdsClientPoolProviderTest {
     // Create xDS client that uses the CallCredentials on the transport
     ObjectPool<XdsClient> xdsClientPool =
         provider.getOrCreate("target", bootstrapInfo, metricRecorder, sampleCreds,
-            null, null);
+            null);
     XdsClient xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(
         XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
@@ -216,6 +220,61 @@ public class SharedXdsClientPoolProviderTest {
     // Wait for xDS server to get the request and verify that it received the CallCredentials
     assertThat(callCredentialsInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
         .isEqualTo("Bearer token");
+
+    // Clean up
+    xdsClientPool.returnObject(xdsClient);
+    xdsServer.shutdownNow();
+  }
+
+  @Test
+  public void xdsClient_usesChildChannelConfigurer() throws Exception {
+    // Set up fake xDS server
+    XdsTestControlPlaneService fakeXdsService = new XdsTestControlPlaneService();
+    CallCredsServerInterceptor callInterceptor = new CallCredsServerInterceptor();
+    Server xdsServer =
+        Grpc.newServerBuilderForPort(0, InsecureServerCredentials.create())
+            .addService(fakeXdsService)
+            .intercept(callInterceptor)
+            .build()
+            .start();
+    String xdsServerUri = "localhost:" + xdsServer.getPort();
+
+    // Set up bootstrap & xDS client pool provider
+    ServerInfo server = ServerInfo.create(xdsServerUri, InsecureChannelCredentials.create());
+    BootstrapInfo bootstrapInfo =
+        BootstrapInfo.builder().servers(Collections.singletonList(server)).node(node).build();
+    SharedXdsClientPoolProvider provider = new SharedXdsClientPoolProvider();
+
+    // Create a client interceptor that actually just injects a test token
+    ClientInterceptor testInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> io.grpc.ClientCall<ReqT, RespT> interceptCall(
+          io.grpc.MethodDescriptor<ReqT, RespT> method,
+          io.grpc.CallOptions callOptions,
+          io.grpc.Channel next) {
+        return new io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+            next.newCall(method, callOptions)) {
+          @Override
+          public void start(Listener<RespT> responseListener, Metadata headers) {
+            headers.put(AUTHORIZATION_METADATA_KEY, "Bearer test-configurer-token");
+            super.start(responseListener, headers);
+          }
+        };
+      }
+    };
+
+    ChildChannelConfigurer configurer = builder -> builder.intercept(testInterceptor);
+
+    // Create xDS client that uses the ChildChannelConfigurer on the transport
+    ObjectPool<XdsClient> xdsClientPool =
+        provider.getOrCreate("target", bootstrapInfo, metricRecorder, null, configurer);
+    XdsClient xdsClient = xdsClientPool.getObject();
+    xdsClient.watchXdsResource(
+        XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
+
+    // Wait for xDS server to get the request and verify that it received the token from configurer
+    assertThat(callInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
+        .isEqualTo("Bearer test-configurer-token");
 
     // Clean up
     xdsClientPool.returnObject(xdsClient);
