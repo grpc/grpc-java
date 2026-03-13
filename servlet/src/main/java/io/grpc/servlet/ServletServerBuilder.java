@@ -78,7 +78,9 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   private InternalServerImpl internalServer;
 
   public ServletServerBuilder() {
-    serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+    serverImplBuilder = new ServerImplBuilder(
+        (streamTracerFactories, metricRecorder) -> 
+            buildTransportServers(streamTracerFactories));
   }
 
   /**

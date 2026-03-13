@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import io.grpc.ServerStreamTracer;
+import io.grpc.MetricRecorder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
@@ -43,8 +43,9 @@ public class NettyServerBuilderTest {
   @Test
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
-    NettyServer server =
-        builder.buildTransportServers(ImmutableList.<ServerStreamTracer.Factory>of());
+    NettyServer server = builder.buildTransportServers(
+        ImmutableList.of(),
+        new MetricRecorder() {});
 
     assertThat(server.getListenSocketAddresses()).hasSize(2);
   }
@@ -189,4 +190,5 @@ public class NettyServerBuilderTest {
 
     builder.assertEventLoopsAndChannelType();
   }
+
 }

@@ -1052,18 +1052,18 @@ final class XdsNameResolver extends NameResolver {
     private final XdsClientPoolFactory xdsClientPoolFactory;
     private final String target;
     private final @Nullable Map<String, ?> bootstrapOverride;
-    private final @Nullable MetricRecorder metricRecorder;
+    private final MetricRecorder metricRecorder;
     private ObjectPool<XdsClient> xdsClientPool;
 
     BootstrappingXdsClientPool(
         XdsClientPoolFactory xdsClientPoolFactory,
         String target,
         @Nullable Map<String, ?> bootstrapOverride,
-        @Nullable MetricRecorder metricRecorder) {
+        MetricRecorder metricRecorder) {
       this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.target = checkNotNull(target, "target");
       this.bootstrapOverride = bootstrapOverride;
-      this.metricRecorder = metricRecorder;
+      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
     }
 
     @Override

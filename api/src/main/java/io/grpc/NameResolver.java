@@ -355,7 +355,7 @@ public abstract class NameResolver {
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
-    @Nullable private final MetricRecorder metricRecorder;
+    private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
@@ -369,7 +369,8 @@ public abstract class NameResolver {
       this.channelLogger = builder.channelLogger;
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
-      this.metricRecorder = builder.metricRecorder;
+      this.metricRecorder = builder.metricRecorder != null ? builder.metricRecorder
+          : new MetricRecorder() {};
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
     }
@@ -497,7 +498,6 @@ public abstract class NameResolver {
     /**
      * Returns the {@link MetricRecorder} that the channel uses to record metrics.
      */
-    @Nullable
     public MetricRecorder getMetricRecorder() {
       return metricRecorder;
     }
@@ -680,7 +680,7 @@ public abstract class NameResolver {
        * See {@link Args#getMetricRecorder()}. This is an optional field.
        */
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
-        this.metricRecorder = metricRecorder;
+        this.metricRecorder = checkNotNull(metricRecorder);
         return this;
       }
 

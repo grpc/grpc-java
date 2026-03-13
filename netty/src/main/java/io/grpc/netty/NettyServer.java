@@ -31,6 +31,7 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
@@ -93,6 +94,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
+  private MetricRecorder metricRecorder;
   private final long keepAliveTimeInNanos;
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionIdleInNanos;
@@ -136,8 +138,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
       int maxRstCount, long maxRstPeriodNanos,
-      Attributes eagAttributes, InternalChannelz channelz) {
+      Attributes eagAttributes, InternalChannelz channelz,
+      MetricRecorder metricRecorder) {
     this.addresses = checkNotNull(addresses, "addresses");
+    this.metricRecorder = metricRecorder;
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -173,6 +177,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.logId = InternalLogId.allocate(getClass(), addresses.isEmpty() ? "No address" :
         String.valueOf(addresses));
   }
+
 
   @Override
   public SocketAddress getListenSocketAddress() {
@@ -272,7 +277,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
                     permitKeepAliveTimeInNanos,
                     maxRstCount,
                     maxRstPeriodNanos,
-                    eagAttributes);
+                    eagAttributes,
+                    metricRecorder);
         ServerTransportListener transportListener;
         // This is to order callbacks on the listener, not to guard access to channel.
         synchronized (NettyServer.this) {
