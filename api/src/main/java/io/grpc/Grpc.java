@@ -102,6 +102,34 @@ public final class Grpc {
   }
 
   /**
+   * Creates a channel builder with a target string, credentials, and a specific
+   * name resolver registry.
+   *
+   * <p>The provided {@code nameResolverRegistry} is used to resolve the target address
+   * into physical addresses (e.g., DNS or custom schemes).
+   *
+   * @param target the target URI for the channel, such as {@code "localhost:8080"}
+   *     or {@code "dns:///example.com"}
+   * @param creds the channel credentials to use for secure communication
+   * @param nameResolverRegistry the registry used to look up {@link NameResolver}
+   *     providers for the target
+   * @return a {@link ManagedChannelBuilder} instance configured with the given parameters
+   * @throws IllegalArgumentException if no provider is available for the given target
+   *     or credentials
+   * @since 1.81.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12694")
+  public static ManagedChannelBuilder<?> newChannelBuilder(
+      String target,
+      ChannelCredentials creds,
+      NameResolverRegistry nameResolverRegistry) {
+    return ManagedChannelRegistry.getDefaultRegistry().newChannelBuilder(
+        nameResolverRegistry,
+        target,
+        creds);
+  }
+
+  /**
    * Creates a channel builder from a host, port, and credentials. The host and port are combined to
    * form an authority string and then passed to {@link #newChannelBuilder(String,
    * ChannelCredentials)}. IPv6 addresses are properly surrounded by square brackets ("[]").
