@@ -35,6 +35,8 @@ import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.round_robin.v3.RoundRobin;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
+import io.envoyproxy.envoy.extensions.transport_sockets.http_11_proxy.v3.Http11ProxyUpstreamTransport;
+import io.envoyproxy.envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext;
 import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext;
 import io.envoyproxy.envoy.service.discovery.v3.Resource;
@@ -72,8 +74,12 @@ final class MessagePrinter implements MessagePrettyPrinter {
               .add(ClusterConfig.getDescriptor())
               .add(ClusterLoadAssignment.getDescriptor())
               .add(WrrLocality.getDescriptor())
-              .add(TypedStruct.getDescriptor())
-              .add(RoundRobin.getDescriptor());
+              .add(RoundRobin.getDescriptor())
+              // Transports
+              .add(Http11ProxyUpstreamTransport.getDescriptor())
+              .add(RawBuffer.getDescriptor())
+              // Always last, guarding the semicolon.
+              .add(TypedStruct.getDescriptor());
       try {
         @SuppressWarnings("unchecked")
         Class<? extends Message> routeLookupClusterSpecifierClass =
