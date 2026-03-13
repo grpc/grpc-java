@@ -130,6 +130,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
+  private final MetricRecorder metricRecorder = mock(MetricRecorder.class);
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
@@ -204,6 +205,20 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
     channel().releaseOutbound();
+  }
+
+  @Test
+  public void tcpMetrics_recorded() throws Exception {
+    manualSetUp();
+    handler().channelActive(ctx());
+    // Verify that channelActive triggered TcpMetrics
+    ArgumentCaptor<Long> countCaptor = ArgumentCaptor.forClass(Long.class);
+    verify(metricRecorder, atLeastOnce()).addLongCounter(
+        eq(io.grpc.InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT),
+        countCaptor.capture(),
+        any(),
+        any());
+    assertEquals(1L, countCaptor.getValue().longValue());
   }
 
   @Test
@@ -1418,7 +1433,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxRstPeriodNanos,
         Attributes.EMPTY,
         fakeClock().getTicker(),
-        new MetricRecorder() {});
+        metricRecorder);
   }
 
   @Override

@@ -22,7 +22,6 @@ import static io.undertow.servlet.Servlets.servlet;
 
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
-import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
@@ -92,9 +91,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
                                                                streamTracerFactories) {
     return new InternalServer() {
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServers(
-              streamTracerFactories, new MetricRecorder() {
-              });
+          new ServletServerBuilder().buildTransportServers(streamTracerFactories);
 
       @Override
       public void start(ServerListener listener) throws IOException {

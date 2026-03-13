@@ -26,7 +26,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
@@ -122,7 +121,6 @@ public class GrpcOpenTelemetryTest {
         .build());
     assertThat(module.getEnableMetrics()).isEmpty();
     assertThat(module.getOptionalLabels()).isEmpty();
-    assertThat(module.getSink()).isInstanceOf(MetricSink.class);
 
     assertThat(module.getTracer()).isSameInstanceAs(noopOpenTelemetry
         .getTracerProvider()

@@ -31,7 +31,6 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
-import io.grpc.MetricRecorder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
@@ -79,7 +78,9 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
   private InternalServerImpl internalServer;
 
   public ServletServerBuilder() {
-    serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+    serverImplBuilder = new ServerImplBuilder(
+        (streamTracerFactories, metricRecorder) -> 
+            buildTransportServers(streamTracerFactories));
   }
 
   /**
@@ -160,8 +161,7 @@ public final class ServletServerBuilder extends ForwardingServerBuilder<ServletS
 
   @VisibleForTesting
   InternalServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      MetricRecorder metricRecorder) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();

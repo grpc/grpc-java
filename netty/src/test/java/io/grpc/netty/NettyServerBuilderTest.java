@@ -191,13 +191,4 @@ public class NettyServerBuilderTest {
     builder.assertEventLoopsAndChannelType();
   }
 
-  @Test
-  public void metricRecorder_propagatedToServer() {
-    MetricRecorder recorder = mock(MetricRecorder.class);
-
-    NettyServer server = builder.buildTransportServers(
-        ImmutableList.of(), recorder);
-
-    assertThat(server.getMetricRecorder()).isSameInstanceAs(recorder);
-  }
 }

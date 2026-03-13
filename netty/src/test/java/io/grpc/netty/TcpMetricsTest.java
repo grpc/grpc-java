@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import io.grpc.InternalTcpMetrics;
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
@@ -49,7 +50,8 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class TcpMetricsTest {
 
-  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   private MetricRecorder metricRecorder;
@@ -63,22 +65,21 @@ public class TcpMetricsTest {
   private TcpMetrics.Tracker metrics;
 
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(eventLoop.schedule(any(Runnable.class), anyLong(), any(TimeUnit.class)))
-            .thenAnswer(invocation -> scheduledFuture);
+        .thenAnswer(invocation -> scheduledFuture);
     metrics = new TcpMetrics.Tracker(metricRecorder);
   }
 
   @Test
-  public void metricsInitialization() {
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
+  public void metricsInitialization() throws Exception {
 
-    org.junit.Assert.assertNotNull(metrics.connectionsCreated);
-    org.junit.Assert.assertNotNull(metrics.connectionCount);
-    org.junit.Assert.assertNotNull(metrics.packetsRetransmitted);
-    org.junit.Assert.assertNotNull(metrics.recurringRetransmits);
-    org.junit.Assert.assertNotNull(metrics.minRtt);
+    org.junit.Assert.assertNotNull(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT);
+    org.junit.Assert.assertNotNull(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT);
+    org.junit.Assert.assertNotNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT);
+    org.junit.Assert.assertNotNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT);
+    org.junit.Assert.assertNotNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT);
   }
 
   public static class FakeEpollTcpInfo {
@@ -109,13 +110,16 @@ public class TcpMetricsTest {
   }
 
   @Test
-  public void tracker_recordTcpInfo_reflectionSuccess() {
+  public void tracker_recordTcpInfo_reflectionSuccess() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-        ConfigurableFakeWithTcpInfo.class.getName(),
-            FakeEpollTcpInfo.class.getName());
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
@@ -124,27 +128,33 @@ public class TcpMetricsTest {
 
     tracker.channelInactive(channel);
 
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(123L), any(), any());
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.recurringRetransmits)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
         eq(4L), any(), any());
-    verify(recorder).recordDoubleHistogram(eq(Objects.requireNonNull(metrics.minRtt)),
+    verify(recorder).recordDoubleHistogram(
+        eq(Objects.requireNonNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT)),
         eq(0.005), any(), any());
   }
 
   @Test
-  public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() {
+  public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-        ConfigurableFakeWithTcpInfo.class.getName(),
-            FakeEpollTcpInfo.class.getName());
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel =
-        org.mockito.Mockito.spy(new ConfigurableFakeWithTcpInfo(infoSource));
+    ConfigurableFakeWithTcpInfo channel = org.mockito.Mockito.spy(
+        new ConfigurableFakeWithTcpInfo(infoSource));
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(channel.isActive()).thenReturn(true);
 
@@ -157,29 +167,35 @@ public class TcpMetricsTest {
     org.mockito.Mockito.clearInvocations(recorder);
     periodicTask.run();
 
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(123L), any(), any());
-    verify(recorder).recordDoubleHistogram(eq(Objects.requireNonNull(metrics.minRtt)),
+    verify(recorder).recordDoubleHistogram(
+        eq(Objects.requireNonNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT)),
         eq(0.005), any(), any());
     // Should NOT record recurring retransmits during periodic polling
     verify(recorder, org.mockito.Mockito.never())
-        .addLongCounter(eq(Objects.requireNonNull(metrics.recurringRetransmits)),
+        .addLongCounter(
+            eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
             anyLong(), any(), any());
   }
 
   @Test
-  public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() {
+  public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-        ConfigurableFakeWithTcpInfo.class.getName(),
-            FakeEpollTcpInfo.class.getName());
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel =
-        org.mockito.Mockito.spy(new ConfigurableFakeWithTcpInfo(infoSource));
+    ConfigurableFakeWithTcpInfo channel = org.mockito.Mockito.spy(
+        new ConfigurableFakeWithTcpInfo(infoSource));
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(channel.isActive()).thenReturn(true);
 
@@ -196,33 +212,38 @@ public class TcpMetricsTest {
     // Let's just create a new channel instance where tcpInfo sets retrans=5.
     FakeEpollTcpInfo infoSource2 = new FakeEpollTcpInfo();
     infoSource2.setValues(130, 5, 5000);
-    ConfigurableFakeWithTcpInfo channel2 =
-        org.mockito.Mockito.spy(new ConfigurableFakeWithTcpInfo(infoSource2));
+    ConfigurableFakeWithTcpInfo channel2 = org.mockito.Mockito.spy(
+        new ConfigurableFakeWithTcpInfo(infoSource2));
     when(channel2.eventLoop()).thenReturn(eventLoop);
 
     tracker.channelInactive(channel2);
 
     // It should record delta for totalRetrans (130 - 123 = 7)
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(7L), any(), any());
     // But for recurringRetransmits it MUST record the raw value 5, not the delta!
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.recurringRetransmits)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
         eq(5L), any(), any());
   }
 
   @Test
-  public void tracker_periodicRecord_reportsDeltaForTotalRetrans() {
+  public void tracker_periodicRecord_reportsDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-        ConfigurableFakeWithTcpInfo.class.getName(),
-            FakeEpollTcpInfo.class.getName());
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel =
-        org.mockito.Mockito.spy(new ConfigurableFakeWithTcpInfo(infoSource));
+    ConfigurableFakeWithTcpInfo channel = org.mockito.Mockito.spy(
+        new ConfigurableFakeWithTcpInfo(infoSource));
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(channel.isActive()).thenReturn(true);
 
@@ -235,7 +256,8 @@ public class TcpMetricsTest {
     // First periodic record
     org.mockito.Mockito.clearInvocations(recorder);
     periodicTask.run();
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(123L), any(), any());
 
     // Change tcpInfo for second periodic record
@@ -251,28 +273,34 @@ public class TcpMetricsTest {
     periodicTask.run();
 
     // Only the delta (150 - 123 = 27) should be recorded
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(27L), any(), any());
-    verify(recorder).recordDoubleHistogram(eq(Objects.requireNonNull(metrics.minRtt)),
+    verify(recorder).recordDoubleHistogram(
+        eq(Objects.requireNonNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT)),
         eq(0.006), any(), any());
     verify(recorder, org.mockito.Mockito.never())
-        .addLongCounter(eq(Objects.requireNonNull(metrics.recurringRetransmits)),
+        .addLongCounter(
+            eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
             anyLong(), any(), any());
   }
 
   @Test
-  public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() {
+  public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-        ConfigurableFakeWithTcpInfo.class.getName(),
-            FakeEpollTcpInfo.class.getName());
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     infoSource.setValues(123, 4, 5000);
-    ConfigurableFakeWithTcpInfo channel =
-        org.mockito.Mockito.spy(new ConfigurableFakeWithTcpInfo(infoSource));
+    ConfigurableFakeWithTcpInfo channel = org.mockito.Mockito.spy(
+        new ConfigurableFakeWithTcpInfo(infoSource));
     when(channel.eventLoop()).thenReturn(eventLoop);
     when(channel.isActive()).thenReturn(true);
 
@@ -291,9 +319,11 @@ public class TcpMetricsTest {
 
     // NO delta (123 - 123 = 0), so it should not be recorded
     verify(recorder, org.mockito.Mockito.never())
-        .addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+        .addLongCounter(
+            eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
             anyLong(), any(), any());
-    verify(recorder).recordDoubleHistogram(eq(Objects.requireNonNull(metrics.minRtt)),
+    verify(recorder).recordDoubleHistogram(
+        eq(Objects.requireNonNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT)),
         eq(0.005), any(), any());
   }
 
@@ -313,15 +343,17 @@ public class TcpMetricsTest {
   }
 
   @Test
-  public void tracker_reportsDeltas_correctly() {
+  public void tracker_reportsDeltas_correctly() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
-    String fakeChannelName = ConfigurableFakeWithTcpInfo.class.getName();
-    String fakeInfoName = FakeEpollTcpInfo.class.getName();
-
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-            fakeChannelName, fakeInfoName);
+    TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
+        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        FakeEpollTcpInfo.class.getConstructor(),
+        ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
+        FakeEpollTcpInfo.class.getMethod("totalRetrans"),
+        FakeEpollTcpInfo.class.getMethod("retrans"),
+        FakeEpollTcpInfo.class.getMethod("rtt"));
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     FakeEpollTcpInfo infoSource = new FakeEpollTcpInfo();
     ConfigurableFakeWithTcpInfo channel = new ConfigurableFakeWithTcpInfo(infoSource);
@@ -330,14 +362,16 @@ public class TcpMetricsTest {
     infoSource.setValues(10, 2, 1000);
     tracker.recordTcpInfo(channel);
 
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(10L), any(), any());
 
     // 15 retransmits total (delta 5)
     infoSource.setValues(15, 0, 1000);
     tracker.recordTcpInfo(channel);
 
-    verify(recorder).addLongCounter(eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
+    verify(recorder).addLongCounter(
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
         eq(5L), any(), any());
 
     // 15 retransmits total (delta 0) - should NOT report
@@ -347,36 +381,35 @@ public class TcpMetricsTest {
     // Verify no new interactions with this specific metric and value
     // We can't easily verify "no interaction" for specific value without capturing.
     verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(
-        eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
-            eq(10L), any(), any());
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
+        eq(10L), any(), any());
     verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(
-        eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
-            eq(5L), any(), any());
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
+        eq(5L), any(), any());
     // Total interactions for packetsRetransmitted should be 2
     verify(recorder, org.mockito.Mockito.times(2)).addLongCounter(
-        eq(Objects.requireNonNull(metrics.packetsRetransmitted)),
-            anyLong(), any(), any());
+        eq(Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)),
+        anyLong(), any(), any());
 
     // recurringRetransmits should NOT have been reported yet (periodic calls)
     verify(recorder, org.mockito.Mockito.times(0)).addLongCounter(
-        eq(Objects.requireNonNull(metrics.recurringRetransmits)),
-            anyLong(), any(), any());
+        eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
+        anyLong(), any(), any());
 
     // Close channel - should report recurringRetransmits
     tracker.channelInactive(channel);
     verify(recorder, org.mockito.Mockito.times(1)).addLongCounter(
-        eq(Objects.requireNonNull(metrics.recurringRetransmits)),
+        eq(Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)),
         eq(1L), // From last infoSource setValues(15, 1, 1000)
         any(), any());
   }
 
   @Test
-  public void tracker_recordTcpInfo_reflectionFailure() {
+  public void tracker_recordTcpInfo_reflectionFailure() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
-    TcpMetrics.Metrics metrics = new TcpMetrics.Metrics();
 
-    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder, metrics,
-            "non.existent.Class", "non.existent.Info");
+    TcpMetrics.epollInfo = null;
+    TcpMetrics.Tracker tracker = new TcpMetrics.Tracker(recorder);
 
     Channel channel = org.mockito.Mockito.mock(Channel.class);
     when(channel.isActive()).thenReturn(true);
@@ -384,35 +417,34 @@ public class TcpMetricsTest {
     // Should catch exception and ignore
     tracker.channelInactive(channel);
   }
-  
+
   @Test
-  public void registeredMetrics_haveCorrectOptionalLabels() {
+  public void registeredMetrics_haveCorrectOptionalLabels() throws Exception {
     List<String> expectedOptionalLabels = Arrays.asList(
         "network.local.address",
         "network.local.port",
         "network.peer.address",
-        "network.peer.port"
-    );
+        "network.peer.port");
 
     org.junit.Assert.assertEquals(
         expectedOptionalLabels,
-        TcpMetrics.getDefaultMetrics().connectionsCreated.getOptionalLabelKeys());
+        InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT.getOptionalLabelKeys());
     org.junit.Assert.assertEquals(
         expectedOptionalLabels,
-        TcpMetrics.getDefaultMetrics().connectionCount.getOptionalLabelKeys());
+        InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT.getOptionalLabelKeys());
 
-    if (TcpMetrics.getDefaultMetrics().packetsRetransmitted != null) {
+    if (InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT != null) {
       org.junit.Assert.assertEquals(
           expectedOptionalLabels,
-          Objects.requireNonNull(TcpMetrics.getDefaultMetrics().packetsRetransmitted)
+          Objects.requireNonNull(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT)
               .getOptionalLabelKeys());
       org.junit.Assert.assertEquals(
           expectedOptionalLabels,
-          Objects.requireNonNull(TcpMetrics.getDefaultMetrics().recurringRetransmits)
+          Objects.requireNonNull(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT)
               .getOptionalLabelKeys());
       org.junit.Assert.assertEquals(
           expectedOptionalLabels,
-          Objects.requireNonNull(TcpMetrics.getDefaultMetrics().minRtt).getOptionalLabelKeys());
+          Objects.requireNonNull(InternalTcpMetrics.MIN_RTT_INSTRUMENT).getOptionalLabelKeys());
     }
   }
 
@@ -425,16 +457,16 @@ public class TcpMetricsTest {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress(remoteInet, 443));
 
     metrics.channelActive(channel);
-    
+
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList(
+        eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList(
+        eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verifyNoMoreInteractions(metricRecorder);
   }
@@ -450,67 +482,68 @@ public class TcpMetricsTest {
     when(channel.remoteAddress()).thenReturn(new InetSocketAddress(remoteInet, 443));
 
     metrics.channelInactive(channel);
-    
+
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(-1L), 
+        eq(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT), eq(-1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList(
+        eq(Arrays.asList(
             localInet.getHostAddress(), "8080", remoteInet.getHostAddress(), "443")));
     verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
-  public void channelActive_extractsLabels_nonInetAddress() {
-    SocketAddress dummyAddress = new SocketAddress() {};
+  public void channelActive_extractsLabels_nonInetAddress() throws Exception {
+    SocketAddress dummyAddress = new SocketAddress() {
+    };
     when(channel.localAddress()).thenReturn(dummyAddress);
     when(channel.remoteAddress()).thenReturn(dummyAddress);
 
     metrics.channelActive(channel);
-    
+
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList("", "", "", "")));
+        eq(Arrays.asList("", "", "", "")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList("", "", "", "")));
+        eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
-  public void channelActive_incrementsCounts() {
+  public void channelActive_incrementsCounts() throws Exception {
     metrics.channelActive(channel);
     verify(metricRecorder).addLongCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionsCreated), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList("", "", "", "")));
+        eq(Arrays.asList("", "", "", "")));
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(1L), 
+        eq(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT), eq(1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList("", "", "", "")));
+        eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
-  public void channelInactive_decrementsCount_noEpoll_noError() {
+  public void channelInactive_decrementsCount_noEpoll_noError() throws Exception {
     metrics.channelInactive(channel);
     verify(metricRecorder).addLongUpDownCounter(
-        eq(TcpMetrics.getDefaultMetrics().connectionCount), eq(-1L), 
+        eq(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT), eq(-1L),
         eq(Collections.emptyList()),
-            eq(Arrays.asList("", "", "", "")));
+        eq(Arrays.asList("", "", "", "")));
     verifyNoMoreInteractions(metricRecorder);
   }
 
   @Test
-  public void channelActive_schedulesReportTimer() {
+  public void channelActive_schedulesReportTimer() throws Exception {
     when(channel.isActive()).thenReturn(true);
     metrics.channelActive(channel);
 
     ArgumentCaptor<Runnable> runnableCaptor = ArgumentCaptor.forClass(Runnable.class);
     ArgumentCaptor<Long> delayCaptor = ArgumentCaptor.forClass(Long.class);
     verify(eventLoop).schedule(
-            runnableCaptor.capture(), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
+        runnableCaptor.capture(), delayCaptor.capture(), eq(TimeUnit.MILLISECONDS));
 
     Runnable task = runnableCaptor.getValue();
     long delay = delayCaptor.getValue();
@@ -535,7 +568,7 @@ public class TcpMetricsTest {
   }
 
   @Test
-  public void channelInactive_cancelsReportTimer() {
+  public void channelInactive_cancelsReportTimer() throws Exception {
     when(channel.isActive()).thenReturn(true);
     metrics.channelActive(channel);
 

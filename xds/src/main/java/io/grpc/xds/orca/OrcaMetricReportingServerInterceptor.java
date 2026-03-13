@@ -75,7 +75,7 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
    * higher precedence compared to metrics from {@link MetricRecorder}.
    */
   public static OrcaMetricReportingServerInterceptor create(
-      MetricRecorder metricRecorder) {
+      @Nullable MetricRecorder metricRecorder) {
     return new OrcaMetricReportingServerInterceptor(metricRecorder);
   }
 

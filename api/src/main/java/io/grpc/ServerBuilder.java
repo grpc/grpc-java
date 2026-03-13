@@ -441,8 +441,9 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @param metricSink the metric sink to add.
    * @return this
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12693")
   public T addMetricSink(MetricSink metricSink) {
-    throw new UnsupportedOperationException();
+    return thisT();
   }
 
   /**

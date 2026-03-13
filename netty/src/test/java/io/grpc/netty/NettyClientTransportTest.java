@@ -37,7 +37,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -230,32 +229,31 @@ public class NettyClientTransportTest {
     // set SO_LINGER option
     int soLinger = 123;
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            new ReflectiveChannelFactory<>(NioSocketChannel.class),
-            channelOptions,
-            group,
-            newNegotiator(),
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            KEEPALIVE_TIME_NANOS_DISABLED,
-            1L,
-            false,
-            authority,
-            null /* user agent */,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            Attributes.EMPTY,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            new MetricRecorder() {
-            },
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        new ReflectiveChannelFactory<>(NioSocketChannel.class),
+        channelOptions,
+        group,
+        newNegotiator(),
+        false,
+        DEFAULT_WINDOW_SIZE,
+        DEFAULT_MAX_MESSAGE_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED,
+        1L,
+        false,
+        authority,
+        null /* user agent */,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        Attributes.EMPTY,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -507,32 +505,31 @@ public class NettyClientTransportTest {
   public void failingToConstructChannelShouldFailGracefully() throws Exception {
     address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            new ReflectiveChannelFactory<>(CantConstructChannel.class),
-            new HashMap<ChannelOption<?>, Object>(),
-            group,
-            newNegotiator(),
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
-            KEEPALIVE_TIME_NANOS_DISABLED,
-            1,
-            false,
-            authority,
-            null,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            Attributes.EMPTY,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            new MetricRecorder() {
-            },
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        new ReflectiveChannelFactory<>(CantConstructChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        group,
+        newNegotiator(),
+        false,
+        DEFAULT_WINDOW_SIZE,
+        DEFAULT_MAX_MESSAGE_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
+        KEEPALIVE_TIME_NANOS_DISABLED,
+        1,
+        false,
+        authority,
+        null,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        Attributes.EMPTY,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
 
     // Should not throw
@@ -995,7 +992,7 @@ public class NettyClientTransportTest {
 
       new Rpc(transport, new Metadata(), "foo.test.google.fr").waitForResponse();
     } finally {
-      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -1018,7 +1015,7 @@ public class NettyClientTransportTest {
 
       new Rpc(transport, new Metadata(), "foo.test.google.fr:12345").waitForResponse();
     } finally {
-      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -1052,7 +1049,7 @@ public class NettyClientTransportTest {
           "No subject alternative names matching IP address 2001:db8:3333:4444:5555:6666:1.2.3.4 "
               + "found");
     } finally {
-      NettyClientHandler.enablePerRpcAuthorityCheck = false;;
+      NettyClientHandler.enablePerRpcAuthorityCheck = false;
     }
   }
 
@@ -1131,32 +1128,31 @@ public class NettyClientTransportTest {
     if (!enableKeepAlive) {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
-    NettyClientTransport transport =
-        new NettyClientTransport(
-            address,
-            channelFactory,
-            new HashMap<ChannelOption<?>, Object>(),
-            group,
-            negotiator,
-            false,
-            DEFAULT_WINDOW_SIZE,
-            maxMsgSize,
-            maxHeaderListSize,
-            maxHeaderListSize,
-            keepAliveTimeNano,
-            keepAliveTimeoutNano,
-            false,
-            authority,
-            userAgent,
-            tooManyPingsRunnable,
-            new TransportTracer(),
-            eagAttributes,
-            new SocketPicker(),
-            new FakeChannelLogger(),
-            false,
-            new MetricRecorder() {
-            },
-            Ticker.systemTicker());
+    NettyClientTransport transport = new NettyClientTransport(
+        address,
+        channelFactory,
+        new HashMap<ChannelOption<?>, Object>(),
+        group,
+        negotiator,
+        false,
+        DEFAULT_WINDOW_SIZE,
+        maxMsgSize,
+        maxHeaderListSize,
+        maxHeaderListSize,
+        keepAliveTimeNano,
+        keepAliveTimeoutNano,
+        false,
+        authority,
+        userAgent,
+        tooManyPingsRunnable,
+        new TransportTracer(),
+        eagAttributes,
+        new SocketPicker(),
+        new FakeChannelLogger(),
+        false,
+        new MetricRecorder() {
+        },
+        Ticker.systemTicker());
     transports.add(transport);
     return transport;
   }
@@ -1175,36 +1171,35 @@ public class NettyClientTransportTest {
 
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize,
       ServerListener serverListener) throws IOException {
-    server =
-        new NettyServer(
-            TestUtils.testServerAddresses(new InetSocketAddress(0)),
-            new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
-            new HashMap<ChannelOption<?>, Object>(),
-            new HashMap<ChannelOption<?>, Object>(),
-            new FixedObjectPool<>(group),
-            new FixedObjectPool<>(group),
-            false,
-            negotiator,
-            Collections.<ServerStreamTracer.Factory>emptyList(),
-            TransportTracer.getDefaultFactory(),
-            maxStreamsPerConnection,
-            false,
-            DEFAULT_WINDOW_SIZE,
-            DEFAULT_MAX_MESSAGE_SIZE,
-            maxHeaderListSize,
-            maxHeaderListSize,
-            DEFAULT_SERVER_KEEPALIVE_TIME_NANOS,
-            DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
-            MAX_CONNECTION_IDLE_NANOS_DISABLED,
-            MAX_CONNECTION_AGE_NANOS_DISABLED,
-            MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
-            true,
-            0,
-            MAX_RST_COUNT_DISABLED,
-            0,
-            Attributes.EMPTY,
-            channelz,
-            mock(MetricRecorder.class));
+    server = new NettyServer(
+        TestUtils.testServerAddresses(new InetSocketAddress(0)),
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
+        new HashMap<ChannelOption<?>, Object>(),
+        new HashMap<ChannelOption<?>, Object>(),
+        new FixedObjectPool<>(group),
+        new FixedObjectPool<>(group),
+        false,
+        negotiator,
+        Collections.<ServerStreamTracer.Factory>emptyList(),
+        TransportTracer.getDefaultFactory(),
+        maxStreamsPerConnection,
+        false,
+        DEFAULT_WINDOW_SIZE,
+        DEFAULT_MAX_MESSAGE_SIZE,
+        maxHeaderListSize,
+        maxHeaderListSize,
+        DEFAULT_SERVER_KEEPALIVE_TIME_NANOS,
+        DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
+        MAX_CONNECTION_IDLE_NANOS_DISABLED,
+        MAX_CONNECTION_AGE_NANOS_DISABLED,
+        MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE,
+        true,
+        0,
+        MAX_RST_COUNT_DISABLED,
+        0,
+        Attributes.EMPTY,
+        channelz,
+        new MetricRecorder() {});
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());

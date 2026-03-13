@@ -21,7 +21,6 @@ import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED
 import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -179,10 +178,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
         String.valueOf(addresses));
   }
 
-  @VisibleForTesting
-  MetricRecorder getMetricRecorder() {
-    return metricRecorder;
-  }
 
   @Override
   public SocketAddress getListenSocketAddress() {

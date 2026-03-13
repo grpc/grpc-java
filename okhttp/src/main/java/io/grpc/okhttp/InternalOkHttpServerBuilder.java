@@ -32,7 +32,7 @@ public final class InternalOkHttpServerBuilder {
   public static InternalServer buildTransportServers(OkHttpServerBuilder builder,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       MetricRecorder metricRecorder) {
-    return builder.buildTransportServers(streamTracerFactories, metricRecorder);
+    return builder.buildTransportServers(streamTracerFactories);
   }
 
   public static void setTransportTracerFactory(OkHttpServerBuilder builder,

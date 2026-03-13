@@ -112,7 +112,15 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     return new OkHttpServerBuilder(address, result.factory);
   }
 
-  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(
+      new ServerImplBuilder.ClientTransportServersBuilder() {
+        @Override
+        public InternalServer buildClientTransportServers(
+            List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+            MetricRecorder metricRecorder) {
+          return buildTransportServers(streamTracerFactories);
+        }
+      });
   final SocketAddress listenAddress;
   final HandshakerSocketFactory handshakerSocketFactory;
   TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
@@ -388,8 +396,7 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
   }
 
   InternalServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      MetricRecorder metricRecorder) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     return new OkHttpServer(this, streamTracerFactories, serverImplBuilder.getChannelz());
   }
 
