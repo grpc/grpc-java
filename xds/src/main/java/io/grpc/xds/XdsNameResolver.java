@@ -817,6 +817,7 @@ final class XdsNameResolver extends NameResolver {
       }
 
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
+      ClientInterceptor extProcInterceptor = null;
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String name = namedFilter.name;
         FilterConfig config = namedFilter.filterConfig;
@@ -829,8 +830,16 @@ final class XdsNameResolver extends NameResolver {
             filter.buildClientInterceptor(config, overrideConfig, scheduler);
 
         if (interceptor != null) {
-          filterInterceptors.add(interceptor);
+          if (config.typeUrl().equals(ExternalProcessorFilter.TYPE_URL)) {
+            extProcInterceptor = interceptor;
+          } else {
+            filterInterceptors.add(interceptor);
+          }
         }
+      }
+
+      if (extProcInterceptor != null) {
+        filterInterceptors.add(extProcInterceptor);
       }
 
       // Combine interceptors produced by different filters into a single one that executes
