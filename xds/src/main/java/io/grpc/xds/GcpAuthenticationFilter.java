@@ -45,6 +45,7 @@ import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrappe
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -81,7 +82,7 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     @Override
-    public GcpAuthenticationFilter newInstance(String name) {
+    public GcpAuthenticationFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
       return new GcpAuthenticationFilter(name, cacheSize);
     }
 

@@ -2,13 +2,11 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
-import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
@@ -26,8 +24,11 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.stub.ClientCallStreamObserver;
-import io.grpc.xds.internal.grpcservice.GrpcServiceChannelCreator;
-import io.grpc.xds.internal.grpcservice.GrpcServiceChannelCreatorImpl;
+import io.grpc.xds.internal.grpcservice.CachedChannelManager;
+import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
+import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
+import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,19 +40,16 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
-  // TODO: Make final after the need to replace with a mock from unit tests is removed.
-  GrpcServiceChannelCreator grpcServiceChannelCreator;
   ManagedChannel grpcServiceChannel;
   ExternalProcessorGrpc.ExternalProcessorStub externalProcessorStub;
   private final Object lock = new Object();
-  private GrpcService lastGrpcServiceConfig;
 
   public ExternalProcessorFilter(String name) {
     filterInstanceName = checkNotNull(name, "name");
-    grpcServiceChannelCreator = new GrpcServiceChannelCreatorImpl();
   }
 
   static final class Provider implements Filter.Provider {
+    private GrpcServiceXdsContextProvider grpcServiceXdsContextProvider;
     @Override
     public String[] typeUrls() {
       return new String[]{TYPE_URL};
@@ -63,7 +61,8 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
-    public ExternalProcessorFilter newInstance(String name) {
+    public ExternalProcessorFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
+      this.grpcServiceXdsContextProvider = grpcServiceXdsContextProvider;
       return new ExternalProcessorFilter(name);
     }
 
@@ -87,7 +86,12 @@ public class ExternalProcessorFilter implements Filter {
         return ConfigOrError.fromError("Invalid response_body_mode: " + mode.getResponseBodyMode() + ". Only GRPC is supported.");
       }
 
-      return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(externalProcessor));
+      try {
+        GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(externalProcessor.getGrpcService(), grpcServiceXdsContextProvider);
+        return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(externalProcessor, grpcServiceConfig));
+      } catch (GrpcServiceParseException e) {
+        return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
+      }
     }
 
     @Override
@@ -103,31 +107,14 @@ public class ExternalProcessorFilter implements Filter {
     return new ExternalProcessorInterceptor(this, (ExternalProcessorFilterConfig) filterConfig, overrideConfig, scheduler);
   }
 
-  ExternalProcessorGrpc.ExternalProcessorStub getExternalProcessorStub(ExternalProcessor config) {
-    GrpcService newServiceConfig = config.getGrpcService();
-    synchronized (lock) {
-      // TODO: gRFC only mentions we should recreate channel if target or channel creds changed
-      // but other fields in grpc service config also do seem relevant to warrant channel
-      // recreation.
-      if (grpcServiceChannel == null || !newServiceConfig.equals(lastGrpcServiceConfig)) {
-        if (grpcServiceChannel != null) {
-          // Shutdown the old channel if the config has changed
-          grpcServiceChannel.shutdown();
-        }
-        grpcServiceChannel = grpcServiceChannelCreator.create(newServiceConfig);
-        externalProcessorStub = ExternalProcessorGrpc.newStub(grpcServiceChannel);
-        lastGrpcServiceConfig = newServiceConfig;
-      }
-      return externalProcessorStub;
-    }
-  }
-
   static final class ExternalProcessorFilterConfig implements FilterConfig {
 
     private final ExternalProcessor externalProcessor;
+    private final GrpcServiceConfig grpcServiceConfig;
 
-    ExternalProcessorFilterConfig(ExternalProcessor externalProcessor) {
+    ExternalProcessorFilterConfig(ExternalProcessor externalProcessor, GrpcServiceConfig grpcServiceConfig) {
       this.externalProcessor = externalProcessor;
+      this.grpcServiceConfig = grpcServiceConfig;
     }
 
     @Override
@@ -137,6 +124,7 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
+    private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
     private final ExternalProcessorFilter filter;
     private final ExternalProcessorFilterConfig filterConfig;
     private final FilterConfig overrideConfig;
@@ -164,7 +152,8 @@ public class ExternalProcessorFilter implements Filter {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      ExternalProcessorGrpc.ExternalProcessorStub stub = filter.getExternalProcessorStub(filterConfig.externalProcessor);
+      ExternalProcessorGrpc.ExternalProcessorStub stub = ExternalProcessorGrpc.newStub(
+          cachedChannelManager.getChannel(filterConfig.grpcServiceConfig));
       ExternalProcessor config = filterConfig.externalProcessor;
 
       MethodDescriptor<InputStream, InputStream> rawMethod = method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();

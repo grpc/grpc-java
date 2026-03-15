@@ -20,6 +20,7 @@ import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.io.Closeable;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
@@ -87,7 +88,7 @@ interface Filter extends Closeable {
      *   <li>Filter name+typeUrl in FilterChain's HCM.http_filters.</li>
      * </ol>
      */
-    Filter newInstance(String name);
+    Filter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider);
 
     /**
      * Parses the top-level filter config from raw proto message. The message may be either a {@link
