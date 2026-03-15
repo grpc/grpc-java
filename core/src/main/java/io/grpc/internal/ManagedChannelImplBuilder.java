@@ -451,9 +451,9 @@ public final class ManagedChannelImplBuilder
     Preconditions.checkArgument(policy != null, "policy cannot be null");
     LoadBalancerProvider provider = LoadBalancerRegistry.getDefaultRegistry().getProvider(policy);
     Preconditions.checkArgument(
-      provider != null,
-      "No provider available for the '%s' load balancing policy.",
-      policy);
+        provider != null,
+        "No provider available for the '%s' load balancing policy.",
+        policy);
     this.defaultLbPolicy = provider.getPolicyName();
     return this;
   }
