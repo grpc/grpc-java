@@ -19,14 +19,19 @@ package io.grpc.xds;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
+import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
+import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.Nullable;
 
 class GrpcBootstrapperImpl extends BootstrapperImpl {
@@ -97,7 +102,8 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   @Override
   protected Object getImplSpecificConfig(Map<String, ?> serverConfig, String serverUri)
       throws XdsInitializationException {
-    return getChannelCredentials(serverConfig, serverUri);
+    ConfiguredChannelCredentials configuredChannel = getChannelCredentials(serverConfig, serverUri);
+    return configuredChannel != null ? configuredChannel.channelCredentials() : null;
   }
 
   @GuardedBy("GrpcBootstrapperImpl.class")
@@ -120,26 +126,26 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
     return defaultBootstrap;
   }
 
-  private static ChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
-                                                          String serverUri)
+  private static ConfiguredChannelCredentials getChannelCredentials(Map<String, ?> serverConfig,
+                                                                  String serverUri)
       throws XdsInitializationException {
     List<?> rawChannelCredsList = JsonUtil.getList(serverConfig, "channel_creds");
     if (rawChannelCredsList == null || rawChannelCredsList.isEmpty()) {
       throw new XdsInitializationException(
           "Invalid bootstrap: server " + serverUri + " 'channel_creds' required");
     }
-    ChannelCredentials channelCredentials =
+    ConfiguredChannelCredentials credentials =
         parseChannelCredentials(JsonUtil.checkObjectList(rawChannelCredsList), serverUri);
-    if (channelCredentials == null) {
+    if (credentials == null) {
       throw new XdsInitializationException(
           "Server " + serverUri + ": no supported channel credentials found");
     }
-    return channelCredentials;
+    return credentials;
   }
 
   @Nullable
-  private static ChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
-                                                            String serverUri)
+  private static ConfiguredChannelCredentials parseChannelCredentials(List<Map<String, ?>> jsonList,
+          String serverUri)
       throws XdsInitializationException {
     for (Map<String, ?> channelCreds : jsonList) {
       String type = JsonUtil.getString(channelCreds, "type");
@@ -155,9 +161,90 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
           config = ImmutableMap.of();
         }
 
-        return provider.newChannelCredentials(config);
+        ChannelCredentials creds = provider.newChannelCredentials(config);
+        if (creds == null) {
+          continue;
+        }
+        return ConfiguredChannelCredentials.create(creds, new JsonChannelCredsConfig(type, config));
       }
     }
     return null;
   }
+
+  @Override
+  protected Optional<Object> parseAllowedGrpcServices(
+      Map<String, ?> rawAllowedGrpcServices)
+      throws XdsInitializationException {
+    ImmutableMap.Builder<String, GrpcServiceXdsContext.AllowedGrpcService> builder =
+        ImmutableMap.builder();
+    for (String targetUri : rawAllowedGrpcServices.keySet()) {
+      Map<String, ?> serviceConfig = JsonUtil.getObject(rawAllowedGrpcServices, targetUri);
+      if (serviceConfig == null) {
+        throw new XdsInitializationException(
+            "Invalid allowed_grpc_services config for " + targetUri);
+      }
+      ConfiguredChannelCredentials configuredChannel =
+          getChannelCredentials(serviceConfig, targetUri);
+
+      Optional<CallCredentials> callCredentials = Optional.empty();
+      List<?> rawCallCredsList = JsonUtil.getList(serviceConfig, "call_creds");
+      if (rawCallCredsList != null && !rawCallCredsList.isEmpty()) {
+        callCredentials =
+            parseCallCredentials(JsonUtil.checkObjectList(rawCallCredsList), targetUri);
+      }
+
+      GrpcServiceXdsContext.AllowedGrpcService.Builder b = GrpcServiceXdsContext.AllowedGrpcService
+          .builder().configuredChannelCredentials(configuredChannel);
+      callCredentials.ifPresent(b::callCredentials);
+      builder.put(targetUri, b.build());
+    }
+    ImmutableMap<String, GrpcServiceXdsContext.AllowedGrpcService> parsed = builder.buildOrThrow();
+    return parsed.isEmpty() ? Optional.empty() : Optional.of(parsed);
+  }
+
+  @SuppressWarnings("unused")
+  private static Optional<CallCredentials> parseCallCredentials(List<Map<String, ?>> jsonList,
+                                                          String targetUri)
+      throws XdsInitializationException {
+    // TODO(sauravzg): Currently no xDS call credentials providers are implemented (no
+    // XdsCallCredentialsRegistry).
+    // As per A102/A97, we should just ignore unsupported call credentials types
+    // without throwing an exception.
+    return Optional.empty();
+  }
+
+  private static final class JsonChannelCredsConfig implements ChannelCredsConfig {
+    private final String type;
+    private final Map<String, ?> config;
+
+    JsonChannelCredsConfig(String type, Map<String, ?> config) {
+      this.type = type;
+      this.config = config;
+    }
+
+    @Override
+    public String type() {
+      return type;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      JsonChannelCredsConfig that = (JsonChannelCredsConfig) o;
+      return java.util.Objects.equals(type, that.type)
+          && java.util.Objects.equals(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(type, config);
+    }
+  }
+
 }
+
