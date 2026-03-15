@@ -148,18 +148,8 @@ public final class GrpcServiceConfigParser {
       return builder.build();
     }
 
-    ConfiguredChannelCredentials channelCreds = null;
-    if (googleGrpcProto.getChannelCredentialsPluginCount() > 0) {
-      try {
-        channelCreds = extractChannelCredentials(googleGrpcProto.getChannelCredentialsPluginList());
-      } catch (GrpcServiceParseException e) {
-        // Fall back to channel_credentials if plugins are not supported
-      }
-    }
-
-    if (channelCreds == null) {
-      throw new GrpcServiceParseException("No valid supported channel_credentials found");
-    }
+    ConfiguredChannelCredentials channelCreds =
+        extractChannelCredentials(googleGrpcProto.getChannelCredentialsPluginList());
 
     Optional<CallCredentials> callCreds =
         extractCallCredentials(googleGrpcProto.getCallCredentialsPluginList());
@@ -276,8 +266,6 @@ public final class GrpcServiceConfigParser {
       delegate.applyRequestMetadata(requestInfo, appExecutor, applier);
     }
   }
-
-
 
   static final class ProtoChannelCredsConfig implements ChannelCredsConfig {
     private final String type;
