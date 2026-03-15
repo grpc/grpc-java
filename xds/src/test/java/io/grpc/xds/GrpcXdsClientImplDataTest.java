@@ -150,6 +150,7 @@ import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.Matchers.FractionMatcher;
 import io.grpc.xds.internal.Matchers.HeaderMatcher;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1289,7 +1290,7 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public TestFilter newInstance(String name) {
+      public TestFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
         return new TestFilter();
       }
 

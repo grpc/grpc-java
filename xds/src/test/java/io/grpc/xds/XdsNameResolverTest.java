@@ -231,7 +231,7 @@ public class XdsNameResolverTest {
     // Lenient: suppress [MockitoHint] Unused warning, only used in resolved_fault* tests.
     lenient()
         .doReturn(new FaultFilter(mockRandom, new AtomicLong()))
-        .when(faultFilterProvider).newInstance(any(String.class));
+        .when(faultFilterProvider).newInstance(any(String.class), null);
 
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         ROUTER_FILTER_PROVIDER,

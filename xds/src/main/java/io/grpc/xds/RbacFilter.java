@@ -35,6 +35,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AlwaysTrueMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AndMatcher;
@@ -89,7 +90,7 @@ final class RbacFilter implements Filter {
     }
 
     @Override
-    public RbacFilter newInstance(String name) {
+    public RbacFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
       return INSTANCE;
     }
 

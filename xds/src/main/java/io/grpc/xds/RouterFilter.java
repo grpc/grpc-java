@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.protobuf.Message;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 
 /**
  * Router filter implementation. Currently this filter does not parse any field in the config.
@@ -56,7 +57,7 @@ final class RouterFilter implements Filter {
     }
 
     @Override
-    public RouterFilter newInstance(String name) {
+    public RouterFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
       return INSTANCE;
     }
 

@@ -22,6 +22,7 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
 import io.grpc.ServerInterceptor;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.util.ConcurrentModificationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -108,7 +109,7 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public synchronized StatefulFilter newInstance(String name) {
+    public synchronized StatefulFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
       StatefulFilter filter = new StatefulFilter(counter++);
       instances.put(filter.idx, filter);
       return filter;
