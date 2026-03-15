@@ -19,6 +19,7 @@ package io.grpc.xds.internal.grpcservice;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.auto.value.AutoValue;
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ManagedChannel;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig.GoogleGrpcConfig;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,6 +49,7 @@ public class CachedChannelManager {
   /**
    * Constructor for testing to inject a channel creator.
    */
+  @VisibleForTesting
   public CachedChannelManager(Function<GrpcServiceConfig, ManagedChannel> channelCreator) {
     this.channelCreator = checkNotNull(channelCreator, "channelCreator");
   }
