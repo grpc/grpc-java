@@ -43,6 +43,9 @@ import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
@@ -67,6 +70,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -85,6 +89,7 @@ public class ManagedChannelImplBuilderTest {
   private static final String DUMMY_TARGET = "fake-target";
   private static final String DUMMY_AUTHORITY_VALID = "valid:1234";
   private static final String DUMMY_AUTHORITY_INVALID = "[ : : 1]";
+  private static final String FAKE_POLICY_NAME = "magic_balancer";
   private static final ClientInterceptor DUMMY_USER_INTERCEPTOR =
       new ClientInterceptor() {
         @Override
@@ -99,6 +104,29 @@ public class ManagedChannelImplBuilderTest {
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
           return next.newCall(method, callOptions);
+        }
+      };
+  
+  private final LoadBalancerProvider fakeProvider =
+      new LoadBalancerProvider() {
+        @Override
+        public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+          return mock(LoadBalancer.class);
+        }
+
+        @Override
+        public boolean isAvailable() {
+          return true;
+        }
+
+        @Override
+        public int getPriority() {
+          return 5;
+        }
+
+        @Override
+        public String getPolicyName() {
+          return FAKE_POLICY_NAME;
         }
       };
 
@@ -141,6 +169,13 @@ public class ManagedChannelImplBuilderTest {
         DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
         new FixedPortProvider(DUMMY_PORT));
+
+    LoadBalancerRegistry.getDefaultRegistry().register(fakeProvider);
+  }
+
+  @After
+  public void tearDown() {
+    LoadBalancerRegistry.getDefaultRegistry().deregister(fakeProvider);
   }
 
   /** Ensure getDefaultPort() returns default port when no custom implementation provided. */
@@ -247,6 +282,14 @@ public class ManagedChannelImplBuilderTest {
   @SuppressWarnings("deprecation")
   public void nameResolverFactory_notAllowedWithDirectAddress() {
     directAddressBuilder.nameResolverFactory(mock(NameResolver.Factory.class));
+  }
+
+  @Test
+  public void defaultLoadBalancingPolicy_unregisteredPolicy() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> builder.defaultLoadBalancingPolicy("unregistered_balancer")
+    );
   }
 
   @Test
