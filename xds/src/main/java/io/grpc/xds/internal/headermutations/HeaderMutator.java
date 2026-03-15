@@ -111,7 +111,7 @@ public class HeaderMutator {
 
       default:
         // Should be unreachable unless there's a proto schema mismatch.
-        logger.warning("Unknown HeaderAppendAction: " + action);
+        logger.fine("Unknown HeaderAppendAction: " + action);
     }
 
     if (!keepEmptyValue) {
