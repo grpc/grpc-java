@@ -33,7 +33,7 @@ public class HeaderMutationFilter {
 
 
 
-  public HeaderMutationFilter(Optional<HeaderMutationRulesConfig> mutationRules) { // NOPMD
+  public HeaderMutationFilter(Optional<HeaderMutationRulesConfig> mutationRules) {
     this.mutationRules = mutationRules;
   }
 
