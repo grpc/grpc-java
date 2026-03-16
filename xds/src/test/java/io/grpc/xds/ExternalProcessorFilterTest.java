@@ -168,7 +168,7 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorFilterConfig filterConfig = createFilterConfig();
     
     // Manually create the interceptor using the test-friendly constructor
-    CachedChannelManager testChannelManager = new CachedChannelManager(config -> 
+    CachedChannelManager testChannelManager = new CachedChannelManager(config ->
         grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build())
     );
     ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager);

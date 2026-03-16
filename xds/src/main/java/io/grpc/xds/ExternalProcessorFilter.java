@@ -549,9 +549,10 @@ public class ExternalProcessorFilter implements Filter {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasBody()) {
             byte[] mutatedBody = mutation.getBody().toByteArray();
-            super.sendMessage(new ByteArrayInputStream(mutatedBody));
+            if (mutatedBody.length > 0) {
+              super.sendMessage(new ByteArrayInputStream(mutatedBody));
+            }
           } else if (mutation.getClearBody()) {
-            // "clear_body" means we should send an empty message.
             super.sendMessage(new ByteArrayInputStream(new byte[0]));
           }
           // If body mutation is present but has no body and clear_body is false, do nothing.
@@ -718,7 +719,9 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onExternalBody(com.google.protobuf.ByteString body) {
-         super.onMessage(body.newInput());
+         if (body.size() > 0) {
+           super.onMessage(body.newInput());
+         }
       }
 
       void unblockAfterStreamComplete() {
