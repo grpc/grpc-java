@@ -111,6 +111,25 @@ tasks.withType(JavaCompile).configureEach {
             "|")
 }
 
+// Workaround error seen with Gradle 8.14.3 and AGP 7.4.1 when building:
+//   ./gradlew clean :grpc-android-interop-testing:build -PskipAndroid=false \
+//       -Pandroid.useAndroidX=true --no-build-cache
+//
+// Error message:
+//
+// Execution failed for task ':grpc-android-interop-testing:mergeExtDexDebug'.
+// > Could not resolve all files for configuration ':grpc-android-interop-testing:debugRuntimeClasspath'.
+//    > Failed to transform opencensus-contrib-grpc-metrics-0.31.1.jar (io.opencensus:opencensus-contrib-grpc-metrics:0.31.1) to match attributes {artifactType=android-dex, asm-transformed-variant=NONE, dexing-enable-desugaring=true, dexing-enable-jacoco-instrumentation=false, dexing-is-debuggable=true, dexing-min-sdk=23, org.gradle.category=library, org.gradle.libraryelements=jar, org.gradle.status=release, org.gradle.usage=java-runtime}.
+//       > Could not resolve all files for configuration ':grpc-android-interop-testing:debugRuntimeClasspath'.
+//          > Failed to transform grpc-api-1.81.0-SNAPSHOT.jar (project :grpc-api) to match attributes {artifactType=android-classes-jar, org.gradle.category=library, org.gradle.dependency.bundling=external, org.gradle.jvm.version=8, org.gradle.libraryelements=jar, org.gradle.usage=java-runtime}.
+//             > Execution failed for IdentityTransform: grpc-java/api/build/libs/grpc-api-1.81.0-SNAPSHOT.jar.
+//                > File/directory does not exist: grpc-java/api/build/libs/grpc-api-1.81.0-SNAPSHOT.jar
+tasks.configureEach { task ->
+    if (task.name.equals("mergeExtDexDebug")) {
+        dependsOn(':grpc-api:jar')
+    }
+}
+
 afterEvaluate {
     // Hack to workaround "Task ':grpc-android-interop-testing:extractIncludeDebugProto' uses this
     // output of task ':grpc-context:jar' without declaring an explicit or implicit dependency." The
