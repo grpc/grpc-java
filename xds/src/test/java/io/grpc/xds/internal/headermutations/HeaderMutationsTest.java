@@ -20,31 +20,18 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
-import io.grpc.xds.internal.headermutations.HeaderMutations.RequestHeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutations.ResponseHeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import org.junit.Test;
 
 public class HeaderMutationsTest {
   @Test
   public void testCreate() {
-    HeaderValueOption reqHeader = HeaderValueOption.create(
-        HeaderValue.create("req-key", "req-value"),
+    HeaderValueOption header = HeaderValueOption.create(
+        HeaderValue.create("key", "value"),
         HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
-    RequestHeaderMutations requestMutations = RequestHeaderMutations
-        .create(ImmutableList.of(reqHeader), ImmutableList.of("remove-req-key"));
-    assertThat(requestMutations.headers()).containsExactly(reqHeader);
-    assertThat(requestMutations.headersToRemove()).containsExactly("remove-req-key");
-
-    HeaderValueOption respHeader = HeaderValueOption.create(
-        HeaderValue.create("resp-key", "resp-value"),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
-    ResponseHeaderMutations responseMutations =
-        ResponseHeaderMutations.create(ImmutableList.of(respHeader));
-    assertThat(responseMutations.headers()).containsExactly(respHeader);
-
-    HeaderMutations mutations = HeaderMutations.create(requestMutations, responseMutations);
-    assertThat(mutations.requestMutations()).isEqualTo(requestMutations);
-    assertThat(mutations.responseMutations()).isEqualTo(responseMutations);
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header), ImmutableList.of("remove-key"));
+    assertThat(mutations.headers()).containsExactly(header);
+    assertThat(mutations.headersToRemove()).containsExactly("remove-key");
   }
 }
