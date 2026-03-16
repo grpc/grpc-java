@@ -257,7 +257,7 @@ public final class Uri {
       int hostStart = userInfoEnd >= 0 ? userInfoEnd + 1 : 0;
       int portStartColon = findPortStartColon(authority, hostStart);
       if (portStartColon < 0) {
-        builder.setRawHost(authority.substring(hostStart, authority.length()));
+        builder.setRawHost(authority.substring(hostStart));
       } else {
         builder.setRawHost(authority.substring(hostStart, portStartColon));
         builder.setRawPort(authority.substring(portStartColon + 1));
