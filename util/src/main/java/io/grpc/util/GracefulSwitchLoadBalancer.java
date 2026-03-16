@@ -51,11 +51,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final LoadBalancer defaultBalancer = new LoadBalancer() {
     /**
      * Handles newly resolved addresses and metadata attributes from name resolution system.
-     *
-     * @deprecated  As of release 1.69.0,
-     *     use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
      */
-    @Deprecated
     @Override
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       throw new AssertionError("real LB is called instead");
