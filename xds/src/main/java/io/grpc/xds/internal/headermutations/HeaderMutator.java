@@ -19,8 +19,6 @@ package io.grpc.xds.internal.headermutations;
 
 import io.grpc.Metadata;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
-import io.grpc.xds.internal.headermutations.HeaderMutations.RequestHeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutations.ResponseHeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import java.util.logging.Logger;
 
@@ -47,23 +45,13 @@ public class HeaderMutator {
    * @param mutations The header mutations to apply.
    * @param headers The metadata headers to which the mutations will be applied.
    */
-  public void applyRequestMutations(final RequestHeaderMutations mutations, Metadata headers) {
+  public void applyMutations(final HeaderMutations mutations, Metadata headers) {
     // TODO(sauravzg): The specification is not clear on order of header removals and additions.
     // in case of conflicts. Copying the order from Envoy here, which does removals at the end.
     applyHeaderUpdates(mutations.headers(), headers);
     for (String headerToRemove : mutations.headersToRemove()) {
       headers.discardAll(Metadata.Key.of(headerToRemove, Metadata.ASCII_STRING_MARSHALLER));
     }
-  }
-
-  /**
-   * Applies the given header mutations to the provided metadata headers.
-   *
-   * @param mutations The header mutations to apply.
-   * @param headers The metadata headers to which the mutations will be applied.
-   */
-  public void applyResponseMutations(final ResponseHeaderMutations mutations, Metadata headers) {
-    applyHeaderUpdates(mutations.headers(), headers);
   }
 
   private void applyHeaderUpdates(final Iterable<HeaderValueOption> headerOptions,
