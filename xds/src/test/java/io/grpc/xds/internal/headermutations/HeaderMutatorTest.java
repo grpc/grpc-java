@@ -23,8 +23,7 @@ import com.google.common.testing.TestLogHandler;
 import com.google.protobuf.ByteString;
 import io.grpc.Metadata;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
-import io.grpc.xds.internal.headermutations.HeaderMutations.RequestHeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutations.ResponseHeaderMutations;
+import io.grpc.xds.internal.headermutations.HeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -86,8 +85,8 @@ public class HeaderMutatorTest {
     headers.put(REMOVE_KEY, "remove-value-original");
     headers.put(OVERWRITE_IF_EXISTS_KEY, "original-value");
 
-    RequestHeaderMutations mutations =
-        RequestHeaderMutations.create(
+    HeaderMutations mutations =
+        HeaderMutations.create(
             ImmutableList.of(
                 header(
                     APPEND_KEY.name(),
@@ -113,7 +112,7 @@ public class HeaderMutatorTest {
                     HeaderAppendAction.OVERWRITE_IF_EXISTS)),
             ImmutableList.of(REMOVE_KEY.name()));
 
-    headerMutator.applyRequestMutations(mutations, headers);
+    headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.getAll(APPEND_KEY)).containsExactly("append-value-1", "append-value-2");
     assertThat(headers.get(ADD_KEY)).isEqualTo("add-value-original");
@@ -129,14 +128,14 @@ public class HeaderMutatorTest {
   public void applyRequestMutations_removalHasPriority() {
     Metadata headers = new Metadata();
     headers.put(REMOVE_KEY, "value");
-    RequestHeaderMutations mutations =
-        RequestHeaderMutations.create(
+    HeaderMutations mutations =
+        HeaderMutations.create(
             ImmutableList.of(
                 header(
                     REMOVE_KEY.name(), "new-value", HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)),
             ImmutableList.of(REMOVE_KEY.name()));
 
-    headerMutator.applyRequestMutations(mutations, headers);
+    headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.containsKey(REMOVE_KEY)).isFalse();
   }
@@ -150,8 +149,8 @@ public class HeaderMutatorTest {
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
             HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
             false);
-    headerMutator.applyRequestMutations(
-        RequestHeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
+    headerMutator.applyMutations(
+        HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
   }
 
@@ -162,8 +161,8 @@ public class HeaderMutatorTest {
     headers.put(ADD_KEY, "add-value-original");
     headers.put(OVERWRITE_KEY, "overwrite-value-original");
 
-    ResponseHeaderMutations mutations =
-        ResponseHeaderMutations.create(
+    HeaderMutations mutations =
+        HeaderMutations.create(
             ImmutableList.of(
                 header(
                     APPEND_KEY.name(),
@@ -178,9 +177,9 @@ public class HeaderMutatorTest {
                 header(
                     NEW_OVERWRITE_KEY.name(),
                     "new-overwrite-value",
-                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)));
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)), ImmutableList.of());
 
-    headerMutator.applyResponseMutations(mutations, headers);
+    headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.getAll(APPEND_KEY)).containsExactly("append-value-1", "append-value-2");
     assertThat(headers.get(ADD_KEY)).isEqualTo("add-value-original");
@@ -198,8 +197,8 @@ public class HeaderMutatorTest {
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
             HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
             false);
-    headerMutator.applyResponseMutations(
-        ResponseHeaderMutations.create(ImmutableList.of(option)), headers);
+    headerMutator.applyMutations(
+        HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
   }
 
@@ -209,8 +208,8 @@ public class HeaderMutatorTest {
     headers.put(APPEND_KEY, "existing-value");
     headers.put(OVERWRITE_KEY, "existing-value");
 
-    RequestHeaderMutations mutations =
-        RequestHeaderMutations.create(
+    HeaderMutations mutations =
+        HeaderMutations.create(
             ImmutableList.of(
                 header(NEW_ADD_KEY.name(), "", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 header(APPEND_KEY.name(), "", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
@@ -228,7 +227,7 @@ public class HeaderMutatorTest {
     headers.put(
         Metadata.Key.of("keep-empty-overwrite-key", Metadata.ASCII_STRING_MARSHALLER), "old");
 
-    headerMutator.applyRequestMutations(mutations, headers);
+    headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
     assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value", "");

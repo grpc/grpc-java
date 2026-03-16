@@ -18,8 +18,6 @@ package io.grpc.xds.internal.headermutations;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.xds.internal.grpcservice.HeaderValueValidationUtils;
-import io.grpc.xds.internal.headermutations.HeaderMutations.RequestHeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutations.ResponseHeaderMutations;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -48,18 +46,12 @@ public class HeaderMutationFilter {
    */
   public HeaderMutations filter(HeaderMutations mutations)
       throws HeaderMutationDisallowedException {
-    ImmutableList<HeaderValueOption> allowedRequestHeaders =
-        filterCollection(mutations.requestMutations().headers(),
-            this::shouldIgnore, this::isHeaderMutationAllowed);
-    ImmutableList<String> allowedRequestHeadersToRemove =
-        filterCollection(mutations.requestMutations().headersToRemove(),
-            this::shouldIgnore, this::isHeaderMutationAllowed);
-    ImmutableList<HeaderValueOption> allowedResponseHeaders =
-        filterCollection(mutations.responseMutations().headers(),
-            this::shouldIgnore, this::isHeaderMutationAllowed);
-    return HeaderMutations.create(
-        RequestHeaderMutations.create(allowedRequestHeaders, allowedRequestHeadersToRemove),
-        ResponseHeaderMutations.create(allowedResponseHeaders));
+    ImmutableList<HeaderValueOption> allowedHeaders =
+        filterCollection(mutations.headers(), this::shouldIgnore, this::isHeaderMutationAllowed);
+    ImmutableList<String> allowedHeadersToRemove =
+        filterCollection(mutations.headersToRemove(), this::shouldIgnore,
+            this::isHeaderMutationAllowed);
+    return HeaderMutations.create(allowedHeaders, allowedHeadersToRemove);
   }
 
   /**

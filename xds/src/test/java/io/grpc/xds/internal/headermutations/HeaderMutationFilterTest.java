@@ -20,8 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.ImmutableList;
 import com.google.re2j.Pattern;
-import io.grpc.xds.internal.headermutations.HeaderMutations.RequestHeaderMutations;
-import io.grpc.xds.internal.headermutations.HeaderMutations.ResponseHeaderMutations;
+import io.grpc.xds.internal.headermutations.HeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import java.util.Optional;
 import org.junit.Test;
@@ -46,56 +45,47 @@ public class HeaderMutationFilterTest {
   public void filter_removesImmutableHeaders() throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(header("add-key", "add-value"), header(":authority", "new-authority"),
-                header("host", "new-host"), header(":scheme", "https"), header(":method", "PUT")),
-            ImmutableList.of("remove-key", "host", ":authority", ":scheme", ":method")),
-        ResponseHeaderMutations.create(ImmutableList.of(header("resp-add-key", "resp-add-value"),
-            header(":scheme", "https"))));
+        ImmutableList.of(header("add-key", "add-value"), header(":authority", "new-authority"),
+            header("host", "new-host"), header(":scheme", "https"), header(":method", "PUT"),
+            header("resp-add-key", "resp-add-value"), header(":scheme", "https")),
+        ImmutableList.of("remove-key", "host", ":authority", ":scheme", ":method"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers())
-        .containsExactly(header("add-key", "add-value"));
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("remove-key");
-    assertThat(filtered.responseMutations().headers())
-        .containsExactly(header("resp-add-key", "resp-add-value"));
+
+    assertThat(filtered.headersToRemove()).containsExactly("remove-key");
+    assertThat(filtered.headers()).containsExactly(header("add-key", "add-value"),
+            header("resp-add-key", "resp-add-value"));
   }
 
   @Test
   public void filter_cannotAppendToSystemHeaders() throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
-    HeaderMutations mutations =
-        HeaderMutations.create(
-            RequestHeaderMutations.create(
-                ImmutableList.of(
-                    header("add-key", "add-value", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
-                    header(":authority", "new-authority",
-                        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
-                    header("host", "new-host", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
-                    header(":path", "/new-path", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD)),
-                ImmutableList.of()),
-            ResponseHeaderMutations.create(ImmutableList
-                .of(header("host", "new-host", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD))));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(
+            header("add-key", "add-value", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
+            header(":authority", "new-authority", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
+            header("host", "new-host", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
+            header(":path", "/new-path", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
+            header("host", "new-host", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD)),
+        ImmutableList.of());
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers()).containsExactly(
+    assertThat(filtered.headers()).containsExactly(
         header("add-key", "add-value", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD));
-    assertThat(filtered.responseMutations().headers()).isEmpty();
   }
 
   @Test
   public void filter_cannotRemoveSystemHeaders() throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(ImmutableList.of(),
-            ImmutableList.of("remove-key", "host", ":foo", ":bar")),
-        ResponseHeaderMutations.create(ImmutableList.of()));
+        ImmutableList.of(),
+        ImmutableList.of("remove-key", "host", ":foo", ":bar"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("remove-key");
+    assertThat(filtered.headersToRemove()).containsExactly("remove-key");
   }
 
   @Test
@@ -103,20 +93,17 @@ public class HeaderMutationFilterTest {
       throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(header("user-agent", "new-agent"),
-                header(":path", "/new/path", HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD),
-                header(":grpc-trace-bin", "binary-value", HeaderAppendAction.ADD_IF_ABSENT)),
-            ImmutableList.of()),
-        ResponseHeaderMutations.create(ImmutableList
-            .of(header(":alt-svc", "h3=:443", HeaderAppendAction.OVERWRITE_IF_EXISTS))));
+        ImmutableList.of(header("user-agent", "new-agent"),
+            header(":path", "/new/path", HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD),
+            header(":grpc-trace-bin", "binary-value", HeaderAppendAction.ADD_IF_ABSENT),
+            header(":alt-svc", "h3=:443", HeaderAppendAction.OVERWRITE_IF_EXISTS)),
+        ImmutableList.of());
 
     HeaderMutations filtered = filter.filter(mutations);
 
     // System headers should be filtered out
-    assertThat(filtered.requestMutations().headers()).containsExactly(
+    assertThat(filtered.headers()).containsExactly(
         header("user-agent", "new-agent"));
-    assertThat(filtered.responseMutations().headers()).isEmpty();
   }
 
   @Test
@@ -125,15 +112,13 @@ public class HeaderMutationFilterTest {
     HeaderMutationRulesConfig rules = HeaderMutationRulesConfig.builder().disallowAll(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(ImmutableList.of(header("add-key", "add-value")),
-            ImmutableList.of("remove-key")),
-        ResponseHeaderMutations.create(ImmutableList.of(header("resp-add-key", "resp-add-value"))));
+        ImmutableList.of(header("add-key", "add-value"), header("resp-add-key", "resp-add-value")),
+        ImmutableList.of("remove-key"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers()).isEmpty();
-    assertThat(filtered.requestMutations().headersToRemove()).isEmpty();
-    assertThat(filtered.responseMutations().headers()).isEmpty();
+    assertThat(filtered.headers()).isEmpty();
+    assertThat(filtered.headersToRemove()).isEmpty();
   }
 
   @Test
@@ -143,18 +128,16 @@ public class HeaderMutationFilterTest {
         .disallowExpression(Pattern.compile("^x-private-.*")).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(header("x-public", "value"), header("x-private-key", "value")),
-            ImmutableList.of("x-public-remove", "x-private-remove")),
-        ResponseHeaderMutations.create(
-            ImmutableList.of(header("x-public-resp", "value"), header("x-private-resp", "value"))));
+        ImmutableList.of(header("x-public", "value"), header("x-private-key", "value"),
+            header("x-public-resp", "value"), header("x-private-resp", "value")),
+        ImmutableList.of("x-public-remove", "x-private-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers()).containsExactly(header("x-public", "value"));
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("x-public-remove");
-    assertThat(filtered.responseMutations().headers())
-        .containsExactly(header("x-public-resp", "value"));
+
+    assertThat(filtered.headersToRemove()).containsExactly("x-public-remove");
+    assertThat(filtered.headers()).containsExactly(header("x-public", "value"),
+            header("x-public-resp", "value"));
   }
 
   @Test
@@ -163,22 +146,17 @@ public class HeaderMutationFilterTest {
     HeaderMutationRulesConfig rules = HeaderMutationRulesConfig.builder()
         .allowExpression(Pattern.compile("^x-allowed-.*")).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
-    HeaderMutations mutations =
-        HeaderMutations.create(
-            RequestHeaderMutations.create(
-                ImmutableList.of(header("x-allowed-key", "value"),
-                    header("not-allowed-key", "value")),
-                ImmutableList.of("x-allowed-remove", "not-allowed-remove")),
-            ResponseHeaderMutations.create(ImmutableList.of(header("x-allowed-resp-key", "value"),
-                header("not-allowed-resp-key", "value"))));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header("x-allowed-key", "value"), header("not-allowed-key", "value"),
+            header("x-allowed-resp-key", "value"), header("not-allowed-resp-key", "value")),
+        ImmutableList.of("x-allowed-remove", "not-allowed-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers())
-        .containsExactly(header("x-allowed-key", "value"));
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("x-allowed-remove");
-    assertThat(filtered.responseMutations().headers())
-        .containsExactly(header("x-allowed-resp-key", "value"));
+
+    assertThat(filtered.headersToRemove()).containsExactly("x-allowed-remove");
+    assertThat(filtered.headers()).containsExactly(header("x-allowed-key", "value"),
+            header("x-allowed-resp-key", "value"));
   }
 
   @Test
@@ -188,19 +166,15 @@ public class HeaderMutationFilterTest {
         .allowExpression(Pattern.compile("^x-allowed-.*")).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(header("x-allowed-key", "value"), header("not-allowed", "value")),
-            ImmutableList.of("x-allowed-remove", "not-allowed-remove")),
-        ResponseHeaderMutations.create(ImmutableList.of(header("x-allowed-resp-key", "value"),
-            header("not-allowed-resp-key", "value"))));
+        ImmutableList.of(header("x-allowed-key", "value"), header("not-allowed", "value"),
+            header("x-allowed-resp-key", "value"), header("not-allowed-resp-key", "value")),
+        ImmutableList.of("x-allowed-remove", "not-allowed-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers())
-        .containsExactly(header("x-allowed-key", "value"));
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("x-allowed-remove");
-    assertThat(filtered.responseMutations().headers())
-        .containsExactly(header("x-allowed-resp-key", "value"));
+    assertThat(filtered.headersToRemove()).containsExactly("x-allowed-remove");
+    assertThat(filtered.headers()).containsExactly(header("x-allowed-key", "value"),
+            header("x-allowed-resp-key", "value"));
   }
 
   @Test(expected = HeaderMutationDisallowedException.class)
@@ -209,9 +183,9 @@ public class HeaderMutationFilterTest {
     HeaderMutationRulesConfig rules =
         HeaderMutationRulesConfig.builder().disallowAll(true).disallowIsError(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
-    HeaderMutations mutations = HeaderMutations.create(RequestHeaderMutations
-        .create(ImmutableList.of(header("add-key", "add-value")), ImmutableList.of()),
-        ResponseHeaderMutations.create(ImmutableList.of()));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header("add-key", "add-value")),
+        ImmutableList.of());
     filter.filter(mutations);
   }
 
@@ -222,8 +196,8 @@ public class HeaderMutationFilterTest {
         HeaderMutationRulesConfig.builder().disallowAll(true).disallowIsError(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(ImmutableList.of(), ImmutableList.of("remove-key")),
-        ResponseHeaderMutations.create(ImmutableList.of()));
+        ImmutableList.of(),
+        ImmutableList.of("remove-key"));
     filter.filter(mutations);
   }
 
@@ -234,8 +208,8 @@ public class HeaderMutationFilterTest {
         HeaderMutationRulesConfig.builder().disallowAll(true).disallowIsError(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(ImmutableList.of(), ImmutableList.of()),
-        ResponseHeaderMutations.create(ImmutableList.of(header("resp-add-key", "resp-add-value"))));
+        ImmutableList.of(header("resp-add-key", "resp-add-value")),
+        ImmutableList.of());
     filter.filter(mutations);
   }
 
@@ -243,28 +217,24 @@ public class HeaderMutationFilterTest {
   public void filter_ignoresUppercaseHeaders() throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(header("Valid-Key", "value"), header("valid-key", "value")),
-            ImmutableList.of("UPPER-REMOVE", "lower-remove")),
-        ResponseHeaderMutations.create(ImmutableList.of()));
+        ImmutableList.of(header("Valid-Key", "value"), header("valid-key", "value")),
+        ImmutableList.of("UPPER-REMOVE", "lower-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headers()).containsExactly(header("valid-key", "value"));
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("lower-remove");
+    assertThat(filtered.headers()).containsExactly(header("valid-key", "value"));
+    assertThat(filtered.headersToRemove()).containsExactly("lower-remove");
   }
 
   @Test
   public void filter_ignoresGrpcHeadersInRemoval() throws HeaderMutationDisallowedException {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     HeaderMutations mutations = HeaderMutations.create(
-        RequestHeaderMutations.create(
-            ImmutableList.of(),
-            ImmutableList.of("grpc-timeout", "valid-remove")),
-        ResponseHeaderMutations.create(ImmutableList.of()));
+        ImmutableList.of(),
+        ImmutableList.of("grpc-timeout", "valid-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
-    assertThat(filtered.requestMutations().headersToRemove()).containsExactly("valid-remove");
+    assertThat(filtered.headersToRemove()).containsExactly("valid-remove");
   }
 }
