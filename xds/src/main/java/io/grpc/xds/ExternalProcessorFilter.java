@@ -20,6 +20,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -124,7 +125,7 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
-    private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
+    private final CachedChannelManager cachedChannelManager;
     private final ExternalProcessorFilterConfig filterConfig;
 
     private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
@@ -136,7 +137,13 @@ public class ExternalProcessorFilter implements Filter {
         };
 
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig) {
+      this(filterConfig, new CachedChannelManager());
+    }
+
+    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
+        CachedChannelManager cachedChannelManager) {
       this.filterConfig = filterConfig;
+      this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
     }
 
     @Override

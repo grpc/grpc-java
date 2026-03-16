@@ -32,10 +32,13 @@ import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
-import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
+import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
+import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
+import io.grpc.xds.internal.grpcservice.CachedChannelManager;
 import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
+import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -116,11 +119,10 @@ public class ExternalProcessorFilterTest {
         InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
   }
 
-  private ExternalProcessorFilter.ExternalProcessorFilterConfig createFilterConfig() {
+  private ExternalProcessorFilterConfig createFilterConfig() {
     GrpcService grpcService = GrpcService.newBuilder()
         .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-            // Important: Use "in-process:" scheme so Grpc.newChannelBuilder resolves it correctly
-            .setTargetUri("in-process:" + extProcServerName)
+            .setTargetUri(extProcServerName)
             .setStatPrefix("ext_proc")
             .build())
         .build();
@@ -152,7 +154,7 @@ public class ExternalProcessorFilterTest {
     this.filter = provider.newInstance("ext-proc", contextProvider);
     
     // 2. Parse the config using the provider
-    ConfigOrError<ExternalProcessorFilter.ExternalProcessorFilterConfig> configOrError =
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(externalProcessor));
         
     assertThat(configOrError.errorDetail).isNull();
@@ -161,10 +163,14 @@ public class ExternalProcessorFilterTest {
 
   @Test
   public void requestHeadersMutated() throws Exception {
-    ExternalProcessorFilter.ExternalProcessorFilterConfig filterConfig = createFilterConfig();
+    ExternalProcessorFilterConfig filterConfig = createFilterConfig();
     
-    // Use the filter instance created in createFilterConfig()
-    ClientInterceptor interceptor = filter.buildClientInterceptor(filterConfig, null, null);
+    // Manually create the interceptor using the test-friendly constructor
+    CachedChannelManager testChannelManager = new CachedChannelManager(config -> 
+        grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build())
+    );
+    ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager);
+
     Channel interceptedChannel = ClientInterceptors.intercept(dataPlaneChannel, interceptor);
 
     // Data Plane Server
