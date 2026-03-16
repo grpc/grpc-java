@@ -19,39 +19,16 @@ package io.grpc.xds.internal.headermutations;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 
-/** A collection of header mutations for both request and response headers. */
+/** A collection of header mutations. */
 @AutoValue
 public abstract class HeaderMutations {
 
-  public static HeaderMutations create(RequestHeaderMutations requestMutations,
-      ResponseHeaderMutations responseMutations) {
-    return new AutoValue_HeaderMutations(requestMutations, responseMutations);
+  public static HeaderMutations create(ImmutableList<HeaderValueOption> headers,
+      ImmutableList<String> headersToRemove) {
+    return new AutoValue_HeaderMutations(headers, headersToRemove);
   }
 
-  public abstract RequestHeaderMutations requestMutations();
+  public abstract ImmutableList<HeaderValueOption> headers();
 
-  public abstract ResponseHeaderMutations responseMutations();
-
-  /** Represents mutations for request headers. */
-  @AutoValue
-  public abstract static class RequestHeaderMutations {
-    public static RequestHeaderMutations create(ImmutableList<HeaderValueOption> headers,
-        ImmutableList<String> headersToRemove) {
-      return new AutoValue_HeaderMutations_RequestHeaderMutations(headers, headersToRemove);
-    }
-
-    public abstract ImmutableList<HeaderValueOption> headers();
-
-    public abstract ImmutableList<String> headersToRemove();
-  }
-
-  /** Represents mutations for response headers. */
-  @AutoValue
-  public abstract static class ResponseHeaderMutations {
-    public static ResponseHeaderMutations create(ImmutableList<HeaderValueOption> headers) {
-      return new AutoValue_HeaderMutations_ResponseHeaderMutations(headers);
-    }
-
-    public abstract ImmutableList<HeaderValueOption> headers();
-  }
+  public abstract ImmutableList<String> headersToRemove();
 }
