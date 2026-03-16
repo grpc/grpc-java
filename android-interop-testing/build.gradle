@@ -79,7 +79,7 @@ dependencies {
         exclude group: 'com.google.guava'
     }
 
-    androidTestImplementation 'androidx.test.ext:junit:1.1.3',
+    androidTestImplementation libraries.androidx.test.ext.junit,
             'androidx.test:runner:1.4.0'
 }
 
