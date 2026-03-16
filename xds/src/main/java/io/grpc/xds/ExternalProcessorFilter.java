@@ -33,6 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
@@ -40,8 +41,6 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
-  ManagedChannel grpcServiceChannel;
-  ExternalProcessorGrpc.ExternalProcessorStub externalProcessorStub;
   private final Object lock = new Object();
 
   public ExternalProcessorFilter(String name) {
@@ -154,6 +153,15 @@ public class ExternalProcessorFilter implements Filter {
         Channel next) {
       ExternalProcessorGrpc.ExternalProcessorStub stub = ExternalProcessorGrpc.newStub(
           cachedChannelManager.getChannel(filterConfig.grpcServiceConfig));
+      
+      if (filterConfig.grpcServiceConfig.timeout() != null && filterConfig.grpcServiceConfig.timeout().isPresent()) {
+        long timeoutNanos = filterConfig.grpcServiceConfig.timeout().get().getSeconds() * 1_000_000_000L 
+                            + filterConfig.grpcServiceConfig.timeout().get().getNano();
+        if (timeoutNanos > 0) {
+          stub = stub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
+        }
+      }
+
       ExternalProcessor config = filterConfig.externalProcessor;
 
       MethodDescriptor<InputStream, InputStream> rawMethod = method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
@@ -372,7 +380,7 @@ public class ExternalProcessorFilter implements Filter {
             // 3. We don't send request trailers in gRPC for half close.
             // 4. Server Headers
             else if (response.hasResponseHeaders()) {
-              if (response.getResponseHeaders().hasResponse()) {
+              if (response.hasResponseHeaders() && response.getResponseHeaders().hasResponse()) {
                 applyHeaderMutations(wrappedListener.savedHeaders, response.getResponseHeaders().getResponse().getHeaderMutation());
               }
               wrappedListener.proceedWithHeaders();
