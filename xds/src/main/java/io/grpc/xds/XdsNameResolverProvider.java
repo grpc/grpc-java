@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import io.grpc.xds.client.XdsClient;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -86,14 +87,37 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(
-          targetUri, name, args.getOverrideAuthority(),
-          args.getServiceConfigParser(), args.getSynchronizationContext(),
-          args.getScheduledExecutorService(),
-          bootstrapOverride,
-          args.getMetricRecorder(), args);
+      return newNameResolver(targetUri.toString(), targetUri.getAuthority(), name, args);
     }
     return null;
+  }
+
+  @Override
+  public XdsNameResolver newNameResolver(Uri targetUri, Args args) {
+    if (scheme.equals(targetUri.getScheme())) {
+      Preconditions.checkArgument(
+          targetUri.isPathAbsolute(),
+          "the path component of the target (%s) must start with '/'",
+          targetUri);
+      return newNameResolver(
+          targetUri.toString(), targetUri.getAuthority(), targetUri.getPath().substring(1), args);
+    }
+    return null;
+  }
+
+  private XdsNameResolver newNameResolver(
+      String targetUri, String targetAuthority, String name, Args args) {
+    return new XdsNameResolver(
+        targetUri.toString(),
+        targetAuthority,
+        name,
+        args.getOverrideAuthority(),
+        args.getServiceConfigParser(),
+        args.getSynchronizationContext(),
+        args.getScheduledExecutorService(),
+        bootstrapOverride,
+        args.getMetricRecorder(),
+        args);
   }
 
   @Override

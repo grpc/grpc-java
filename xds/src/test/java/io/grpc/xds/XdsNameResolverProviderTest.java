@@ -29,18 +29,22 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /** Unit tests for {@link XdsNameResolverProvider}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class XdsNameResolverProviderTest {
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -63,6 +67,13 @@ public class XdsNameResolverProviderTest {
 
   private XdsNameResolverProvider provider = new XdsNameResolverProvider();
 
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Test
   public void provided() {
     for (NameResolverProvider current
@@ -81,48 +92,46 @@ public class XdsNameResolverProviderTest {
   }
 
   @Test
-  public void newNameResolver() {
-    assertThat(
-        provider.newNameResolver(URI.create("xds://1.1.1.1/foo.googleapis.com"), args))
+  public void newNameResolver_returnsExpectedType() {
+    assertThat(newNameResolver(provider, "xds://1.1.1.1/foo.googleapis.com", args))
         .isInstanceOf(XdsNameResolver.class);
-    assertThat(
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args))
+    assertThat(newNameResolver(provider, "xds:///foo.googleapis.com", args))
         .isInstanceOf(XdsNameResolver.class);
-    assertThat(
-        provider.newNameResolver(URI.create("notxds://1.1.1.1/foo.googleapis.com"),
-            args))
-        .isNull();
+  }
+
+  @Test
+  public void newNameResolver_matchesExpectedScheme() {
+    assertThat(newNameResolver(provider, "notxds://1.1.1.1/foo.googleapis.com", args)).isNull();
   }
 
   @Test
   public void validName_withAuthority() {
-    XdsNameResolver resolver =
-        provider.newNameResolver(
-            URI.create("xds://trafficdirector.google.com/foo.googleapis.com"), args);
+    NameResolver resolver =
+        newNameResolver(provider, "xds://trafficdirector.google.com/foo.googleapis.com", args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void validName_noAuthority() {
-    XdsNameResolver resolver =
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
+    NameResolver resolver = newNameResolver(provider, "xds:///foo.googleapis.com", args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
 
   @Test
   public void validName_urlExtractedAuthorityInvalidWithoutEncoding() {
-    XdsNameResolver resolver = 
-        provider.newNameResolver(URI.create("xds:///1234/path/foo.googleapis.com:8080"), args);
+    NameResolver resolver =
+        newNameResolver(provider, "xds:///1234/path/foo.googleapis.com:8080", args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
   }
 
   @Test
   public void validName_urlwithTargetAuthorityAndExtractedAuthorityInvalidWithoutEncoding() {
-    XdsNameResolver resolver = provider.newNameResolver(URI.create(
-        "xds://trafficdirector.google.com/1234/path/foo.googleapis.com:8080"), args);
+    NameResolver resolver =
+        newNameResolver(
+            provider, "xds://trafficdirector.google.com/1234/path/foo.googleapis.com:8080", args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("1234%2Fpath%2Ffoo.googleapis.com:8080");
   }
@@ -135,18 +144,14 @@ public class XdsNameResolverProviderTest {
     XdsNameResolverProvider provider1 = XdsNameResolverProvider.createForTest("new-xds-scheme",
             new HashMap<String, String>());
     registry.register(provider1);
-    assertThat(registry.asFactory()
-            .newNameResolver(URI.create("xds:///localhost"), args)).isNotNull();
-    assertThat(registry.asFactory()
-            .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNotNull();
-    assertThat(registry.asFactory()
-            .newNameResolver(URI.create("no-scheme:///localhost"), args)).isNotNull();
+    assertThat(newNameResolver(registry.asFactory(), "xds:///localhost", args)).isNotNull();
+    assertThat(newNameResolver(registry.asFactory(), "new-xds-scheme:///localhost", args))
+        .isNotNull();
+    assertThat(newNameResolver(registry.asFactory(), "no-scheme:///localhost", args)).isNotNull();
     registry.deregister(provider1);
-    assertThat(registry.asFactory()
-            .newNameResolver(URI.create("new-xds-scheme:///localhost"), args)).isNull();
+    assertThat(newNameResolver(registry.asFactory(), "new-xds-scheme:///localhost", args)).isNull();
     registry.deregister(provider0);
-    assertThat(registry.asFactory()
-            .newNameResolver(URI.create("xds:///localhost"), args)).isNotNull();
+    assertThat(newNameResolver(registry.asFactory(), "xds:///localhost", args)).isNotNull();
   }
 
   @Test
@@ -175,5 +180,12 @@ public class XdsNameResolverProviderTest {
             .isEqualTo("ENVOY_NODE_ID");
     resolver.shutdown();
     registry.deregister(provider);
+  }
+
+  private NameResolver newNameResolver(
+      NameResolver.Factory factory, String uriString, NameResolver.Args args) {
+    return enableRfc3986UrisParam
+        ? factory.newNameResolver(Uri.create(uriString), args)
+        : factory.newNameResolver(URI.create(uriString), args);
   }
 }
