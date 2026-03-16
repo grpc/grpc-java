@@ -3,9 +3,11 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
+import io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation;
 import io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.CommonResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
@@ -13,6 +15,7 @@ import io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation;
 import io.envoyproxy.envoy.service.ext_proc.v3.HeadersResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.TrailersResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientInterceptor;
@@ -35,11 +38,13 @@ import io.grpc.util.MutableHandlerRegistry;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
+import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
-import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -84,7 +89,7 @@ public class ExternalProcessorFilterTest {
     @Override
     public String parse(InputStream stream) {
       try {
-        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         int nRead;
         byte[] data = new byte[1024];
         while ((nRead = stream.read(data, 0, data.length)) != -1) {
@@ -92,7 +97,7 @@ public class ExternalProcessorFilterTest {
         }
         buffer.flush();
         return new String(buffer.toByteArray());
-      } catch (java.io.IOException e) {
+      } catch (IOException e) {
         throw new RuntimeException(e);
       }
     }
@@ -122,7 +127,7 @@ public class ExternalProcessorFilterTest {
   private ExternalProcessorFilterConfig createFilterConfig() {
     GrpcService grpcService = GrpcService.newBuilder()
         .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-            .setTargetUri(extProcServerName)
+            .setTargetUri("in-process:" + extProcServerName)
             .setStatPrefix("ext_proc")
             .build())
         .build();
@@ -137,7 +142,6 @@ public class ExternalProcessorFilterTest {
 
     ExternalProcessorFilter.Provider provider = new ExternalProcessorFilter.Provider();
     
-    // Provide a context that supplies Insecure credentials for testing
     GrpcServiceXdsContextProvider contextProvider = targetUri -> {
         ConfiguredChannelCredentials credentials = ConfiguredChannelCredentials.create(
             InsecureChannelCredentials.create(),
@@ -150,10 +154,8 @@ public class ExternalProcessorFilterTest {
         return GrpcServiceXdsContext.create(false, Optional.of(allowedGrpcService), true);
     };
     
-    // 1. Create the filter instance via the provider
     this.filter = provider.newInstance("ext-proc", contextProvider);
     
-    // 2. Parse the config using the provider
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(externalProcessor));
         
@@ -170,7 +172,7 @@ public class ExternalProcessorFilterTest {
         grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build())
     );
     ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager);
-
+    
     Channel interceptedChannel = ClientInterceptors.intercept(dataPlaneChannel, interceptor);
 
     // Data Plane Server
@@ -198,14 +200,12 @@ public class ExternalProcessorFilterTest {
     dataPlaneServiceRegistry.addService(interceptedServiceDef);
 
     // Ext-Proc Server
-    List<ProcessingRequest> receivedRequests = new ArrayList<>();
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
       public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
-            receivedRequests.add(request);
             if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder()
@@ -223,18 +223,39 @@ public class ExternalProcessorFilterTest {
                   .build());
             } else if (request.hasRequestBody()) {
                responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestBody(BodyResponse.newBuilder().build())
+                  .setRequestBody(BodyResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setBodyMutation(BodyMutation.newBuilder()
+                              .setBody(request.getRequestBody().getBody())
+                              .build())
+                          .build())
+                      .build())
+                  .build());
+            } else if (request.hasResponseHeaders()) {
+               responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder().build())
+                      .build())
+                  .build());
+            } else if (request.hasResponseBody()) {
+               responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseBody(BodyResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setBodyMutation(BodyMutation.newBuilder()
+                              .setBody(request.getResponseBody().getBody())
+                              .build())
+                          .build())
+                      .build())
+                  .build());
+            } else if (request.hasResponseTrailers()) {
+               responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseTrailers(TrailersResponse.newBuilder().build())
                   .build());
             }
           }
 
-          @Override
-          public void onError(Throwable t) {}
-
-          @Override
-          public void onCompleted() {
-            responseObserver.onCompleted();
-          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
         };
       }
     };
