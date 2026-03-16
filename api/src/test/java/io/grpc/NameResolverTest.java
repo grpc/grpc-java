@@ -147,8 +147,8 @@ public class NameResolverTest {
     
     // Validate configurer accepts builders
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
-    args.getChildChannelConfigurer().accept(mockBuilder);
-    verify(childChannelConfigurer).accept(mockBuilder);
+    args.getChildChannelConfigurer().configureChannelBuilder(mockBuilder);
+    verify(childChannelConfigurer).configureChannelBuilder(mockBuilder);
   }
 
   @Test

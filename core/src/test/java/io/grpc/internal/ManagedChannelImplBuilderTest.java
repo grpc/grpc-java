@@ -786,11 +786,14 @@ public class ManagedChannelImplBuilderTest {
     ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
 
     // Define the Configurer
-    ChildChannelConfigurer configurer = (builder) -> {
-      builder.addMetricSink(mockMetricSink);
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.addMetricSink(mockMetricSink);
 
-      // Assuming InternalInterceptorFactory is also accessible
-      builder.interceptWithTarget(target -> mockInterceptor);
+        // Assuming InternalInterceptorFactory is also accessible
+        builder.interceptWithTarget(target -> mockInterceptor);
+      }
     };
 
     // Mock NameResolver.Factory to capture Args
@@ -833,7 +836,7 @@ public class ManagedChannelImplBuilderTest {
     // Stub addMetricSink to return the builder to avoid generic return type issues
     doReturn(mockChildBuilder).when(mockChildBuilder).addMetricSink(any());
 
-    configurer.accept(mockChildBuilder);
+    configurer.configureChannelBuilder(mockChildBuilder);
     verify(mockChildBuilder).addMetricSink(mockMetricSink);
     verify(mockChildBuilder).interceptWithTarget(any());
   }

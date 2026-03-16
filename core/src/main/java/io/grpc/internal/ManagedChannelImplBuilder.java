@@ -125,7 +125,7 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-  ChildChannelConfigurer childChannelConfigurer = builder -> {};
+  ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
 
   @Override
   public ManagedChannelImplBuilder childChannelConfigurer(

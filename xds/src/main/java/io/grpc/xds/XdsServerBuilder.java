@@ -59,7 +59,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
-  private ChildChannelConfigurer childChannelConfigurer = builder -> { };
+  private ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;

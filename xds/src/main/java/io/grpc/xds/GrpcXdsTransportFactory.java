@@ -88,7 +88,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES);
       if (childChannelConfigurer != null) {
-        childChannelConfigurer.accept(channelBuilder);
+        childChannelConfigurer.configureChannelBuilder(channelBuilder);
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;

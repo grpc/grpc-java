@@ -31,10 +31,9 @@ import io.grpc.CallCredentials;
 import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
-import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.grpc.Server;
@@ -263,7 +262,12 @@ public class SharedXdsClientPoolProviderTest {
       }
     };
 
-    ChildChannelConfigurer configurer = builder -> builder.intercept(testInterceptor);
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.intercept(testInterceptor);
+      }
+    };
 
     // Create xDS client that uses the ChildChannelConfigurer on the transport
     ObjectPool<XdsClient> xdsClientPool =

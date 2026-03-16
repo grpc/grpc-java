@@ -129,7 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  private ChildChannelConfigurer childChannelConfigurer = builder -> { };
+  private ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
 
   XdsServerWrapper(
       String listenerAddress,

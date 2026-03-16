@@ -69,7 +69,6 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
-import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -102,7 +101,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -306,8 +304,6 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
-  @Mock
-  private ChildChannelConfigurer mockChildChannelConfigurer;
 
 
   private void createChannel(ClientInterceptor... interceptors) {
@@ -3775,6 +3771,7 @@ public class ManagedChannelImplTest {
     assertEquals(SHUTDOWN, getStats(channel).state);
     assertEquals(SHUTDOWN, getStats(oobChannel).state);
   }
+
   @Test
   public void binaryLogInstalled() throws Exception {
     final SettableFuture<Boolean> intercepted = SettableFuture.create();

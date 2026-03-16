@@ -155,7 +155,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
 
-  private ChildChannelConfigurer childChannelConfigurer = builder -> {};
+  private ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
 
   private final InternalLogId logId;
   private final String target;
@@ -1580,7 +1580,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       // Note that we follow the global configurator pattern and try to fuse the configurations as
       // soon as the builder gets created
-      builder.childChannelConfigurer(childChannelConfigurer);
+      if (childChannelConfigurer != null) {
+        childChannelConfigurer.configureChannelBuilder(builder);
+      }
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

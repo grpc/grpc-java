@@ -159,7 +159,12 @@ public class GrpcXdsTransportFactoryTest {
         .thenReturn(new io.grpc.NoopClientCall<>());
 
     // Create Configurer that adds the interceptor
-    ChildChannelConfigurer configurer = (builder) -> builder.intercept(mockInterceptor);
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.intercept(mockInterceptor);
+      }
+    };
 
     // Create Factory
     GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
@@ -204,7 +209,7 @@ public class GrpcXdsTransportFactoryTest {
         Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
 
     // Verify Configurer was accessed and applied
-    verify(mockConfigurer).accept(any(ManagedChannelBuilder.class));
+    verify(mockConfigurer).configureChannelBuilder(any(ManagedChannelBuilder.class));
 
     transport.shutdown();
   }
@@ -215,10 +220,15 @@ public class GrpcXdsTransportFactoryTest {
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
 
     // Create Configurer that modifies message size
-    ChildChannelConfigurer configurer = (builder) -> builder.maxInboundMessageSize(1024);
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.maxInboundMessageSize(1024);
+      }
+    };
 
     // Apply configurer to builder
-    configurer.accept(mockBuilder);
+    configurer.configureChannelBuilder(mockBuilder);
 
     // Verify builder was modified
     verify(mockBuilder).maxInboundMessageSize(1024);
@@ -229,13 +239,16 @@ public class GrpcXdsTransportFactoryTest {
     ClientInterceptor interceptor1 = mock(ClientInterceptor.class);
     ClientInterceptor interceptor2 = mock(ClientInterceptor.class);
 
-    ChildChannelConfigurer configurer = builder -> {
-      builder.intercept(interceptor1);
-      builder.intercept(interceptor2);
+    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.intercept(interceptor1);
+        builder.intercept(interceptor2);
+      }
     };
 
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
-    configurer.accept(mockBuilder);
+    configurer.configureChannelBuilder(mockBuilder);
 
     verify(mockBuilder).intercept(interceptor1);
     verify(mockBuilder).intercept(interceptor2);

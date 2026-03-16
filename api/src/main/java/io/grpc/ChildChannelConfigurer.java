@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import java.util.function.Consumer;
+
 
 /**
  * A configurer for child channels created by gRPC's internal infrastructure.
@@ -44,14 +44,13 @@ import java.util.function.Consumer;
  *     .build();
  * }</pre>
  *
- * <p>Implementations must be thread-safe as {@link #accept} may be invoked concurrently
+ * <p>Implementations must be thread-safe as the configure methods may be invoked concurrently
  * by multiple internal components.
  *
  * @since 1.79.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-@FunctionalInterface
-public interface ChildChannelConfigurer extends Consumer<ManagedChannelBuilder<?>> {
+public interface ChildChannelConfigurer {
 
   /**
    * Configures a builder for a new child channel.
@@ -59,12 +58,17 @@ public interface ChildChannelConfigurer extends Consumer<ManagedChannelBuilder<?
    * <p>This method is invoked synchronously during the creation of the child channel,
    * before {@link ManagedChannelBuilder#build()} is called.
    *
-   * <p>Note: The provided {@code builder} is generic (`?`). Implementations should use
-   * universal configuration methods (like {@code intercept()}, {@code userAgent()}) on the
-   * builder rather than casting it to specific implementation types.
-   *
    * @param builder the mutable channel builder for the new child channel
    */
-  @Override
-  void accept(ManagedChannelBuilder<?> builder);
+  default void configureChannelBuilder(ManagedChannelBuilder<?> builder) {}
+
+  /**
+   * Configures a builder for a new child server.
+   *
+   * <p>This method is invoked synchronously during the creation of the child server,
+   * before {@link ServerBuilder#build()} is called.
+   *
+   * @param builder the mutable server builder for the new child server
+   */
+  default void configureServerBuilder(ServerBuilder<?> builder) {}
 }
