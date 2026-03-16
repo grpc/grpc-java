@@ -152,14 +152,13 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
     childLbHelper.updateFilterMetadata(config.filterMetadata);
     childLbHelper.updateBackendMetricPropagation(config.backendMetricPropagation);
 
-    childSwitchLb.handleResolvedAddresses(
+    return childSwitchLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
             .setAttributes(attributes.toBuilder()
               .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
               .build())
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
-    return Status.OK;
   }
 
   @Override
