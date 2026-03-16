@@ -21,7 +21,6 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
 import java.io.ByteArrayOutputStream;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.junit.Assume;
@@ -80,30 +79,6 @@ public abstract class ReadableBufferTestBase {
     ByteArrayOutputStream stream = new ByteArrayOutputStream();
     buffer.readBytes(stream, 2);
     assertArrayEquals(new byte[]{'h', 'e'}, Arrays.copyOfRange(stream.toByteArray(), 0, 2));
-    assertEquals(msg.length() - 2, buffer.readableBytes());
-  }
-
-  @Test
-  public void readToByteBufferShouldSucceed() {
-    ReadableBuffer buffer = buffer();
-    ByteBuffer byteBuffer = ByteBuffer.allocate(msg.length());
-    buffer.readBytes(byteBuffer);
-    ((Buffer) byteBuffer).flip();
-    byte[] array = new byte[msg.length()];
-    byteBuffer.get(array);
-    assertArrayEquals(msg.getBytes(UTF_8), array);
-    assertEquals(0, buffer.readableBytes());
-  }
-
-  @Test
-  public void partialReadToByteBufferShouldSucceed() {
-    ReadableBuffer buffer = buffer();
-    ByteBuffer byteBuffer = ByteBuffer.allocate(2);
-    buffer.readBytes(byteBuffer);
-    ((Buffer) byteBuffer).flip();
-    byte[] array = new byte[2];
-    byteBuffer.get(array);
-    assertArrayEquals(new byte[]{'h', 'e'}, array);
     assertEquals(msg.length() - 2, buffer.readableBytes());
   }
 

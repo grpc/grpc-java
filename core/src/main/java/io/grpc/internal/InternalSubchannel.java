@@ -326,7 +326,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   }
 
   /**
-   * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise this
+   * Immediately attempt to reconnect if the current state is TRANSIENT_FAILURE. Otherwise, this
    * method has no effect.
    */
   void resetConnectBackoff() {
@@ -620,7 +620,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     }
 
     @Override
-    public void transportShutdown(final Status s) {
+    public void transportShutdown(final Status s, final DisconnectError disconnectError) {
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       shutdownInitiated = true;
@@ -639,8 +639,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                     NameResolver.ATTR_BACKEND_SERVICE),
                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
                     EquivalentAddressGroup.ATTR_LOCALITY_NAME),
-                /* disconnectError= */ SubchannelMetrics.DisconnectError.UNKNOWN
-                    .getErrorString(null),
+                /* disconnectError= */ disconnectError.toErrorString(),
                 /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
                     .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           } else if (pendingTransport == transport) {

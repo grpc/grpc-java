@@ -28,8 +28,6 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.nio.Buffer;
-import java.nio.ByteBuffer;
 import java.nio.InvalidMarkException;
 import org.junit.After;
 import org.junit.Before;
@@ -122,27 +120,6 @@ public class CompositeReadableBufferTest {
   }
 
   @Test
-  public void readByteBufferShouldSucceed() {
-    ByteBuffer byteBuffer = ByteBuffer.allocate(EXPECTED_VALUE.length());
-    int remaining = EXPECTED_VALUE.length();
-
-    ((Buffer) byteBuffer).limit(1);
-    composite.readBytes(byteBuffer);
-    remaining--;
-    assertEquals(remaining, composite.readableBytes());
-
-    ((Buffer) byteBuffer).limit(byteBuffer.limit() + 5);
-    composite.readBytes(byteBuffer);
-    remaining -= 5;
-    assertEquals(remaining, composite.readableBytes());
-
-    ((Buffer) byteBuffer).limit(byteBuffer.limit() + remaining);
-    composite.readBytes(byteBuffer);
-    assertEquals(0, composite.readableBytes());
-    assertEquals(EXPECTED_VALUE, new String(byteBuffer.array(), UTF_8));
-  }
-
-  @Test
   public void readStreamShouldSucceed() throws IOException {
     ByteArrayOutputStream bos = new ByteArrayOutputStream();
     int remaining = EXPECTED_VALUE.length();
@@ -213,18 +190,6 @@ public class CompositeReadableBufferTest {
     assertEquals(EXPECTED_VALUE.length(), composite.readableBytes());
     byte[] second = new byte[EXPECTED_VALUE.length()];
     composite.readBytes(second, 0, EXPECTED_VALUE.length());
-    assertArrayEquals(first, second);
-  }
-
-  @Test
-  public void markAndResetWithReadByteBufferShouldSucceed() {
-    byte[] first = new byte[EXPECTED_VALUE.length()];
-    composite.mark();
-    composite.readBytes(ByteBuffer.wrap(first));
-    composite.reset();
-    byte[] second = new byte[EXPECTED_VALUE.length()];
-    assertEquals(EXPECTED_VALUE.length(), composite.readableBytes());
-    composite.readBytes(ByteBuffer.wrap(second));
     assertArrayEquals(first, second);
   }
 

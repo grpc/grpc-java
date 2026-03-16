@@ -201,8 +201,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
   }
 
   /**
-   * Prevents creating any new streams.  Buffered streams are not failed and may still proceed
-   * when {@link #reprocess} is called.  The delayed transport will be terminated when there is no
+   * Prevents creating any new streams. Buffered streams are not failed and may still proceed
+   * when {@link #reprocess} is called. The delayed transport will be terminated when there is no
    * more buffered streams.
    */
   @Override
@@ -215,7 +215,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       syncContext.executeLater(new Runnable() {
           @Override
           public void run() {
-            listener.transportShutdown(status);
+            listener.transportShutdown(status, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
           }
         });
       if (!hasPendingStreams() && reportTransportTerminated != null) {
@@ -363,6 +363,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private volatile Status lastPickStatus;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
+      super("connecting_and_lb");
       this.args = args;
       this.tracers = tracers;
     }

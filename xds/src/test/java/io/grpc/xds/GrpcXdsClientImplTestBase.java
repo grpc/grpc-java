@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.StatusMatcher.statusHasCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -42,6 +43,7 @@ import com.google.protobuf.Any;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import com.google.protobuf.StringValue;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.OutlierDetection;
@@ -59,6 +61,7 @@ import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
+import io.grpc.StatusOrMatcher;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
@@ -111,6 +114,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.CountDownLatch;
@@ -277,6 +281,8 @@ public abstract class GrpcXdsClientImplTestBase {
   private ResourceWatcher<CdsUpdate> cdsResourceWatcher;
   @Mock
   private ResourceWatcher<EdsUpdate> edsResourceWatcher;
+  @Mock
+  private ResourceWatcher<StringUpdate> stringResourceWatcher;
   @Mock
   private XdsClientMetricReporter xdsClientMetricReporter;
   @Mock
@@ -665,6 +671,58 @@ public abstract class GrpcXdsClientImplTestBase {
     verify(serverConnectionCallback, times(times)).reportServerConnectionGauge(
         eq(isConnected),
         eq(xdsServer));
+  }
+
+  @Test
+  public void doParse_returnsSuccessfully() {
+    XdsStringResource resourceType = new XdsStringResource();
+    xdsClient.watchXdsResource(
+        resourceType, "resource1", stringResourceWatcher, MoreExecutors.directExecutor());
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+
+    Any resource = Any.pack(StringValue.newBuilder().setValue("resource1").build());
+    call.sendResponse(resourceType, resource, VERSION_1, "0000");
+    verify(stringResourceWatcher).onResourceChanged(argThat(StatusOrMatcher.hasValue(
+        (StringUpdate arg) -> new StringUpdate("resource1").equals(arg))));
+  }
+
+  @Test
+  public void doParse_throwsResourceInvalidException_resourceInvalid() {
+    XdsStringResource resourceType = new XdsStringResource() {
+      @Override
+      protected StringUpdate doParse(Args args, Message unpackedMessage)
+          throws ResourceInvalidException {
+        throw new ResourceInvalidException("some bad input");
+      }
+    };
+    xdsClient.watchXdsResource(
+        resourceType, "resource1", stringResourceWatcher, MoreExecutors.directExecutor());
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+
+    Any resource = Any.pack(StringValue.newBuilder().setValue("resource1").build());
+    call.sendResponse(resourceType, resource, VERSION_1, "0000");
+    verify(stringResourceWatcher).onResourceChanged(argThat(StatusOrMatcher.hasStatus(
+        statusHasCode(Status.Code.UNAVAILABLE)
+          .andDescriptionContains("validation error: some bad input"))));
+  }
+
+  @Test
+  public void doParse_throwsError_resourceInvalid() throws Exception {
+    XdsStringResource resourceType = new XdsStringResource() {
+      @Override
+      protected StringUpdate doParse(Args args, Message unpackedMessage) {
+        throw new AssertionError("something bad happened");
+      }
+    };
+    xdsClient.watchXdsResource(
+        resourceType, "resource1", stringResourceWatcher, MoreExecutors.directExecutor());
+    DiscoveryRpcCall call = resourceDiscoveryCalls.poll();
+
+    Any resource = Any.pack(StringValue.newBuilder().setValue("resource1").build());
+    call.sendResponse(resourceType, resource, VERSION_1, "0000");
+    verify(stringResourceWatcher).onResourceChanged(argThat(StatusOrMatcher.hasStatus(
+        statusHasCode(Status.Code.UNAVAILABLE)
+          .andDescriptionContains("unexpected error: AssertionError: something bad happened"))));
   }
 
   @Test
@@ -5317,5 +5375,71 @@ public abstract class GrpcXdsClientImplTestBase {
         @Nullable String rdsName, @Nullable Message routeConfig, List<Message> httpFilters);
 
     protected abstract Message buildTerminalFilter();
+  }
+
+  private static class XdsStringResource extends XdsResourceType<StringUpdate> {
+    @Override
+    @SuppressWarnings("unchecked")
+    protected Class<? extends com.google.protobuf.Message> unpackedClassName() {
+      return StringValue.class;
+    }
+
+    @Override
+    public String typeName() {
+      return "EMPTY";
+    }
+
+    @Override
+    public String typeUrl() {
+      return "type.googleapis.com/google.protobuf.StringValue";
+    }
+
+    @Override
+    public boolean shouldRetrieveResourceKeysForArgs() {
+      return false;
+    }
+
+    @Override
+    protected boolean isFullStateOfTheWorld() {
+      return false;
+    }
+
+    @Override
+    @Nullable
+    protected String extractResourceName(Message unpackedResource) {
+      if (!(unpackedResource instanceof StringValue)) {
+        return null;
+      }
+      return ((StringValue) unpackedResource).getValue();
+    }
+
+    @Override
+    protected StringUpdate doParse(Args args, Message unpackedMessage)
+        throws ResourceInvalidException {
+      return new StringUpdate(((StringValue) unpackedMessage).getValue());
+    }
+  }
+
+  private static final class StringUpdate implements ResourceUpdate {
+    @SuppressWarnings("UnusedVariable")
+    public final String value;
+
+    public StringUpdate(String value) {
+      this.value = value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof StringUpdate)) {
+        return false;
+      }
+      StringUpdate that = (StringUpdate) o;
+      return Objects.equals(this.value, that.value);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(value);
+    }
   }
 }

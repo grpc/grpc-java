@@ -142,6 +142,21 @@ import javax.annotation.Nullable;
  *
  * <p>{@link java.net.URI} and {@link Uri} both support IPv6 literals in square brackets as defined
  * by RFC 2732.
+ *
+ * <p>{@link java.net.URI} supports IPv6 scope IDs but accepts and emits a non-standard syntax.
+ * {@link Uri} implements the newer RFC 6874, which percent encodes scope IDs and the % delimiter
+ * itself. RFC 9844 claims to obsolete RFC 6874 because web browsers would not support it. This
+ * class implements RFC 6874 anyway, mostly to avoid creating a barrier to migration away from
+ * {@link java.net.URI}.
+ *
+ * <p>Some URI components, e.g. scheme, are required while others may or may not be present, e.g.
+ * authority. {@link Uri} is careful to preserve the distinction between an absent string component
+ * (getter returns null) and one with an empty value (getter returns ""). {@link java.net.URI} makes
+ * this distinction too, *except* when it comes to the authority and host components: {@link
+ * java.net.URI#getAuthority()} and {@link java.net.URI#getHost()} return null when an authority is
+ * absent, e.g. <code>file:/path</code> as expected. But these methods surprisingly also return null
+ * when the authority is the empty string, e.g.<code>file:///path</code>. {@link Uri}'s getters
+ * correctly return null and "" in these cases, respectively, as one would expect.
  */
 @Internal
 public final class Uri {
@@ -431,9 +446,9 @@ public final class Uri {
     return host;
   }
 
-  /** Returns the "port" component of this URI, or -1 if not present. */
+  /** Returns the "port" component of this URI, or -1 if empty or not present. */
   public int getPort() {
-    return port != null ? Integer.parseInt(port) : -1;
+    return port != null && !port.isEmpty() ? Integer.parseInt(port) : -1;
   }
 
   /** Returns the raw port component of this URI in its originally parsed form. */
@@ -475,6 +490,15 @@ public final class Uri {
    * <p>Prefer this method over {@link #getPath()} because it preserves the distinction between
    * segment separators and literal '/'s within a path segment.
    *
+   * <p>A trailing '/' delimiter in the path results in the empty string as the last element in the
+   * returned list. For example, <code>file://localhost/foo/bar/</code> has path segments <code>
+   * ["foo", "bar", ""]</code>
+   *
+   * <p>A leading '/' delimiter cannot be detected using this method. For example, both <code>
+   * dns:example.com</code> and <code>dns:///example.com</code> have the same list of path segments:
+   * <code>["example.com"]</code>. Use {@link #isPathAbsolute()} or {@link #isPathRootless()} to
+   * distinguish these cases.
+   *
    * <p>The returned list is immutable.
    */
   public List<String> getPathSegments() {
@@ -482,6 +506,44 @@ public final class Uri {
     ImmutableList.Builder<String> segmentsBuilder = ImmutableList.builder();
     parseAssumedUtf8PathIntoSegments(path, segmentsBuilder);
     return segmentsBuilder.build();
+  }
+
+  /**
+   * Returns true iff this URI's path component starts with a path segment (rather than the '/'
+   * segment delimiter).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>tel:+1-206-555-1212
+   * </code>, <code>mailto:me@example.com</code> and <code>urn:isbn:978-1492082798</code> all have
+   * rootless paths. <code>mailto:%2Fdev%2Fnull@example.com</code> is also rootless because its
+   * percent-encoded slashes are not segment delimiters but rather part of the first and only path
+   * segment.
+   *
+   * <p>Contrast rootless paths with absolute ones (see {@link #isPathAbsolute()}.
+   */
+  public boolean isPathRootless() {
+    return !path.isEmpty() && !path.startsWith("/");
+  }
+
+  /**
+   * Returns true iff this URI's path component starts with the '/' segment delimiter (rather than a
+   * path segment).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>file:///resume.txt
+   * </code>, <code>file:/resume.txt</code> and <code>file://localhost/</code> all have absolute
+   * paths while <code>tel:+1-206-555-1212</code>'s path is not absolute. <code>
+   * mailto:%2Fdev%2Fnull@example.com</code> is also not absolute because its percent-encoded
+   * slashes are not segment delimiters but rather part of the first and only path segment.
+   *
+   * <p>Contrast absolute paths with rootless ones (see {@link #isPathRootless()}.
+   *
+   * <p>NB: The term "absolute" has two different meanings in RFC 3986 which are easily confused.
+   * This method tests for a property of this URI's path component. Contrast with {@link
+   * #isAbsolute()} which tests the URI itself for a different property.
+   */
+  public boolean isPathAbsolute() {
+    return path.startsWith("/");
   }
 
   /**
@@ -825,12 +887,32 @@ public final class Uri {
      */
     @CanIgnoreReturnValue
     public Builder setHost(@Nullable InetAddress addr) {
-      this.host = addr != null ? InetAddresses.toUriString(addr) : null;
+      this.host = addr != null ? toUriString(addr) : null;
       return this;
+    }
+
+    private static String toUriString(InetAddress addr) {
+      // InetAddresses.toUriString(addr) is almost enough but neglects RFC 6874 percent encoding.
+      String inetAddrStr = InetAddresses.toUriString(addr);
+      int percentIndex = inetAddrStr.indexOf('%');
+      if (percentIndex < 0) {
+        return inetAddrStr;
+      }
+
+      String scope = inetAddrStr.substring(percentIndex, inetAddrStr.length() - 1);
+      return inetAddrStr.substring(0, percentIndex) + percentEncode(scope, unreservedChars) + "]";
     }
 
     @CanIgnoreReturnValue
     Builder setRawHost(String host) {
+      if (host.startsWith("[") && host.endsWith("]")) {
+        // IP-literal: Guava's isUriInetAddress() is almost enough but it doesn't check the scope.
+        int percentIndex = host.indexOf('%');
+        if (percentIndex > 0) {
+          String scope = host.substring(percentIndex, host.length() - 1);
+          checkPercentEncodedArg(scope, "scope", unreservedChars);
+        }
+      }
       // IP-literal validation is complicated so we delegate it to Guava. We use this particular
       // method of InetAddresses because it doesn't try to match interfaces on the local machine.
       // (The validity of a URI should be the same no matter which machine does the parsing.)
@@ -861,10 +943,12 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawPort(String port) {
-      try {
-        Integer.parseInt(port); // Result unused.
-      } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid port", e);
+      if (port != null && !port.isEmpty()) {
+        try {
+          Integer.parseInt(port); // Result unused.
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port", e);
+        }
       }
       this.port = port;
       return this;

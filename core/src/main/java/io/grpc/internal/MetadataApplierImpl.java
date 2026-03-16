@@ -120,7 +120,7 @@ final class MetadataApplierImpl extends MetadataApplier {
     synchronized (lock) {
       if (returnedStream == null) {
         // apply() has not been called, needs to buffer the requests.
-        delayedStream = new DelayedStream();
+        delayedStream = new DelayedStream("call_credentials");
         return returnedStream = delayedStream;
       } else {
         return returnedStream;

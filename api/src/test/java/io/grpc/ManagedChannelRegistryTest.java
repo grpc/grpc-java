@@ -20,17 +20,23 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.google.common.collect.ImmutableSet;
+import io.grpc.FlagResetRule;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /** Unit tests for {@link ManagedChannelRegistry}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ManagedChannelRegistryTest {
   private String target = "testing123";
   private ChannelCredentials creds = new ChannelCredentials() {
@@ -39,6 +45,20 @@ public class ManagedChannelRegistryTest {
       throw new UnsupportedOperationException();
     }
   };
+
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
+  @Before
+  public void setUp() {
+    flagResetRule.setFlagForTest(FeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+  }
 
   @Test
   public void register_unavailableProviderThrows() {

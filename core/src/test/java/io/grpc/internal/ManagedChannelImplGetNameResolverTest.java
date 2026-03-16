@@ -17,12 +17,12 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.UriWrapper.wrap;
 import static org.junit.Assert.fail;
 
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.Collections;
@@ -36,6 +36,21 @@ public class ManagedChannelImplGetNameResolverTest {
   @Test
   public void invalidUriTarget() {
     testInvalidTarget("defaultscheme:///[invalid]");
+  }
+
+  @Test
+  public void validSquareBracketsInRfc2396UriFragment() throws Exception {
+    testValidTarget("dns://8.8.8.8/host#section[1]",
+        "dns://8.8.8.8/host#section[1]",
+        new URI("dns", "8.8.8.8", "/host", null, "section[1]"));
+  }
+
+
+  @Test
+  public void validSquareBracketsInRfc2396UriQuery() throws Exception {
+    testValidTarget("dns://8.8.8.8/host?section=[1]",
+        "dns://8.8.8.8/host?section=[1]",
+        new URI("dns", "8.8.8.8", "/host", "section=[1]", null));
   }
 
   @Test
@@ -75,6 +90,13 @@ public class ManagedChannelImplGetNameResolverTest {
   }
 
   @Test
+  public void validIpv6UriWithJavaNetUriScopeName() throws Exception {
+    testValidTarget("dns://[::1%eth0]:53/host",
+        "dns://[::1%eth0]:53/host",
+        new URI("dns", "[::1%eth0]:53", "/host", null, null));
+  }
+
+  @Test
   public void invalidIpv6UriTarget() throws Exception {
     testInvalidTarget("dns:///[::1]:1234");
   }
@@ -96,8 +118,7 @@ public class ManagedChannelImplGetNameResolverTest {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
-          "foo.googleapis.com:8080", nameResolverRegistry,
-          Collections.singleton(InetSocketAddress.class));
+          "foo.googleapis.com:8080", nameResolverRegistry);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       // expected
@@ -109,8 +130,8 @@ public class ManagedChannelImplGetNameResolverTest {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("testscheme");
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
-          "testscheme:///foo.googleapis.com:8080", nameResolverRegistry,
-          Collections.singleton(CustomSocketAddress.class));
+              "testscheme:///foo.googleapis.com:8080", nameResolverRegistry)
+          .checkAddressTypes(Collections.singleton(CustomSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().isEqualTo(
@@ -122,10 +143,9 @@ public class ManagedChannelImplGetNameResolverTest {
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
     ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-        ManagedChannelImplBuilder.getNameResolverProvider(
-            target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+        ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry);
     assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
-    assertThat(resolved.targetUri).isEqualTo(expectedUri);
+    assertThat(resolved.targetUri).isEqualTo(wrap(expectedUri));
     assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
   }
 
@@ -134,8 +154,7 @@ public class ManagedChannelImplGetNameResolverTest {
 
     try {
       ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-          ManagedChannelImplBuilder.getNameResolverProvider(
-              target, nameResolverRegistry, Collections.singleton(InetSocketAddress.class));
+          ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry);
       FakeNameResolverProvider nameResolverProvider = (FakeNameResolverProvider) resolved.provider;
       fail("Should have failed, but got resolver provider " + nameResolverProvider);
     } catch (IllegalArgumentException e) {

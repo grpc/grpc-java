@@ -55,6 +55,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.TlsServerCredentials;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.DisconnectError;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
@@ -409,7 +410,7 @@ public class ProtocolNegotiatorsTest {
     } else {
       ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
       verify(clientTransportListener, timeout(TIMEOUT_SECONDS * 1000))
-          .transportShutdown(captor.capture());
+          .transportShutdown(captor.capture(), any(DisconnectError.class));
       result = captor.getValue();
     }
 

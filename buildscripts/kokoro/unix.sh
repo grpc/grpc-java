@@ -38,6 +38,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
+GRADLE_FLAGS+=" --stacktrace"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 
 # For universal binaries on macOS, signal Gradle to use universal flags.

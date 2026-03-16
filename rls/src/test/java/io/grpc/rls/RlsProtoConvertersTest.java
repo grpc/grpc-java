@@ -531,6 +531,65 @@ public class RlsProtoConvertersTest {
   }
 
   @Test
+  public void convert_jsonRlsConfig_clampMaxAgeIfStaleAgeMissing() throws IOException {
+    String jsonStr = "{\n"
+        + "  \"grpcKeybuilders\": [\n"
+        + "    {\n"
+        + "      \"names\": [\n"
+        + "        {\n"
+        + "          \"service\": \"service1\",\n"
+        + "          \"method\": \"create\"\n"
+        + "        }\n"
+        + "      ],\n"
+        + "      \"headers\": [\n"
+        + "        {\n"
+        + "          \"key\": \"user\","
+        + "          \"names\": [\"User\", \"Parent\"],\n"
+        + "          \"optional\": true\n"
+        + "        },\n"
+        + "        {\n"
+        + "          \"key\": \"id\","
+        + "          \"names\": [\"X-Google-Id\"],\n"
+        + "          \"optional\": true\n"
+        + "        }\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"lookupService\": \"service1\",\n"
+        + "  \"lookupServiceTimeout\": \"2s\",\n"
+        + "  \"maxAge\": \"350s\",\n" // Exceeds 5m limit
+        + "  \"validTargets\": [\"a valid target\"],"
+        + "  \"cacheSizeBytes\": \"1000\",\n"
+        + "  \"defaultTarget\": \"us_east_1.cloudbigtable.googleapis.com\"\n"
+        + "}";
+
+    RouteLookupConfig expectedConfig =
+        RouteLookupConfig.builder()
+            .grpcKeybuilders(ImmutableList.of(
+                GrpcKeyBuilder.create(
+                    ImmutableList.of(Name.create("service1", "create")),
+                    ImmutableList.of(
+                        NameMatcher.create("user", ImmutableList.of("User", "Parent")),
+                        NameMatcher.create("id", ImmutableList.of("X-Google-Id"))),
+                    ExtraKeys.DEFAULT,
+                    ImmutableMap.<String, String>of())))
+            .lookupService("service1")
+            .lookupServiceTimeoutInNanos(TimeUnit.SECONDS.toNanos(2))
+            // Should be clamped to 300s (5m) because staleAge is missing
+            .maxAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .staleAgeInNanos(TimeUnit.MINUTES.toNanos(5))
+            .cacheSizeBytes(1000)
+            .defaultTarget("us_east_1.cloudbigtable.googleapis.com")
+            .build();
+
+    RouteLookupConfigConverter converter = new RouteLookupConfigConverter();
+    @SuppressWarnings("unchecked")
+    Map<String, ?> parsedJson = (Map<String, ?>) JsonParser.parse(jsonStr);
+    RouteLookupConfig converted = converter.convert(parsedJson);
+    assertThat(converted).isEqualTo(expectedConfig);
+  }
+
+  @Test
   public void convert_jsonRlsConfig_keyBuilderWithoutName() throws IOException {
     String jsonStr = "{\n"
         + "  \"grpcKeybuilders\": [\n"

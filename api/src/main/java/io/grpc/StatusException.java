@@ -65,6 +65,7 @@ public class StatusException extends Exception {
    *
    * @since 1.0.0
    */
+  @Nullable
   public final Metadata getTrailers() {
     return trailers;
   }

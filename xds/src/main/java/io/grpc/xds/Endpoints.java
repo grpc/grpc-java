@@ -59,7 +59,7 @@ final class Endpoints {
     // The endpoint address to be connected to.
     abstract EquivalentAddressGroup eag();
 
-    // Endpoint's weight for load balancing. If unspecified, value of 0 is returned.
+    // Endpoint's weight for load balancing. Guaranteed not to be 0.
     abstract int loadBalancingWeight();
 
     // Whether the endpoint is healthy.
@@ -71,6 +71,9 @@ final class Endpoints {
 
     static LbEndpoint create(EquivalentAddressGroup eag, int loadBalancingWeight,
         boolean isHealthy, String hostname, ImmutableMap<String, Object> endpointMetadata) {
+      if (loadBalancingWeight == 0) {
+        loadBalancingWeight = 1;
+      }
       return new AutoValue_Endpoints_LbEndpoint(
           eag, loadBalancingWeight, isHealthy, hostname, endpointMetadata);
     }

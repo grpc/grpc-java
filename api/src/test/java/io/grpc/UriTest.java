@@ -18,10 +18,13 @@ package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assume.assumeNoException;
 
 import com.google.common.net.InetAddresses;
 import com.google.common.testing.EqualsTester;
+import java.net.Inet6Address;
 import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.util.BitSet;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -43,6 +46,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme://user@host:0443/path?query#fragment");
     assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
+    assertThat(uri.isPathAbsolute()).isTrue();
+    assertThat(uri.isPathRootless()).isFalse();
   }
 
   @Test
@@ -78,6 +83,20 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_ipv6ScopedLiteral() throws URISyntaxException {
+    Uri uri = Uri.parse("http://[fe80::1%25eth0]");
+    assertThat(uri.getRawHost()).isEqualTo("[fe80::1%25eth0]");
+    assertThat(uri.getHost()).isEqualTo("[fe80::1%eth0]");
+  }
+
+  @Test
+  public void parse_ipv6ScopedPercentEncodedLiteral() throws URISyntaxException {
+    Uri uri = Uri.parse("http://[fe80::1%25foo-bar%2Fblah]");
+    assertThat(uri.getRawHost()).isEqualTo("[fe80::1%25foo-bar%2Fblah]");
+    assertThat(uri.getHost()).isEqualTo("[fe80::1%foo-bar/blah]");
+  }
+
+  @Test
   public void parse_noQuery() throws URISyntaxException {
     Uri uri = Uri.parse("scheme://authority/path#fragment");
     assertThat(uri.getScheme()).isEqualTo("scheme");
@@ -110,6 +129,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isFalse();
   }
 
   @Test
@@ -122,6 +143,8 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("mailto:ceo@company.com?subject=raise");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
   }
 
   @Test
@@ -134,6 +157,44 @@ public final class UriTest {
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme:");
     assertThat(uri.isAbsolute()).isTrue();
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isFalse();
+  }
+
+  @Test
+  public void parse_emptyQuery() {
+    Uri uri = Uri.create("scheme:?");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getQuery()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyFragment() {
+    Uri uri = Uri.create("scheme:#");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getFragment()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyUserInfo() {
+    Uri uri = Uri.create("scheme://@host");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("@host");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getUserInfo()).isEmpty();
+    assertThat(uri.toString()).isEqualTo("scheme://@host");
+  }
+
+  @Test
+  public void parse_emptyPort() {
+    Uri uri = Uri.create("scheme://host:");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("host:");
+    assertThat(uri.getRawAuthority()).isEqualTo("host:");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getPort()).isEqualTo(-1);
+    assertThat(uri.getRawPort()).isEqualTo("");
+    assertThat(uri.toString()).isEqualTo("scheme://host:");
   }
 
   @Test
@@ -204,10 +265,10 @@ public final class UriTest {
   }
 
   @Test
-  public void parse_emptyPort_throws() {
+  public void parse_invalidBackslashScope_throws() {
     URISyntaxException e =
-        assertThrows(URISyntaxException.class, () -> Uri.parse("scheme://user@host:/path"));
-    assertThat(e).hasMessageThat().contains("Invalid port");
+        assertThrows(URISyntaxException.class, () -> Uri.parse("http://[::1%25foo\\bar]"));
+    assertThat(e).hasMessageThat().contains("Invalid character in scope");
   }
 
   @Test
@@ -325,9 +386,31 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_onePathSegment_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("dns:www.example.com");
+    assertThat(uri.getPathSegments()).containsExactly("www.example.com");
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
+  }
+
+  @Test
   public void parse_twoPathSegments() throws URISyntaxException {
     Uri uri = Uri.create("file:/foo/bar");
     assertThat(uri.getPathSegments()).containsExactly("foo", "bar");
+  }
+
+  @Test
+  public void parse_twoPathSegments_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("file:foo/bar");
+    assertThat(uri.getPathSegments()).containsExactly("foo", "bar");
+  }
+
+  @Test
+  public void parse_percentEncodedPathSegment_rootless() throws URISyntaxException {
+    Uri uri = Uri.create("mailto:%2Fdev%2Fnull@example.com");
+    assertThat(uri.getPathSegments()).containsExactly("/dev/null@example.com");
+    assertThat(uri.isPathAbsolute()).isFalse();
+    assertThat(uri.isPathRootless()).isTrue();
   }
 
   @Test
@@ -395,6 +478,47 @@ public final class UriTest {
             .setHost(InetAddresses.forString("2001:4860:4860::8844"))
             .build();
     assertThat(uri.toString()).isEqualTo("scheme://[2001:4860:4860::8844]");
+  }
+
+  @Test
+  public void builder_ipv6ScopedLiteral_numeric() throws UnknownHostException {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            // Create an address with a numeric scope_id, which should always be valid.
+            .setHost(
+                Inet6Address.getByAddress(null, InetAddresses.forString("fe80::1").getAddress(), 1))
+            .build();
+
+    // We expect the scope ID to be percent encoded.
+    assertThat(uri.getRawHost()).isEqualTo("[fe80::1%251]");
+    assertThat(uri.getHost()).isEqualTo("[fe80::1%1]");
+  }
+
+  @Test
+  public void builder_ipv6ScopedLiteral_named() throws UnknownHostException {
+    // Unfortunately, there's no Java API to create an Inet6Address with an arbitrary interface-
+    // scoped name. There's actually no way to hermetically create an Inet6Address with a scope name
+    // at all! The following address/interface is likely to be present on Linux test runners.
+    Inet6Address address;
+    try {
+      address = (Inet6Address) InetAddresses.forString("::1%lo");
+    } catch (IllegalArgumentException e) {
+      assumeNoException(e);
+      return; // Not reached.
+    }
+    Uri uri = Uri.newBuilder().setScheme("http").setHost(address).build();
+
+    // We expect the scope ID to be percent encoded.
+    assertThat(uri.getRawHost()).isEqualTo("[::1%25lo]");
+    assertThat(uri.getHost()).isEqualTo("[::1%lo]");
+  }
+
+  @Test
+  public void builder_ipv6PercentEncodedScopedLiteral() {
+    Uri uri = Uri.newBuilder().setScheme("http").setRawHost("[fe80::1%25foo%2Dbar%2Fblah]").build();
+    assertThat(uri.getRawHost()).isEqualTo("[fe80::1%25foo%2Dbar%2Fblah]");
+    assertThat(uri.getHost()).isEqualTo("[fe80::1%foo-bar/blah]");
   }
 
   @Test

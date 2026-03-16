@@ -33,15 +33,11 @@ android {
 
     defaultConfig {
         applicationId "io.grpc.android.integrationtest"
-        // Held back to 20 as Gradle fails to build at the 21 level. This is
-        // presumably a Gradle bug that can be revisited later.
-        // Maybe this issue: https://github.com/gradle/gradle/issues/20778
-        minSdkVersion 20
+        minSdkVersion 23
         targetSdkVersion 33
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        multiDexEnabled = true
     }
     buildTypes {
         debug { minifyEnabled false }
@@ -62,11 +58,11 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.3.0'
-    implementation 'androidx.multidex:multidex:2.0.0'
     implementation libraries.androidx.annotation
     implementation 'com.google.android.gms:play-services-base:18.0.1'
 
     implementation project(':grpc-android'),
+            project(':grpc-api'),
             project(':grpc-core'),
             project(':grpc-census'),
             project(':grpc-okhttp'),
@@ -113,6 +109,25 @@ tasks.withType(JavaCompile).configureEach {
             it.options.errorprone.excludedPaths,
             ".*/src/generated/.*",
             "|")
+}
+
+// Workaround error seen with Gradle 8.14.3 and AGP 7.4.1 when building:
+//   ./gradlew clean :grpc-android-interop-testing:build -PskipAndroid=false \
+//       -Pandroid.useAndroidX=true --no-build-cache
+//
+// Error message:
+//
+// Execution failed for task ':grpc-android-interop-testing:mergeExtDexDebug'.
+// > Could not resolve all files for configuration ':grpc-android-interop-testing:debugRuntimeClasspath'.
+//    > Failed to transform opencensus-contrib-grpc-metrics-0.31.1.jar (io.opencensus:opencensus-contrib-grpc-metrics:0.31.1) to match attributes {artifactType=android-dex, asm-transformed-variant=NONE, dexing-enable-desugaring=true, dexing-enable-jacoco-instrumentation=false, dexing-is-debuggable=true, dexing-min-sdk=23, org.gradle.category=library, org.gradle.libraryelements=jar, org.gradle.status=release, org.gradle.usage=java-runtime}.
+//       > Could not resolve all files for configuration ':grpc-android-interop-testing:debugRuntimeClasspath'.
+//          > Failed to transform grpc-api-1.81.0-SNAPSHOT.jar (project :grpc-api) to match attributes {artifactType=android-classes-jar, org.gradle.category=library, org.gradle.dependency.bundling=external, org.gradle.jvm.version=8, org.gradle.libraryelements=jar, org.gradle.usage=java-runtime}.
+//             > Execution failed for IdentityTransform: grpc-java/api/build/libs/grpc-api-1.81.0-SNAPSHOT.jar.
+//                > File/directory does not exist: grpc-java/api/build/libs/grpc-api-1.81.0-SNAPSHOT.jar
+tasks.configureEach { task ->
+    if (task.name.equals("mergeExtDexDebug")) {
+        dependsOn(':grpc-api:jar')
+    }
 }
 
 afterEvaluate {

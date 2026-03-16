@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -43,6 +44,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FlagResetRule;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
@@ -63,7 +65,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,8 +79,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
-import javax.annotation.Nullable;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -100,6 +99,7 @@ public class DnsNameResolverTest {
 
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(10));
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
 
   private final Map<String, ?> serviceConfig = new LinkedHashMap<>();
 
@@ -112,7 +112,6 @@ public class DnsNameResolverTest {
         }
       });
 
-  private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
   private static final FakeClock.TaskFilter NAME_RESOLVER_REFRESH_TASK_FILTER =
@@ -139,21 +138,10 @@ public class DnsNameResolverTest {
     public void close(Executor instance) {}
   }
 
-  private final NameResolver.Args args = NameResolver.Args.newBuilder()
-      .setDefaultPort(DEFAULT_PORT)
-      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
-      .setSynchronizationContext(syncContext)
-      .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setChannelLogger(mock(ChannelLogger.class))
-      .setScheduledExecutorService(fakeExecutor.getScheduledExecutorService())
-      .build();
-
   @Mock
   private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resultCaptor;
-  @Nullable
-  private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
   @Mock private ProxyDetector mockProxyDetector;
@@ -161,12 +149,6 @@ public class DnsNameResolverTest {
   private RetryingNameResolver newResolver(String name, int defaultPort) {
     return newResolver(
         name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted());
-  }
-
-  private RetryingNameResolver newResolver(String name, int defaultPort, boolean isAndroid) {
-    return newResolver(
-        name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
-        isAndroid);
   }
 
   private RetryingNameResolver newResolver(
@@ -213,44 +195,9 @@ public class DnsNameResolverTest {
   @Before
   public void setUp() {
     DnsNameResolver.enableJndi = true;
-    networkaddressCacheTtlPropertyValue =
-        System.getProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
 
     // By default the mock listener processes the result successfully.
     when(mockListener.onResult2(isA(ResolutionResult.class))).thenReturn(Status.OK);
-  }
-
-  @After
-  public void restoreSystemProperty() {
-    if (networkaddressCacheTtlPropertyValue == null) {
-      System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    } else {
-      System.setProperty(
-          DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY,
-          networkaddressCacheTtlPropertyValue);
-    }
-  }
-
-  @Test
-  public void invalidDnsName() throws Exception {
-    testInvalidUri(new URI("dns", null, "/[invalid]", null));
-  }
-
-  @Test
-  public void validIpv6() throws Exception {
-    testValidUri(new URI("dns", null, "/[::1]", null), "[::1]", DEFAULT_PORT);
-  }
-
-  @Test
-  public void validDnsNameWithoutPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com", null),
-        "foo.googleapis.com", DEFAULT_PORT);
-  }
-
-  @Test
-  public void validDnsNameWithPort() throws Exception {
-    testValidUri(new URI("dns", null, "/foo.googleapis.com:456", null),
-        "foo.googleapis.com:456", 456);
   }
 
   @Test
@@ -274,29 +221,13 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve_androidIgnoresPropertyValue() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(2));
-    resolveNeverCache(true);
-  }
-
-  @Test
-  public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(-1));
-    resolveNeverCache(true);
-  }
-
-  @Test
   public void resolve_neverCache() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
-    resolveNeverCache(false);
-  }
-
-  private void resolveNeverCache(boolean isAndroid) throws Exception {
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
 
-    RetryingNameResolver resolver = newResolver(name, 81, isAndroid);
+    RetryingNameResolver resolver = newResolver(name, 81);
     DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
@@ -387,7 +318,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_cacheForever() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
@@ -421,7 +352,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_usingCache() throws Exception {
     long ttl = 60;
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
     final List<InetAddress> answer = createAddressList(2);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
@@ -456,7 +387,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_cacheExpired() throws Exception {
     long ttl = 60;
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(ttl));
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
@@ -490,25 +421,37 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void resolve_androidIgnoresPropertyValue() throws Exception {
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "2");
+    resolveDefaultValue(true);
+  }
+
+  @Test
+  public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+    resolveDefaultValue(true);
+  }
+
+  @Test
   public void resolve_invalidTtlPropertyValue() throws Exception {
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
-    resolveDefaultValue();
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
+    resolveDefaultValue(false);
   }
 
   @Test
   public void resolve_noPropertyValue() throws Exception {
-    System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    resolveDefaultValue();
+    flagResetRule.clearSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    resolveDefaultValue(false);
   }
 
-  private void resolveDefaultValue() throws Exception {
+  private void resolveDefaultValue(boolean isAndroid) throws Exception {
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
     RetryingNameResolver resolver = newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker), isAndroid);
     DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
@@ -741,7 +684,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve_addressFailure_neverLookUpServiceConfig() throws Exception {
+  public void resolve_addressFailure_stillLookUpServiceConfig() throws Exception {
     DnsNameResolver.enableTxt = true;
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
@@ -760,7 +703,7 @@ public class DnsNameResolverTest {
     Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
-    verify(mockResourceResolver, never()).resolveTxt(anyString());
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + name);
 
     assertEquals(0, fakeClock.numPendingTasks());
     // A retry should be scheduled
@@ -1297,22 +1240,6 @@ public class DnsNameResolverTest {
     assertThat(result).isNotNull();
     assertThat(result.getError()).isNull();
     assertThat(result.getConfig()).isEqualTo(ImmutableMap.of());
-  }
-
-  private void testInvalidUri(URI uri) {
-    try {
-      provider.newNameResolver(uri, args);
-      fail("Should have failed");
-    } catch (IllegalArgumentException e) {
-      // expected
-    }
-  }
-
-  private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = (DnsNameResolver) provider.newNameResolver(uri, args);
-    assertNotNull(resolver);
-    assertEquals(expectedPort, resolver.getPort());
-    assertEquals(exportedAuthority, resolver.getServiceAuthority());
   }
 
   private byte lastByte = 0;

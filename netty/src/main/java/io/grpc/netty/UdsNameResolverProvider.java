@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -32,8 +33,20 @@ public final class UdsNameResolverProvider extends NameResolverProvider {
   private static final String SCHEME = "unix";
 
   @Override
+  public NameResolver newNameResolver(Uri targetUri, NameResolver.Args args) {
+    if (SCHEME.equals(targetUri.getScheme())) {
+      return new UdsNameResolver(targetUri.getAuthority(), targetUri.getPath(), args);
+    } else {
+      return null;
+    }
+  }
+
+  @Override
   public UdsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
+      // TODO(jdcormie): java.net.URI has a bug where getAuthority() returns null for both the
+      // undefined and zero-length authority. Doesn't matter for now because UdsNameResolver doesn't
+      // distinguish these cases.
       return new UdsNameResolver(targetUri.getAuthority(), getTargetPathFromUri(targetUri), args);
     } else {
       return null;
@@ -44,6 +57,10 @@ public final class UdsNameResolverProvider extends NameResolverProvider {
     Preconditions.checkArgument(SCHEME.equals(targetUri.getScheme()), "scheme must be " + SCHEME);
     String targetPath = targetUri.getPath();
     if (targetPath == null) {
+      // TODO(jdcormie): This incorrectly includes '?' and any characters that follow. In the
+      // hierarchical case ('unix:///path'), java.net.URI parses these into a query component that's
+      // distinct from the path. But in the present "opaque" case ('unix:/path'), what may look like
+      // a query is considered part of the SSP.
       targetPath = Preconditions.checkNotNull(targetUri.getSchemeSpecificPart(), "targetPath");
     }
     return targetPath;

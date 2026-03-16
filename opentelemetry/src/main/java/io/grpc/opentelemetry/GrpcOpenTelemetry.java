@@ -48,6 +48,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
@@ -97,7 +100,8 @@ public final class GrpcOpenTelemetry {
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
-        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins,
+        builder.targetFilter);
     this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
@@ -139,6 +143,11 @@ public final class GrpcOpenTelemetry {
   @VisibleForTesting
   Tracer getTracer() {
     return this.openTelemetryTracingModule.getTracer();
+  }
+
+  @VisibleForTesting
+  TargetFilter getTargetAttributeFilter() {
+    return this.openTelemetryMetricsModule.getTargetAttributeFilter();
   }
 
   /**
@@ -349,6 +358,13 @@ public final class GrpcOpenTelemetry {
         && !disableDefault;
   }
 
+  /**
+   * Internal interface to avoid storing a {@link java.util.function.Predicate} directly, ensuring
+   * compatibility with Android devices (API level < 24) that do not use library desugaring.
+   */
+  interface TargetFilter {
+    boolean test(String target);
+  }
 
   /**
    * Builder for configuring {@link GrpcOpenTelemetry}.
@@ -359,6 +375,8 @@ public final class GrpcOpenTelemetry {
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
+    @Nullable
+    private TargetFilter targetFilter;
 
     private Builder() {}
 
@@ -418,6 +436,26 @@ public final class GrpcOpenTelemetry {
 
     Builder enableTracing(boolean enable) {
       ENABLE_OTEL_TRACING = enable;
+      return this;
+    }
+
+    /**
+     * Sets an optional filter to control recording of the {@code grpc.target} metric
+     * attribute.
+     *
+     * <p>If the predicate returns {@code true}, the original target is recorded. Otherwise,
+     * the target is recorded as {@code "other"} to limit metric cardinality.
+     *
+     * <p>If unset, all targets are recorded as-is.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12595")
+    @IgnoreJRERequirement
+    public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
+      if (filter == null) {
+        this.targetFilter = null;
+      } else {
+        this.targetFilter = filter::test;
+      }
       return this;
     }
 
