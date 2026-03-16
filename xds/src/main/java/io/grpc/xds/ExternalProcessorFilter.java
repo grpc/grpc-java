@@ -441,6 +441,7 @@ public class ExternalProcessorFilter implements Filter {
               }
               // Finally notify the local app of the completion
               wrappedListener.proceedWithClose();
+              extProcClientCallRequestObserver.onCompleted();
             }
           }
 
@@ -542,6 +543,14 @@ public class ExternalProcessorFilter implements Filter {
                 .build())
             .build());
         super.halfClose();
+      }
+
+      @Override
+      public void cancel(@Nullable String message, @Nullable Throwable cause) {
+        if (extProcClientCallRequestObserver != null) {
+          extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
+        }
+        super.cancel(message, cause);
       }
 
       private void handleRequestBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse) {
@@ -691,6 +700,7 @@ public class ExternalProcessorFilter implements Filter {
 
         if (extProcClientCall.config.getObservabilityMode()) {
           super.onClose(status, trailers);
+          extProcClientCall.extProcClientCallRequestObserver.onCompleted();
         }
       }
 
