@@ -7,6 +7,7 @@ import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
@@ -19,6 +20,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -32,6 +34,7 @@ import io.grpc.xds.internal.grpcservice.HeaderValue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -122,7 +125,7 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
-    private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
+    private final CachedChannelManager cachedChannelManager;
     private final ExternalProcessorFilterConfig filterConfig;
 
     private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
@@ -134,7 +137,13 @@ public class ExternalProcessorFilter implements Filter {
         };
 
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig) {
+      this(filterConfig, new CachedChannelManager());
+    }
+
+    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
+        CachedChannelManager cachedChannelManager) {
       this.filterConfig = filterConfig;
+      this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
     }
 
     @Override
@@ -432,6 +441,7 @@ public class ExternalProcessorFilter implements Filter {
               }
               // Finally notify the local app of the completion
               wrappedListener.proceedWithClose();
+              extProcClientCallRequestObserver.onCompleted();
             }
           }
 
@@ -535,14 +545,23 @@ public class ExternalProcessorFilter implements Filter {
         super.halfClose();
       }
 
+      @Override
+      public void cancel(@Nullable String message, @Nullable Throwable cause) {
+        if (extProcClientCallRequestObserver != null) {
+          extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
+        }
+        super.cancel(message, cause);
+      }
+
       private void handleRequestBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasBody()) {
             byte[] mutatedBody = mutation.getBody().toByteArray();
-            super.sendMessage(new ByteArrayInputStream(mutatedBody));
+            if (mutatedBody.length > 0) {
+              super.sendMessage(new ByteArrayInputStream(mutatedBody));
+            }
           } else if (mutation.getClearBody()) {
-            // "clear_body" means we should send an empty message.
             super.sendMessage(new ByteArrayInputStream(new byte[0]));
           }
           // If body mutation is present but has no body and clear_body is false, do nothing.
@@ -681,6 +700,7 @@ public class ExternalProcessorFilter implements Filter {
 
         if (extProcClientCall.config.getObservabilityMode()) {
           super.onClose(status, trailers);
+          extProcClientCall.extProcClientCallRequestObserver.onCompleted();
         }
       }
 
@@ -709,7 +729,9 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onExternalBody(com.google.protobuf.ByteString body) {
-         super.onMessage(body.newInput());
+         if (body.size() > 0) {
+           super.onMessage(body.newInput());
+         }
       }
 
       void unblockAfterStreamComplete() {
