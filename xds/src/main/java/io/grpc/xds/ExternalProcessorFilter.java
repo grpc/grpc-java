@@ -102,7 +102,7 @@ public class ExternalProcessorFilter implements Filter {
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
-    return new ExternalProcessorInterceptor(this, (ExternalProcessorFilterConfig) filterConfig, overrideConfig, scheduler);
+    return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig);
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -123,10 +123,7 @@ public class ExternalProcessorFilter implements Filter {
 
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
     private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
-    private final ExternalProcessorFilter filter;
     private final ExternalProcessorFilterConfig filterConfig;
-    private final FilterConfig overrideConfig;
-    private final ScheduledExecutorService scheduler;
 
     private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
         new MethodDescriptor.Marshaller<InputStream>() {
@@ -136,13 +133,8 @@ public class ExternalProcessorFilter implements Filter {
           public InputStream parse(InputStream stream) { return stream; }
         };
 
-    ExternalProcessorInterceptor(ExternalProcessorFilter filter,
-        ExternalProcessorFilterConfig filterConfig,
-        @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
-      this.filter = filter;
+    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig) {
       this.filterConfig = filterConfig;
-      this.overrideConfig = overrideConfig;
-      this.scheduler = scheduler;
     }
 
     @Override
