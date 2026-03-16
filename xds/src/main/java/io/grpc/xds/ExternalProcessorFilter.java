@@ -2,11 +2,11 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
-import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc;
@@ -19,7 +19,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -29,6 +28,7 @@ import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
+import io.grpc.xds.internal.grpcservice.HeaderValue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -41,7 +41,6 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
-  private final Object lock = new Object();
 
   public ExternalProcessorFilter(String name) {
     filterInstanceName = checkNotNull(name, "name");
@@ -160,6 +159,36 @@ public class ExternalProcessorFilter implements Filter {
         if (timeoutNanos > 0) {
           stub = stub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
         }
+      }
+
+      ImmutableList<HeaderValue> initialMetadata = filterConfig.grpcServiceConfig.initialMetadata();
+      if (initialMetadata != null && !initialMetadata.isEmpty()) {
+        stub = stub.withInterceptors(new ClientInterceptor() {
+          @Override
+          public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
+              MethodDescriptor<ExtReqT, ExtRespT> extMethod, CallOptions extCallOptions, Channel extNext) {
+            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(extNext.newCall(extMethod, extCallOptions)) {
+              @Override
+              public void start(Listener<ExtRespT> responseListener, Metadata headers) {
+                for (HeaderValue headerValue : initialMetadata) {
+                  String key = headerValue.key();
+                  if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+                    if (headerValue.rawValue().isPresent()) {
+                      Metadata.Key<byte[]> metadataKey = Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
+                      headers.put(metadataKey, headerValue.rawValue().get().toByteArray());
+                    }
+                  } else {
+                    if (headerValue.value().isPresent()) {
+                      Metadata.Key<String> metadataKey = Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+                      headers.put(metadataKey, headerValue.value().get());
+                    }
+                  }
+                }
+                super.start(responseListener, headers);
+              }
+            };
+          }
+        });
       }
 
       ExternalProcessor config = filterConfig.externalProcessor;
