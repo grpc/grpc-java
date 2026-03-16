@@ -53,6 +53,7 @@ import io.grpc.BinaryLog;
 import io.grpc.Channel;
 import io.grpc.Compressor;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
@@ -1146,11 +1147,21 @@ public class ServerImplTest {
   @Test
   public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
       throws Exception {
+    builder.ticker = new Deadline.Ticker() {
+      private long time;
+
+      @Override
+      public long nanoTime() {
+        time += 1000;
+        return time;
+      }
+    };
+
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    testStreamClose_setup(callReference, context, contextCancelled, 0L);
+    testStreamClose_setup(callReference, context, contextCancelled, 1L);
 
     // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
     // prevents extremely short deadlines causing NPEs.

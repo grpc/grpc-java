@@ -53,7 +53,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusOr;
-import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -73,6 +72,7 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -83,11 +83,15 @@ import org.mockito.Mockito;
 public class GcpAuthenticationFilterTest {
   private static final GcpAuthenticationFilter.Provider FILTER_PROVIDER =
       new GcpAuthenticationFilter.Provider();
-  private static final String serverName = InProcessServerBuilder.generateName();
   private static final LdsUpdate ldsUpdate = getLdsUpdate();
   private static final EdsUpdate edsUpdate = getEdsUpdate();
   private static final RdsUpdate rdsUpdate = getRdsUpdate();
   private static final CdsUpdate cdsUpdate = getCdsUpdate();
+
+  @Before
+  public void setUp() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_GCP_AUTHENTICATION_FILTER", "true");
+  }
 
   @Test
   public void testNewFilterInstancesPerFilterName() {
@@ -455,7 +459,7 @@ public class GcpAuthenticationFilterTest {
 
   private static LdsUpdate getLdsUpdate() {
     Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
-        serverName, RouterFilter.ROUTER_CONFIG);
+        "router", RouterFilter.ROUTER_CONFIG);
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
     return XdsListenerResource.LdsUpdate.forApiListener(httpConnectionManager);
@@ -463,8 +467,9 @@ public class GcpAuthenticationFilterTest {
 
   private static RdsUpdate getRdsUpdate() {
     RouteConfiguration routeConfiguration =
-        buildRouteConfiguration(serverName, RDS_NAME, CLUSTER_NAME);
-    XdsResourceType.Args args = new XdsResourceType.Args(null, "0", "0", null, null, null);
+        buildRouteConfiguration("my-server", RDS_NAME, CLUSTER_NAME);
+    XdsResourceType.Args args = new XdsResourceType.Args(
+        XdsTestUtils.EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
     try {
       return XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
     } catch (ResourceInvalidException ex) {
@@ -475,7 +480,7 @@ public class GcpAuthenticationFilterTest {
   private static EdsUpdate getEdsUpdate() {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        "127.0.0.5", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
@@ -487,7 +492,7 @@ public class GcpAuthenticationFilterTest {
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("TEST_AUDIENCE"));
     try {
       CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
           .lbPolicyConfig(getWrrLbConfigAsMap());
       return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
     } catch (IOException ex) {
@@ -500,7 +505,7 @@ public class GcpAuthenticationFilterTest {
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("NEW_TEST_AUDIENCE"));
     try {
       CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
           .lbPolicyConfig(getWrrLbConfigAsMap());
       return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
     } catch (IOException ex) {
@@ -512,7 +517,7 @@ public class GcpAuthenticationFilterTest {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
     parsedMetadata.put("FILTER_INSTANCE_NAME", "TEST_AUDIENCE");
     CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-            CLUSTER_NAME, EDS_NAME, null, null, null, null, false)
+            CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap());
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }

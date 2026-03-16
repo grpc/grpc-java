@@ -143,6 +143,17 @@ public class AdvancedTlsX509TrustManagerTest {
   }
 
   @Test
+  public void missingFile_throwsFileNotFoundException() throws Exception {
+    AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder().build();
+    File nonExistentFile = new File("missing_cert.pem");
+    Exception thrown =
+        assertThrows(Exception.class, () -> trustManager.updateTrustCredentials(nonExistentFile));
+    assertNotNull(thrown);
+    assertEquals(thrown.getMessage(),
+        "Certificate file not found or not readable: " + nonExistentFile.getAbsolutePath());
+  }
+
+  @Test
   public void clientTrustedWithSocketTest() throws Exception {
     AdvancedTlsX509TrustManager trustManager = AdvancedTlsX509TrustManager.newBuilder()
         .setVerification(Verification.CERTIFICATE_ONLY_VERIFICATION).build();

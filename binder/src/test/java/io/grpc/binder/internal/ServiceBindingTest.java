@@ -19,6 +19,7 @@ package io.grpc.binder.internal;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.os.Looper.getMainLooper;
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -27,6 +28,8 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.UserHandle;
@@ -34,6 +37,7 @@ import androidx.core.content.ContextCompat;
 import androidx.test.core.app.ApplicationProvider;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusException;
 import io.grpc.binder.BinderChannelCredentials;
 import io.grpc.binder.internal.Bindable.Observer;
 import java.util.Arrays;
@@ -48,7 +52,6 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
-import org.robolectric.shadows.ShadowDevicePolicyManager;
 
 @RunWith(RobolectricTestRunner.class)
 public final class ServiceBindingTest {
@@ -59,6 +62,7 @@ public final class ServiceBindingTest {
 
   private Application appContext;
   private ComponentName serviceComponent;
+  private ServiceInfo serviceInfo = new ServiceInfo();
   private ShadowApplication shadowApplication;
   private TestObserver observer;
   private ServiceBinding binding;
@@ -67,13 +71,17 @@ public final class ServiceBindingTest {
   public void setUp() {
     appContext = ApplicationProvider.getApplicationContext();
     serviceComponent = new ComponentName("DUMMY", "SERVICE");
+    serviceInfo.packageName = serviceComponent.getPackageName();
+    serviceInfo.name = serviceComponent.getClassName();
     observer = new TestObserver();
 
     shadowApplication = shadowOf(appContext);
     shadowApplication.setComponentNameAndServiceForBindService(serviceComponent, mockBinder);
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
 
     // Don't call onServiceDisconnected() upon unbindService(), just like the real Android doesn't.
     shadowApplication.setUnbindServiceCallsOnServiceDisconnected(false);
+    shadowApplication.setBindServiceCallsOnServiceConnectedDirectly(false);
 
     binding = newBuilder().build();
     shadowOf(getMainLooper()).idle();
@@ -105,6 +113,32 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+  }
+
+  @Test
+  public void testGetConnectedServiceInfo() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
+  }
+
+  @Test
+  public void testGetConnectedServiceInfoThrows() throws Exception {
+    binding = newBuilder().setTargetComponent(serviceComponent).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.gotBoundEvent).isTrue();
+    shadowOf(appContext.getPackageManager()).removeService(serviceComponent);
+
+    StatusException se = assertThrows(StatusException.class, binding::getConnectedServiceInfo);
+    assertThat(se.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
   }
 
   @Test
@@ -277,15 +311,111 @@ public final class ServiceBindingTest {
   }
 
   @Test
-  @Config(sdk = 30)
-  public void testBindWithDeviceAdmin() throws Exception {
-    String deviceAdminClassName = "DevicePolicyAdmin";
-    ComponentName adminComponent = new ComponentName(appContext, deviceAdminClassName);
-    allowBindDeviceAdminForUser(appContext, adminComponent, /* userId= */ 0);
+  public void testResolve() throws Exception {
+    serviceInfo.processName = "x"; // ServiceInfo has no equals() so look for one distinctive field.
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.processName).isEqualTo(serviceInfo.processName);
+  }
+
+  @Test
+  @Config(sdk = 33)
+  public void testResolveWithTargetUserHandle() throws Exception {
+    serviceInfo.processName = "x"; // ServiceInfo has no equals() so look for one distinctive field.
+    // Robolectric just ignores the user arg to resolveServiceAsUser() so this is all we can do.
+    shadowOf(appContext.getPackageManager()).addOrUpdateService(serviceInfo);
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    ServiceInfo resolvedServiceInfo = binding.resolve();
+    assertThat(resolvedServiceInfo.processName).isEqualTo(serviceInfo.processName);
+  }
+
+  @Test
+  @Config(sdk = 29)
+  public void testResolveWithUnsupportedTargetUserHandle() throws Exception {
+    binding = newBuilder().setTargetUserHandle(generateUserHandle(/* userId= */ 0)).build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(statusException.getStatus().getDescription()).contains("SDK_INT >= R");
+  }
+
+  @Test
+  public void testResolveNonExistentServiceThrows() throws Exception {
+    ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
+    binding = newBuilder().setTargetComponent(doesNotExistService).build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+    assertThat(statusException.getStatus().getDescription()).contains("does.not.exist");
+  }
+
+  @Test
+  @Config(sdk = 33)
+  public void testResolveNonExistentServiceWithTargetUserThrows() throws Exception {
+    ComponentName doesNotExistService = new ComponentName("does.not.exist", "NoService");
     binding =
         newBuilder()
-            .setTargetUserHandle(UserHandle.getUserHandleForUid(/* userId= */ 0))
-            .setTargetUserHandle(generateUserHandle(/* userId= */ 0))
+            .setTargetUserHandle(generateUserHandle(/* userId= */ 12345))
+            .setTargetComponent(doesNotExistService)
+            .build();
+    StatusException statusException = assertThrows(StatusException.class, binding::resolve);
+    assertThat(statusException.getStatus().getCode()).isEqualTo(Code.UNIMPLEMENTED);
+    assertThat(statusException.getStatus().getDescription()).contains("does.not.exist");
+    assertThat(statusException.getStatus().getDescription()).contains("12345");
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testBindService_doesNotThrowInternalErrorWhenSdkAtLeastR() {
+    UserHandle userHandle = generateUserHandle(/* userId= */ 12345);
+    binding = newBuilder().setTargetUserHandle(userHandle).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(Build.VERSION.SDK_INT).isEqualTo(Build.VERSION_CODES.R);
+    assertThat(observer.unboundReason).isNull();
+  }
+
+  @Test
+  @Config(sdk = 28)
+  public void testBindServiceAsUser_returnsErrorWhenSdkBelowR() {
+    UserHandle userHandle = generateUserHandle(/* userId= */ 12345);
+    binding = newBuilder().setTargetUserHandle(userHandle).build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.unboundReason.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(observer.unboundReason.getDescription())
+        .isEqualTo("Cross user Channel requires Android R+");
+  }
+
+  @Test
+  @Config(sdk = 28)
+  public void testDevicePolicyBlind_returnsErrorWhenSdkBelowR() {
+    ComponentName adminComponent = new ComponentName(appContext, "DevicePolicyAdmin");
+    UserHandle user10 = generateUserHandle(/* userId= */ 10);
+    allowBindDeviceAdminForUser(appContext, adminComponent, user10);
+    binding =
+        newBuilder()
+            .setTargetUserHandle(user10)
+            .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
+            .build();
+    binding.bind();
+    shadowOf(getMainLooper()).idle();
+
+    assertThat(observer.unboundReason.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(observer.unboundReason.getDescription())
+        .isEqualTo("Device policy admin binding requires Android R+");
+  }
+
+  @Test
+  @Config(sdk = 30)
+  public void testBindWithDeviceAdmin() throws Exception {
+    ComponentName adminComponent = new ComponentName(appContext, "DevicePolicyAdmin");
+    UserHandle user0 = generateUserHandle(/* userId= */ 0);
+    allowBindDeviceAdminForUser(appContext, adminComponent, user0);
+    binding =
+        newBuilder()
+            .setTargetUserHandle(user0)
+            .setTargetComponent(serviceComponent)
             .setChannelCredentials(BinderChannelCredentials.forDevicePolicyAdmin(adminComponent))
             .build();
     shadowOf(getMainLooper()).idle();
@@ -298,6 +428,10 @@ public final class ServiceBindingTest {
     assertThat(observer.binder).isSameInstanceAs(mockBinder);
     assertThat(observer.gotUnboundEvent).isFalse();
     assertThat(binding.isSourceContextCleared()).isFalse();
+
+    ServiceInfo serviceInfo = binding.getConnectedServiceInfo();
+    assertThat(serviceInfo.name).isEqualTo(serviceComponent.getClassName());
+    assertThat(serviceInfo.packageName).isEqualTo(serviceComponent.getPackageName());
   }
 
   private void assertNoLockHeld() {
@@ -313,15 +447,10 @@ public final class ServiceBindingTest {
   }
 
   private static void allowBindDeviceAdminForUser(
-      Context context, ComponentName admin, int userId) {
-    ShadowDevicePolicyManager devicePolicyManager =
-        shadowOf(context.getSystemService(DevicePolicyManager.class));
-    devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(
-        Arrays.asList(UserHandle.getUserHandleForUid(userId)));
-    shadowOf((DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE));
-    devicePolicyManager.setDeviceOwner(admin);
-    devicePolicyManager.setBindDeviceAdminTargetUsers(Arrays.asList(generateUserHandle(userId)));
+      Context context, ComponentName admin, UserHandle user) {
+    DevicePolicyManager devicePolicyManager = context.getSystemService(DevicePolicyManager.class);
+    shadowOf(devicePolicyManager).setBindDeviceAdminTargetUsers(Arrays.asList(user));
+    shadowOf(devicePolicyManager).setDeviceOwner(admin);
   }
 
   /** Generate UserHandles the hard way. */

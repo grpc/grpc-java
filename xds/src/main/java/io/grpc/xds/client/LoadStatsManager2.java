@@ -25,6 +25,7 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
 import io.grpc.Internal;
 import io.grpc.Status;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.client.Stats.BackendLoadMetricStats;
 import io.grpc.xds.client.Stats.ClusterStats;
 import io.grpc.xds.client.Stats.DroppedRequests;
@@ -57,6 +58,8 @@ public final class LoadStatsManager2 {
   private final Map<String, Map<String,
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
+  public static boolean isEnabledOrcaLrsPropagation =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", false);
 
   @VisibleForTesting
   public LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
@@ -98,13 +101,20 @@ public final class LoadStatsManager2 {
 
   /**
    * Gets or creates the stats object for recording loads for the specified locality (in the
-   * specified cluster with edsServiceName). The returned object is reference counted and the
-   * caller should use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
+   * specified cluster with edsServiceName) with the specified backend metric propagation
+   * configuration. The returned object is reference counted and the caller should
+   * use {@link ClusterLocalityStats#release} to release its <i>hard</i> reference
    * when it is safe to discard the future stats for the locality.
    */
   @VisibleForTesting
   public synchronized ClusterLocalityStats getClusterLocalityStats(
       String cluster, @Nullable String edsServiceName, Locality locality) {
+    return getClusterLocalityStats(cluster, edsServiceName, locality, null);
+  }
+
+  public synchronized ClusterLocalityStats getClusterLocalityStats(
+      String cluster, @Nullable String edsServiceName, Locality locality,
+      @Nullable BackendMetricPropagation backendMetricPropagation) {
     if (!allLoadStats.containsKey(cluster)) {
       allLoadStats.put(
           cluster,
@@ -121,8 +131,8 @@ public final class LoadStatsManager2 {
     if (!localityStats.containsKey(locality)) {
       localityStats.put(
           locality,
-          ReferenceCounted.wrap(new ClusterLocalityStats(
-              cluster, edsServiceName, locality, stopwatchSupplier.get())));
+          ReferenceCounted.wrap(new ClusterLocalityStats(cluster, edsServiceName,
+              locality, stopwatchSupplier.get(), backendMetricPropagation)));
     }
     ReferenceCounted<ClusterLocalityStats> ref = localityStats.get(locality);
     ref.retain();
@@ -325,6 +335,8 @@ public final class LoadStatsManager2 {
     private final String edsServiceName;
     private final Locality locality;
     private final Stopwatch stopwatch;
+    @Nullable
+    private final BackendMetricPropagation backendMetricPropagation;
     private final AtomicLong callsInProgress = new AtomicLong();
     private final AtomicLong callsSucceeded = new AtomicLong();
     private final AtomicLong callsFailed = new AtomicLong();
@@ -333,11 +345,12 @@ public final class LoadStatsManager2 {
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
-        Stopwatch stopwatch) {
+        Stopwatch stopwatch, BackendMetricPropagation backendMetricPropagation) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.locality = checkNotNull(locality, "locality");
       this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+      this.backendMetricPropagation = backendMetricPropagation;
       stopwatch.reset().start();
     }
 
@@ -367,15 +380,49 @@ public final class LoadStatsManager2 {
      * requests counter of 1 and the {@code value} if the key is not present in the map. Otherwise,
      * increments the finished requests counter and adds the {@code value} to the existing
      * {@link BackendLoadMetricStats}.
+     * Metrics are filtered based on the backend metric propagation configuration if configured.
      */
     public synchronized void recordBackendLoadMetricStats(Map<String, Double> namedMetrics) {
+      if (!isEnabledOrcaLrsPropagation) {
+        namedMetrics.forEach((name, value) -> updateLoadMetricStats(name, value));
+        return;
+      }
+
       namedMetrics.forEach((name, value) -> {
-        if (!loadMetricStatsMap.containsKey(name)) {
-          loadMetricStatsMap.put(name, new BackendLoadMetricStats(1, value));
-        } else {
-          loadMetricStatsMap.get(name).addMetricValueAndIncrementRequestsFinished(value);
+        if (backendMetricPropagation.shouldPropagateNamedMetric(name)) {
+          updateLoadMetricStats("named_metrics." + name, value);
         }
       });
+    }
+
+    private void updateLoadMetricStats(String metricName, double value) {
+      if (!loadMetricStatsMap.containsKey(metricName)) {
+        loadMetricStatsMap.put(metricName, new BackendLoadMetricStats(1, value));
+      } else {
+        loadMetricStatsMap.get(metricName).addMetricValueAndIncrementRequestsFinished(value);
+      }
+    }
+
+    /**
+     * Records top-level ORCA metrics (CPU, memory, application utilization) for per-call load
+     * reporting. Metrics are filtered based on the backend metric propagation configuration
+     * if configured.
+     *
+     * @param cpuUtilization CPU utilization metric value
+     * @param memUtilization Memory utilization metric value
+     * @param applicationUtilization Application utilization metric value
+     */
+    public synchronized void recordTopLevelMetrics(double cpuUtilization, double memUtilization,
+        double applicationUtilization) {
+      if (backendMetricPropagation.propagateCpuUtilization && cpuUtilization > 0) {
+        updateLoadMetricStats("cpu_utilization", cpuUtilization);
+      }
+      if (backendMetricPropagation.propagateMemUtilization && memUtilization > 0) {
+        updateLoadMetricStats("mem_utilization", memUtilization);
+      }
+      if (backendMetricPropagation.propagateApplicationUtilization && applicationUtilization > 0) {
+        updateLoadMetricStats("application_utilization", applicationUtilization);
+      }
     }
 
     /**

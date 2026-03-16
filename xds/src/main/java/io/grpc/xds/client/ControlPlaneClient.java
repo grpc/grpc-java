@@ -109,7 +109,7 @@ final class ControlPlaneClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.messagePrinter = checkNotNull(messagePrinter, "messagePrinter");
     stopwatch = checkNotNull(stopwatchSupplier, "stopwatchSupplier").get();
-    logId = InternalLogId.allocate("xds-client", serverInfo.target());
+    logId = InternalLogId.allocate("xds-cp-client", serverInfo.target());
     logger = XdsLogger.withLogId(logId);
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -457,10 +457,10 @@ final class ControlPlaneClient {
       if (responseReceived) {
         // A closed ADS stream after a successful response is not considered an error. Servers may
         // close streams for various reasons during normal operation, such as load balancing or
-        // underlying connection hitting its max connection age limit  (see gRFC A9).
+        // underlying connection hitting its max connection age limit (see gRFC A9).
         if (!status.isOk()) {
           newStatus = Status.OK;
-          logger.log( XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
+          logger.log(XdsLogLevel.DEBUG, "ADS stream closed with error {0}: {1}. However, a "
               + "response was received, so this will not be treated as an error. Cause: {2}",
               status.getCode(), status.getDescription(), status.getCause());
         } else {

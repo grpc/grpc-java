@@ -23,10 +23,8 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
 import com.google.common.base.VerifyException;
-import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.ProxiedSocketAddress;
@@ -101,7 +99,7 @@ public class DnsNameResolver extends NameResolver {
    * not installed, the ttl value is {@code null} which falls back to {@link
    * #DEFAULT_NETWORK_CACHE_TTL_SECONDS gRPC default value}.
    *
-   * <p>For android, gRPC doesn't attempt to cache; this property value will be ignored.
+   * <p>For android, gRPC uses a fixed value; this property value will be ignored.
    */
   @VisibleForTesting
   static final String NETWORKADDRESS_CACHE_TTL_PROPERTY = "networkaddress.cache.ttl";
@@ -211,20 +209,8 @@ public class DnsNameResolver extends NameResolver {
     resolve();
   }
 
-  private List<EquivalentAddressGroup> resolveAddresses() {
-    List<? extends InetAddress> addresses;
-    Exception addressesException = null;
-    try {
-      addresses = addressResolver.resolveAddress(host);
-    } catch (Exception e) {
-      addressesException = e;
-      Throwables.throwIfUnchecked(e);
-      throw new RuntimeException(e);
-    } finally {
-      if (addressesException != null) {
-        logger.log(Level.FINE, "Address resolution failure", addressesException);
-      }
-    }
+  private List<EquivalentAddressGroup> resolveAddresses() throws Exception {
+    List<? extends InetAddress> addresses = addressResolver.resolveAddress(host);
     // Each address forms an EAG
     List<EquivalentAddressGroup> servers = new ArrayList<>(addresses.size());
     for (InetAddress inetAddr : addresses) {
@@ -275,21 +261,19 @@ public class DnsNameResolver extends NameResolver {
   /**
    * Main logic of name resolution.
    */
-  protected InternalResolutionResult doResolve(boolean forceTxt) {
-    InternalResolutionResult result = new InternalResolutionResult();
+  protected ResolutionResult doResolve() {
+    ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder();
     try {
-      result.addresses = resolveAddresses();
+      resultBuilder.setAddressesOrError(StatusOr.fromValue(resolveAddresses()));
     } catch (Exception e) {
-      if (!forceTxt) {
-        result.error =
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e);
-        return result;
-      }
+      logger.log(Level.FINE, "Address resolution failure", e);
+      resultBuilder.setAddressesOrError(StatusOr.fromStatus(
+          Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e)));
     }
     if (enableTxt) {
-      result.config = resolveServiceConfig();
+      resultBuilder.setServiceConfig(resolveServiceConfig());
     }
-    return result;
+    return resultBuilder.build();
   }
 
   private final class Resolve implements Runnable {
@@ -304,38 +288,22 @@ public class DnsNameResolver extends NameResolver {
       if (logger.isLoggable(Level.FINER)) {
         logger.finer("Attempting DNS resolution of " + host);
       }
-      InternalResolutionResult result = null;
+      ResolutionResult result = null;
       try {
         EquivalentAddressGroup proxiedAddr = detectProxy();
-        ResolutionResult.Builder resolutionResultBuilder = ResolutionResult.newBuilder();
         if (proxiedAddr != null) {
           if (logger.isLoggable(Level.FINER)) {
             logger.finer("Using proxy address " + proxiedAddr);
           }
-          resolutionResultBuilder.setAddressesOrError(
-              StatusOr.fromValue(Collections.singletonList(proxiedAddr)));
+          result = ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(proxiedAddr)))
+              .build();
         } else {
-          result = doResolve(false);
-          if (result.error != null) {
-            InternalResolutionResult finalResult = result;
-            syncContext.execute(() ->
-                savedListener.onResult2(ResolutionResult.newBuilder()
-                    .setAddressesOrError(StatusOr.fromStatus(finalResult.error))
-                    .build()));
-            return;
-          }
-          if (result.addresses != null) {
-            resolutionResultBuilder.setAddressesOrError(StatusOr.fromValue(result.addresses));
-          }
-          if (result.config != null) {
-            resolutionResultBuilder.setServiceConfig(result.config);
-          }
-          if (result.attributes != null) {
-            resolutionResultBuilder.setAttributes(result.attributes);
-          }
+          result = doResolve();
         }
+        ResolutionResult savedResult = result;
         syncContext.execute(() -> {
-          savedListener.onResult2(resolutionResultBuilder.build());
+          savedListener.onResult2(savedResult);
         });
       } catch (IOException e) {
         syncContext.execute(() ->
@@ -345,7 +313,7 @@ public class DnsNameResolver extends NameResolver {
                         Status.UNAVAILABLE.withDescription(
                             "Unable to resolve host " + host).withCause(e))).build()));
       } finally {
-        final boolean succeed = result != null && result.error == null;
+        final boolean succeed = result != null && result.getAddressesOrError().hasValue();
         syncContext.execute(new Runnable() {
           @Override
           public void run() {
@@ -463,12 +431,14 @@ public class DnsNameResolver extends NameResolver {
 
   /**
    * Returns value of network address cache ttl property if not Android environment. For android,
-   * DnsNameResolver does not cache the dns lookup result.
+   * DnsNameResolver uses a fixed value.
    */
   private static long getNetworkAddressCacheTtlNanos(boolean isAndroid) {
     if (isAndroid) {
-      // on Android, ignore dns cache.
-      return 0;
+      // On Android, use fixed value. If the network used changes this value shouldn't matter, as
+      // channel.enterIdle() should be called and this name resolver instance will be discarded. The
+      // new name resolver instance will then re-request.
+      return TimeUnit.SECONDS.toNanos(DEFAULT_NETWORK_CACHE_TTL_SECONDS);
     }
 
     String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
@@ -490,7 +460,7 @@ public class DnsNameResolver extends NameResolver {
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md">
-   *   Service Config in DNS</a>
+   *     Service Config in DNS</a>
    * @param choice The service config choice.
    * @return The service config object or {@code null} if this choice does not apply.
    */
@@ -543,18 +513,6 @@ public class DnsNameResolver extends NameResolver {
           "key '%s' missing in '%s'", choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY));
     }
     return sc;
-  }
-
-  /**
-   * Used as a DNS-based name resolver's internal representation of resolution result.
-   */
-  protected static final class InternalResolutionResult {
-    private Status error;
-    private List<EquivalentAddressGroup> addresses;
-    private ConfigOrError config;
-    public Attributes attributes;
-
-    private InternalResolutionResult() {}
   }
 
   /**

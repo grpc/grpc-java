@@ -151,10 +151,12 @@ public class DelayedClientCallTest {
     delayedClientCall.request(1);
     Runnable r = delayedClientCall.setCall(mockRealCall);
     assertThat(r).isNotNull();
-    r.run();
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
+    // start() must be called before setCall() returns (not in runnable), to ensure the in-use
+    // counts keeping the channel alive after shutdown() don't momentarily decrease to zero.
     verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    r.run();
     Listener<Integer> realCallListener = listenerCaptor.getValue();
     verify(mockRealCall).request(1);
     realCallListener.onMessage(1);
@@ -204,7 +206,7 @@ public class DelayedClientCallTest {
     Object goldenValue = new Object();
     DelayedClientCall<String, Integer> delayedClientCall =
         Context.current().withValue(contextKey, goldenValue).call(() ->
-          new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
+            new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
     AtomicReference<Context> readyContext = new AtomicReference<>();
     delayedClientCall.start(new ClientCall.Listener<Integer>() {
       @Override public void onReady() {

@@ -21,6 +21,7 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -53,9 +54,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -67,10 +66,6 @@ import org.mockito.InOrder;
 @RunWith(JUnit4.class)
 public class GracefulSwitchLoadBalancerTest {
   private static final Object FAKE_CONFIG = new Object();
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private final Map<LoadBalancerProvider, LoadBalancer> balancers = new HashMap<>();
   private final Map<LoadBalancer, Helper> helpers = new HashMap<>();
@@ -102,8 +97,8 @@ public class GracefulSwitchLoadBalancerTest {
         .build()));
     Subchannel subchannel = mock(Subchannel.class);
     ConnectivityStateInfo connectivityStateInfo = ConnectivityStateInfo.forNonError(READY);
-    thrown.expect(UnsupportedOperationException.class);
-    gracefulSwitchLb.handleSubchannelState(subchannel, connectivityStateInfo);
+    assertThrows(UnsupportedOperationException.class,
+        () -> gracefulSwitchLb.handleSubchannelState(subchannel, connectivityStateInfo));
   }
 
   @Test

@@ -24,6 +24,7 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.protobuf.Any;
+import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -44,6 +45,7 @@ import io.envoyproxy.envoy.config.listener.v3.FilterChainMatch;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
 import io.envoyproxy.envoy.config.route.v3.NonForwardingAction;
 import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
 import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.config.route.v3.VirtualHost;
@@ -237,7 +239,25 @@ public class ControlPlaneRule extends TestWatcher {
    * Builds a new default RDS configuration.
    */
   static RouteConfiguration buildRouteConfiguration(String authority) {
-    return XdsTestUtils.buildRouteConfiguration(authority, RDS_NAME, CLUSTER_NAME);
+    return buildRouteConfiguration(authority, RDS_NAME, CLUSTER_NAME);
+  }
+
+  static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
+                                                    String clusterName) {
+    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder =
+        io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
+            .setName(rdsName)
+            .addDomains(authority)
+            .addRoutes(
+                Route.newBuilder()
+                    .setMatch(
+                        RouteMatch.newBuilder().setPrefix("/").build())
+                    .setRoute(
+                        RouteAction.newBuilder().setCluster(clusterName)
+                            .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
+                            .build()));
+    io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
+    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
   }
 
   /**
@@ -266,17 +286,17 @@ public class ControlPlaneRule extends TestWatcher {
   /**
    * Builds a new default EDS configuration.
    */
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
-                                                          int port) {
-    return buildClusterLoadAssignment(hostName, endpointHostname, port, EDS_NAME);
+  static ClusterLoadAssignment buildClusterLoadAssignment(
+          String hostAddress, String endpointHostname, int port) {
+    return buildClusterLoadAssignment(hostAddress, endpointHostname, port, EDS_NAME);
   }
 
-  static ClusterLoadAssignment buildClusterLoadAssignment(String hostName, String endpointHostname,
-                                                          int port, String edsName) {
+  static ClusterLoadAssignment buildClusterLoadAssignment(
+          String hostAddress, String endpointHostname, int port, String edsName) {
 
     Address address = Address.newBuilder()
         .setSocketAddress(
-            SocketAddress.newBuilder().setAddress(hostName).setPortValue(port).build()).build();
+            SocketAddress.newBuilder().setAddress(hostAddress).setPortValue(port).build()).build();
     LocalityLbEndpoints endpoints = LocalityLbEndpoints.newBuilder()
         .setLoadBalancingWeight(UInt32Value.of(10))
         .setPriority(0)
@@ -297,17 +317,12 @@ public class ControlPlaneRule extends TestWatcher {
    * Builds a new client listener.
    */
   static Listener buildClientListener(String name) {
-    return buildClientListener(name, "terminal-filter");
+    return buildClientListener(name, RDS_NAME);
   }
 
-
-  static Listener buildClientListener(String name, String identifier) {
-    return buildClientListener(name, identifier, RDS_NAME);
-  }
-
-  static Listener buildClientListener(String name, String identifier, String rdsName) {
+  static Listener buildClientListener(String name, String rdsName) {
     HttpFilter httpFilter = HttpFilter.newBuilder()
-        .setName(identifier)
+        .setName("terminal-filter")
         .setTypedConfig(Any.pack(Router.newBuilder().build()))
         .setIsOptional(true)
         .build();

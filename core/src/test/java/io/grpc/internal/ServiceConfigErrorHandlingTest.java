@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
+import static io.grpc.internal.UriWrapper.wrap;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -168,7 +169,7 @@ public class ServiceConfigErrorHandlingTest {
         new ManagedChannelImpl(
             channelBuilder,
             mockTransportFactory,
-            expectedUri,
+            wrap(expectedUri),
             nameResolverProvider,
             new FakeBackoffPolicyProvider(),
             balancerRpcExecutorPool,

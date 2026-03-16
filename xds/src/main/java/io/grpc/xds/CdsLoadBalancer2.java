@@ -18,39 +18,57 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.xds.XdsLbPolicies.CLUSTER_RESOLVER_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
+import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
-import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.UnsignedInts;
+import com.google.errorprone.annotations.CheckReturnValue;
+import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
-import io.grpc.internal.ObjectPool;
+import io.grpc.StatusOr;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig;
-import io.grpc.xds.ClusterResolverLoadBalancerProvider.ClusterResolverConfig.DiscoveryMechanism;
+import io.grpc.xds.ClusterImplLoadBalancerProvider.ClusterImplConfig;
+import io.grpc.xds.Endpoints.DropOverload;
+import io.grpc.xds.Endpoints.LbEndpoint;
+import io.grpc.xds.Endpoints.LocalityLbEndpoints;
+import io.grpc.xds.EnvoyServerProtoData.FailurePercentageEjection;
+import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
+import io.grpc.xds.EnvoyServerProtoData.SuccessRateEjection;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
+import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig.PriorityChildConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsClusterResource.CdsUpdate.ClusterType;
-import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsClient.ResourceWatcher;
+import io.grpc.xds.XdsConfig.Subscription;
+import io.grpc.xds.XdsConfig.XdsClusterConfig;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.AggregateConfig;
+import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
+import io.grpc.xds.XdsEndpointResource.EdsUpdate;
+import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
-import java.util.ArrayDeque;
+import io.grpc.xds.internal.XdsInternalAttributes;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import javax.annotation.Nullable;
+import java.util.TreeMap;
 
 /**
  * Load balancer for cds_experimental LB policy. One instance per top-level cluster.
@@ -58,50 +76,128 @@ import javax.annotation.Nullable;
  * by a group of sub-clusters in a tree hierarchy.
  */
 final class CdsLoadBalancer2 extends LoadBalancer {
+  static boolean pickFirstWeightedShuffling =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
+
   private final XdsLogger logger;
   private final Helper helper;
-  private final SynchronizationContext syncContext;
   private final LoadBalancerRegistry lbRegistry;
+  private final ClusterState clusterState = new ClusterState();
+  private GracefulSwitchLoadBalancer delegate;
   // Following fields are effectively final.
-  private ObjectPool<XdsClient> xdsClientPool;
-  private XdsClient xdsClient;
-  private CdsLbState cdsLbState;
-  private ResolvedAddresses resolvedAddresses;
+  private String clusterName;
+  private Subscription clusterSubscription;
 
-  CdsLoadBalancer2(Helper helper) {
-    this(helper, LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+    this.delegate = new GracefulSwitchLoadBalancer(helper);
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
 
   @Override
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    if (this.resolvedAddresses != null) {
+    logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
+    if (this.clusterName == null) {
+      CdsConfig config = (CdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
+      logger.log(XdsLogLevel.INFO, "Config: {0}", config);
+      if (config.isDynamic) {
+        clusterSubscription = resolvedAddresses.getAttributes()
+            .get(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY)
+            .subscribeToCluster(config.name);
+      }
+      this.clusterName = config.name;
+    }
+    XdsConfig xdsConfig = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CONFIG);
+    StatusOr<XdsClusterConfig> clusterConfigOr = xdsConfig.getClusters().get(clusterName);
+    if (clusterConfigOr == null) {
+      if (clusterSubscription == null) {
+        // Should be impossible, because XdsDependencyManager wouldn't have generated this
+        return fail(Status.INTERNAL.withDescription(
+            errorPrefix() + "Unable to find non-dynamic cluster"));
+      }
+      // The dynamic cluster must not have loaded yet
       return Status.OK;
     }
-    logger.log(XdsLogLevel.DEBUG, "Received resolution result: {0}", resolvedAddresses);
-    this.resolvedAddresses = resolvedAddresses;
-    xdsClientPool = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_POOL);
-    xdsClient = xdsClientPool.getObject();
-    CdsConfig config = (CdsConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
-    logger.log(XdsLogLevel.INFO, "Config: {0}", config);
-    cdsLbState = new CdsLbState(config.name);
-    cdsLbState.start();
-    return Status.OK;
+    if (!clusterConfigOr.hasValue()) {
+      return fail(clusterConfigOr.getStatus());
+    }
+    XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
+
+    NameResolver.ConfigOrError configOrError;
+    if (clusterConfig.getChildren() instanceof EndpointConfig) {
+      // The LB policy config is provided in service_config.proto/JSON format.
+      configOrError =
+              GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()),
+                      lbRegistry);
+      if (configOrError.getError() != null) {
+        // Should be impossible, because XdsClusterResource validated this
+        return fail(Status.INTERNAL.withDescription(
+                errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
+      }
+
+      StatusOr<EdsUpdate> edsUpdate = getEdsUpdate(xdsConfig, clusterName);
+      StatusOr<ClusterResolutionResult> statusOrResult = clusterState.edsUpdateToResult(
+          clusterName,
+          clusterConfig.getClusterResource(),
+          configOrError.getConfig(),
+          edsUpdate);
+      if (!statusOrResult.hasValue()) {
+        Status status = Status.UNAVAILABLE
+            .withDescription(statusOrResult.getStatus().getDescription())
+            .withCause(statusOrResult.getStatus().getCause());
+        delegate.handleNameResolutionError(status);
+        return status;
+      }
+      ClusterResolutionResult result = statusOrResult.getValue();
+      List<EquivalentAddressGroup> addresses = result.addresses;
+      if (addresses.isEmpty()) {
+        Status status = Status.UNAVAILABLE
+            .withDescription("No usable endpoint from cluster: " + clusterName);
+        delegate.handleNameResolutionError(status);
+        return status;
+      }
+      Object gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          lbRegistry.getProvider(PRIORITY_POLICY_NAME),
+          new PriorityLbConfig(
+              Collections.unmodifiableMap(result.priorityChildConfigs),
+              Collections.unmodifiableList(result.priorities)));
+      return delegate.acceptResolvedAddresses(
+          resolvedAddresses.toBuilder()
+            .setLoadBalancingPolicyConfig(gracefulConfig)
+            .setAddresses(Collections.unmodifiableList(addresses))
+            .build());
+    } else if (clusterConfig.getChildren() instanceof AggregateConfig) {
+      Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
+      List<String> leafClusters = ((AggregateConfig) clusterConfig.getChildren()).getLeafNames();
+      for (String childCluster: leafClusters) {
+        priorityChildConfigs.put(childCluster,
+                new PriorityChildConfig(
+                        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+                                lbRegistry.getProvider(CDS_POLICY_NAME),
+                                new CdsConfig(childCluster)),
+                        false));
+      }
+      Object gracefulConfig = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          lbRegistry.getProvider(PRIORITY_POLICY_NAME),
+          new PriorityLoadBalancerProvider.PriorityLbConfig(
+              Collections.unmodifiableMap(priorityChildConfigs), leafClusters));
+      return delegate.acceptResolvedAddresses(
+          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(gracefulConfig).build());
+    } else {
+      return fail(Status.INTERNAL.withDescription(
+              errorPrefix() + "Unexpected cluster children type: "
+                      + clusterConfig.getChildren().getClass()));
+    }
   }
 
   @Override
   public void handleNameResolutionError(Status error) {
     logger.log(XdsLogLevel.WARNING, "Received name resolution error: {0}", error);
-    if (cdsLbState != null && cdsLbState.childLb != null) {
-      cdsLbState.childLb.handleNameResolutionError(error);
+    if (delegate != null) {
+      delegate.handleNameResolutionError(error);
     } else {
       helper.updateBalancingState(
           TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
@@ -111,314 +207,409 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   @Override
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
-    if (cdsLbState != null) {
-      cdsLbState.shutdown();
+    delegate.shutdown();
+    delegate = new GracefulSwitchLoadBalancer(helper);
+    if (clusterSubscription != null) {
+      clusterSubscription.close();
+      clusterSubscription = null;
     }
-    if (xdsClientPool != null) {
-      xdsClientPool.returnObject(xdsClient);
+  }
+
+  @CheckReturnValue // don't forget to return up the stack after the fail call
+  private Status fail(Status error) {
+    delegate.shutdown();
+    helper.updateBalancingState(
+        TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
+    return Status.OK; // XdsNameResolver isn't a polling NR, so this value doesn't matter
+  }
+
+  private String errorPrefix() {
+    return "CdsLb for " + clusterName + ": ";
+  }
+
+  /**
+   * The number of bits assigned to the fractional part of fixed-point values. We normalize weights
+   * to a fixed-point number between 0 and 1, representing that item's proportion of traffic (1 ==
+   * 100% of traffic). We reserve at least one bit for the whole number so that we don't need to
+   * special case a single item, and so that we can round up very low values without risking uint32
+   * overflow of the sum of weights.
+   */
+  private static final int FIXED_POINT_FRACTIONAL_BITS = 31;
+
+  /** Divide two uint32s and produce a fixed-point uint32 result. */
+  private static long fractionToFixedPoint(long numerator, long denominator) {
+    long one = 1L << FIXED_POINT_FRACTIONAL_BITS;
+    return numerator * one / denominator;
+  }
+
+  /** Multiply two uint32 fixed-point numbers, returning a uint32 fixed-point. */
+  private static long fixedPointMultiply(long a, long b) {
+    return (a * b) >> FIXED_POINT_FRACTIONAL_BITS;
+  }
+
+  private static StatusOr<EdsUpdate> getEdsUpdate(XdsConfig xdsConfig, String cluster) {
+    StatusOr<XdsClusterConfig> clusterConfig = xdsConfig.getClusters().get(cluster);
+    if (clusterConfig == null) {
+      return StatusOr.fromStatus(Status.INTERNAL
+          .withDescription("BUG: cluster resolver could not find cluster in xdsConfig"));
+    }
+    if (!clusterConfig.hasValue()) {
+      return StatusOr.fromStatus(clusterConfig.getStatus());
+    }
+    if (!(clusterConfig.getValue().getChildren() instanceof XdsClusterConfig.EndpointConfig)) {
+      return StatusOr.fromStatus(Status.INTERNAL
+          .withDescription("BUG: cluster resolver cluster with children of unknown type"));
+    }
+    XdsClusterConfig.EndpointConfig endpointConfig =
+        (XdsClusterConfig.EndpointConfig) clusterConfig.getValue().getChildren();
+    return endpointConfig.getEndpoint();
+  }
+
+  /**
+   * Generates a string that represents the priority in the LB policy config. The string is unique
+   * across priorities in all clusters and priorityName(c, p1) < priorityName(c, p2) iff p1 < p2.
+   * The ordering is undefined for priorities in different clusters.
+   */
+  private static String priorityName(String cluster, int priority) {
+    return cluster + "[child" + priority + "]";
+  }
+
+  /**
+   * Generates a string that represents the locality in the LB policy config. The string is unique
+   * across all localities in all clusters.
+   */
+  private static String localityName(Locality locality) {
+    return "{region=\"" + locality.region()
+        + "\", zone=\"" + locality.zone()
+        + "\", sub_zone=\"" + locality.subZone()
+        + "\"}";
+  }
+
+  private final class ClusterState {
+    private Map<Locality, String> localityPriorityNames = Collections.emptyMap();
+    int priorityNameGenId = 1;
+
+    StatusOr<ClusterResolutionResult> edsUpdateToResult(
+        String clusterName,
+        CdsUpdate discovery,
+        Object lbConfig,
+        StatusOr<EdsUpdate> updateOr) {
+      if (!updateOr.hasValue()) {
+        return StatusOr.fromStatus(updateOr.getStatus());
+      }
+      EdsUpdate update = updateOr.getValue();
+      logger.log(XdsLogLevel.DEBUG, "Received endpoint update {0}", update);
+      if (logger.isLoggable(XdsLogLevel.INFO)) {
+        logger.log(XdsLogLevel.INFO, "Cluster {0}: {1} localities, {2} drop categories",
+            clusterName, update.localityLbEndpointsMap.size(),
+            update.dropPolicies.size());
+      }
+      Map<Locality, LocalityLbEndpoints> localityLbEndpoints =
+          update.localityLbEndpointsMap;
+      List<DropOverload> dropOverloads = update.dropPolicies;
+      List<EquivalentAddressGroup> addresses = new ArrayList<>();
+      Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
+      List<String> sortedPriorityNames =
+          generatePriorityNames(clusterName, localityLbEndpoints);
+      Map<String, Long> priorityLocalityWeightSums;
+      if (pickFirstWeightedShuffling) {
+        priorityLocalityWeightSums = new HashMap<>(sortedPriorityNames.size() * 2);
+        for (Locality locality : localityLbEndpoints.keySet()) {
+          LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
+          String priorityName = localityPriorityNames.get(locality);
+          Long sum = priorityLocalityWeightSums.get(priorityName);
+          if (sum == null) {
+            sum = 0L;
+          }
+          long weight = UnsignedInts.toLong(localityLbInfo.localityWeight());
+          priorityLocalityWeightSums.put(priorityName, sum + weight);
+        }
+      } else {
+        priorityLocalityWeightSums = null;
+      }
+
+      for (Locality locality : localityLbEndpoints.keySet()) {
+        LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
+        String priorityName = localityPriorityNames.get(locality);
+        boolean discard = true;
+        // These sums _should_ fit in uint32, but XdsEndpointResource isn't actually verifying that
+        // is true today. Since we are using long to avoid signedness trouble, the math happens to
+        // still work if it turns out the sums exceed uint32.
+        long localityWeightSum = 0;
+        long endpointWeightSum = 0;
+        if (pickFirstWeightedShuffling) {
+          localityWeightSum = priorityLocalityWeightSums.get(priorityName);
+          for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
+            if (endpoint.isHealthy()) {
+              endpointWeightSum += UnsignedInts.toLong(endpoint.loadBalancingWeight());
+            }
+          }
+        }
+        for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
+          if (endpoint.isHealthy()) {
+            discard = false;
+            long weight;
+            if (pickFirstWeightedShuffling) {
+              // Combine locality and endpoint weights as defined by gRFC A113
+              long localityWeight = fractionToFixedPoint(
+                  UnsignedInts.toLong(localityLbInfo.localityWeight()), localityWeightSum);
+              long endpointWeight = fractionToFixedPoint(
+                  UnsignedInts.toLong(endpoint.loadBalancingWeight()), endpointWeightSum);
+              weight = fixedPointMultiply(localityWeight, endpointWeight);
+              if (weight == 0) {
+                weight = 1;
+              }
+            } else {
+              weight = localityLbInfo.localityWeight();
+              if (endpoint.loadBalancingWeight() != 0) {
+                weight *= endpoint.loadBalancingWeight();
+              }
+            }
+
+            String localityName = localityName(locality);
+            Attributes attr =
+                endpoint.eag().getAttributes().toBuilder()
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
+                    .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
+                    .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
+                        localityLbInfo.localityWeight())
+                    .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
+                    .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .build();
+            EquivalentAddressGroup eag;
+            if (discovery.isHttp11ProxyAvailable()) {
+              List<SocketAddress> rewrittenAddresses = new ArrayList<>();
+              for (SocketAddress addr : endpoint.eag().getAddresses()) {
+                rewrittenAddresses.add(rewriteAddress(
+                    addr, endpoint.endpointMetadata(), localityLbInfo.localityMetadata()));
+              }
+              eag = new EquivalentAddressGroup(rewrittenAddresses, attr);
+            } else {
+              eag = new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
+            }
+            eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
+            addresses.add(eag);
+          }
+        }
+        if (discard) {
+          logger.log(XdsLogLevel.INFO,
+              "Discard locality {0} with 0 healthy endpoints", locality);
+          continue;
+        }
+        if (!prioritizedLocalityWeights.containsKey(priorityName)) {
+          prioritizedLocalityWeights.put(priorityName, new HashMap<Locality, Integer>());
+        }
+        prioritizedLocalityWeights.get(priorityName).put(
+            locality, localityLbInfo.localityWeight());
+      }
+      if (prioritizedLocalityWeights.isEmpty()) {
+        // Will still update the result, as if the cluster resource is revoked.
+        logger.log(XdsLogLevel.INFO,
+            "Cluster {0} has no usable priority/locality/endpoint", clusterName);
+      }
+      sortedPriorityNames.retainAll(prioritizedLocalityWeights.keySet());
+      Map<String, PriorityChildConfig> priorityChildConfigs =
+          generatePriorityChildConfigs(
+              clusterName, discovery, lbConfig, lbRegistry,
+              prioritizedLocalityWeights, dropOverloads);
+      return StatusOr.fromValue(new ClusterResolutionResult(addresses, priorityChildConfigs,
+          sortedPriorityNames));
+    }
+
+    private SocketAddress rewriteAddress(SocketAddress addr,
+        ImmutableMap<String, Object> endpointMetadata,
+        ImmutableMap<String, Object> localityMetadata) {
+      if (!(addr instanceof InetSocketAddress)) {
+        return addr;
+      }
+
+      SocketAddress proxyAddress;
+      try {
+        proxyAddress = (SocketAddress) endpointMetadata.get(
+            "envoy.http11_proxy_transport_socket.proxy_address");
+        if (proxyAddress == null) {
+          proxyAddress = (SocketAddress) localityMetadata.get(
+              "envoy.http11_proxy_transport_socket.proxy_address");
+        }
+      } catch (ClassCastException e) {
+        return addr;
+      }
+
+      if (proxyAddress == null) {
+        return addr;
+      }
+
+      return HttpConnectProxiedSocketAddress.newBuilder()
+          .setTargetAddress((InetSocketAddress) addr)
+          .setProxyAddress(proxyAddress)
+          .build();
+    }
+
+    private List<String> generatePriorityNames(String name,
+        Map<Locality, LocalityLbEndpoints> localityLbEndpoints) {
+      TreeMap<Integer, List<Locality>> todo = new TreeMap<>();
+      for (Locality locality : localityLbEndpoints.keySet()) {
+        int priority = localityLbEndpoints.get(locality).priority();
+        if (!todo.containsKey(priority)) {
+          todo.put(priority, new ArrayList<>());
+        }
+        todo.get(priority).add(locality);
+      }
+      Map<Locality, String> newNames = new HashMap<>();
+      Set<String> usedNames = new HashSet<>();
+      List<String> ret = new ArrayList<>();
+      for (Integer priority: todo.keySet()) {
+        String foundName = "";
+        for (Locality locality : todo.get(priority)) {
+          if (localityPriorityNames.containsKey(locality)
+              && usedNames.add(localityPriorityNames.get(locality))) {
+            foundName = localityPriorityNames.get(locality);
+            break;
+          }
+        }
+        if ("".equals(foundName)) {
+          foundName = priorityName(name, priorityNameGenId++);
+        }
+        for (Locality locality : todo.get(priority)) {
+          newNames.put(locality, foundName);
+        }
+        ret.add(foundName);
+      }
+      localityPriorityNames = newNames;
+      return ret;
+    }
+  }
+
+  private static class ClusterResolutionResult {
+    // Endpoint addresses.
+    private final List<EquivalentAddressGroup> addresses;
+    // Config (include load balancing policy/config) for each priority in the cluster.
+    private final Map<String, PriorityChildConfig> priorityChildConfigs;
+    // List of priority names ordered in descending priorities.
+    private final List<String> priorities;
+
+    ClusterResolutionResult(List<EquivalentAddressGroup> addresses,
+        Map<String, PriorityChildConfig> configs, List<String> priorities) {
+      this.addresses = addresses;
+      this.priorityChildConfigs = configs;
+      this.priorities = priorities;
     }
   }
 
   /**
-   * The state of a CDS working session of {@link CdsLoadBalancer2}. Created and started when
-   * receiving the CDS LB policy config with the top-level cluster name.
+   * Generates configs to be used in the priority LB policy for priorities in a cluster.
+   *
+   * <p>priority LB -> cluster_impl LB (one per priority) -> (weighted_target LB
+   * -> round_robin / least_request_experimental (one per locality)) / ring_hash_experimental
    */
-  private final class CdsLbState {
+  private static Map<String, PriorityChildConfig> generatePriorityChildConfigs(
+      String clusterName,
+      CdsUpdate discovery,
+      Object endpointLbConfig,
+      LoadBalancerRegistry lbRegistry,
+      Map<String, Map<Locality, Integer>> prioritizedLocalityWeights,
+      List<DropOverload> dropOverloads) {
+    Map<String, PriorityChildConfig> configs = new HashMap<>();
+    for (String priority : prioritizedLocalityWeights.keySet()) {
+      ClusterImplConfig clusterImplConfig =
+          new ClusterImplConfig(
+              clusterName, discovery.edsServiceName(), discovery.lrsServerInfo(),
+              discovery.maxConcurrentRequests(), dropOverloads, endpointLbConfig,
+              discovery.upstreamTlsContext(), discovery.filterMetadata(),
+              discovery.backendMetricPropagation());
+      LoadBalancerProvider clusterImplLbProvider =
+          lbRegistry.getProvider(XdsLbPolicies.CLUSTER_IMPL_POLICY_NAME);
+      Object priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+          clusterImplLbProvider, clusterImplConfig);
 
-    private final ClusterState root;
-    private final Map<String, ClusterState> clusterStates = new ConcurrentHashMap<>();
-    private LoadBalancer childLb;
+      // If outlier detection has been configured we wrap the child policy in the outlier detection
+      // load balancer.
+      if (discovery.outlierDetection() != null) {
+        LoadBalancerProvider outlierDetectionProvider = lbRegistry.getProvider(
+            "outlier_detection_experimental");
+        priorityChildPolicy = GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
+            outlierDetectionProvider,
+            buildOutlierDetectionLbConfig(discovery.outlierDetection(), priorityChildPolicy));
+      }
 
-    private CdsLbState(String rootCluster) {
-      root = new ClusterState(rootCluster);
+      boolean isEds = discovery.clusterType() == ClusterType.EDS;
+      PriorityChildConfig priorityChildConfig =
+          new PriorityChildConfig(priorityChildPolicy, isEds /* ignoreReresolution */);
+      configs.put(priority, priorityChildConfig);
+    }
+    return configs;
+  }
+
+  /**
+   * Converts {@link OutlierDetection} that represents the xDS configuration to {@link
+   * OutlierDetectionLoadBalancerConfig} that the {@link io.grpc.util.OutlierDetectionLoadBalancer}
+   * understands.
+   */
+  private static OutlierDetectionLoadBalancerConfig buildOutlierDetectionLbConfig(
+      OutlierDetection outlierDetection, Object childConfig) {
+    OutlierDetectionLoadBalancerConfig.Builder configBuilder
+        = new OutlierDetectionLoadBalancerConfig.Builder();
+
+    configBuilder.setChildConfig(childConfig);
+
+    if (outlierDetection.intervalNanos() != null) {
+      configBuilder.setIntervalNanos(outlierDetection.intervalNanos());
+    }
+    if (outlierDetection.baseEjectionTimeNanos() != null) {
+      configBuilder.setBaseEjectionTimeNanos(outlierDetection.baseEjectionTimeNanos());
+    }
+    if (outlierDetection.maxEjectionTimeNanos() != null) {
+      configBuilder.setMaxEjectionTimeNanos(outlierDetection.maxEjectionTimeNanos());
+    }
+    if (outlierDetection.maxEjectionPercent() != null) {
+      configBuilder.setMaxEjectionPercent(outlierDetection.maxEjectionPercent());
     }
 
-    private void start() {
-      root.start();
+    SuccessRateEjection successRate = outlierDetection.successRateEjection();
+    if (successRate != null) {
+      OutlierDetectionLoadBalancerConfig.SuccessRateEjection.Builder
+          successRateConfigBuilder = new OutlierDetectionLoadBalancerConfig
+          .SuccessRateEjection.Builder();
+
+      if (successRate.stdevFactor() != null) {
+        successRateConfigBuilder.setStdevFactor(successRate.stdevFactor());
+      }
+      if (successRate.enforcementPercentage() != null) {
+        successRateConfigBuilder.setEnforcementPercentage(successRate.enforcementPercentage());
+      }
+      if (successRate.minimumHosts() != null) {
+        successRateConfigBuilder.setMinimumHosts(successRate.minimumHosts());
+      }
+      if (successRate.requestVolume() != null) {
+        successRateConfigBuilder.setRequestVolume(successRate.requestVolume());
+      }
+
+      configBuilder.setSuccessRateEjection(successRateConfigBuilder.build());
     }
 
-    private void shutdown() {
-      root.shutdown();
-      if (childLb != null) {
-        childLb.shutdown();
+    FailurePercentageEjection failurePercentage = outlierDetection.failurePercentageEjection();
+    if (failurePercentage != null) {
+      OutlierDetectionLoadBalancerConfig.FailurePercentageEjection.Builder
+          failurePercentageConfigBuilder = new OutlierDetectionLoadBalancerConfig
+          .FailurePercentageEjection.Builder();
+
+      if (failurePercentage.threshold() != null) {
+        failurePercentageConfigBuilder.setThreshold(failurePercentage.threshold());
       }
+      if (failurePercentage.enforcementPercentage() != null) {
+        failurePercentageConfigBuilder.setEnforcementPercentage(
+            failurePercentage.enforcementPercentage());
+      }
+      if (failurePercentage.minimumHosts() != null) {
+        failurePercentageConfigBuilder.setMinimumHosts(failurePercentage.minimumHosts());
+      }
+      if (failurePercentage.requestVolume() != null) {
+        failurePercentageConfigBuilder.setRequestVolume(failurePercentage.requestVolume());
+      }
+
+      configBuilder.setFailurePercentageEjection(failurePercentageConfigBuilder.build());
     }
 
-    private void handleClusterDiscovered() {
-      List<DiscoveryMechanism> instances = new ArrayList<>();
-
-      // Used for loop detection to break the infinite recursion that loops would cause
-      Map<ClusterState, List<ClusterState>> parentClusters = new HashMap<>();
-      Status loopStatus = null;
-
-      // Level-order traversal.
-      // Collect configurations for all non-aggregate (leaf) clusters.
-      Queue<ClusterState> queue = new ArrayDeque<>();
-      queue.add(root);
-      while (!queue.isEmpty()) {
-        int size = queue.size();
-        for (int i = 0; i < size; i++) {
-          ClusterState clusterState = queue.remove();
-          if (!clusterState.discovered) {
-            return;  // do not proceed until all clusters discovered
-          }
-          if (clusterState.result == null) {  // resource revoked or not exists
-            continue;
-          }
-          if (clusterState.isLeaf) {
-            if (instances.stream().map(inst -> inst.cluster).noneMatch(clusterState.name::equals)) {
-              DiscoveryMechanism instance;
-              if (clusterState.result.clusterType() == ClusterType.EDS) {
-                instance = DiscoveryMechanism.forEds(
-                    clusterState.name, clusterState.result.edsServiceName(),
-                    clusterState.result.lrsServerInfo(),
-                    clusterState.result.maxConcurrentRequests(),
-                    clusterState.result.upstreamTlsContext(),
-                    clusterState.result.filterMetadata(),
-                    clusterState.result.outlierDetection());
-              } else {  // logical DNS
-                instance = DiscoveryMechanism.forLogicalDns(
-                    clusterState.name, clusterState.result.dnsHostName(),
-                    clusterState.result.lrsServerInfo(),
-                    clusterState.result.maxConcurrentRequests(),
-                    clusterState.result.upstreamTlsContext(),
-                    clusterState.result.filterMetadata());
-              }
-              instances.add(instance);
-            }
-          } else {
-            if (clusterState.childClusterStates == null) {
-              continue;
-            }
-            // Do loop detection and break recursion if detected
-            List<String> namesCausingLoops = identifyLoops(clusterState, parentClusters);
-            if (namesCausingLoops.isEmpty()) {
-              queue.addAll(clusterState.childClusterStates.values());
-            } else {
-              // Do cleanup
-              if (childLb != null) {
-                childLb.shutdown();
-                childLb = null;
-              }
-              if (loopStatus != null) {
-                logger.log(XdsLogLevel.WARNING,
-                    "Multiple loops in CDS config.  Old msg:  " + loopStatus.getDescription());
-              }
-              loopStatus = Status.UNAVAILABLE.withDescription(String.format(
-                  "CDS error: circular aggregate clusters directly under %s for "
-                      + "root cluster %s, named %s, xDS node ID: %s",
-                  clusterState.name, root.name, namesCausingLoops,
-                  xdsClient.getBootstrapInfo().node().getId()));
-            }
-          }
-        }
-      }
-
-      if (loopStatus != null) {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(loopStatus)));
-        return;
-      }
-
-      if (instances.isEmpty()) {  // none of non-aggregate clusters exists
-        if (childLb != null) {
-          childLb.shutdown();
-          childLb = null;
-        }
-        Status unavailable = Status.UNAVAILABLE.withDescription(String.format(
-            "CDS error: found 0 leaf (logical DNS or EDS) clusters for root cluster %s"
-                + " xDS node ID: %s", root.name, xdsClient.getBootstrapInfo().node().getId()));
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(unavailable)));
-        return;
-      }
-
-      // The LB policy config is provided in service_config.proto/JSON format.
-      NameResolver.ConfigOrError configOrError =
-          GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-              Arrays.asList(root.result.lbPolicyConfig()), lbRegistry);
-      if (configOrError.getError() != null) {
-        throw configOrError.getError().augmentDescription("Unable to parse the LB config")
-            .asRuntimeException();
-      }
-
-      ClusterResolverConfig config = new ClusterResolverConfig(
-          Collections.unmodifiableList(instances),
-          configOrError.getConfig(),
-          root.result.isHttp11ProxyAvailable());
-      if (childLb == null) {
-        childLb = lbRegistry.getProvider(CLUSTER_RESOLVER_POLICY_NAME).newLoadBalancer(helper);
-      }
-      childLb.handleResolvedAddresses(
-          resolvedAddresses.toBuilder().setLoadBalancingPolicyConfig(config).build());
-    }
-
-    /**
-     * Returns children that would cause loops and builds up the parentClusters map.
-     **/
-
-    private List<String> identifyLoops(ClusterState clusterState,
-        Map<ClusterState, List<ClusterState>> parentClusters) {
-      Set<String> ancestors = new HashSet<>();
-      ancestors.add(clusterState.name);
-      addAncestors(ancestors, clusterState, parentClusters);
-
-      List<String> namesCausingLoops = new ArrayList<>();
-      for (ClusterState state : clusterState.childClusterStates.values()) {
-        if (ancestors.contains(state.name)) {
-          namesCausingLoops.add(state.name);
-        }
-      }
-
-      // Update parent map with entries from remaining children to clusterState
-      clusterState.childClusterStates.values().stream()
-          .filter(child -> !namesCausingLoops.contains(child.name))
-          .forEach(
-              child -> parentClusters.computeIfAbsent(child, k -> new ArrayList<>())
-                  .add(clusterState));
-
-      return namesCausingLoops;
-    }
-
-    /** Recursively add all parents to the ancestors list. **/
-    private void addAncestors(Set<String> ancestors, ClusterState clusterState,
-        Map<ClusterState, List<ClusterState>> parentClusters) {
-      List<ClusterState> directParents = parentClusters.get(clusterState);
-      if (directParents != null) {
-        directParents.stream().map(c -> c.name).forEach(ancestors::add);
-        directParents.forEach(p -> addAncestors(ancestors, p, parentClusters));
-      }
-    }
-
-    private void handleClusterDiscoveryError(Status error) {
-      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
-      Status errorWithNodeId = error.withDescription(
-              description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
-      if (childLb != null) {
-        childLb.handleNameResolutionError(errorWithNodeId);
-      } else {
-        helper.updateBalancingState(
-            TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(errorWithNodeId)));
-      }
-    }
-
-    private final class ClusterState implements ResourceWatcher<CdsUpdate> {
-      private final String name;
-      @Nullable
-      private Map<String, ClusterState> childClusterStates;
-      @Nullable
-      private CdsUpdate result;
-      // Following fields are effectively final.
-      private boolean isLeaf;
-      private boolean discovered;
-      private boolean shutdown;
-
-      private ClusterState(String name) {
-        this.name = name;
-      }
-
-      private void start() {
-        shutdown = false;
-        xdsClient.watchXdsResource(XdsClusterResource.getInstance(), name, this, syncContext);
-      }
-
-      void shutdown() {
-        shutdown = true;
-        xdsClient.cancelXdsResourceWatch(XdsClusterResource.getInstance(), name, this);
-        if (childClusterStates != null) {
-          // recursively shut down all descendants
-          childClusterStates.values().stream()
-              .filter(state -> !state.shutdown)
-              .forEach(ClusterState::shutdown);
-        }
-      }
-
-      @Override
-      public void onError(Status error) {
-        Status status = Status.UNAVAILABLE
-            .withDescription(
-                String.format("Unable to load CDS %s. xDS server returned: %s: %s",
-                  name, error.getCode(), error.getDescription()))
-            .withCause(error.getCause());
-        if (shutdown) {
-          return;
-        }
-        // All watchers should receive the same error, so we only propagate it once.
-        if (ClusterState.this == root) {
-          handleClusterDiscoveryError(status);
-        }
-      }
-
-      @Override
-      public void onResourceDoesNotExist(String resourceName) {
-        if (shutdown) {
-          return;
-        }
-        discovered = true;
-        result = null;
-        if (childClusterStates != null) {
-          for (ClusterState state : childClusterStates.values()) {
-            state.shutdown();
-          }
-          childClusterStates = null;
-        }
-        handleClusterDiscovered();
-      }
-
-      @Override
-      public void onChanged(final CdsUpdate update) {
-        if (shutdown) {
-          return;
-        }
-        logger.log(XdsLogLevel.DEBUG, "Received cluster update {0}", update);
-        discovered = true;
-        result = update;
-        if (update.clusterType() == ClusterType.AGGREGATE) {
-          isLeaf = false;
-          logger.log(XdsLogLevel.INFO, "Aggregate cluster {0}, underlying clusters: {1}",
-              update.clusterName(), update.prioritizedClusterNames());
-          Map<String, ClusterState> newChildStates = new LinkedHashMap<>();
-          for (String cluster : update.prioritizedClusterNames()) {
-            if (newChildStates.containsKey(cluster)) {
-              logger.log(XdsLogLevel.WARNING,
-                  String.format("duplicate cluster name %s in aggregate %s is being ignored",
-                      cluster, update.clusterName()));
-              continue;
-            }
-            if (childClusterStates == null || !childClusterStates.containsKey(cluster)) {
-              ClusterState childState;
-              if (clusterStates.containsKey(cluster)) {
-                childState = clusterStates.get(cluster);
-                if (childState.shutdown) {
-                  childState.start();
-                }
-              } else {
-                childState = new ClusterState(cluster);
-                clusterStates.put(cluster, childState);
-                childState.start();
-              }
-              newChildStates.put(cluster, childState);
-            } else {
-              newChildStates.put(cluster, childClusterStates.remove(cluster));
-            }
-          }
-          if (childClusterStates != null) {  // stop subscribing to revoked child clusters
-            for (ClusterState watcher : childClusterStates.values()) {
-              watcher.shutdown();
-            }
-          }
-          childClusterStates = newChildStates;
-        } else if (update.clusterType() == ClusterType.EDS) {
-          isLeaf = true;
-          logger.log(XdsLogLevel.INFO, "EDS cluster {0}, edsServiceName: {1}",
-              update.clusterName(), update.edsServiceName());
-        } else {  // logical DNS
-          isLeaf = true;
-          logger.log(XdsLogLevel.INFO, "Logical DNS cluster {0}", update.clusterName());
-        }
-        handleClusterDiscovered();
-      }
-
-    }
+    return configBuilder.build();
   }
 }

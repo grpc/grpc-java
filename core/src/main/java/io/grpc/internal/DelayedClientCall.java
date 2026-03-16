@@ -64,6 +64,8 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    * order, but also used if an error occurs before {@code realCall} is set.
    */
   private Listener<RespT> listener;
+  // No need to synchronize; start() synchronization provides a happens-before
+  private Metadata startHeaders;
   // Must hold {@code this} lock when setting.
   private ClientCall<ReqT, RespT> realCall;
   @GuardedBy("this")
@@ -96,15 +98,13 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private ScheduledFuture<?> scheduleDeadlineIfNeeded(
       ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
     Deadline contextDeadline = context.getDeadline();
-    if (deadline == null && contextDeadline == null) {
-      return null;
-    }
-    long remainingNanos = Long.MAX_VALUE;
-    if (deadline != null) {
+    String deadlineName;
+    long remainingNanos;
+    if (deadline != null && isAbeforeB(deadline, contextDeadline)) {
+      deadlineName = "CallOptions";
       remainingNanos = deadline.timeRemaining(NANOSECONDS);
-    }
-
-    if (contextDeadline != null && contextDeadline.timeRemaining(NANOSECONDS) < remainingNanos) {
+    } else if (contextDeadline != null) {
+      deadlineName = "Context";
       remainingNanos = contextDeadline.timeRemaining(NANOSECONDS);
       if (logger.isLoggable(Level.FINE)) {
         StringBuilder builder =
@@ -121,29 +121,29 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
         logger.fine(builder.toString());
       }
-    }
-
-    long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
-    long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
-    final StringBuilder buf = new StringBuilder();
-    String deadlineName = isAbeforeB(contextDeadline, deadline) ? "Context" : "CallOptions";
-    if (remainingNanos < 0) {
-      buf.append("ClientCall started after ");
-      buf.append(deadlineName);
-      buf.append(" deadline was exceeded. Deadline has been exceeded for ");
     } else {
-      buf.append("Deadline ");
-      buf.append(deadlineName);
-      buf.append(" will be exceeded in ");
+      return null;
     }
-    buf.append(seconds);
-    buf.append(String.format(Locale.US, ".%09d", nanos));
-    buf.append("s. ");
 
     /* Cancels the call if deadline exceeded prior to the real call being set. */
     class DeadlineExceededRunnable implements Runnable {
       @Override
       public void run() {
+        long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
+        long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
+        StringBuilder buf = new StringBuilder();
+        if (remainingNanos < 0) {
+          buf.append("ClientCall started after ");
+          buf.append(deadlineName);
+          buf.append(" deadline was exceeded. Deadline has been exceeded for ");
+        } else {
+          buf.append("Deadline ");
+          buf.append(deadlineName);
+          buf.append(" was exceeded after ");
+        }
+        buf.append(seconds);
+        buf.append(String.format(Locale.US, ".%09d", nanos));
+        buf.append("s");
         cancel(
             Status.DEADLINE_EXCEEDED.withDescription(buf.toString()),
             // We should not cancel the call if the realCall is set because there could be a
@@ -163,13 +163,23 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
    */
   // When this method returns, passThrough is guaranteed to be true
   public final Runnable setCall(ClientCall<ReqT, RespT> call) {
+    Listener<RespT> savedDelayedListener;
     synchronized (this) {
       // If realCall != null, then either setCall() or cancel() has been called.
       if (realCall != null) {
         return null;
       }
       setRealCall(checkNotNull(call, "call"));
+      // start() not yet called
+      if (delayedListener == null) {
+        assert pendingRunnables.isEmpty();
+        pendingRunnables = null;
+        passThrough = true;
+        return null;
+      }
+      savedDelayedListener = this.delayedListener;
     }
+    internalStart(savedDelayedListener);
     return new ContextRunnable(context) {
       @Override
       public void runInContext() {
@@ -178,8 +188,15 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     };
   }
 
+  private void internalStart(Listener<RespT> listener) {
+    Metadata savedStartHeaders = this.startHeaders;
+    this.startHeaders = null;
+    context.run(() -> realCall.start(listener, savedStartHeaders));
+  }
+
   @Override
   public final void start(Listener<RespT> listener, final Metadata headers) {
+    checkNotNull(headers, "headers");
     checkState(this.listener == null, "already started");
     Status savedError;
     boolean savedPassThrough;
@@ -190,6 +207,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       savedPassThrough = passThrough;
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedListener<>(listener);
+        startHeaders = headers;
       }
     }
     if (savedError != null) {
@@ -198,15 +216,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     if (savedPassThrough) {
       realCall.start(listener, headers);
-    } else {
-      final Listener<RespT> finalListener = listener;
-      delayOrExecute(new Runnable() {
-        @Override
-        public void run() {
-          realCall.start(finalListener, headers);
-        }
-      });
-    }
+    } // else realCall.start() will be called by setCall
   }
 
   // When this method returns, passThrough is guaranteed to be true
@@ -255,6 +265,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       if (listenerToClose != null) {
         callExecutor.execute(new CloseListenerRunnable(listenerToClose, status));
       }
+      internalStart(listenerToClose); // listener instance doesn't matter
       drainPendingCalls();
     }
     callCancelled();

@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_java//java:defs.bzl", "java_library")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 load("//:java_grpc_library.bzl", "java_rpc_toolchain")
 
@@ -18,11 +19,11 @@ cc_binary(
 
 java_library(
     name = "java_grpc_library_deps__do_not_reference",
+    visibility = ["//xds:__pkg__"],
     exports = [
         "//api",
         "//protobuf",
         "//stub",
-        "//stub:javax_annotation",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
         "@com_google_protobuf//:protobuf_java",
@@ -35,7 +36,6 @@ java_library(
         "//api",
         "//protobuf-lite",
         "//stub",
-        "//stub:javax_annotation",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
     ],

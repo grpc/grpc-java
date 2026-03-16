@@ -106,7 +106,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+        .isEqualTo("Invalid 'minRingSize'/'maxRingSize'");
   }
 
   @Test
@@ -117,7 +117,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+        .isEqualTo("Invalid 'minRingSize'/'maxRingSize'");
   }
 
   @Test
@@ -214,7 +214,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+        .isEqualTo("Invalid 'minRingSize'/'maxRingSize'");
   }
 
   @Test
@@ -225,7 +225,7 @@ public class RingHashLoadBalancerProviderTest {
     assertThat(configOrError.getError()).isNotNull();
     assertThat(configOrError.getError().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(configOrError.getError().getDescription())
-        .isEqualTo("Invalid 'mingRingSize'/'maxRingSize'");
+        .isEqualTo("Invalid 'minRingSize'/'maxRingSize'");
   }
 
   @Test

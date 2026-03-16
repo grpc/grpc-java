@@ -154,7 +154,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
         ChildLbState child =
             new ChildLbState(priority, priorityConfigs.get(priority).ignoreReresolution);
         children.put(priority, child);
-        updateOverallState(priority, CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+        // Child is created in CONNECTING with pending failOverTimer
+        updateOverallState(priority, child.connectivityState, child.picker);
         // Calling the child's updateResolvedAddresses() can result in tryNextPriority() being
         // called recursively. We need to be sure to be done with processing here before it is
         // called.
@@ -173,21 +174,23 @@ final class PriorityLoadBalancer extends LoadBalancer {
         }
         return Status.OK;
       }
-      if (child.failOverTimer != null && child.failOverTimer.isPending()) {
+      if (child.failOverTimer.isPending()) {
         updateOverallState(priority, child.connectivityState, child.picker);
         return Status.OK; // Give priority i time to connect.
       }
-      if (priority.equals(currentPriority) && child.connectivityState != TRANSIENT_FAILURE) {
-        // If the current priority is not changed into TRANSIENT_FAILURE, keep using it.
+    }
+    for (int i = 0; i < priorityNames.size(); i++) {
+      String priority = priorityNames.get(i);
+      ChildLbState child = children.get(priority);
+      if (child.connectivityState.equals(CONNECTING)) {
         updateOverallState(priority, child.connectivityState, child.picker);
         return Status.OK;
       }
     }
-    // TODO(zdapeng): Include error details of each priority.
     logger.log(XdsLogLevel.DEBUG, "All priority failed");
     String lastPriority = priorityNames.get(priorityNames.size() - 1);
-    SubchannelPicker errorPicker = children.get(lastPriority).picker;
-    updateOverallState(lastPriority, TRANSIENT_FAILURE, errorPicker);
+    ChildLbState child = children.get(lastPriority);
+    updateOverallState(lastPriority, child.connectivityState, child.picker);
     return Status.OK;
   }
 
@@ -231,10 +234,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
           // The child is deactivated.
           return;
         }
-        picker = new FixedResultPicker(PickResult.withError(
-            Status.UNAVAILABLE.withDescription("Connection timeout for priority " + priority)));
         logger.log(XdsLogLevel.DEBUG, "Priority {0} failed over to next", priority);
-        currentPriority = null; // reset currentPriority to guarantee failover happen
         Status status = tryNextPriority();
         if (!status.isOk()) {
           // A child had a problem with the addresses/config. Request it to be refreshed
@@ -320,13 +320,14 @@ final class PriorityLoadBalancer extends LoadBalancer {
         if (!children.containsKey(priority)) {
           return;
         }
+        ConnectivityState oldState = connectivityState;
         connectivityState = newState;
         picker = newPicker;
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
         }
-        if (newState.equals(CONNECTING)) {
+        if (newState.equals(CONNECTING) && !oldState.equals(newState)) {
           if (!failOverTimer.isPending() && seenReadyOrIdleSinceTransientFailure) {
             failOverTimer = syncContext.schedule(new FailOverTask(), 10, TimeUnit.SECONDS,
                 executor);

@@ -26,14 +26,29 @@ import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
+import java.util.List;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
 /**
  * Contains certificate/key PEM file utility method(s) for internal usage.
  */
 public final class CertificateUtils {
+  private static final Class<?> x509ExtendedTrustManagerClass;
+
+  static {
+    Class<?> x509ExtendedTrustManagerClass1;
+    try {
+      x509ExtendedTrustManagerClass1 = Class.forName("javax.net.ssl.X509ExtendedTrustManager");
+    } catch (ClassNotFoundException e) {
+      x509ExtendedTrustManagerClass1 = null;
+      // Will disallow per-rpc authority override via call option.
+    }
+    x509ExtendedTrustManagerClass = x509ExtendedTrustManagerClass1;
+  }
+
   /**
    * Creates X509TrustManagers using the provided CA certs.
    */
@@ -69,6 +84,17 @@ public final class CertificateUtils {
             TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
     trustManagerFactory.init(ks);
     return trustManagerFactory.getTrustManagers();
+  }
+
+  public static X509TrustManager getX509ExtendedTrustManager(List<TrustManager> trustManagers) {
+    if (x509ExtendedTrustManagerClass != null) {
+      for (TrustManager trustManager : trustManagers) {
+        if (x509ExtendedTrustManagerClass.isInstance(trustManager)) {
+          return (X509TrustManager) trustManager;
+        }
+      }
+    }
+    return null;
   }
 
   private static X509Certificate[] getX509Certificates(InputStream inputStream)

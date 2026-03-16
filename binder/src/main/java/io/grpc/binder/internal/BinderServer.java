@@ -178,14 +178,14 @@ public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.
               serverPolicyChecker,
               checkNotNull(executor, "Not started?"));
           // Create a new transport and let our listener know about it.
-          BinderTransport.BinderServerTransport transport =
-              new BinderTransport.BinderServerTransport(
+          BinderServerTransport transport =
+              BinderServerTransport.create(
                   executorServicePool,
                   attrsBuilder.build(),
                   streamTracerFactories,
                   OneWayBinderProxy.IDENTITY_DECORATOR,
                   callbackBinder);
-          transport.setServerTransportListener(listener.transportCreated(transport));
+          transport.start(listener.transportCreated(transport));
           return true;
         }
       }

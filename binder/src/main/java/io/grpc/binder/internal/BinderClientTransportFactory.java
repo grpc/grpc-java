@@ -18,7 +18,6 @@ package io.grpc.binder.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import android.content.Context;
-import android.os.UserHandle;
 import androidx.core.content.ContextCompat;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
@@ -39,7 +38,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 
 /** Creates new binder transports. */
 @Internal
@@ -50,11 +48,12 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final ObjectPool<ScheduledExecutorService> scheduledExecutorPool;
   final ObjectPool<? extends Executor> offloadExecutorPool;
   final SecurityPolicy securityPolicy;
-  @Nullable final UserHandle defaultTargetUserHandle;
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
   final long readyTimeoutMillis;
+  final boolean preAuthorizeServers; // TODO(jdcormie): Default to true.
+  final boolean useLegacyAuthStrategy;
 
   ScheduledExecutorService executorService;
   Executor offloadExecutor;
@@ -70,23 +69,24 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     scheduledExecutorPool = checkNotNull(builder.scheduledExecutorPool);
     offloadExecutorPool = checkNotNull(builder.offloadExecutorPool);
     securityPolicy = checkNotNull(builder.securityPolicy);
-    defaultTargetUserHandle = builder.defaultTargetUserHandle;
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
     readyTimeoutMillis = builder.readyTimeoutMillis;
+    preAuthorizeServers = builder.preAuthorizeServers;
+    useLegacyAuthStrategy = builder.useLegacyAuthStrategy;
 
     executorService = scheduledExecutorPool.getObject();
     offloadExecutor = offloadExecutorPool.getObject();
   }
 
   @Override
-  public BinderTransport.BinderClientTransport newClientTransport(
+  public BinderClientTransport newClientTransport(
       SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
     if (closed) {
       throw new IllegalStateException("The transport factory is closed.");
     }
-    return new BinderTransport.BinderClientTransport(this, (AndroidComponentAddress) addr, options);
+    return new BinderClientTransport(this, (AndroidComponentAddress) addr, options);
   }
 
   @Override
@@ -123,11 +123,12 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     ObjectPool<ScheduledExecutorService> scheduledExecutorPool =
         SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
     SecurityPolicy securityPolicy = SecurityPolicies.internalOnly();
-    @Nullable UserHandle defaultTargetUserHandle;
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
     long readyTimeoutMillis = 60_000;
+    boolean preAuthorizeServers;
+    boolean useLegacyAuthStrategy = true; // TODO(jdcormie): Default to false.
 
     @Override
     public BinderClientTransportFactory buildClientTransportFactory() {
@@ -137,6 +138,10 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     public Builder setSourceContext(Context sourceContext) {
       this.sourceContext = checkNotNull(sourceContext);
       return this;
+    }
+
+    public Context getSourceContext() {
+      return sourceContext;
     }
 
     public Builder setOffloadExecutorPool(ObjectPool<? extends Executor> offloadExecutorPool) {
@@ -162,11 +167,6 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
 
     public Builder setSecurityPolicy(SecurityPolicy securityPolicy) {
       this.securityPolicy = checkNotNull(securityPolicy, "securityPolicy");
-      return this;
-    }
-
-    public Builder setDefaultTargetUserHandle(@Nullable UserHandle defaultTargetUserHandle) {
-      this.defaultTargetUserHandle = defaultTargetUserHandle;
       return this;
     }
 
@@ -214,6 +214,18 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      */
     public Builder setReadyTimeoutMillis(long readyTimeoutMillis) {
       this.readyTimeoutMillis = readyTimeoutMillis;
+      return this;
+    }
+
+    /** Whether to check server addresses against the SecurityPolicy *before* binding to them. */
+    public Builder setPreAuthorizeServers(boolean preAuthorizeServers) {
+      this.preAuthorizeServers = preAuthorizeServers;
+      return this;
+    }
+
+    /** Specifies which version of the client handshake to use. */
+    public Builder setUseLegacyAuthStrategy(boolean useLegacyAuthStrategy) {
+      this.useLegacyAuthStrategy = useLegacyAuthStrategy;
       return this;
     }
   }

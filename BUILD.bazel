@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@com_google_protobuf//bazel:java_proto_library.bzl", "java_proto_library")
+load("@rules_java//java:defs.bzl", "java_library", "java_plugin")
 load("@rules_jvm_external//:defs.bzl", "artifact")
 load(":java_grpc_library.bzl", "java_grpc_library")
 
@@ -33,7 +35,6 @@ java_library(
         "//api",
         "//protobuf",
         "//stub",
-        "//stub:javax_annotation",
         "@com_google_protobuf//:protobuf_java",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
@@ -47,7 +48,6 @@ java_library(
         "//api",
         "//protobuf-lite",
         "//stub",
-        "//stub:javax_annotation",
         artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
     ],
@@ -67,6 +67,5 @@ java_library(
     visibility = ["//:__subpackages__"],
     exports = [
         artifact("com.google.auto.value:auto-value-annotations"),
-        artifact("org.apache.tomcat:annotations-api"),  # @Generated for Java 9+
     ],
 )

@@ -264,6 +264,42 @@ public class MultiChildLoadBalancerTest {
         .testEquals();
   }
 
+  @Test
+  public void offsetIterable_positive() {
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1, 2, 3, 4), 9))
+        .containsExactly(2, 3, 4, 1)
+        .inOrder();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1, 2, 3, 4, 5), 9))
+        .containsExactly(5, 1, 2, 3, 4)
+        .inOrder();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1, 2, 3), 3))
+        .containsExactly(1, 2, 3)
+        .inOrder();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1, 2, 3), 0))
+        .containsExactly(1, 2, 3)
+        .inOrder();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1), 123))
+        .containsExactly(1)
+        .inOrder();
+  }
+
+  @Test
+  public void offsetIterable_negative() {
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(1, 2, 3, 4), -1))
+        .containsExactly(4, 1, 2, 3)
+        .inOrder();
+  }
+
+  @Test
+  public void offsetIterable_empty() {
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(), 1))
+        .isEmpty();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(), 0))
+        .isEmpty();
+    assertThat(MultiChildLoadBalancer.offsetIterable(Arrays.asList(), -1))
+        .isEmpty();
+  }
+
   private String addressesOnlyString(EquivalentAddressGroup eag) {
     if (eag == null) {
       return null;

@@ -24,13 +24,14 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -62,6 +63,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private final boolean enableHappyEyeballs = !isSerializingRetries()
       && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  static boolean weightedShuffling =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
@@ -92,7 +95,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       return Status.FAILED_PRECONDITION.withDescription("Already shut down");
     }
 
-    // Cache whether or not this is a petiole policy, which is based off of an address attribute
+    // Check whether this is a petiole policy, which is based off of an address attribute
     Boolean isPetiolePolicy = resolvedAddresses.getAttributes().get(IS_PETIOLE_POLICY);
     this.notAPetiolePolicy = isPetiolePolicy == null || !isPetiolePolicy;
 
@@ -129,17 +132,21 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       PickFirstLeafLoadBalancerConfig config
           = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
-        Collections.shuffle(cleanServers,
-            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+        cleanServers = shuffle(
+            cleanServers, config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
-        ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
+        ImmutableList.copyOf(cleanServers);
 
-    if (rawConnectivityState == READY || rawConnectivityState == CONNECTING) {
+    if (rawConnectivityState == READY
+        || (rawConnectivityState == CONNECTING
+          && (!enableHappyEyeballs || addressIndex.isValid()))) {
       // If the previous ready (or connecting) subchannel exists in new address list,
-      // keep this connection and don't create new subchannels
+      // keep this connection and don't create new subchannels. Happy Eyeballs is excluded when
+      // connecting, because it allows multiple attempts simultaneously, thus is fine to start at
+      // the beginning.
       SocketAddress previousAddress = addressIndex.getCurrentAddress();
       addressIndex.updateGroups(newImmutableAddressGroups);
       if (addressIndex.seekTo(previousAddress)) {
@@ -160,7 +167,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
-      updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
     }
 
     if (rawConnectivityState == READY) {
@@ -221,6 +228,46 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return newGroups;
   }
 
+  // Also used by PickFirstLoadBalancer
+  @CheckReturnValue
+  static List<EquivalentAddressGroup> shuffle(List<EquivalentAddressGroup> eags, Random random) {
+    if (weightedShuffling) {
+      List<WeightEntry> weightedEntries = new ArrayList<>(eags.size());
+      for (EquivalentAddressGroup eag : eags) {
+        weightedEntries.add(new WeightEntry(eag, eagToWeight(eag, random)));
+      }
+      Collections.sort(weightedEntries, Collections.reverseOrder() /* descending */);
+      return Lists.transform(weightedEntries, entry -> entry.eag);
+    } else {
+      List<EquivalentAddressGroup> eagsCopy = new ArrayList<>(eags);
+      Collections.shuffle(eagsCopy, random);
+      return eagsCopy;
+    }
+  }
+
+  private static double eagToWeight(EquivalentAddressGroup eag, Random random) {
+    Long weight = eag.getAttributes().get(InternalEquivalentAddressGroup.ATTR_WEIGHT);
+    if (weight == null) {
+      weight = 1L;
+    }
+    return Math.pow(random.nextDouble(), 1.0 / weight);
+  }
+
+  private static final class WeightEntry implements Comparable<WeightEntry> {
+    final EquivalentAddressGroup eag;
+    final double weight;
+
+    public WeightEntry(EquivalentAddressGroup eag, double weight) {
+      this.eag = eag;
+      this.weight = weight;
+    }
+
+    @Override
+    public int compareTo(WeightEntry entry) {
+      return Double.compare(this.weight, entry.weight);
+    }
+  }
+
   @Override
   public void handleNameResolutionError(Status error) {
     if (rawConnectivityState == SHUTDOWN) {
@@ -233,7 +280,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     subchannels.clear();
     addressIndex.updateGroups(ImmutableList.of());
     rawConnectivityState = TRANSIENT_FAILURE;
-    updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+    updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
   }
 
   void processSubchannelState(SubchannelData subchannelData, ConnectivityStateInfo stateInfo) {
@@ -286,7 +333,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
-        updateBalancingState(CONNECTING, new Picker(PickResult.withNoResult()));
+        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         break;
 
       case READY:
@@ -318,7 +365,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         if (isPassComplete()) {
           rawConnectivityState = TRANSIENT_FAILURE;
           updateBalancingState(TRANSIENT_FAILURE,
-              new Picker(PickResult.withError(stateInfo.getStatus())));
+              new FixedResultPicker(PickResult.withError(stateInfo.getStatus())));
 
           // Refresh Name Resolution, but only when all 3 conditions are met
           // * We are at the end of addressIndex
@@ -381,11 +428,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateBalancingState(READY,
           new FixedResultPicker(PickResult.withSubchannel(subchannelData.subchannel)));
     } else if (subchannelData.getHealthState() == TRANSIENT_FAILURE) {
-      updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(
+      updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
           subchannelData.healthStateInfo.getStatus())));
     } else if (concludedState != TRANSIENT_FAILURE) {
       updateBalancingState(subchannelData.getHealthState(),
-          new Picker(PickResult.withNoResult()));
+          new FixedResultPicker(PickResult.withNoResult()));
     }
   }
 
@@ -449,7 +496,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN || reconnectTask != null) {
       return;
     }
 
@@ -587,28 +634,6 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   ConnectivityState getConcludedConnectivityState() {
     return this.concludedState;
-  }
-
-  /**
-   * No-op picker which doesn't add any custom picking logic. It just passes already known result
-   * received in constructor.
-   */
-  private static final class Picker extends SubchannelPicker {
-    private final PickResult result;
-
-    Picker(PickResult result) {
-      this.result = checkNotNull(result, "result");
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(Picker.class).add("result", result).toString();
-    }
   }
 
   /**

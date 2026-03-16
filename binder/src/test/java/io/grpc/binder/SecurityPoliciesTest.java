@@ -357,7 +357,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 21)
+  @Config(sdk = Config.OLDEST_SDK)
   public void testIsProfileOwner_succeedsForProfileOwner() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
@@ -371,7 +371,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 21)
+  @Config(sdk = Config.OLDEST_SDK)
   public void testIsProfileOwner_failsForNotProfileOwner() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
@@ -385,7 +385,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 21)
+  @Config(sdk = Config.OLDEST_SDK)
   public void testIsProfileOwner_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isProfileOwner(appContext);
 
@@ -425,7 +425,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 21)
+  @Config(sdk = Config.OLDEST_SDK)
   public void testIsProfileOwnerOnOrgOwned_failsForNotProfileOwner() throws Exception {
     PackageInfo info =
         newBuilder().setPackageName(OTHER_UID_PACKAGE_NAME).setSignatures(SIG2).build();
@@ -439,7 +439,7 @@ public final class SecurityPoliciesTest {
   }
 
   @Test
-  @Config(sdk = 21)
+  @Config(sdk = Config.OLDEST_SDK)
   public void testIsProfileOwnerOnOrgOwned_failsWhenNoPackagesForUid() throws Exception {
     policy = SecurityPolicies.isProfileOwnerOnOrganizationOwnedDevice(appContext);
 

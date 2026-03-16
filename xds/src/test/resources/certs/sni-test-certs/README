@@ -1,0 +1,55 @@
+Bad Wildcard DNS Certificate (bad_wildcard_dns_certificate.pem)
+This certificate is used for testing SNI with invalid wildcard DNS SANs. It is issued by a custom, self-signed Certificate Authority (CA).
+
+1. Create the Certificate Authority (CA)
+Create the CA's private key:
+$ openssl genpkey -algorithm RSA -out ca.key -pkeyopt rsa_keygen_bits:2048
+Create the CA's self-signed certificate:
+$ openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.pem -subj "/CN=My Internal CA"
+
+2. Generate the Server Certificate
+Next, generate the server's private key and a Certificate Signing Request (CSR).
+Create the server's private key:
+$ openssl genpkey -algorithm RSA -out bad_wildcard_dns.key -pkeyopt rsa_keygen_bits:2048
+Create a configuration file named san.cnf with the following content. This file specifies the Subject Alternative Names (SANs) for the certificate.
+[req]
+distinguished_name = req_distinguished_name
+req_extensions = v3_req
+prompt = no
+
+[req_distinguished_name]
+C = US
+ST = Illinois
+L = Chicago
+O = "Example, Co."
+CN = *.test.google.com
+
+[v3_req]
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = *.test.google.fr
+DNS.2 = *.test.youtube.com
+DNS.3 = waterzooi.test.google.be
+DNS.4 = 192.168.1.3
+DNS.5 = *.TEST.YOUTUBE.com
+DNS.6 = w*i.test.google.be
+DNS.7 = w*a.test.google.be
+DNS.8 = *.test.google.com.au
+DNS.9 = *waterzooi
+DNS.10 = *.lyft.com
+DNS.11 = ly**ft.com
+DNS.12 = *yft.c*m
+DNS.13 = xn--*.lyft.com
+
+Create the Certificate Signing Request (CSR):
+$ openssl req -new -key bad_wildcard_dns.key -out bad_wildcard_dns.csr -config san.cnf
+
+3. Sign the Server Certificate
+Finally, use the CA to sign the CSR, which will create the server certificate.
+$ openssl x509 -req -in bad_wildcard_dns.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out bad_wildcard_dns_certificate.pem -days 365 -sha256 -extensions v3_req -extfile san.cnf
+
+4. Clean Up
+$ rm bad_wildcard_dns.key san.cnf bad_wildcard_dns.csr ca.key ca.pem ca.srl

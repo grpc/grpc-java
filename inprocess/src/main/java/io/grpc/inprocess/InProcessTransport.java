@@ -18,7 +18,6 @@ package io.grpc.inprocess;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.io.ByteStreams;
@@ -59,6 +58,7 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.SimpleDisconnectError;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
 import java.io.ByteArrayInputStream;
@@ -328,7 +328,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       return;
     }
     shutdown = true;
-    clientTransportListener.transportShutdown(s);
+    clientTransportListener.transportShutdown(s, SimpleDisconnectError.SUBCHANNEL_SHUTDOWN);
   }
 
   private synchronized void notifyTerminated() {
@@ -939,8 +939,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @Override
       public void setDeadline(Deadline deadline) {
         headers.discardAll(TIMEOUT_KEY);
-        long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
-        headers.put(TIMEOUT_KEY, effectiveTimeout);
+        headers.put(TIMEOUT_KEY, deadline.timeRemaining(TimeUnit.NANOSECONDS));
       }
 
       @Override

@@ -97,8 +97,14 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getAddressesOrError().getValue(),
-                resolutionResult.getAttributes());
+            StatusOr<List<EquivalentAddressGroup>> addressesOrError =
+                resolutionResult.getAddressesOrError();
+            if (addressesOrError.hasValue()) {
+              listener.onAddresses(addressesOrError.getValue(),
+                  resolutionResult.getAttributes());
+            } else {
+              listener.onError(addressesOrError.getStatus());
+            }
           }
       });
     }
@@ -152,12 +158,47 @@ public abstract class NameResolver {
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
      * URI.
      *
+     * <p>This method will eventually be deprecated and removed as part of a migration from {@code
+     * java.net.URI} to {@code io.grpc.Uri}. Implementations will override {@link
+     * #newNameResolver(Uri, Args)} instead.
+     *
      * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
      * @param args other information that may be useful
      *
      * @since 1.21.0
      */
     public abstract NameResolver newNameResolver(URI targetUri, final Args args);
+
+    /**
+     * Creates a {@link NameResolver} for the given target URI.
+     *
+     * <p>Implementations return {@code null} if 'targetUri' cannot be resolved by this factory. The
+     * decision should be solely based on the target's scheme.
+     *
+     * <p>All {@link NameResolver.Factory} implementations should override this method, as it will
+     * eventually replace {@link #newNameResolver(URI, Args)}. For backwards compatibility, this
+     * default implementation delegates to {@link #newNameResolver(URI, Args)} if 'targetUri' can be
+     * converted to a java.net.URI.
+     *
+     * <p>NB: Conversion is not always possible, for example {@code scheme:#frag} is a valid {@link
+     * Uri} but not a valid {@link URI} because its path is empty. The default implementation throws
+     * IllegalArgumentException in these cases.
+     *
+     * @param targetUri the target URI to be resolved
+     * @param args other information that may be useful
+     * @throws IllegalArgumentException if targetUri does not have the expected form
+     * @since 1.79
+     */
+    public NameResolver newNameResolver(Uri targetUri, final Args args) {
+      // Not every io.grpc.Uri can be converted but in the ordinary ManagedChannel creation flow,
+      // any IllegalArgumentException thrown here would happened anyway, just earlier. That's
+      // because parse/toString is transparent so java.net.URI#create here sees the original target
+      // string just like it did before the io.grpc.Uri migration.
+      //
+      // Throwing IAE shouldn't surprise non-framework callers either. After all, many existing
+      // Factory impls are picky about targetUri and throw IAE when it doesn't look how they expect.
+      return newNameResolver(URI.create(targetUri.toString()), args);
+    }
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -239,6 +280,9 @@ public abstract class NameResolver {
      * {@link ResolutionResult#getAddressesOrError()} is empty, {@link #onError(Status)} will be
      * called.
      *
+     * <p>Newer NameResolver implementations should prefer calling onResult2. This method exists to
+     * facilitate older {@link Listener} implementations to migrate to {@link Listener2}.
+     *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
      */
@@ -248,6 +292,10 @@ public abstract class NameResolver {
      * Handles a name resolving error from the resolver. The listener is responsible for eventually
      * invoking {@link NameResolver#refresh()} to re-attempt resolution.
      *
+     * <p>New NameResolver implementations should prefer calling onResult2 which will have the
+     * address resolution error in {@link ResolutionResult}'s addressesOrError. This method exists
+     * to facilitate older implementations using {@link Listener} to migrate to {@link Listener2}.
+     *
      * @param error a non-OK status
      * @since 1.21.0
      */
@@ -255,9 +303,14 @@ public abstract class NameResolver {
     public abstract void onError(Status error);
 
     /**
-     * Handles updates on resolved addresses and attributes.
+     * Handles updates on resolved addresses and attributes. Must be called from the same
+     * {@link SynchronizationContext} available in {@link NameResolver.Args} that is passed
+     * from the channel.
      *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @param resolutionResult the resolved server addresses or error in address resolution,
+     *     attributes, and Service Config or error
+     * @return status indicating whether the resolutionResult was accepted by the listener,
+     *     typically the result from a load balancer.
      * @since 1.66
      */
     public Status onResult2(ResolutionResult resolutionResult) {
@@ -303,6 +356,7 @@ public abstract class NameResolver {
     @Nullable private final Executor executor;
     @Nullable private final String overrideAuthority;
     @Nullable private final MetricRecorder metricRecorder;
+    @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
 
     private Args(Builder builder) {
@@ -316,6 +370,7 @@ public abstract class NameResolver {
       this.executor = builder.executor;
       this.overrideAuthority = builder.overrideAuthority;
       this.metricRecorder = builder.metricRecorder;
+      this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
@@ -447,6 +502,18 @@ public abstract class NameResolver {
       return metricRecorder;
     }
 
+    /**
+     * Returns the {@link NameResolverRegistry} that the Channel uses to look for {@link
+     * NameResolver}s.
+     *
+     * @since 1.74.0
+     */
+    public NameResolverRegistry getNameResolverRegistry() {
+      if (nameResolverRegistry == null) {
+        throw new IllegalStateException("NameResolverRegistry is not set in Builder");
+      }
+      return nameResolverRegistry;
+    }
 
     @Override
     public String toString() {
@@ -461,6 +528,7 @@ public abstract class NameResolver {
           .add("executor", executor)
           .add("overrideAuthority", overrideAuthority)
           .add("metricRecorder", metricRecorder)
+          .add("nameResolverRegistry", nameResolverRegistry)
           .toString();
     }
 
@@ -480,6 +548,7 @@ public abstract class NameResolver {
       builder.setOffloadExecutor(executor);
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
+      builder.setNameResolverRegistry(nameResolverRegistry);
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
@@ -508,6 +577,7 @@ public abstract class NameResolver {
       private Executor executor;
       private String overrideAuthority;
       private MetricRecorder metricRecorder;
+      private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
 
       Builder() {
@@ -611,6 +681,16 @@ public abstract class NameResolver {
        */
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
         this.metricRecorder = metricRecorder;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getNameResolverRegistry}.  This is an optional field.
+       *
+       * @since 1.74.0
+       */
+      public Builder setNameResolverRegistry(NameResolverRegistry registry) {
+        this.nameResolverRegistry = registry;
         return this;
       }
 

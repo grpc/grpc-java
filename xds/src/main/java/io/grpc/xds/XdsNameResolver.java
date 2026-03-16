@@ -64,6 +64,7 @@ import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
 import java.net.URI;
@@ -80,6 +81,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
@@ -91,7 +93,6 @@ import javax.annotation.Nullable;
  * @see XdsNameResolverProvider
  */
 final class XdsNameResolver extends NameResolver {
-
   static final CallOptions.Key<String> CLUSTER_SELECTION_KEY =
       CallOptions.Key.create("io.grpc.xds.CLUSTER_SELECTION_KEY");
   static final CallOptions.Key<XdsConfig> XDS_CONFIG_CALL_OPTION_KEY =
@@ -118,7 +119,7 @@ final class XdsNameResolver extends NameResolver {
   private final ServiceConfigParser serviceConfigParser;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService scheduler;
-  private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final XdsClientPool xdsClientPool;
   private final ThreadSafeRandom random;
   private final FilterRegistry filterRegistry;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
@@ -127,7 +128,6 @@ final class XdsNameResolver extends NameResolver {
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
   private final long randomChannelId;
-  private final MetricRecorder metricRecorder;
   private final Args nameResolverArgs;
   // Must be accessed in syncContext.
   // Filter instances are unique per channel, and per filter (name+typeUrl).
@@ -136,7 +136,6 @@ final class XdsNameResolver extends NameResolver {
 
   private volatile RoutingConfig routingConfig;
   private Listener2 listener;
-  private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
@@ -148,7 +147,10 @@ final class XdsNameResolver extends NameResolver {
       @Nullable Map<String, ?> bootstrapOverride,
       MetricRecorder metricRecorder, Args nameResolverArgs) {
     this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
-        syncContext, scheduler, SharedXdsClientPoolProvider.getDefaultProvider(),
+        syncContext, scheduler,
+        bootstrapOverride == null
+          ? SharedXdsClientPoolProvider.getDefaultProvider()
+          : new SharedXdsClientPoolProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
         metricRecorder, nameResolverArgs);
   }
@@ -173,12 +175,17 @@ final class XdsNameResolver extends NameResolver {
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.xdsClientPoolFactory = bootstrapOverride == null ? checkNotNull(xdsClientPoolFactory,
-            "xdsClientPoolFactory") : new SharedXdsClientPoolProvider();
-    this.xdsClientPoolFactory.setBootstrapOverride(bootstrapOverride);
+    Supplier<XdsClient> xdsClientSupplierArg =
+        nameResolverArgs.getArg(XdsNameResolverProvider.XDS_CLIENT_SUPPLIER);
+    if (xdsClientSupplierArg != null) {
+      this.xdsClientPool = new SupplierXdsClientPool(xdsClientSupplierArg);
+    } else {
+      checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+      this.xdsClientPool = new BootstrappingXdsClientPool(
+          xdsClientPoolFactory, target, bootstrapOverride, metricRecorder);
+    }
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
-    this.metricRecorder = metricRecorder;
     this.nameResolverArgs = checkNotNull(nameResolverArgs, "nameResolverArgs");
 
     randomChannelId = random.nextLong();
@@ -196,13 +203,12 @@ final class XdsNameResolver extends NameResolver {
   public void start(Listener2 listener) {
     this.listener = checkNotNull(listener, "listener");
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate(target, metricRecorder);
+      xdsClient = xdsClientPool.getObject();
     } catch (Exception e) {
       listener.onError(
           Status.UNAVAILABLE.withDescription("Failed to initialize xDS").withCause(e));
       return;
     }
-    xdsClient = xdsClientPool.getObject();
     BootstrapInfo bootstrapInfo = xdsClient.getBootstrapInfo();
     String listenerNameTemplate;
     if (targetAuthority == null) {
@@ -230,7 +236,15 @@ final class XdsNameResolver extends NameResolver {
     ldsResourceName = XdsClient.canonifyResourceName(ldsResourceName);
     callCounterProvider = SharedCallCounterMap.getInstance();
 
-    resolveState = new ResolveState(ldsResourceName); // auto starts
+    resolveState = new ResolveState(ldsResourceName);
+    resolveState.start();
+  }
+
+  @Override
+  public void refresh() {
+    if (resolveState != null) {
+      resolveState.refresh();
+    }
   }
 
   private static String expandPercentS(String template, String replacement) {
@@ -311,7 +325,7 @@ final class XdsNameResolver extends NameResolver {
     ConfigOrError parsedServiceConfig = serviceConfigParser.parseServiceConfig(rawServiceConfig);
     Attributes attrs =
         Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_POOL, xdsClientPool)
+            .set(XdsAttributes.XDS_CLIENT, xdsClient)
             .set(XdsAttributes.XDS_CONFIG, xdsConfig)
             .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, resolveState.xdsDependencyManager)
             .set(XdsAttributes.CALL_COUNTER_PROVIDER, callCounterProvider)
@@ -322,7 +336,9 @@ final class XdsNameResolver extends NameResolver {
             .setAttributes(attrs)
             .setServiceConfig(parsedServiceConfig)
             .build();
-    listener.onResult2(result);
+    if (!listener.onResult2(result).isOk()) {
+      resolveState.xdsDependencyManager.requestReresolution();
+    }
   }
 
   /**
@@ -515,7 +531,7 @@ final class XdsNameResolver extends NameResolver {
           Result.newBuilder()
               .setConfig(config)
               .setInterceptor(combineInterceptors(
-                  ImmutableList.of(filters, new ClusterSelectionInterceptor())))
+                  ImmutableList.of(new ClusterSelectionInterceptor(), filters)))
               .build();
     }
 
@@ -547,7 +563,7 @@ final class XdsNameResolver extends NameResolver {
             if (clusterRefs.get(cluster).refCount.get() != 0) {
               throw new AssertionError();
             }
-            clusterRefs.remove(cluster);
+            clusterRefs.remove(cluster).close();
             if (resolveState.lastConfigOrStatus.hasValue()) {
               updateResolutionResult(resolveState.lastConfigOrStatus.getValue());
             } else {
@@ -653,8 +669,16 @@ final class XdsNameResolver extends NameResolver {
     private ResolveState(String ldsResourceName) {
       authority = overrideAuthority != null ? overrideAuthority : encodedServiceAuthority;
       xdsDependencyManager =
-          new XdsDependencyManager(xdsClient, this, syncContext, authority, ldsResourceName,
-              nameResolverArgs, scheduler);
+          new XdsDependencyManager(xdsClient, syncContext, authority, ldsResourceName,
+              nameResolverArgs);
+    }
+
+    void start() {
+      xdsDependencyManager.start(this);
+    }
+
+    void refresh() {
+      xdsDependencyManager.requestReresolution();
     }
 
     private void shutdown() {
@@ -788,9 +812,13 @@ final class XdsNameResolver extends NameResolver {
           clusterRefs.get(cluster).refCount.incrementAndGet();
         } else {
           if (clusterNameMap.containsKey(cluster)) {
+            assert cluster.startsWith("cluster:");
+            XdsConfig.Subscription subscription =
+                xdsDependencyManager.subscribeToCluster(cluster.substring("cluster:".length()));
             clusterRefs.put(
                 cluster,
-                ClusterRefState.forCluster(new AtomicInteger(1), clusterNameMap.get(cluster)));
+                ClusterRefState.forCluster(
+                    new AtomicInteger(1), clusterNameMap.get(cluster), subscription));
           }
           if (rlsPluginConfigMap.containsKey(cluster)) {
             clusterRefs.put(
@@ -814,6 +842,9 @@ final class XdsNameResolver extends NameResolver {
       if (shouldUpdateResult && routingConfig != null) {
         updateResolutionResult(xdsConfig);
         shouldUpdateResult = false;
+      } else {
+        // Need to update at least once
+        shouldUpdateResult = true;
       }
       // Make newly added clusters selectable by config selector and deleted clusters no longer
       // selectable.
@@ -821,7 +852,7 @@ final class XdsNameResolver extends NameResolver {
       for (String cluster : deletedClusters) {
         int count = clusterRefs.get(cluster).refCount.decrementAndGet();
         if (count == 0) {
-          clusterRefs.remove(cluster);
+          clusterRefs.remove(cluster).close();
           shouldUpdateResult = true;
         }
       }
@@ -874,7 +905,7 @@ final class XdsNameResolver extends NameResolver {
         for (String cluster : existingClusters) {
           int count = clusterRefs.get(cluster).refCount.decrementAndGet();
           if (count == 0) {
-            clusterRefs.remove(cluster);
+            clusterRefs.remove(cluster).close();
           }
         }
         existingClusters = null;
@@ -960,15 +991,18 @@ final class XdsNameResolver extends NameResolver {
     final String traditionalCluster;
     @Nullable
     final RlsPluginConfig rlsPluginConfig;
+    @Nullable
+    final XdsConfig.Subscription subscription;
 
     private ClusterRefState(
         AtomicInteger refCount, @Nullable String traditionalCluster,
-        @Nullable RlsPluginConfig rlsPluginConfig) {
+        @Nullable RlsPluginConfig rlsPluginConfig, @Nullable XdsConfig.Subscription subscription) {
       this.refCount = refCount;
       checkArgument(traditionalCluster == null ^ rlsPluginConfig == null,
           "There must be exactly one non-null value in traditionalCluster and pluginConfig");
       this.traditionalCluster = traditionalCluster;
       this.rlsPluginConfig = rlsPluginConfig;
+      this.subscription = subscription;
     }
 
     private Map<String, ?> toLbPolicy() {
@@ -981,19 +1015,97 @@ final class XdsNameResolver extends NameResolver {
             .put("routeLookupConfig", rlsPluginConfig.config())
             .put(
                 "childPolicy",
-                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of())))
+                ImmutableList.of(ImmutableMap.of(XdsLbPolicies.CDS_POLICY_NAME, ImmutableMap.of(
+                    "is_dynamic", true))))
             .put("childPolicyConfigTargetFieldName", "cluster")
             .buildOrThrow();
         return ImmutableMap.of("rls_experimental", rlsConfig);
       }
     }
 
-    static ClusterRefState forCluster(AtomicInteger refCount, String name) {
-      return new ClusterRefState(refCount, name, null);
+    private void close() {
+      if (subscription != null) {
+        subscription.close();
+      }
     }
 
-    static ClusterRefState forRlsPlugin(AtomicInteger refCount, RlsPluginConfig rlsPluginConfig) {
-      return new ClusterRefState(refCount, null, rlsPluginConfig);
+    static ClusterRefState forCluster(
+        AtomicInteger refCount, String name, XdsConfig.Subscription subscription) {
+      return new ClusterRefState(refCount, name, null, checkNotNull(subscription, "subscription"));
+    }
+
+    static ClusterRefState forRlsPlugin(
+        AtomicInteger refCount,
+        RlsPluginConfig rlsPluginConfig) {
+      return new ClusterRefState(refCount, null, rlsPluginConfig, null);
+    }
+  }
+
+  /** An ObjectPool, except it can throw an exception. */
+  private interface XdsClientPool {
+    XdsClient getObject() throws XdsInitializationException;
+
+    XdsClient returnObject(XdsClient xdsClient);
+  }
+
+  private static final class BootstrappingXdsClientPool implements XdsClientPool {
+    private final XdsClientPoolFactory xdsClientPoolFactory;
+    private final String target;
+    private final @Nullable Map<String, ?> bootstrapOverride;
+    private final @Nullable MetricRecorder metricRecorder;
+    private ObjectPool<XdsClient> xdsClientPool;
+
+    BootstrappingXdsClientPool(
+        XdsClientPoolFactory xdsClientPoolFactory,
+        String target,
+        @Nullable Map<String, ?> bootstrapOverride,
+        @Nullable MetricRecorder metricRecorder) {
+      this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+      this.target = checkNotNull(target, "target");
+      this.bootstrapOverride = bootstrapOverride;
+      this.metricRecorder = metricRecorder;
+    }
+
+    @Override
+    public XdsClient getObject() throws XdsInitializationException {
+      if (xdsClientPool == null) {
+        BootstrapInfo bootstrapInfo;
+        if (bootstrapOverride == null) {
+          bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
+        } else {
+          bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
+        }
+        this.xdsClientPool =
+            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder);
+      }
+      return xdsClientPool.getObject();
+    }
+
+    @Override
+    public XdsClient returnObject(XdsClient xdsClient) {
+      return xdsClientPool.returnObject(xdsClient);
+    }
+  }
+
+  private static final class SupplierXdsClientPool implements XdsClientPool {
+    private final Supplier<XdsClient> xdsClientSupplier;
+
+    SupplierXdsClientPool(Supplier<XdsClient> xdsClientSupplier) {
+      this.xdsClientSupplier = checkNotNull(xdsClientSupplier, "xdsClientSupplier");
+    }
+
+    @Override
+    public XdsClient getObject() throws XdsInitializationException {
+      XdsClient xdsClient = xdsClientSupplier.get();
+      if (xdsClient == null) {
+        throw new XdsInitializationException("Caller failed to initialize XDS_CLIENT_SUPPLIER");
+      }
+      return xdsClient;
+    }
+
+    @Override
+    public XdsClient returnObject(XdsClient xdsClient) {
+      return null;
     }
   }
 }

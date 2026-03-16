@@ -166,7 +166,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       final boolean wasCancelled = (scheduledRetry != null) ? scheduledRetry.isCancelled() : false;
       final Future<?> retryFuture;
-      if (scheduledRetry != null) {
+      final boolean retryWasScheduled = scheduledRetry != null;
+      if (retryWasScheduled) {
         retryFuture = scheduledRetry.markCancelled();
         scheduledRetry = null;
       } else {
@@ -190,8 +191,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
             }
           }
-          if (retryFuture != null) {
-            retryFuture.cancel(false);
+          if (retryWasScheduled) {
+            if (retryFuture != null) {
+              retryFuture.cancel(false);
+            }
             if (!wasCancelled && inFlightSubStreams.decrementAndGet() == Integer.MIN_VALUE) {
               assert savedCloseMasterListenerReason != null;
               listenerSerializeExecutor.execute(
@@ -245,7 +248,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   // returns null means we should not create new sub streams, e.g. cancelled or
   // other close condition is met for retriableStream.
   @Nullable
-  private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry) {
+  private Substream createSubstream(int previousAttemptCount, boolean isTransparentRetry,
+                                    boolean isHedgedStream) {
     int inFlight;
     do {
       inFlight = inFlightSubStreams.get();
@@ -266,7 +270,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
-    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry);
+    sub.stream = newSubstream(newHeaders, tracerFactory, previousAttemptCount, isTransparentRetry,
+        isHedgedStream);
     return sub;
   }
 
@@ -276,7 +281,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    */
   abstract ClientStream newSubstream(
       Metadata headers, ClientStreamTracer.Factory tracerFactory, int previousAttempts,
-      boolean isTransparentRetry);
+      boolean isTransparentRetry, boolean isHedgedStream);
 
   /** Adds grpc-previous-rpc-attempts in the headers of a retry/hedging RPC. */
   @VisibleForTesting
@@ -398,7 +403,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       state.buffer.add(new StartEntry());
     }
 
-    Substream substream = createSubstream(0, false);
+    Substream substream = createSubstream(0, false, false);
     if (substream == null) {
       return;
     }
@@ -471,7 +476,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // If this run is not cancelled, the value of state.hedgingAttemptCount won't change
       // until state.addActiveHedge() is called subsequently, even the state could possibly
       // change.
-      Substream newSubstream = createSubstream(state.hedgingAttemptCount, false);
+      Substream newSubstream = createSubstream(state.hedgingAttemptCount, false, true);
       if (newSubstream == null) {
         return;
       }
@@ -851,7 +856,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   public static long intervalWithJitter(long intervalNanos) {
     double inverseJitterFactor = isExperimentalRetryJitterEnabled
-            ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
+            ? 0.4 * random.nextDouble() + 0.8 : random.nextDouble();
     return (long) (intervalNanos * inverseJitterFactor);
   }
 
@@ -936,9 +941,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           && localOnlyTransparentRetries.incrementAndGet() > 1_000) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
-          Status tooManyTransparentRetries = Status.INTERNAL
-              .withDescription("Too many transparent retries. Might be a bug in gRPC")
-              .withCause(status.asRuntimeException());
+          Status tooManyTransparentRetries = GrpcUtil.statusWithDetails(
+              Status.Code.INTERNAL, "Too many transparent retries. Might be a bug in gRPC", status);
           safeCloseMasterListener(tooManyTransparentRetries, rpcProgress, trailers);
         }
         return;
@@ -949,7 +953,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             || (rpcProgress == RpcProgress.REFUSED
                 && noMoreTransparentRetry.compareAndSet(false, true))) {
           // transparent retry
-          final Substream newSubstream = createSubstream(substream.previousAttemptCount, true);
+          final Substream newSubstream = createSubstream(substream.previousAttemptCount,
+              true, false);
           if (newSubstream == null) {
             return;
           }
@@ -1001,7 +1006,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             RetryPlan retryPlan = makeRetryDecision(status, trailers);
             if (retryPlan.shouldRetry) {
               // retry
-              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1, false);
+              Substream newSubstream = createSubstream(substream.previousAttemptCount + 1,
+                  false, false);
               if (newSubstream == null) {
                 return;
               }

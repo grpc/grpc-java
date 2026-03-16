@@ -366,6 +366,8 @@ public class CsdsServiceTest {
           .isEqualTo(ClientResourceStatus.ACKED);
       assertThat(CsdsService.metadataStatusToClientStatus(ResourceMetadataStatus.NACKED))
           .isEqualTo(ClientResourceStatus.NACKED);
+      assertThat(CsdsService.metadataStatusToClientStatus(ResourceMetadataStatus.TIMEOUT))
+          .isEqualTo(ClientResourceStatus.TIMEOUT);
     }
 
     @Test
@@ -511,13 +513,8 @@ public class CsdsServiceTest {
     }
 
     @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      throw new UnsupportedOperationException("Should not be called");
-    }
-
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder) {
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

@@ -18,8 +18,6 @@ dependencies {
             project(':grpc-testing'),
             project(':grpc-xds')
 
-    compileOnly libraries.javax.annotation
-
     runtimeOnly libraries.netty.tcnative,
             libraries.netty.tcnative.classes
     testImplementation testFixtures(project(':grpc-api')),

@@ -38,8 +38,10 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.FlagResetRule;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -69,13 +71,15 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link ManagedChannelImplBuilder}. */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class ManagedChannelImplBuilderTest {
   private static final int DUMMY_PORT = 42;
   private static final String DUMMY_TARGET = "fake-target";
@@ -98,8 +102,16 @@ public class ManagedChannelImplBuilderTest {
         }
       };
 
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
+  @Rule public final FlagResetRule flagResetRule = new FlagResetRule();
 
   @Mock private ClientTransportFactory mockClientTransportFactory;
   @Mock private ClientTransportFactoryBuilder mockClientTransportFactoryBuilder;
@@ -117,6 +129,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Before
   public void setUp() throws Exception {
+    flagResetRule.setFlagForTest(
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+
     builder = new ManagedChannelImplBuilder(
         DUMMY_TARGET,
         new UnsupportedClientTransportFactoryBuilder(),
@@ -373,8 +388,11 @@ public class ManagedChannelImplBuilderTest {
       ManagedChannel unused = grpcCleanupRule.register(builder.build());
       fail("Should fail");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo(
-          "Address types of NameResolver 'dns' for 'valid:1234' not supported by transport");
+      assertThat(e)
+          .hasMessageThat()
+          .isEqualTo(
+              "Address types of NameResolver 'dns' for 'dns:///valid:1234' not supported by"
+                  + " transport");
     }
   }
 

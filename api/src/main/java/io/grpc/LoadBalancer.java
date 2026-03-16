@@ -637,6 +637,8 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones, 
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
@@ -664,6 +666,28 @@ public abstract class LoadBalancer {
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
     }
 
     /**
@@ -860,9 +884,11 @@ public abstract class LoadBalancer {
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 
+      private static final Object[][] EMPTY_CUSTOM_OPTIONS = new Object[0][2];
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
-      private Object[][] customOptions = new Object[0][2];
+      private Object[][] customOptions = EMPTY_CUSTOM_OPTIONS;
 
       Builder() {
       }
@@ -1193,6 +1219,10 @@ public abstract class LoadBalancer {
     /**
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
+     *
+     * <p>Work added to the synchronization context might not run immediately, so LB implementations
+     * must be careful to ensure that any assumptions still hold when it is executed. In particular,
+     * the LB might have been shut down or subchannels might have changed state.
      *
      * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
      * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your

@@ -34,6 +34,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
@@ -43,7 +44,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -84,6 +84,7 @@ public class XdsServerBuilderTest {
         XdsServerBuilder.forPort(
             port, XdsServerCredentials.create(InsecureServerCredentials.create()));
     builder.xdsClientPoolFactory(xdsClientPoolFactory);
+    builder.overrideBootstrapForTest(XdsServerTestHelper.RAW_BOOTSTRAP);
     if (xdsServingStatusListener != null) {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
@@ -138,7 +139,18 @@ public class XdsServerBuilderTest {
         }
       }
     });
-    xdsClient.ldsResource.get(5000, TimeUnit.MILLISECONDS);
+    try {
+      xdsClient.ldsResource.get(5000, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException ex) {
+      // start() probably failed, so throw its exception
+      if (settableFuture.isDone()) {
+        Throwable t = settableFuture.get();
+        if (t != null) {
+          throw new ExecutionException(t);
+        }
+      }
+      throw ex;
+    }
     return settableFuture;
   }
 
@@ -198,13 +210,14 @@ public class XdsServerBuilderTest {
             CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
             tlsContextManager);
     future.get(5000, TimeUnit.MILLISECONDS);
-    xdsClient.ldsWatcher.onError(Status.ABORTED);
+    xdsClient.ldsWatcher.onAmbientError(Status.ABORTED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onError(Status.CANCELLED);
+    xdsClient.ldsWatcher.onAmbientError(Status.CANCELLED);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
-    xdsClient.ldsWatcher.onResourceDoesNotExist("not found error");
+    Status notFoundStatus = Status.NOT_FOUND.withDescription("not found error");
+    xdsClient.ldsWatcher.onResourceChanged(StatusOr.fromStatus(notFoundStatus));
     verify(mockXdsServingStatusListener).onNotServing(any(StatusException.class));
     reset(mockXdsServingStatusListener);
     XdsServerTestHelper.generateListenerUpdate(
@@ -255,7 +268,7 @@ public class XdsServerBuilderTest {
             tlsContextManager);
     verify(mockXdsServingStatusListener, never()).onNotServing(any(Throwable.class));
     verifyServer(future, mockXdsServingStatusListener, null);
-    xdsClient.ldsWatcher.onError(Status.ABORTED);
+    xdsClient.ldsWatcher.onAmbientError(Status.ABORTED);
     verifyServer(null, mockXdsServingStatusListener, null);
   }
 
@@ -304,9 +317,12 @@ public class XdsServerBuilderTest {
 
   @Test
   public void testOverrideBootstrap() throws Exception {
-    Map<String, Object> b = new HashMap<>();
+    Map<String, ?> b = XdsServerTestHelper.RAW_BOOTSTRAP;
     buildBuilder(null);
     builder.overrideBootstrapForTest(b);
-    assertThat(xdsClientPoolFactory.savedBootstrap).isEqualTo(b);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+    Future<Throwable> unused = startServerAsync();
+    assertThat(xdsClientPoolFactory.savedBootstrapInfo.node().getId())
+        .isEqualTo(XdsServerTestHelper.BOOTSTRAP_INFO.node().getId());
   }
 }

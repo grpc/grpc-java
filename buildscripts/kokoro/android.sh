@@ -9,9 +9,6 @@ BASE_DIR="$(pwd)"
 
 cd "$BASE_DIR/github/grpc-java"
 
-export LDFLAGS=-L/tmp/protobuf/lib
-export CXXFLAGS=-I/tmp/protobuf/include
-export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
 cat <<EOF >> gradle.properties
@@ -30,9 +27,17 @@ unzip -qd "${ANDROID_HOME}/cmdline-tools" cmdline.zip
 rm cmdline.zip
 mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
 (yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
-
+curl -Ls https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.tar.gz | \
+    tar xz -C /tmp
+export PATH=/tmp/cmake-3.26.3-linux-x86_64/bin:$PATH
+    
 # Proto deps
 buildscripts/make_dependencies.sh
+
+sudo apt-get update && sudo apt-get install pkg-config
+export LDFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --libs protobuf)"
+export CXXFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --cflags protobuf)"
+export LD_LIBRARY_PATH=/tmp/protobuf/lib
 
 # Build Android with Java 11, this adds it to the PATH
 sudo update-java-alternatives --set java-1.11.0-openjdk-amd64
@@ -98,6 +103,7 @@ cd $BASE_DIR/github/grpc-java
 ./gradlew clean
 git checkout HEAD^
 ./gradlew --stop  # use a new daemon to build the previous commit
+GRADLE_FLAGS="${GRADLE_FLAGS} -PskipCodegen=true" # skip codegen for build from previous commit since it wasn't built with --std=c++14 when making this change
 ./gradlew publishToMavenLocal $GRADLE_FLAGS
 cd examples/android/helloworld/
 ../../gradlew build $GRADLE_FLAGS

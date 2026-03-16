@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.grpc.ExperimentalApi;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -139,30 +140,29 @@ public abstract class XdsClient {
 
   /**
    * Watcher interface for a single requested xDS resource.
+   *
+   * <p>Note that we expect that the implementer to:
+   * - Comply with the guarantee to not generate certain statuses by the library:
+   *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
+   *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
+   * - Keep {@link Status} description in one form or another, as it contains valuable debugging
+   *   information.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10862")
   public interface ResourceWatcher<T extends ResourceUpdate> {
 
     /**
-     * Called when the resource discovery RPC encounters some transient error.
-     *
-     * <p>Note that we expect that the implementer to:
-     * - Comply with the guarantee to not generate certain statuses by the library:
-     *   https://grpc.github.io/grpc/core/md_doc_statuscodes.html. If the code needs to be
-     *   propagated to the channel, override it with {@link io.grpc.Status.Code#UNAVAILABLE}.
-     * - Keep {@link Status} description in one form or another, as it contains valuable debugging
-     *   information.
+     * Called to deliver a resource update or an error. If an error is passed after a valid
+     * resource has been delivered, the watcher should stop using the previously delivered
+     * resource.
      */
-    void onError(Status error);
+    void onResourceChanged(StatusOr<T> update);
 
     /**
-     * Called when the requested resource is not available.
-     *
-     * @param resourceName name of the resource requested in discovery request.
-     */
-    void onResourceDoesNotExist(String resourceName);
-
-    void onChanged(T update);
+     * Called to deliver a transient error that should not affect the watcher's use of any
+     * previously received resource.
+     *   */
+    void onAmbientError(Status error);
   }
 
   /**
@@ -197,6 +197,10 @@ public abstract class XdsClient {
 
     public static ResourceMetadata newResourceMetadataDoesNotExist() {
       return new ResourceMetadata(ResourceMetadataStatus.DOES_NOT_EXIST, "", 0, false, null, null);
+    }
+
+    public static ResourceMetadata newResourceMetadataTimeout() {
+      return new ResourceMetadata(ResourceMetadataStatus.TIMEOUT, "", 0, false, null, null);
     }
 
     public static ResourceMetadata newResourceMetadataAcked(
@@ -256,7 +260,7 @@ public abstract class XdsClient {
      * config_dump.proto</a>
      */
     public enum ResourceMetadataStatus {
-      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED
+      UNKNOWN, REQUESTED, DOES_NOT_EXIST, ACKED, NACKED, TIMEOUT
     }
 
     /**
@@ -384,6 +388,23 @@ public abstract class XdsClient {
   public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
       Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
       Locality locality) {
+    return addClusterLocalityStats(serverInfo, clusterName, edsServiceName, locality, null);
+  }
+
+  /**
+   * Adds load stats for the specified locality (in the specified cluster with edsServiceName) by
+   * using the returned object to record RPCs. Load stats recorded with the returned object will
+   * be reported to the load reporting server. The returned object is reference counted and the
+   * caller should use {@link LoadStatsManager2.ClusterLocalityStats#release} to release its
+   * <i>hard</i> reference when it is safe to stop reporting RPC loads for the specified locality
+   * in the future.
+   *
+   * @param backendMetricPropagation Configuration for which backend metrics should be propagated
+   *     to LRS load reports. If null, all metrics will be propagated (legacy behavior).
+   */
+  public LoadStatsManager2.ClusterLocalityStats addClusterLocalityStats(
+      Bootstrapper.ServerInfo serverInfo, String clusterName, @Nullable String edsServiceName,
+      Locality locality, @Nullable BackendMetricPropagation backendMetricPropagation) {
     throw new UnsupportedOperationException();
   }
 

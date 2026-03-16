@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service to remotely control health status of an xDS test server.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/testing/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class XdsUpdateHealthServiceGrpc {
 
@@ -230,15 +227,15 @@ public final class XdsUpdateHealthServiceGrpc {
 
     /**
      */
-    public io.grpc.testing.integration.EmptyProtos.Empty setServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.integration.EmptyProtos.Empty setServing(io.grpc.testing.integration.EmptyProtos.Empty request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getSetServingMethod(), getCallOptions(), request);
     }
 
     /**
      */
-    public io.grpc.testing.integration.EmptyProtos.Empty setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.integration.EmptyProtos.Empty setNotServing(io.grpc.testing.integration.EmptyProtos.Empty request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getSetNotServingMethod(), getCallOptions(), request);
     }
   }

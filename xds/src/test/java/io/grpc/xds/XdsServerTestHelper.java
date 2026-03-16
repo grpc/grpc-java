@@ -24,6 +24,8 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
+import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyServerProtoData.ConnectionSourceType;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
@@ -37,7 +39,6 @@ import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.XdsClient;
-import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsResourceType;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -63,6 +64,17 @@ public class XdsServerTestHelper {
       "projects/42/networks/default/nodes/5c85b298-6f5b-4722-b74a-f7d1f0ccf5ad";
   private static final EnvoyProtoData.Node BOOTSTRAP_NODE =
       EnvoyProtoData.Node.newBuilder().setId(NODE_ID).build();
+  static final Map<String, ?> RAW_BOOTSTRAP = ImmutableMap.of(
+      "node", ImmutableMap.of(
+          "id", NODE_ID),
+      "server_listener_resource_name_template", "grpc/server?udpa.resource.listening_address=%s",
+      "xds_servers", ImmutableList.of(
+          ImmutableMap.of(
+              "server_uri", SERVER_URI,
+              "channel_creds", ImmutableList.of(
+                  ImmutableMap.of(
+                      "type", "insecure")))
+      ));
   static final Bootstrapper.BootstrapInfo BOOTSTRAP_INFO =
       Bootstrapper.BootstrapInfo.builder()
           .servers(Arrays.asList(
@@ -140,15 +152,10 @@ public class XdsServerTestHelper {
         implements XdsClientPoolFactory {
 
     private XdsClient xdsClient;
-    Map<String, ?> savedBootstrap;
+    BootstrapInfo savedBootstrapInfo;
 
     FakeXdsClientPoolFactory(XdsClient xdsClient) {
       this.xdsClient = xdsClient;
-    }
-
-    @Override
-    public void setBootstrapOverride(Map<String, ?> bootstrap) {
-      this.savedBootstrap = bootstrap;
     }
 
     @Override
@@ -158,8 +165,9 @@ public class XdsServerTestHelper {
     }
 
     @Override
-    public ObjectPool<XdsClient> getOrCreate(String target, MetricRecorder metricRecorder)
-        throws XdsInitializationException {
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
+      this.savedBootstrapInfo = bootstrapInfo;
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -295,13 +303,14 @@ public class XdsServerTestHelper {
     void deliverLdsUpdateWithApiListener(long httpMaxStreamDurationNano,
         List<VirtualHost> virtualHosts) {
       execute(() -> {
-        ldsWatcher.onChanged(LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
-            httpMaxStreamDurationNano, virtualHosts, null)));
+        LdsUpdate update = LdsUpdate.forApiListener(HttpConnectionManager.forVirtualHosts(
+            httpMaxStreamDurationNano, virtualHosts, null));
+        ldsWatcher.onResourceChanged(StatusOr.fromValue(update));
       });
     }
 
     void deliverLdsUpdate(LdsUpdate ldsUpdate) {
-      execute(() -> ldsWatcher.onChanged(ldsUpdate));
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromValue(ldsUpdate)));
     }
 
     void deliverLdsUpdate(
@@ -316,11 +325,14 @@ public class XdsServerTestHelper {
     }
 
     void deliverLdsResourceNotFound() {
-      execute(() -> ldsWatcher.onResourceDoesNotExist(awaitLdsResource(DEFAULT_TIMEOUT)));
+      String resourceName = awaitLdsResource(DEFAULT_TIMEOUT);
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> ldsWatcher.onResourceChanged(StatusOr.fromStatus(status)));
     }
 
     void deliverRdsUpdate(String resourceName, List<VirtualHost> virtualHosts) {
-      execute(() -> rdsWatchers.get(resourceName).onChanged(new RdsUpdate(virtualHosts)));
+      RdsUpdate update = new RdsUpdate(virtualHosts);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromValue(update)));
     }
 
     void deliverRdsUpdate(String resourceName, VirtualHost virtualHost) {
@@ -328,7 +340,8 @@ public class XdsServerTestHelper {
     }
 
     void deliverRdsResourceNotFound(String resourceName) {
-      execute(() -> rdsWatchers.get(resourceName).onResourceDoesNotExist(resourceName));
+      Status status = Status.NOT_FOUND.withDescription("Resource not found: " + resourceName);
+      execute(() -> rdsWatchers.get(resourceName).onResourceChanged(StatusOr.fromStatus(status)));
     }
   }
 }

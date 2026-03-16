@@ -1,1 +1,17 @@
+pluginManagement {
+    // https://issuetracker.google.com/issues/342522142#comment8
+    // use D8/R8 8.0.44 or 8.1.44 with AGP 7.4 if needed.
+    buildscript {
+        repositories {
+            mavenCentral()
+            maven {
+                url = uri("https://storage.googleapis.com/r8-releases/raw")
+            }
+        }
+        dependencies {
+            classpath("com.android.tools:r8:8.1.44")
+        }
+    }
+}
+
 rootProject.name = 'example-debug'

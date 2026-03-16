@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * A service to dynamically update the configuration of an xDS test client.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: grpc/testing/test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class XdsUpdateClientConfigureServiceGrpc {
 
@@ -195,8 +192,8 @@ public final class XdsUpdateClientConfigureServiceGrpc {
      * Update the tes client's configuration.
      * </pre>
      */
-    public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.testing.integration.Messages.ClientConfigureResponse configure(io.grpc.testing.integration.Messages.ClientConfigureRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getConfigureMethod(), getCallOptions(), request);
     }
   }

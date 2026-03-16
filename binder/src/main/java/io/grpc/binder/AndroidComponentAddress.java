@@ -58,7 +58,7 @@ public final class AndroidComponentAddress extends SocketAddress {
   @Nullable
   private final UserHandle targetUser; // null means the same user that hosts this process.
 
-  protected AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
+  private AndroidComponentAddress(Intent bindIntent, @Nullable UserHandle targetUser) {
     checkArgument(
         bindIntent.getComponent() != null || bindIntent.getPackage() != null,
         "'bindIntent' must be explicit. Specify either a package or ComponentName.");
@@ -250,7 +250,22 @@ public final class AndroidComponentAddress extends SocketAddress {
       return this;
     }
 
-    /** See {@link AndroidComponentAddress#getTargetUser()}. */
+    /**
+     * Specifies the Android user in which the built Address' bind Intent will be evaluated.
+     *
+     * <p>Connecting to a server in a different Android user is uncommon and requires the client app
+     * have runtime visibility of &#064;SystemApi's and hold certain &#064;SystemApi permissions.
+     * The device must also be running Android SDK version 30 or higher.
+     *
+     * <p>See https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces
+     * for details on which apps can call the underlying &#064;SystemApi's needed to make this type
+     * of connection.
+     *
+     * <p>One of the "android.permission.INTERACT_ACROSS_XXX" permissions is required. The exact one
+     * depends on the calling user's relationship to the target user, whether client and server are
+     * in the same or different apps, and the version of Android in use. See {@link
+     * Context#bindServiceAsUser}, the essential underlying Android API, for details.
+     */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
     public Builder setTargetUser(@Nullable UserHandle targetUser) {
       this.targetUser = targetUser;

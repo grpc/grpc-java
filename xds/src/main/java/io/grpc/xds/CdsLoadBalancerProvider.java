@@ -23,6 +23,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.JsonUtil;
@@ -35,8 +36,6 @@ import java.util.Map;
  */
 @Internal
 public class CdsLoadBalancerProvider extends LoadBalancerProvider {
-
-  private static final String CLUSTER_KEY = "cluster";
 
   @Override
   public boolean isAvailable() {
@@ -53,9 +52,24 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
     return XdsLbPolicies.CDS_POLICY_NAME;
   }
 
+  private final LoadBalancerRegistry loadBalancerRegistry;
+
+  public CdsLoadBalancerProvider() {
+    this.loadBalancerRegistry = null;
+  }
+
+  public CdsLoadBalancerProvider(LoadBalancerRegistry loadBalancerRegistry) {
+    this.loadBalancerRegistry = loadBalancerRegistry;
+  }
+
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new CdsLoadBalancer2(helper);
+    LoadBalancerRegistry loadBalancerRegistry = this.loadBalancerRegistry;
+    if (loadBalancerRegistry == null) {
+      loadBalancerRegistry = LoadBalancerRegistry.getDefaultRegistry();
+    }
+
+    return new CdsLoadBalancer2(helper, loadBalancerRegistry);
   }
 
   @Override
@@ -70,9 +84,12 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
    */
   static ConfigOrError parseLoadBalancingConfigPolicy(Map<String, ?> rawLoadBalancingPolicyConfig) {
     try {
-      String cluster =
-          JsonUtil.getString(rawLoadBalancingPolicyConfig, CLUSTER_KEY);
-      return ConfigOrError.fromConfig(new CdsConfig(cluster));
+      String cluster = JsonUtil.getString(rawLoadBalancingPolicyConfig, "cluster");
+      Boolean isDynamic = JsonUtil.getBoolean(rawLoadBalancingPolicyConfig, "is_dynamic");
+      if (isDynamic == null) {
+        isDynamic = Boolean.FALSE;
+      }
+      return ConfigOrError.fromConfig(new CdsConfig(cluster, isDynamic));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.UNAVAILABLE.withCause(e).withDescription(
@@ -89,15 +106,28 @@ public class CdsLoadBalancerProvider extends LoadBalancerProvider {
      * Name of cluster to query CDS for.
      */
     final String name;
+    /**
+     * Whether this cluster was dynamically chosen, so the XdsDependencyManager may be unaware of
+     * it without an explicit cluster subscription.
+     */
+    final boolean isDynamic;
 
     CdsConfig(String name) {
+      this(name, false);
+    }
+
+    CdsConfig(String name, boolean isDynamic) {
       checkArgument(name != null && !name.isEmpty(), "name is null or empty");
       this.name = name;
+      this.isDynamic = isDynamic;
     }
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this).add("name", name).toString();
+      return MoreObjects.toStringHelper(this)
+          .add("name", name)
+          .add("isDynamic", isDynamic)
+          .toString();
     }
   }
 }

@@ -24,7 +24,6 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
-import com.google.common.base.Strings;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -32,6 +31,7 @@ import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
@@ -219,7 +219,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.73.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.81.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -651,12 +651,14 @@ public final class GrpcUtil {
   static class TimeoutMarshaller implements Metadata.AsciiMarshaller<Long> {
 
     @Override
-    public String toAsciiString(Long timeoutNanos) {
+    public String toAsciiString(Long timeoutNanosObject) {
       long cutoff = 100000000;
+      // Timeout checking is inherently racy. RPCs with timeouts in the past ideally don't even get
+      // here, but if the timeout is expired assume that happened recently and adjust it to the
+      // smallest allowed timeout
+      long timeoutNanos = Math.max(1, timeoutNanosObject);
       TimeUnit unit = TimeUnit.NANOSECONDS;
-      if (timeoutNanos < 0) {
-        throw new IllegalArgumentException("Timeout too small");
-      } else if (timeoutNanos < cutoff) {
+      if (timeoutNanos < cutoff) {
         return timeoutNanos + "n";
       } else if (timeoutNanos < cutoff * 1000L) {
         return unit.toMicros(timeoutNanos) + "u";
@@ -757,13 +759,15 @@ public final class GrpcUtil {
 
   /** Gets stream tracers based on CallOptions. */
   public static ClientStreamTracer[] getClientStreamTracers(
-      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry) {
+      CallOptions callOptions, Metadata headers, int previousAttempts, boolean isTransparentRetry,
+      boolean isHedging) {
     List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
     ClientStreamTracer[] tracers = new ClientStreamTracer[factories.size() + 1];
     StreamInfo streamInfo = StreamInfo.newBuilder()
         .setCallOptions(callOptions)
         .setPreviousAttempts(previousAttempts)
         .setIsTransparentRetry(isTransparentRetry)
+        .setIsHedging(isHedging)
         .build();
     for (int i = 0; i < factories.size(); i++) {
       tracers[i] = factories.get(i).newClientStreamTracer(streamInfo, headers);
@@ -815,6 +819,31 @@ public final class GrpcUtil {
         ? Status.INTERNAL.withDescription(
         "Inappropriate status code from control plane: " + status.getCode() + " "
             + status.getDescription()).withCause(status.getCause()) : status;
+  }
+
+  /**
+   * Returns a "clean" representation of a status code and description (not cause) like
+   * "UNAVAILABLE: The description". Should be similar to Status.formatThrowableMessage().
+   */
+  public static String statusToPrettyString(Status status) {
+    if (status.getDescription() == null) {
+      return status.getCode().toString();
+    } else {
+      return status.getCode() + ": " + status.getDescription();
+    }
+  }
+
+  /**
+   * Create a status with contextual information, propagating details from a non-null status that
+   * contributed to the failure. For example, if UNAVAILABLE, "Couldn't load bar", and status
+   * "FAILED_PRECONDITION: Foo missing" were passed as arguments, then this method would produce the
+   * status "UNAVAILABLE: Couldn't load bar: FAILED_PRECONDITION: Foo missing" with a cause if the
+   * passed status had a cause.
+   */
+  public static Status statusWithDetails(Status.Code code, String description, Status causeStatus) {
+    return code.toStatus()
+        .withDescription(description + ": " + statusToPrettyString(causeStatus))
+        .withCause(causeStatus.getCause());
   }
 
   /**
@@ -929,18 +958,7 @@ public final class GrpcUtil {
   }
 
   public static boolean getFlag(String envVarName, boolean enableByDefault) {
-    String envVar = System.getenv(envVarName);
-    if (envVar == null) {
-      envVar = System.getProperty(envVarName);
-    }
-    if (envVar != null) {
-      envVar = envVar.trim();
-    }
-    if (enableByDefault) {
-      return Strings.isNullOrEmpty(envVar) || Boolean.parseBoolean(envVar);
-    } else {
-      return !Strings.isNullOrEmpty(envVar) && Boolean.parseBoolean(envVar);
-    }
+    return InternalFeatureFlags.getFlag(envVarName, enableByDefault);
   }
 
 

@@ -32,7 +32,9 @@ import io.netty.handler.ssl.SslContextBuilder;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
+import java.util.AbstractMap;
 import java.util.concurrent.Executor;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * A SslContextProvider is a "container" or provider of SslContext. This is used by gRPC-xds to
@@ -57,7 +59,8 @@ public abstract class SslContextProvider implements Closeable {
     }
 
     /** Informs callee of new/updated SslContext. */
-    @VisibleForTesting public abstract void updateSslContext(SslContext sslContext);
+    @VisibleForTesting public abstract void updateSslContextAndExtendedX509TrustManager(
+        AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContext);
 
     /** Informs callee of an exception that was generated. */
     @VisibleForTesting protected abstract void onException(Throwable throwable);
@@ -119,8 +122,9 @@ public abstract class SslContextProvider implements Closeable {
           @Override
           public void run() {
             try {
-              SslContext sslContext = sslContextGetter.get();
-              callback.updateSslContext(sslContext);
+              AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager> sslContextAndTm =
+                  sslContextGetter.get();
+              callback.updateSslContextAndExtendedX509TrustManager(sslContextAndTm);
             } catch (Throwable e) {
               callback.onException(e);
             }
@@ -130,6 +134,6 @@ public abstract class SslContextProvider implements Closeable {
 
   /** Allows implementations to compute or get SslContext. */
   protected interface SslContextGetter {
-    SslContext get() throws Exception;
+    AbstractMap.SimpleImmutableEntry<SslContext,X509TrustManager> get() throws Exception;
   }
 }

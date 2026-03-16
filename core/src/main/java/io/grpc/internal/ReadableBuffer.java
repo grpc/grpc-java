@@ -72,15 +72,6 @@ public interface ReadableBuffer extends Closeable {
   void readBytes(byte[] dest, int destOffset, int length);
 
   /**
-   * Reads from this buffer until the destination's position reaches its limit, and increases the
-   * read position by the number of the transferred bytes.
-   *
-   * @param dest the destination buffer to receive the bytes.
-   * @throws IndexOutOfBoundsException if required bytes are not readable
-   */
-  void readBytes(ByteBuffer dest);
-
-  /**
    * Reads {@code length} bytes from this buffer and writes them to the destination stream.
    * Increments the read position by {@code length}. If the required bytes are not readable, throws
    * {@link IndexOutOfBoundsException}.

@@ -30,7 +30,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.cluster.v3.Cluster;
@@ -38,10 +37,7 @@ import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
 import io.envoyproxy.envoy.config.endpoint.v3.ClusterStats;
 import io.envoyproxy.envoy.config.listener.v3.ApiListener;
 import io.envoyproxy.envoy.config.listener.v3.Listener;
-import io.envoyproxy.envoy.config.route.v3.Route;
-import io.envoyproxy.envoy.config.route.v3.RouteAction;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.config.route.v3.RouteMatch;
 import io.envoyproxy.envoy.extensions.clusters.aggregate.v3.ClusterConfig;
 import io.envoyproxy.envoy.extensions.filters.http.router.v3.Router;
 import io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter;
@@ -51,15 +47,22 @@ import io.envoyproxy.envoy.service.load_stats.v3.LoadStatsResponse;
 import io.grpc.BindableService;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.grpc.InsecureChannelCredentials;
 import io.grpc.StatusOr;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.Locality;
+import io.grpc.xds.client.XdsClient;
+import io.grpc.xds.client.XdsClientMetricReporter;
 import io.grpc.xds.client.XdsResourceType;
+import io.grpc.xds.client.XdsTransportFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -82,6 +85,9 @@ public class XdsTestUtils {
   static final String HTTP_CONNECTION_MANAGER_TYPE_URL =
       "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3"
           + ".HttpConnectionManager";
+  static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
+      Bootstrapper.ServerInfo.create(
+      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false);
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -136,7 +142,7 @@ public class XdsTestUtils {
                            int endpointPort) {
 
     Listener serverListener = ControlPlaneRule.buildServerListener();
-    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, serverName, rdsName);
+    Listener clientListener = ControlPlaneRule.buildClientListener(serverName, rdsName);
     service.setXdsConfig(ADS_TYPE_URL_LDS,
         ImmutableMap.of(SERVER_LISTENER, serverListener, serverName, clientListener));
 
@@ -148,7 +154,7 @@ public class XdsTestUtils {
     service.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.<String, Message>of(clusterName, cluster));
 
     ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-        serverName, endpointHostname, endpointPort, edsName);
+        "127.0.0.11", endpointHostname, endpointPort, edsName);
     service.setXdsConfig(ADS_TYPE_URL_EDS,
         ImmutableMap.<String, Message>of(edsName, clusterLoadAssignment));
 
@@ -186,7 +192,7 @@ public class XdsTestUtils {
     Map<String, Message> edsMap = new HashMap<>();
     for (String child : children) {
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          serverName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+          "127.0.0.16", ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
       edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
     }
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
@@ -225,7 +231,7 @@ public class XdsTestUtils {
         continue;
       }
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          child, ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
+          "127.0.0.15", ENDPOINT_HOSTNAME, ENDPOINT_PORT, getEdsNameForCluster(child));
       edsMap.put(getEdsNameForCluster(child), clusterLoadAssignment);
     }
     service.setXdsConfig(ADS_TYPE_URL_EDS, edsMap);
@@ -236,7 +242,7 @@ public class XdsTestUtils {
     XdsConfig.XdsConfigBuilder builder = new XdsConfig.XdsConfigBuilder();
 
     Filter.NamedFilterConfig routerFilterConfig = new Filter.NamedFilterConfig(
-        serverHostName, RouterFilter.ROUTER_CONFIG);
+        "terminal-filter", RouterFilter.ROUTER_CONFIG);
 
     HttpConnectionManager httpConnectionManager = HttpConnectionManager.forRdsName(
         0L, RDS_NAME, Collections.singletonList(routerFilterConfig));
@@ -245,8 +251,8 @@ public class XdsTestUtils {
 
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
-    Bootstrapper.ServerInfo serverInfo = null;
-    XdsResourceType.Args args = new XdsResourceType.Args(serverInfo, "0", "0", null, null, null);
+    XdsResourceType.Args args = new XdsResourceType.Args(
+        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
@@ -257,7 +263,7 @@ public class XdsTestUtils {
     // Need to create endpoints to create locality endpoints map to create edsUpdate
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        "127.0.0.11", ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
@@ -266,7 +272,7 @@ public class XdsTestUtils {
     XdsEndpointResource.EdsUpdate edsUpdate = new XdsEndpointResource.EdsUpdate(
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
-        CLUSTER_NAME, EDS_NAME, serverInfo, null, null, null, false)
+        CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
@@ -280,10 +286,10 @@ public class XdsTestUtils {
     return builder.build();
   }
 
-  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverHostName) {
+  static Map<Locality, LocalityLbEndpoints> createMinimalLbEndpointsMap(String serverAddress) {
     Map<Locality, LocalityLbEndpoints> lbEndpointsMap = new HashMap<>();
     LbEndpoint lbEndpoint = LbEndpoint.create(
-        serverHostName, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
+        serverAddress, ENDPOINT_PORT, 0, true, ENDPOINT_HOSTNAME, ImmutableMap.of());
     lbEndpointsMap.put(
         Locality.create("", "", ""),
         LocalityLbEndpoints.create(ImmutableList.of(lbEndpoint), 10, 0, ImmutableMap.of()));
@@ -300,20 +306,7 @@ public class XdsTestUtils {
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
                                                     String clusterName) {
-    io.envoyproxy.envoy.config.route.v3.VirtualHost.Builder vhBuilder =
-        io.envoyproxy.envoy.config.route.v3.VirtualHost.newBuilder()
-            .setName(rdsName)
-            .addDomains(authority)
-            .addRoutes(
-                Route.newBuilder()
-                    .setMatch(
-                        RouteMatch.newBuilder().setPrefix("/").build())
-                    .setRoute(
-                        RouteAction.newBuilder().setCluster(clusterName)
-                            .setAutoHostRewrite(BoolValue.newBuilder().setValue(true).build())
-                            .build()));
-    io.envoyproxy.envoy.config.route.v3.VirtualHost virtualHost = vhBuilder.build();
-    return RouteConfiguration.newBuilder().setName(rdsName).addVirtualHosts(virtualHost).build();
+    return ControlPlaneRule.buildRouteConfiguration(authority, rdsName, clusterName);
   }
 
   static Cluster buildAggCluster(String name, List<String> childNames) {
@@ -338,7 +331,7 @@ public class XdsTestUtils {
       clusterMap.put(clusterName, cluster);
 
       ClusterLoadAssignment clusterLoadAssignment = ControlPlaneRule.buildClusterLoadAssignment(
-          clusterName, ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
+          "127.0.0.13", ENDPOINT_HOSTNAME, ENDPOINT_PORT, edsName);
       edsMap.put(edsName, clusterLoadAssignment);
     }
   }
@@ -346,7 +339,7 @@ public class XdsTestUtils {
   static Listener buildInlineClientListener(String rdsName, String clusterName, String serverName) {
     HttpFilter
         httpFilter = HttpFilter.newBuilder()
-        .setName(serverName)
+        .setName("terminal-filter")
         .setTypedConfig(Any.pack(Router.newBuilder().build()))
         .setIsOptional(true)
         .build();
@@ -362,6 +355,32 @@ public class XdsTestUtils {
     return Listener.newBuilder()
         .setName(serverName)
         .setApiListener(clientListenerBuilder.build()).build();
+  }
+
+  public static XdsClient createXdsClient(
+      List<String> serverUris,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock) {
+    return createXdsClient(
+        CommonBootstrapperTestUtils.buildBootStrap(serverUris),
+        xdsTransportFactory,
+        fakeClock,
+        new XdsClientMetricReporter() {});
+  }
+
+  /** Calls {@link CommonBootstrapperTestUtils#createXdsClient} with gRPC-specific values. */
+  public static XdsClient createXdsClient(
+      Bootstrapper.BootstrapInfo bootstrapInfo,
+      XdsTransportFactory xdsTransportFactory,
+      FakeClock fakeClock,
+      XdsClientMetricReporter xdsClientMetricReporter) {
+    return CommonBootstrapperTestUtils.createXdsClient(
+          bootstrapInfo,
+          xdsTransportFactory,
+          fakeClock,
+          new ExponentialBackoffPolicy.Provider(),
+          MessagePrinter.INSTANCE,
+          xdsClientMetricReporter);
   }
 
   /**

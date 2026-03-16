@@ -249,6 +249,8 @@ public final class CsdsService implements BindableService {
         return ClientResourceStatus.ACKED;
       case NACKED:
         return ClientResourceStatus.NACKED;
+      case TIMEOUT:
+        return ClientResourceStatus.TIMEOUT;
       default:
         throw new AssertionError("Unexpected ResourceMetadataStatus: " + status);
     }

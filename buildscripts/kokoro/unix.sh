@@ -38,7 +38,13 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
+GRADLE_FLAGS+=" --stacktrace"
 GRADLE_FLAGS+=" -PtargetArch=$ARCH"
+
+# For universal binaries on macOS, signal Gradle to use universal flags.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  GRADLE_FLAGS+=" -PbuildUniversal=true"
+fi
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
@@ -51,9 +57,9 @@ fi
 export GRADLE_OPTS="-Dorg.gradle.jvmargs='-Xmx1g'"
 
 # Make protobuf discoverable by :grpc-compiler
-export LD_LIBRARY_PATH=/tmp/protobuf/lib
-export LDFLAGS=-L/tmp/protobuf/lib
-export CXXFLAGS="-I/tmp/protobuf/include"
+export LDFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --libs protobuf)"
+export CXXFLAGS="$(PKG_CONFIG_PATH=/tmp/protobuf/lib/pkgconfig pkg-config --cflags protobuf)"
+export LIBRARY_PATH=/tmp/protobuf/lib
 
 ./gradlew grpc-compiler:clean $GRADLE_FLAGS
 

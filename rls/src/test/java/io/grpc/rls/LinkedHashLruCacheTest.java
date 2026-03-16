@@ -25,8 +25,10 @@ import com.google.common.base.Ticker;
 import io.grpc.internal.FakeClock;
 import io.grpc.rls.LruCache.EvictionListener;
 import io.grpc.rls.LruCache.EvictionType;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -264,6 +266,93 @@ public class LinkedHashLruCacheTest {
     @Override
     public int hashCode() {
       return Objects.hash(value, expireTime);
+    }
+  }
+
+  @Test
+  public void testFitToLimitWithReSize() {
+
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10, 4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20, 1);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30, 2);
+
+    cache.cache(1, entry1);
+    cache.cache(2, entry2);
+    cache.cache(3, entry3);
+
+    assertThat(cache.estimatedSize()).isEqualTo(2);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(3);
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(5);
+
+    cache.resize(2);
+    assertThat(cache.estimatedSize()).isEqualTo(1);
+    assertThat(cache.estimatedSizeBytes()).isEqualTo(2);
+    assertThat(cache.estimatedMaxSizeBytes()).isEqualTo(2);
+
+    assertThat(cache.fitToLimit()).isEqualTo(false);
+  }
+
+  @Test
+  public void testFitToLimit() {
+
+    TestFitToLimitEviction localCache = new TestFitToLimitEviction(
+            MAX_SIZE,
+            evictionListener,
+            fakeClock.getTicker()
+    );
+
+    Entry entry1 = new Entry("Entry1", ticker.read() + 10, 4);
+    Entry entry2 = new Entry("Entry2", ticker.read() + 20, 2);
+    Entry entry3 = new Entry("Entry3", ticker.read() + 30, 1);
+
+    localCache.cache(1, entry1);
+    localCache.cache(2, entry2);
+    localCache.cache(3, entry3);
+
+    assertThat(localCache.estimatedSize()).isEqualTo(3);
+    assertThat(localCache.estimatedSizeBytes()).isEqualTo(7);
+    assertThat(localCache.estimatedMaxSizeBytes()).isEqualTo(5);
+
+    localCache.enableEviction();
+
+    assertThat(localCache.fitToLimit()).isEqualTo(true);
+
+    assertThat(localCache.values().contains(entry1)).isFalse();
+    assertThat(localCache.values().containsAll(Arrays.asList(entry2, entry3))).isTrue();
+
+    assertThat(localCache.estimatedSize()).isEqualTo(2);
+    assertThat(localCache.estimatedSizeBytes()).isEqualTo(3);
+    assertThat(localCache.estimatedMaxSizeBytes()).isEqualTo(5);
+  }
+
+  private static class TestFitToLimitEviction extends LinkedHashLruCache<Integer, Entry> {
+
+    private boolean allowEviction = false;
+
+    TestFitToLimitEviction(
+            long estimatedMaxSizeBytes,
+            @Nullable EvictionListener<Integer, Entry> evictionListener,
+            Ticker ticker) {
+      super(estimatedMaxSizeBytes, evictionListener, ticker);
+    }
+
+    @Override
+    protected boolean isExpired(Integer key, Entry value, long nowNanos) {
+      return value.expireTime - nowNanos <= 0;
+    }
+
+    @Override
+    protected int estimateSizeOf(Integer key, Entry value) {
+      return value.size;
+    }
+
+    @Override
+    protected boolean shouldInvalidateEldestEntry(Integer eldestKey, Entry eldestValue, long now) {
+      return allowEviction && super.shouldInvalidateEldestEntry(eldestKey, eldestValue, now);
+    }
+
+    public void enableEviction() {
+      allowEviction = true;
     }
   }
 }

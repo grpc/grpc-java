@@ -12,9 +12,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * the multiplexed singleton APIs at the Envoy instance and management server.
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: envoy/service/discovery/v3/ads.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AggregatedDiscoveryServiceGrpc {
 

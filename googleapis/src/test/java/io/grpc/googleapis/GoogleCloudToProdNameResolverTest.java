@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.ChannelLogger;
+import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -47,7 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -77,15 +77,16 @@ public class GoogleCloudToProdNameResolverTest {
           throw new AssertionError(e);
         }
       });
+  private final FakeClock fakeExecutor = new FakeClock();
   private final NameResolver.Args args = NameResolver.Args.newBuilder()
       .setDefaultPort(DEFAULT_PORT)
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
+      .setScheduledExecutorService(fakeExecutor.getScheduledExecutorService())
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .setChannelLogger(mock(ChannelLogger.class))
+      .setMetricRecorder(new MetricRecorder() {})
       .build();
-  private final FakeClock fakeExecutor = new FakeClock();
-  private final FakeBootstrapSetter fakeBootstrapSetter = new FakeBootstrapSetter();
   private final Resource<Executor> fakeExecutorResource = new Resource<Executor>() {
     @Override
     public Executor create() {
@@ -101,34 +102,18 @@ public class GoogleCloudToProdNameResolverTest {
 
   @Mock
   private NameResolver.Listener2 mockListener;
-  private Random random = new Random(1);
   @Captor
   private ArgumentCaptor<Status> errorCaptor;
   private boolean originalIsOnGcp;
-  private boolean originalXdsBootstrapProvided;
   private GoogleCloudToProdNameResolver resolver;
+  private String responseToIpV6 = "1:1:1";
 
   @Before
   public void setUp() {
     nsRegistry.register(new FakeNsProvider("dns"));
     nsRegistry.register(new FakeNsProvider("xds"));
     originalIsOnGcp = GoogleCloudToProdNameResolver.isOnGcp;
-    originalXdsBootstrapProvided = GoogleCloudToProdNameResolver.xdsBootstrapProvided;
-  }
 
-  @After
-  public void tearDown() {
-    GoogleCloudToProdNameResolver.isOnGcp = originalIsOnGcp;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = originalXdsBootstrapProvided;
-    resolver.shutdown();
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).shutdown();
-  }
-
-  private void createResolver() {
-    createResolver("1:1:1");
-  }
-
-  private void createResolver(String responseToIpV6) {
     HttpConnectionProvider httpConnections = new HttpConnectionProvider() {
       @Override
       public HttpURLConnection createConnection(String url) throws IOException {
@@ -148,10 +133,24 @@ public class GoogleCloudToProdNameResolverTest {
         throw new AssertionError("Unknown http query");
       }
     };
+    GoogleCloudToProdNameResolver.setHttpConnectionProvider(httpConnections);
+
+    GoogleCloudToProdNameResolver.setC2pId(new Random(1).nextInt());
+  }
+
+  @After
+  public void tearDown() {
+    GoogleCloudToProdNameResolver.isOnGcp = originalIsOnGcp;
+    GoogleCloudToProdNameResolver.setHttpConnectionProvider(null);
+    if (resolver != null) {
+      resolver.shutdown();
+      verify(Iterables.getOnlyElement(delegatedResolver.values())).shutdown();
+    }
+  }
+
+  private void createResolver() {
     resolver = new GoogleCloudToProdNameResolver(
-        TARGET_URI, args, fakeExecutorResource, random, fakeBootstrapSetter,
-        nsRegistry.asFactory());
-    resolver.setHttpConnectionProvider(httpConnections);
+        TARGET_URI, args, fakeExecutorResource, nsRegistry.asFactory());
   }
 
   @Test
@@ -164,27 +163,19 @@ public class GoogleCloudToProdNameResolverTest {
   }
 
   @Test
-  public void hasProvidedBootstrap_DelegateToDns() {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
-    GoogleCloudToProdNameResolver.enableFederation = false;
-    createResolver();
-    resolver.start(mockListener);
-    assertThat(delegatedResolver.keySet()).containsExactly("dns");
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
   public void onGcpAndNoProvidedBootstrap_DelegateToXds() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
     createResolver();
     resolver.start(mockListener);
     fakeExecutor.runDueTasks();
     assertThat(delegatedResolver.keySet()).containsExactly("xds");
     verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void generateBootstrap_ipv6() throws IOException {
+    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
     Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
     assertThat(node).containsExactly(
         "id", "C2P-991614323",
@@ -204,15 +195,9 @@ public class GoogleCloudToProdNameResolverTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void onGcpAndNoProvidedBootstrap_DelegateToXds_noIpV6() {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
-    createResolver(null);
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("xds");
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
+  public void generateBootstrap_noIpV6() throws IOException {
+    responseToIpV6 = null;
+    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
     Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
     assertThat(node).containsExactly(
         "id", "C2P-991614323",
@@ -231,70 +216,18 @@ public class GoogleCloudToProdNameResolverTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void emptyResolverMeetadataValue() {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
-    createResolver("");
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("xds");
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
+  public void emptyResolverMeetadataValue() throws IOException {
+    responseToIpV6 = "";
+    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
     Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
     assertThat(node).containsExactly(
         "id", "C2P-991614323",
         "locality", ImmutableMap.of("zone", ZONE));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void onGcpAndNoProvidedBootstrapAndFederationEnabled_DelegateToXds() {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
-    GoogleCloudToProdNameResolver.enableFederation = true;
-    createResolver();
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("xds");
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    // check bootstrap
-    Map<String, ?> bootstrap = fakeBootstrapSetter.bootstrapRef.get();
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-991614323",
-        "locality", ImmutableMap.of("zone", ZONE),
-        "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
-    Map<String, ?> server = Iterables.getOnlyElement(
-        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
-    assertThat(server).containsExactly(
-        "server_uri", "directpath-pa.googleapis.com",
-        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
-    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
-    assertThat(authorities).containsExactly(
-        "traffic-director-c2p.xds.googleapis.com",
-        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void onGcpAndProvidedBootstrapAndFederationEnabled_DontDelegateToXds() {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = true;
-    GoogleCloudToProdNameResolver.enableFederation = true;
-    createResolver();
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("xds");
-    verify(Iterables.getOnlyElement(delegatedResolver.values())).start(mockListener);
-    // Bootstrapper should not have been set, since there was no user provided config.
-    assertThat(fakeBootstrapSetter.bootstrapRef.get()).isNull();
   }
 
   @Test
   public void failToQueryMetadata() {
     GoogleCloudToProdNameResolver.isOnGcp = true;
-    GoogleCloudToProdNameResolver.xdsBootstrapProvided = false;
     createResolver();
     HttpConnectionProvider httpConnections = new HttpConnectionProvider() {
       @Override
@@ -304,7 +237,7 @@ public class GoogleCloudToProdNameResolverTest {
         return con;
       }
     };
-    resolver.setHttpConnectionProvider(httpConnections);
+    GoogleCloudToProdNameResolver.setHttpConnectionProvider(httpConnections);
     resolver.start(mockListener);
     fakeExecutor.runDueTasks();
     verify(mockListener).onError(errorCaptor.capture());
@@ -342,16 +275,6 @@ public class GoogleCloudToProdNameResolverTest {
     @Override
     public String getDefaultScheme() {
       return scheme;
-    }
-  }
-
-  private static final class FakeBootstrapSetter
-      implements GoogleCloudToProdNameResolver.BootstrapSetter {
-    private final AtomicReference<Map<String, ?>> bootstrapRef = new AtomicReference<>();
-
-    @Override
-    public void setBootstrap(Map<String, ?> bootstrap) {
-      bootstrapRef.set(bootstrap);
     }
   }
 }

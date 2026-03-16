@@ -16,6 +16,7 @@
 
 package io.grpc.protobuf.lite;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -43,18 +44,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /** Unit tests for {@link ProtoLiteUtils}. */
 @RunWith(JUnit4.class)
 public class ProtoLiteUtilsTest {
-
-  @SuppressWarnings("deprecation") // https://github.com/grpc/grpc-java/issues/7467
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final Marshaller<Type> marshaller = ProtoLiteUtils.marshaller(Type.getDefaultInstance());
   private Type proto = Type.newBuilder().setName("name").build();
@@ -214,10 +210,9 @@ public class ProtoLiteUtilsTest {
 
   @Test
   public void extensionRegistry_notNull() {
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("newRegistry");
-
-    ProtoLiteUtils.setExtensionRegistry(null);
+    NullPointerException e = assertThrows(NullPointerException.class,
+        () -> ProtoLiteUtils.setExtensionRegistry(null));
+    assertThat(e).hasMessageThat().isEqualTo("newRegistry");
   }
 
   @Test

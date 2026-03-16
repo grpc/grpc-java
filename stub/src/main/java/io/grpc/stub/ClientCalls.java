@@ -183,6 +183,23 @@ public final class ClientCalls {
   }
 
   /**
+   * Executes a unary call and blocks on the response,
+   * throws a checked {@link StatusException}.
+   *
+   * @return the single response message.
+   * @throws StatusException on error
+   */
+  public static <ReqT, RespT> RespT blockingV2UnaryCall(
+      Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req)
+      throws StatusException {
+    try {
+      return blockingUnaryCall(channel, method, callOptions, req);
+    } catch (StatusRuntimeException e) {
+      throw e.getStatus().asException(e.getTrailers());
+    }
+  }
+
+  /**
    * Executes a server-streaming call returning a blocking {@link Iterator} over the
    * response stream.  The {@code call} should not be already started.  After calling this method,
    * {@code call} should no longer be used.
@@ -914,15 +931,12 @@ public final class ClientCalls {
         } while ((runnable = poll()) != null);
         // Wake everything up now that we've done something and they can check in their outer loop
         // if they can continue or need to wait again.
-        signallAll();
+        signalAll();
       }
     }
 
-    /**
-     * Executes all queued Runnables and if there were any wakes up any waiting threads.
-     */
-    public void drain() throws InterruptedException {
-      throwIfInterrupted();
+    /** Executes all queued Runnables and if there were any wakes up any waiting threads. */
+    void drain() {
       Runnable runnable;
       boolean didWork = false;
 
@@ -932,11 +946,11 @@ public final class ClientCalls {
       }
 
       if (didWork) {
-        signallAll();
+        signalAll();
       }
     }
 
-    private void signallAll() {
+    private void signalAll() {
       waiterLock.lock();
       try {
         waiterCondition.signalAll();

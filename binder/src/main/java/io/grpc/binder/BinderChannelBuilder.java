@@ -20,8 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import android.content.Context;
-import android.os.UserHandle;
-import androidx.annotation.RequiresApi;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
@@ -235,32 +233,6 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     return this;
   }
 
-  /**
-   * Specifies the {@link UserHandle} to be searched for the remote Android Service by default.
-   *
-   * <p>Used only as a fallback if the direct or resolved {@link AndroidComponentAddress} doesn't
-   * specify a {@link UserHandle}. If neither the Channel nor the {@link AndroidComponentAddress}
-   * specifies a target user, the {@link UserHandle} of the current process will be used.
-   *
-   * <p>Targeting a Service in a different Android user is uncommon and requires special permissions
-   * normally reserved for system apps. See {@link android.content.Context#bindServiceAsUser} for
-   * details.
-   *
-   * @deprecated This method's name is misleading because it implies an impersonated client identity
-   *     when it's actually specifying part of the server's location. It's also no longer necessary
-   *     since the target user is part of {@link AndroidComponentAddress}. Prefer to specify target
-   *     user in the address instead, either directly or via a {@link io.grpc.NameResolverProvider}.
-   * @param targetUserHandle the target user to bind into.
-   * @return this
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10173")
-  @RequiresApi(30)
-  @Deprecated
-  public BinderChannelBuilder bindAsUser(UserHandle targetUserHandle) {
-    transportFactoryBuilder.setDefaultTargetUserHandle(targetUserHandle);
-    return this;
-  }
-
   /** Sets the policy for inbound parcelable objects. */
   public BinderChannelBuilder inboundParcelablePolicy(
       InboundParcelablePolicy inboundParcelablePolicy) {
@@ -279,6 +251,96 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
     return this;
   }
 
+  /**
+   * Checks servers against this Channel's {@link SecurityPolicy} *before* binding.
+   *
+   * <p>Android users can be tricked into installing a malicious app with the same package name as a
+   * legitimate server. That's why we don't send calls to a server until it has been authorized by
+   * an appropriate {@link SecurityPolicy}. But merely binding to a malicious server can enable
+   * "keep-alive" and "background activity launch" abuse, even if it's ultimately unauthorized.
+   * Pre-authorization mitigates these threats by performing a preliminary {@link SecurityPolicy}
+   * check against a server app's PackageManager-registered identity without actually creating an
+   * instance of it. This is especially important for security when the server's direct address
+   * isn't known in advance but rather resolved via target URI or discovered by other means.
+   *
+   * <p>Note that, unlike ordinary authorization, pre-authorization is performed against the server
+   * app's UID, not the UID of the process hosting the bound Service. These can be different, most
+   * commonly due to services that set `android:isolatedProcess=true`.
+   *
+   * <p>Pre-authorization is strongly recommended but it remains optional for now because of this
+   * behavior change and the small performance cost.
+   *
+   * <p>The default value of this property is false but it will become true in a future release.
+   * Clients that require a particular behavior should configure it explicitly using this method
+   * rather than relying on the default.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12191")
+  public BinderChannelBuilder preAuthorizeServers(boolean preAuthorize) {
+    transportFactoryBuilder.setPreAuthorizeServers(preAuthorize);
+    return this;
+  }
+
+  /**
+   * Specifies how and when to authorize a server against this Channel's {@link SecurityPolicy}.
+   *
+   * <p>This method selects the original "legacy" authorization strategy, which is no longer
+   * preferred for two reasons: First, the legacy strategy considers the UID of the server *process*
+   * we connect to. This is problematic for services using the `android:isolatedProcess` attribute,
+   * which runs them under a different "ephemeral" UID. This UID lacks all the privileges of the
+   * hosting app -- any non-trivial SecurityPolicy would fail to authorize it. Second, the legacy
+   * authorization strategy performs SecurityPolicy checks later in the connection handshake, which
+   * means the calling UID must be rechecked on every subsequent RPC. For these reasons, prefer
+   * {@link #useV2AuthStrategy} instead.
+   *
+   * <p>The server does not know which authorization strategy a client is using. Both strategies
+   * work with all versions of the grpc-binder server.
+   *
+   * <p>Callers need not specify an authorization strategy, but the default is unspecified and will
+   * eventually become {@link #useV2AuthStrategy()}. Clients that require the legacy strategy should
+   * configure it explicitly using this method. Eventually, however, legacy support will be
+   * deprecated and removed.
+   *
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12397")
+  public BinderChannelBuilder useLegacyAuthStrategy() {
+    transportFactoryBuilder.setUseLegacyAuthStrategy(true);
+    return this;
+  }
+
+  /**
+   * Specifies how and when to authorize a server against this Channel's {@link SecurityPolicy}.
+   *
+   * <p>This method selects the v2 authorization strategy. It improves on the original strategy
+   * ({@link #useLegacyAuthStrategy}), by considering the UID of the server *app* we connect to,
+   * rather than the server *process*. This allows clients to connect to services configured with
+   * the `android:isolatedProcess` attribute, which run with the same authority as the hosting app,
+   * but under a different "ephemeral" UID that any non-trivial SecurityPolicy would fail to
+   * authorize.
+   *
+   * <p>Furthermore, the v2 authorization strategy performs SecurityPolicy checks earlier in the
+   * connection handshake, which allows subsequent RPCs over that connection to proceed securely
+   * without further UID checks. For these reasons, clients should prefer the v2 strategy.
+   *
+   * <p>The server does not know which authorization strategy a client is using. Both strategies
+   * work with all versions of the grpc-binder server.
+   *
+   * <p>Callers need not specify an authorization strategy, but the default is unspecified and can
+   * change over time. Clients that require the v2 strategy should configure it explicitly using
+   * this method. Eventually, this strategy will become the default and legacy support will be
+   * removed.
+   *
+   * <p>If moving to the new authorization strategy causes a robolectric test to fail, ensure your
+   * fake Service component is registered with `ShadowPackageManager` using `addOrUpdateService()`.
+   *
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12397")
+  public BinderChannelBuilder useV2AuthStrategy() {
+    transportFactoryBuilder.setUseLegacyAuthStrategy(false);
+    return this;
+  }
+
   @Override
   public BinderChannelBuilder idleTimeout(long value, TimeUnit unit) {
     checkState(
@@ -292,6 +354,8 @@ public final class BinderChannelBuilder extends ForwardingChannelBuilder<BinderC
   public ManagedChannel build() {
     transportFactoryBuilder.setOffloadExecutorPool(
         managedChannelImplBuilder.getOffloadExecutorPool());
+    setNameResolverArg(
+        ApiConstants.SOURCE_ANDROID_CONTEXT, transportFactoryBuilder.getSourceContext());
     return super.build();
   }
 }

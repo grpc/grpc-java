@@ -50,7 +50,7 @@ public interface MetricRecorder {
    * Adds a value for a long valued counter metric instrument.
    *
    * @param metricInstrument The counter metric instrument to add the value against.
-   * @param value The value to add.
+   * @param value The value to add. MUST be non-negative.
    * @param requiredLabelValues A list of required label values for the metric.
    * @param optionalLabelValues A list of additional, optional label values for the metric.
    */
@@ -65,6 +65,29 @@ public interface MetricRecorder {
         "Incorrect number of optional labels provided. Expected: %s",
         metricInstrument.getOptionalLabelKeys().size());
   }
+
+  /**
+   * Adds a value for a long valued up down counter metric instrument.
+   *
+   * @param metricInstrument    The counter metric instrument to add the value against.
+   * @param value               The value to add. May be positive, negative or zero.
+   * @param requiredLabelValues A list of required label values for the metric.
+   * @param optionalLabelValues A list of additional, optional label values for the metric.
+   */
+  default void addLongUpDownCounter(LongUpDownCounterMetricInstrument metricInstrument,
+                                    long value,
+                                    List<String> requiredLabelValues,
+                                    List<String> optionalLabelValues) {
+    checkArgument(requiredLabelValues != null
+            && requiredLabelValues.size() == metricInstrument.getRequiredLabelKeys().size(),
+        "Incorrect number of required labels provided. Expected: %s",
+        metricInstrument.getRequiredLabelKeys().size());
+    checkArgument(optionalLabelValues != null
+            && optionalLabelValues.size() == metricInstrument.getOptionalLabelKeys().size(),
+        "Incorrect number of optional labels provided. Expected: %s",
+        metricInstrument.getOptionalLabelKeys().size());
+  }
+
 
   /**
    * Records a value for a double-precision histogram metric instrument.

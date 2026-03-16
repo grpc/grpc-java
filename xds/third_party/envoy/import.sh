@@ -16,8 +16,8 @@
 # Update VERSION then execute this script
 
 set -e
-# import VERSION from the google internal copybara_version.txt for Envoy
-VERSION=0b90f64539c88dc3d2a6792dc714e8207bce0c08
+# import VERSION from the google internal go/envoy-import-status
+VERSION=a0b3df32ba54c92a08d3636a9a36013cb920e471
 DOWNLOAD_URL="https://github.com/envoyproxy/envoy/archive/${VERSION}.tar.gz"
 DOWNLOAD_BASE_DIR="envoy-${VERSION}"
 SOURCE_PROTO_BASE_DIR="${DOWNLOAD_BASE_DIR}/api"
@@ -33,9 +33,11 @@ envoy/config/cluster/v3/circuit_breaker.proto
 envoy/config/cluster/v3/cluster.proto
 envoy/config/cluster/v3/filter.proto
 envoy/config/cluster/v3/outlier_detection.proto
+envoy/config/common/mutation_rules/v3/mutation_rules.proto
 envoy/config/core/v3/address.proto
 envoy/config/core/v3/backoff.proto
 envoy/config/core/v3/base.proto
+envoy/config/core/v3/cel.proto
 envoy/config/core/v3/config_source.proto
 envoy/config/core/v3/event_service_config.proto
 envoy/config/core/v3/extension.proto
@@ -46,6 +48,7 @@ envoy/config/core/v3/http_uri.proto
 envoy/config/core/v3/protocol.proto
 envoy/config/core/v3/proxy_protocol.proto
 envoy/config/core/v3/resolver.proto
+envoy/config/core/v3/socket_cmsg_headers.proto
 envoy/config/core/v3/socket_option.proto
 envoy/config/core/v3/substitution_format_string.proto
 envoy/config/core/v3/udp_socket_config.proto
@@ -73,12 +76,21 @@ envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/ext_authz/v3/ext_authz.proto
+envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/composite/v3/composite.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/gcp_authn/v3/gcp_authn.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
 envoy/extensions/filters/http/router/v3/router.proto
 envoy/extensions/filters/network/http_connection_manager/v3/http_connection_manager.proto
+envoy/extensions/grpc_service/call_credentials/access_token/v3/access_token_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/google_default/v3/google_default_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/insecure/v3/insecure_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/local/v3/local_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/tls/v3/tls_credentials.proto
+envoy/extensions/grpc_service/channel_credentials/xds/v3/xds_credentials.proto
 envoy/extensions/load_balancing_policies/client_side_weighted_round_robin/v3/client_side_weighted_round_robin.proto
 envoy/extensions/load_balancing_policies/common/v3/common.proto
 envoy/extensions/load_balancing_policies/least_request/v3/least_request.proto
@@ -91,16 +103,20 @@ envoy/extensions/transport_sockets/tls/v3/cert.proto
 envoy/extensions/transport_sockets/tls/v3/common.proto
 envoy/extensions/transport_sockets/tls/v3/secret.proto
 envoy/extensions/transport_sockets/tls/v3/tls.proto
+envoy/service/auth/v3/attribute_context.proto
+envoy/service/auth/v3/external_auth.proto
 envoy/service/discovery/v3/ads.proto
 envoy/service/discovery/v3/discovery.proto
 envoy/service/load_stats/v3/lrs.proto
 envoy/service/rate_limit_quota/v3/rlqs.proto
 envoy/service/status/v3/csds.proto
 envoy/type/http/v3/path_transformation.proto
+envoy/type/matcher/v3/address.proto
 envoy/type/matcher/v3/filter_state.proto
 envoy/type/matcher/v3/http_inputs.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
+envoy/config/common/matcher/v3/matcher.proto
 envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/path.proto
 envoy/type/matcher/v3/regex.proto

@@ -27,6 +27,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
@@ -47,21 +48,36 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
+import io.grpc.stub.MetadataUtils;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.sdk.common.InstrumentationScopeInfo;
+import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -94,6 +110,11 @@ public class OpenTelemetryMetricsModuleTest {
   private static final String CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE
       = "grpc.client.attempt.rcvd_total_compressed_message_size";
   private static final String CLIENT_CALL_DURATION = "grpc.client.call.duration";
+  private static final String CLIENT_CALL_RETRIES = "grpc.client.call.retries";
+  private static final String CLIENT_CALL_TRANSPARENT_RETRIES =
+      "grpc.client.call.transparent_retries";
+  private static final String CLIENT_CALL_HEDGES = "grpc.client.call.hedges";
+  private static final String CLIENT_CALL_RETRY_DELAY = "grpc.client.call.retry_delay";
   private static final String SERVER_CALL_COUNT = "grpc.server.call.started";
   private static final String SERVER_CALL_DURATION = "grpc.server.call.duration";
   private static final String SERVER_CALL_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE
@@ -153,6 +174,14 @@ public class OpenTelemetryMetricsModuleTest {
   private ServerCall.Listener<String> mockServerCallListener;
   @Captor
   private ArgumentCaptor<Status> statusCaptor;
+  @Mock
+  private DoubleHistogram mockServerCallDurationHistogram;
+  @Captor
+  private ArgumentCaptor<io.opentelemetry.context.Context> contextCaptor;
+  private io.grpc.Server server;
+  private io.grpc.ManagedChannel channel;
+  private OpenTelemetryMetricsResource resource;
+  private final String serverName = "E2ETestServer-" + Math.random();
 
   private final FakeClock fakeClock = new FakeClock();
   private final MethodDescriptor<String, String> method =
@@ -172,6 +201,19 @@ public class OpenTelemetryMetricsModuleTest {
   public void setUp() throws Exception {
     testMeter = openTelemetryTesting.getOpenTelemetry()
         .getMeter(OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
+    resource = OpenTelemetryMetricsResource.builder()
+        .serverCallDurationCounter(mockServerCallDurationHistogram)
+        .build();
+  }
+
+  @After
+  public void tearDown() {
+    if (channel != null) {
+      channel.shutdownNow();
+    }
+    if (server != null) {
+      server.shutdownNow();
+    }
   }
 
   @Test
@@ -194,7 +236,7 @@ public class OpenTelemetryMetricsModuleTest {
             }).build());
 
     final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<>();
-    ClientInterceptor callOptionsCatureInterceptor = new ClientInterceptor() {
+    ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
       @Override
       public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
           MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
@@ -204,7 +246,7 @@ public class OpenTelemetryMetricsModuleTest {
     };
     Channel interceptedChannel =
         ClientInterceptors.intercept(
-            grpcServerRule.getChannel(), callOptionsCatureInterceptor,
+            grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
             module.getClientInterceptor("target:///"));
     ClientCall<String, String> call;
     call = interceptedChannel.newCall(method, CALL_OPTIONS);
@@ -378,6 +420,88 @@ public class OpenTelemetryMetricsModuleTest {
                                         .hasBucketCounts(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
                                             0, 0, 0, 0, 0, 0, 0, 0, 0))));
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .extracting("name")
+        .doesNotContain(
+            CLIENT_CALL_RETRIES,
+            CLIENT_CALL_TRANSPARENT_RETRIES,
+            CLIENT_CALL_HEDGES,
+            CLIENT_CALL_RETRY_DELAY);
+  }
+
+  @Test
+  public void clientBasicMetrics_withRetryMetricsEnabled_shouldRecordZeroOrBeAbsent() {
+    // Explicitly enable the retry metrics
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, method.getFullMethodName(), emptyList());
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    fakeClock.forwardTime(30, TimeUnit.MILLISECONDS);
+    tracer.outboundHeaders();
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    tracer.outboundMessage(0);
+    tracer.streamClosed(Status.OK);
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasHistogramSatisfying(
+                    histogram ->
+                        histogram.hasPointsSatisfying(
+                            point ->
+                                point
+                                    .hasSum(0)
+                                    .hasCount(1)
+                                    .hasAttributes(finalAttributes)))
+
+        );
+
+    List<String> optionalMetricNames = Arrays.asList(
+        CLIENT_CALL_RETRIES,
+        CLIENT_CALL_TRANSPARENT_RETRIES,
+        CLIENT_CALL_HEDGES);
+
+    for (String metricName : optionalMetricNames) {
+      Optional<MetricData> metric = openTelemetryTesting.getMetrics().stream()
+          .filter(m -> m.getName().equals(metricName))
+          .findFirst();
+      if (metric.isPresent()) {
+        assertThat(metric.get())
+            .hasHistogramSatisfying(
+                histogram ->
+                    histogram.hasPointsSatisfying(
+                        point ->
+                            point
+                                .hasSum(0)
+                                .hasCount(1)
+                                .hasAttributes(finalAttributes)));
+      }
+    }
   }
 
   // This test is only unit-testing the metrics recording logic. The retry behavior is faked.
@@ -829,6 +953,182 @@ public class OpenTelemetryMetricsModuleTest {
                                             .hasSum(33D)
                                             .hasAttributes(clientAttributes2)
                                             .hasBucketBoundaries(sizeBuckets))));
+  }
+
+  @Test
+  public void recordAttemptMetrics_withRetryMetricsEnabled() {
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+            method.getFullMethodName(), emptyList());
+
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    fakeClock.forwardTime(154, TimeUnit.MILLISECONDS);
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
+    tracer.streamClosed(Status.NOT_FOUND);
+
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
+    fakeClock.forwardTime(32, MILLISECONDS);
+    tracer.streamClosed(Status.UNAVAILABLE);
+
+    fakeClock.forwardTime(10, MILLISECONDS);
+    tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        STREAM_INFO.toBuilder().setIsTransparentRetry(true).build(), new Metadata());
+    tracer.inboundWireSize(33);
+    fakeClock.forwardTime(24, MILLISECONDS);
+    tracer.streamClosed(Status.OK); // RPC succeeded
+
+    // --- The overall call ends ---
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    // Define attributes for assertions
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    // FINAL ASSERTION BLOCK
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            // Default metrics
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+
+            // --- Assertions for the retry metrics ---
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRIES)
+                .hasUnit("{retry}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(1) // We faked one standard retry
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_TRANSPARENT_RETRIES)
+                .hasUnit("{transparent_retry}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(2) // We faked two transparent retries
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasUnit("s")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(1.02) // 1000ms + 10ms + 10ms
+                        .hasAttributes(finalAttributes)))
+        );
+  }
+
+  @Test
+  public void recordAttemptMetrics_withHedgedCalls() {
+    // Enable the retry metrics, including hedges
+    Map<String, Boolean> enabledMetrics = ImmutableMap.of(
+        CLIENT_CALL_RETRIES, true,
+        CLIENT_CALL_TRANSPARENT_RETRIES, true,
+        CLIENT_CALL_HEDGES, true,
+        CLIENT_CALL_RETRY_DELAY, true
+    );
+
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetrics, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target,
+            method.getFullMethodName(), emptyList());
+
+    // Create a StreamInfo specifically for hedged attempts
+    final ClientStreamTracer.StreamInfo hedgedStreamInfo =
+        STREAM_INFO.toBuilder().setIsHedging(true).build();
+
+    // --- First attempt starts ---
+    ClientStreamTracer tracer =
+        callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    // --- Faking a hedged attempt ---
+    fakeClock.forwardTime(10, TimeUnit.MILLISECONDS); // Hedging delay
+    ClientStreamTracer hedgeTracer1 =
+        callAttemptsTracerFactory.newClientStreamTracer(hedgedStreamInfo, new Metadata());
+
+    // --- Faking a second hedged attempt ---
+    fakeClock.forwardTime(20, TimeUnit.MILLISECONDS); // Another hedging delay
+    ClientStreamTracer hedgeTracer2 =
+        callAttemptsTracerFactory.newClientStreamTracer(hedgedStreamInfo, new Metadata());
+
+    // --- Let the attempts resolve ---
+    fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
+    // Initial attempt is cancelled because a hedge will succeed
+    tracer.streamClosed(Status.CANCELLED);
+    hedgeTracer1.streamClosed(Status.UNAVAILABLE); // First hedge fails
+
+    fakeClock.forwardTime(30, TimeUnit.MILLISECONDS);
+    hedgeTracer2.streamClosed(Status.OK); // Second hedge succeeds
+
+    // --- The overall call ends ---
+    callAttemptsTracerFactory.callEnded(Status.OK);
+
+    // Define attributes for assertions
+    io.opentelemetry.api.common.Attributes finalAttributes
+        = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    // FINAL ASSERTION BLOCK
+    // We expect 7 metrics: 5 default + hedges + retry_delay.
+    // Retries and transparent_retries are 0 and will not be reported.
+    assertThat(openTelemetryTesting.getMetrics())
+        .satisfiesExactlyInAnyOrder(
+            // Default metrics
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_DURATION_INSTRUMENT_NAME),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_SENT_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_ATTEMPT_RECV_TOTAL_COMPRESSED_MESSAGE_SIZE),
+            metric -> assertThat(metric).hasName(CLIENT_CALL_DURATION),
+
+            // --- Assertions for the NEW metrics ---
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_HEDGES)
+                .hasUnit("{hedge}")
+                .hasHistogramSatisfying(histogram -> histogram.hasPointsSatisfying(
+                    point -> point
+                        .hasCount(1)
+                        .hasSum(2)
+                        .hasAttributes(finalAttributes))),
+            metric -> assertThat(metric)
+                .hasName(CLIENT_CALL_RETRY_DELAY)
+                .hasUnit("s")
+                .hasHistogramSatisfying(
+                    histogram ->
+                        histogram.hasPointsSatisfying(
+                            point ->
+                                point
+                                    .hasCount(1)
+                                    .hasSum(0)
+                                    .hasAttributes(finalAttributes)))
+        );
   }
 
   @Test
@@ -1329,10 +1629,186 @@ public class OpenTelemetryMetricsModuleTest {
 
   }
 
+  @Test
+  public void serverBaggagePropagationToMetrics() {
+    // 1. Create module and tracer factory using the mock resource
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
+
+    // 2. Define the test baggage and gRPC context
+    Baggage testBaggage = Baggage.builder()
+        .put("user-id", "67")
+        .build();
+
+    // This simulates the context that the Tracing module would have created
+    io.grpc.Context grpcContext = io.grpc.Context.current()
+        .withValue(OpenTelemetryConstants.BAGGAGE_KEY, testBaggage);
+
+    // 3. Attach the gRPC context, trigger metric recording, and detach
+    io.grpc.Context previousContext = grpcContext.attach();
+    try {
+      tracer.streamClosed(Status.OK);
+    } finally {
+      grpcContext.detach(previousContext);
+    }
+
+    // 4. Verify the record call and capture the OTel Context
+    verify(mockServerCallDurationHistogram).record(
+        anyDouble(),
+        any(io.opentelemetry.api.common.Attributes.class),
+        contextCaptor.capture());
+
+    // 5. Assert on the captured OTel Context
+    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
+    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
+
+    assertEquals("67", capturedBaggage.getEntryValue("user-id"));
+  }
+
+  @Test
+  public void targetAttributeFilter_notSet_usesOriginalTarget() {
+    // Test that when no filter is set, the original target is used
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
+  @Test
+  public void targetAttributeFilter_allowsTarget_usesOriginalTarget() {
+    // Test that when filter allows the target, the original target is used
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource,
+        t -> t.contains("example.com"));
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, target,
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
+  @Test
+  public void targetAttributeFilter_rejectsTarget_mapsToOther() {
+    // Test that when filter rejects the target, it is mapped to "other"
+    String target = "dns:///example.com";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource,
+        t -> t.contains("allowed.com"));
+
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(
+            grpcServerRule.getChannel(), module.getClientInterceptor(target));
+
+    ClientCall<String, String> call = interceptedChannel.newCall(method, CALL_OPTIONS);
+
+    // Make the call
+    Metadata headers = new Metadata();
+    call.start(mockClientCallListener, headers);
+
+    // End the call
+    call.halfClose();
+    call.request(1);
+
+    io.opentelemetry.api.common.Attributes attributes = io.opentelemetry.api.common.Attributes.of(
+        TARGET_KEY, "other",
+        METHOD_KEY, method.getFullMethodName());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_ATTEMPT_COUNT_INSTRUMENT_NAME)
+                    .hasUnit("{attempt}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum
+                                .hasPointsSatisfying(
+                                    point ->
+                                        point
+                                            .hasAttributes(attributes))));
+  }
+
   private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
       OpenTelemetryMetricsResource resource) {
     return new OpenTelemetryMetricsModule(
         fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+  }
+
+  private OpenTelemetryMetricsModule newOpenTelemetryMetricsModule(
+      OpenTelemetryMetricsResource resource, TargetFilter filter) {
+    return new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList(), filter);
   }
 
   static class CallInfo<ReqT, RespT> extends ServerCallInfo<ReqT, RespT> {
@@ -1363,6 +1839,66 @@ public class OpenTelemetryMetricsModuleTest {
     @Override
     public String getAuthority() {
       return authority;
+    }
+  }
+
+  @Test
+  public void serverBaggagePropagation_EndToEnd() throws Exception {
+    // 1. Create Both Modules
+    OpenTelemetry otel = openTelemetryTesting.getOpenTelemetry();
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(otel);
+    OpenTelemetryMetricsModule metricsModule = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(), resource, emptyList(), emptyList());
+
+    // 2. Create Server with *both* tracer factories
+    server = InProcessServerBuilder.forName(serverName)
+        .addService(new SimpleServiceImpl()) // <-- Uses the helper class below
+        .addStreamTracerFactory(tracingModule.getServerTracerFactory())
+        .addStreamTracerFactory(metricsModule.getServerTracerFactory())
+        .build()
+        .start();
+
+    // 3. Create Client Channel
+    channel = InProcessChannelBuilder.forName(serverName).directExecutor().build();
+
+    // 4. Manually create baggage headers
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("baggage", Metadata.ASCII_STRING_MARSHALLER),
+        "choice=red_pill_or_blue_pill");
+
+    // 5. Make the gRPC call with these headers
+    ClientInterceptor headerAttachingInterceptor =
+        MetadataUtils.newAttachHeadersInterceptor(headers);
+
+    // Now, create the stub and apply that interceptor
+    SimpleServiceGrpc.SimpleServiceBlockingStub stub =
+        SimpleServiceGrpc.newBlockingStub(channel)
+            .withInterceptors(headerAttachingInterceptor);
+
+    // Use the imported SimpleRequest
+    stub.unaryRpc(SimpleRequest.getDefaultInstance());
+
+    // 6. Verify the Mock
+    verify(mockServerCallDurationHistogram).record(
+        anyDouble(),
+        any(io.opentelemetry.api.common.Attributes.class),
+        contextCaptor.capture());
+
+    // 7. Assert on the captured Context
+    io.opentelemetry.context.Context capturedOtelContext = contextCaptor.getValue();
+    Baggage capturedBaggage = Baggage.fromContext(capturedOtelContext);
+
+    assertEquals("red_pill_or_blue_pill", capturedBaggage.getEntryValue("choice"));
+  }
+
+  /**
+   * A simple service implementation for the E2E test.
+   */
+  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
+    @Override
+    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
+      responseObserver.onNext(SimpleResponse.getDefaultInstance());
+      responseObserver.onCompleted();
     }
   }
 }

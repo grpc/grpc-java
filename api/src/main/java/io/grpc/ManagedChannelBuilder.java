@@ -374,9 +374,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * notice when they are causing excessive load. Clients are strongly encouraged to use only as
    * small of a value as necessary.
    *
+   * <p>When the channel implementation supports TCP_USER_TIMEOUT, enabling keepalive will also
+   * enable TCP_USER_TIMEOUT for the connection. This requires <em>all</em> sent packets to receive
+   * a TCP acknowledgement before the keepalive timeout. The keepalive time is not used for
+   * TCP_USER_TIMEOUT, except as a signal to enable the feature. grpc-netty supports
+   * TCP_USER_TIMEOUT on Linux platforms supported by netty-transport-native-epoll.
+   *
    * @throws UnsupportedOperationException if unsupported
    * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
    *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
@@ -393,6 +401,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @throws UnsupportedOperationException if unsupported
    * @see <a href="https://github.com/grpc/proposal/blob/master/A8-client-side-keepalive.md">gRFC A8
    *     Client-side Keepalive</a>
+   * @see <a href="https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md">gRFC A18
+   *     TCP User Timeout</a>
    * @since 1.7.0
    */
   public T keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {

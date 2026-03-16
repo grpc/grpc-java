@@ -23,6 +23,7 @@ import com.google.common.base.Optional;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.io.Files;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -51,7 +52,7 @@ public final class SpiffeUtil {
 
   private static final Integer URI_SAN_TYPE = 6;
   private static final String USE_PARAMETER_VALUE = "x509-svid";
-  private static final String KTY_PARAMETER_VALUE = "RSA";
+  private static final ImmutableSet<String> KTY_PARAMETER_VALUES = ImmutableSet.of("RSA", "EC");
   private static final String CERTIFICATE_PREFIX = "-----BEGIN CERTIFICATE-----\n";
   private static final String CERTIFICATE_SUFFIX = "-----END CERTIFICATE-----";
   private static final String PREFIX = "spiffe://";
@@ -205,10 +206,12 @@ public final class SpiffeUtil {
 
   private static void checkJwkEntry(Map<String, ?> jwkNode, String trustDomainName) {
     String kty = JsonUtil.getString(jwkNode, "kty");
-    if (kty == null || !kty.equals(KTY_PARAMETER_VALUE)) {
-      throw new IllegalArgumentException(String.format("'kty' parameter must be '%s' but '%s' "
-              + "found. Certificate loading for trust domain '%s' failed.", KTY_PARAMETER_VALUE,
-          kty, trustDomainName));
+    if (kty == null || !KTY_PARAMETER_VALUES.contains(kty)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "'kty' parameter must be one of %s but '%s' "
+                  + "found. Certificate loading for trust domain '%s' failed.",
+              KTY_PARAMETER_VALUES, kty, trustDomainName));
     }
     if (jwkNode.containsKey("kid")) {
       throw new IllegalArgumentException(String.format("'kid' parameter must not be set. "

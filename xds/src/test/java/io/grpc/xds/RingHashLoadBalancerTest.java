@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.Iterables;
 import com.google.common.primitives.UnsignedInteger;
+import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
@@ -254,13 +255,13 @@ public class RingHashLoadBalancerTest {
       inOrder.verify(helper).refreshNameResolution();
       inOrder.verify(helper).updateBalancingState(eq(CONNECTING), any());
     }
-    verifyConnection(0);
+    verifyConnection(1);
   }
 
   private void verifyConnection(int times) {
     for (int i = 0; i < times; i++) {
       Subchannel connectOnce = connectionRequestedQueue.poll();
-      assertWithMessage("Null connection is at (%s) of (%s)", i, times)
+      assertWithMessage("Expected %s new connections, but found %s", times, i)
           .that(connectOnce).isNotNull();
       clearInvocations(connectOnce);
     }
@@ -536,7 +537,7 @@ public class RingHashLoadBalancerTest {
     // Bring one subchannel to TRANSIENT_FAILURE.
     deliverSubchannelUnreachable(getSubChannel(servers.get(0)));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(1);
 
     // Pick subchannel with random hash does trigger connection by walking the ring
     // and choosing the first (at most one) IDLE subchannel along the way.
@@ -582,7 +583,7 @@ public class RingHashLoadBalancerTest {
         getSubChannel(servers.get(0)),
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper, atLeastOnce()).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
@@ -647,8 +648,8 @@ public class RingHashLoadBalancerTest {
         getSubchannel(servers, 2),
         ConnectivityStateInfo.forTransientFailure(
             Status.PERMISSION_DENIED.withDescription("permission denied")));
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verifyConnection(0);
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    verifyConnection(2);
     PickResult result = pickerCaptor.getValue().pickSubchannel(args); // activate last subchannel
     assertThat(result.getStatus().isOk()).isTrue();
     int expectedCount = PickFirstLoadBalancerProvider.isEnabledNewPickFirst() ? 0 : 1;
@@ -720,7 +721,7 @@ public class RingHashLoadBalancerTest {
     }
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(2);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgsForServer(0);
@@ -739,12 +740,13 @@ public class RingHashLoadBalancerTest {
     List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
     initializeLbSubchannels(config, servers);
 
-    // Go to TF does nothing, though PF will try to reconnect after backoff
+    // As per gRFC A61, entering TF triggers a proactive connection attempt
+    // on an IDLE subchannel because no other subchannel is currently CONNECTING.
     deliverSubchannelState(getSubchannel(servers, 1),
         ConnectivityStateInfo.forTransientFailure(
         Status.UNAVAILABLE.withDescription("unreachable")));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(1);
 
     // Picking subchannel triggers connection. RPC hash hits server0.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
@@ -795,7 +797,7 @@ public class RingHashLoadBalancerTest {
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("unreachable")));
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(1);
 
     // Per GRFC A61 Picking subchannel should no longer request connections that were failing
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
@@ -823,7 +825,7 @@ public class RingHashLoadBalancerTest {
 
     Subchannel firstSubchannel = getSubchannel(servers, 0);
     deliverSubchannelUnreachable(firstSubchannel);
-    verifyConnection(0);
+    verifyConnection(1);
 
     deliverSubchannelState(getSubchannel(servers, 2), CSI_CONNECTING);
     verify(helper, times(2)).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
@@ -832,7 +834,7 @@ public class RingHashLoadBalancerTest {
     // Picking subchannel when idle triggers connection.
     deliverSubchannelState(getSubchannel(servers, 2),
         ConnectivityStateInfo.forNonError(IDLE));
-    verifyConnection(0);
+    verifyConnection(1);
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
@@ -856,7 +858,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelUnreachable(firstSubchannel);
     deliverSubchannelUnreachable(getSubchannel(servers, 2));
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(2);
 
     // Picking subchannel triggers connection.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
@@ -886,7 +888,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelState(getSubchannel(servers, 1), CSI_CONNECTING);
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(2);
 
     // Picking subchannel should not trigger connection per gRFC A61.
     PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
@@ -908,7 +910,7 @@ public class RingHashLoadBalancerTest {
     deliverSubchannelUnreachable(firstSubchannel);
 
     verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    verifyConnection(0);
+    verifyConnection(1);
 
     reset(helper);
     deliverSubchannelState(firstSubchannel, ConnectivityStateInfo.forNonError(IDLE));
@@ -1111,6 +1113,52 @@ public class RingHashLoadBalancerTest {
           picker.pickSubchannel(getDefaultPickSubchannelArgs(random.nextLong())).getSubchannel());
     }
     assertThat(picks).containsExactly(subchannel1);
+  }
+
+  @Test
+  public void config_equalsTester() {
+    new EqualsTester()
+        .addEqualityGroup(
+            new RingHashConfig(1, 2, "headerA"),
+            new RingHashConfig(1, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 1, "headerA"))
+        .addEqualityGroup(new RingHashConfig(2, 2, "headerA"))
+        .addEqualityGroup(new RingHashConfig(1, 2, "headerB"))
+        .addEqualityGroup(new RingHashConfig(1, 2, ""))
+        .testEquals();
+  }
+
+  @Test
+  public void tfWithoutConnectingChild_triggersIdleChildConnection() {
+    RingHashConfig config = new RingHashConfig(10, 100, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    Subchannel tfSubchannel = getSubchannel(servers, 0);
+    Subchannel idleSubchannel = getSubchannel(servers, 1);
+
+    deliverSubchannelUnreachable(tfSubchannel);
+
+    Subchannel requested = connectionRequestedQueue.poll();
+    assertThat(requested).isSameInstanceAs(idleSubchannel);
+    assertThat(connectionRequestedQueue.poll()).isNull();
+  }
+
+  @Test
+  public void tfWithReadyChild_doesNotTriggerIdleChildConnection() {
+    RingHashConfig config = new RingHashConfig(10, 100, "");
+    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1, 1, 1);
+
+    initializeLbSubchannels(config, servers);
+
+    Subchannel tfSubchannel = getSubchannel(servers, 0);
+    Subchannel readySubchannel = getSubchannel(servers, 1);
+
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelUnreachable(tfSubchannel);
+
+    assertThat(connectionRequestedQueue.poll()).isNull();
   }
 
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,

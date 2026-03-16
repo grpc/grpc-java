@@ -23,6 +23,9 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -33,6 +36,8 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
 
   private final SocketAddress proxyAddress;
   private final InetSocketAddress targetAddress;
+  @SuppressWarnings("serial")
+  private final Map<String, String> headers;
   @Nullable
   private final String username;
   @Nullable
@@ -41,6 +46,7 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
   private HttpConnectProxiedSocketAddress(
       SocketAddress proxyAddress,
       InetSocketAddress targetAddress,
+      Map<String, String> headers,
       @Nullable String username,
       @Nullable String password) {
     checkNotNull(proxyAddress, "proxyAddress");
@@ -53,6 +59,7 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
     }
     this.proxyAddress = proxyAddress;
     this.targetAddress = targetAddress;
+    this.headers = headers;
     this.username = username;
     this.password = password;
   }
@@ -87,6 +94,14 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
     return targetAddress;
   }
 
+  /**
+   * Returns the custom HTTP headers to be sent during the HTTP CONNECT handshake.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12479")
+  public Map<String, String> getHeaders() {
+    return headers;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (!(o instanceof HttpConnectProxiedSocketAddress)) {
@@ -95,13 +110,14 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
     HttpConnectProxiedSocketAddress that = (HttpConnectProxiedSocketAddress) o;
     return Objects.equal(proxyAddress, that.proxyAddress)
         && Objects.equal(targetAddress, that.targetAddress)
+        && Objects.equal(headers, that.headers)
         && Objects.equal(username, that.username)
         && Objects.equal(password, that.password);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(proxyAddress, targetAddress, username, password);
+    return Objects.hashCode(proxyAddress, targetAddress, username, password, headers);
   }
 
   @Override
@@ -109,6 +125,7 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
     return MoreObjects.toStringHelper(this)
         .add("proxyAddr", proxyAddress)
         .add("targetAddr", targetAddress)
+        .add("headers", headers)
         .add("username", username)
         // Intentionally mask out password
         .add("hasPassword", password != null)
@@ -129,6 +146,7 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
 
     private SocketAddress proxyAddress;
     private InetSocketAddress targetAddress;
+    private Map<String, String> headers = Collections.emptyMap();
     @Nullable
     private String username;
     @Nullable
@@ -154,6 +172,18 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
     }
 
     /**
+     * Sets custom HTTP headers to be sent during the HTTP CONNECT handshake. This is an optional
+     * field. The headers will be sent in addition to any authentication headers (if username and
+     * password are set).
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12479")
+    public Builder setHeaders(Map<String, String> headers) {
+      this.headers = Collections.unmodifiableMap(
+          new HashMap<>(checkNotNull(headers, "headers")));
+      return this;
+    }
+
+    /**
      * Sets the username used to connect to the proxy.  This is an optional field and can be {@code
      * null}.
      */
@@ -175,7 +205,8 @@ public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress 
      * Creates an {@code HttpConnectProxiedSocketAddress}.
      */
     public HttpConnectProxiedSocketAddress build() {
-      return new HttpConnectProxiedSocketAddress(proxyAddress, targetAddress, username, password);
+      return new HttpConnectProxiedSocketAddress(
+          proxyAddress, targetAddress, headers, username, password);
     }
   }
 }

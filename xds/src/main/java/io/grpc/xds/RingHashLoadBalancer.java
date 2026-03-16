@@ -51,6 +51,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -213,10 +214,30 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       overallState = TRANSIENT_FAILURE;
     }
 
+    // gRFC A61: if the aggregated connectivity state is TRANSIENT_FAILURE or CONNECTING and
+    // there are no endpoints in CONNECTING state, the ring_hash policy will choose one of
+    // the endpoints in IDLE state (if any) to trigger a connection attempt on
+    if (numReady == 0 && numTF > 0 && numConnecting == 0 && numIdle > 0) {
+      triggerIdleChildConnection();
+    }
+
     RingHashPicker picker =
         new RingHashPicker(syncContext, ring, getChildLbStates(), requestHashHeaderKey, random);
     getHelper().updateBalancingState(overallState, picker);
     this.currentConnectivityState = overallState;
+  }
+
+
+  /**
+   * Triggers a connection attempt for the first IDLE child load balancer.
+   */
+  private void triggerIdleChildConnection() {
+    for (ChildLbState child : getChildLbStates()) {
+      if (child.getCurrentState() == ConnectivityState.IDLE) {
+        child.getLb().requestConnection();
+        return;
+      }
+    }
   }
 
   @Override
@@ -437,7 +458,9 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
 
           if (subchannelView.connectivityState == IDLE) {
             syncContext.execute(() -> {
-              childLbState.getLb().requestConnection();
+              if (childLbState.getCurrentState() == IDLE) {
+                childLbState.getLb().requestConnection();
+              }
             });
 
             return PickResult.withNoResult(); // Indicates that this should be retried after backoff
@@ -455,10 +478,11 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
             return childLbState.getCurrentPicker().pickSubchannel(args);
           }
           if (!requestedConnection && subchannelView.connectivityState == IDLE) {
-            syncContext.execute(
-                () -> {
-                  childLbState.getLb().requestConnection();
-                });
+            syncContext.execute(() -> {
+              if (childLbState.getCurrentState() == IDLE) {
+                childLbState.getLb().requestConnection();
+              }
+            });
             requestedConnection = true;
           }
         }
@@ -521,6 +545,22 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
       this.minRingSize = minRingSize;
       this.maxRingSize = maxRingSize;
       this.requestHashHeader = requestHashHeader;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof RingHashConfig)) {
+        return false;
+      }
+      RingHashConfig that = (RingHashConfig) o;
+      return this.minRingSize == that.minRingSize
+          && this.maxRingSize == that.maxRingSize
+          && Objects.equals(this.requestHashHeader, that.requestHashHeader);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(minRingSize, maxRingSize, requestHashHeader);
     }
 
     @Override

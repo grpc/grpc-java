@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.StatusOr;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
@@ -26,9 +27,9 @@ import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import java.io.Closeable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Represents the xDS configuration tree for a specified Listener.
@@ -191,10 +192,14 @@ final class XdsConfig {
 
     // The list of leaf clusters for an aggregate cluster.
     static final class AggregateConfig implements ClusterChild {
-      private final Set<String> leafNames;
+      private final List<String> leafNames;
 
-      public AggregateConfig(Set<String> leafNames) {
-        this.leafNames = checkNotNull(leafNames, "leafNames");
+      public AggregateConfig(List<String> leafNames) {
+        this.leafNames = ImmutableList.copyOf(checkNotNull(leafNames, "leafNames"));
+      }
+
+      public List<String> getLeafNames() {
+        return leafNames;
       }
 
       @Override
@@ -249,6 +254,12 @@ final class XdsConfig {
   }
 
   public interface XdsClusterSubscriptionRegistry {
-    Closeable subscribeToCluster(String clusterName);
+    Subscription subscribeToCluster(String clusterName);
+  }
+
+  public interface Subscription extends Closeable {
+    /** Release resources without throwing exceptions. */
+    @Override
+    void close();
   }
 }

@@ -47,6 +47,13 @@ message CelExpression {
   //
   // If set, takes precedence over ``cel_expr_parsed``.
   cel.expr.CheckedExpr cel_expr_checked = 4;
+
+  // Unparsed expression in string form. For example, ``request.headers['x-env'] == 'prod'`` will
+  // get ``x-env`` header value and compare it with ``prod``.
+  // Check the `Common Expression Language <https://github.com/google/cel-spec>`_ for more details.
+  //
+  // If set, takes precedence over ``cel_expr_parsed`` and ``cel_expr_checked``.
+  string cel_expr_string = 5;
 }
 
 // Extracts a string by evaluating a `Common Expression Language

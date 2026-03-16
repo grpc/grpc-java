@@ -40,6 +40,7 @@ import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsClient.ResourceUpdate;
 import io.grpc.xds.client.XdsResourceType;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -245,10 +246,16 @@ class XdsEndpointResource extends XdsResourceType<EdsUpdate> {
         proto.getPriority(), localityMetadata));
   }
 
-  private static InetSocketAddress getInetSocketAddress(Address address) {
+  private static InetSocketAddress getInetSocketAddress(Address address)
+      throws ResourceInvalidException {
     io.envoyproxy.envoy.config.core.v3.SocketAddress socketAddress = address.getSocketAddress();
-
-    return new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
+    InetAddress parsedAddress;
+    try {
+      parsedAddress = InetAddresses.forString(socketAddress.getAddress());
+    } catch (IllegalArgumentException ex) {
+      throw new ResourceInvalidException("Address is not an IP", ex);
+    }
+    return new InetSocketAddress(parsedAddress, socketAddress.getPortValue());
   }
 
   static final class EdsUpdate implements ResourceUpdate {

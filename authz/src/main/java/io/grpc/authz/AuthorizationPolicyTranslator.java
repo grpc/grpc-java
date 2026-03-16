@@ -156,19 +156,19 @@ class AuthorizationPolicyTranslator {
   }
 
   /** 
-  * Translates a gRPC authorization policy in JSON string to Envoy RBAC policies.
-  * On success, will return one of the following -
-  * 1. One allow RBAC policy or,
-  * 2. Two RBAC policies, deny policy followed by allow policy.
-  * If the policy cannot be parsed or is invalid, an exception will be thrown.
-  */
+   * Translates a gRPC authorization policy in JSON string to Envoy RBAC policies.
+   * On success, will return one of the following -
+   * 1. One allow RBAC policy or,
+   * 2. Two RBAC policies, deny policy followed by allow policy.
+   * If the policy cannot be parsed or is invalid, an exception will be thrown.
+   */
   public static List<RBAC> translate(String authorizationPolicy) 
             throws IllegalArgumentException, IOException {
     Object jsonObject = JsonParser.parse(authorizationPolicy);
     if (!(jsonObject instanceof Map)) {
       throw new IllegalArgumentException(
-        "Authorization policy should be a JSON object. Found: "
-        + (jsonObject == null ? null : jsonObject.getClass()));
+          "Authorization policy should be a JSON object. Found: "
+          + (jsonObject == null ? null : jsonObject.getClass()));
     }
     @SuppressWarnings("unchecked")
     Map<String, ?> json = (Map<String, ?>)jsonObject;

@@ -37,7 +37,8 @@ final class FilterRegistry {
       instance = newRegistry().register(
               new FaultFilter.Provider(),
               new RouterFilter.Provider(),
-              new RbacFilter.Provider());
+              new RbacFilter.Provider(),
+              new GcpAuthenticationFilter.Provider());
     }
     return instance;
   }

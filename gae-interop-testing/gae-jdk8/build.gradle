@@ -58,6 +58,7 @@ def createDefaultVersion() {
     return new java.text.SimpleDateFormat("yyyyMMdd't'HHmmss").format(new Date())
 }
 
+def nonShadowedProject = project
 // [START model]
 appengine {
     // App Engine tasks configuration
@@ -67,13 +68,13 @@ appengine {
 
     deploy {
         // deploy configuration
-        projectId = 'GCLOUD_CONFIG'
+        projectId = nonShadowedProject.findProperty('gaeProjectId') ?: 'GCLOUD_CONFIG'
         // default - stop the current version
-        stopPreviousVersion = System.getProperty('gaeStopPreviousVersion') ?: true
+        stopPreviousVersion = nonShadowedProject.findProperty('gaeStopPreviousVersion') ?: true
         // default - do not make this the promoted version
-        promote = System.getProperty('gaePromote') ?: false
-        // Use -DgaeDeployVersion if set, otherwise the version is null and the plugin will generate it
-        version = System.getProperty('gaeDeployVersion', createDefaultVersion())
+        promote = nonShadowedProject.findProperty('gaePromote') ?: false
+        // Use -PgaeDeployVersion if set, otherwise the version is null and the plugin will generate it
+        version = nonShadowedProject.findProperty('gaeDeployVersion') ?: createDefaultVersion()
     }
 }
 // [END model]
@@ -83,6 +84,10 @@ version = '1.0-SNAPSHOT'          // Version in generated output
 
 /** Returns the service name. */
 String getGaeProject() {
+    def configuredProjectId = appengine.deploy.projectId
+    if (!"GCLOUD_CONFIG".equals(configuredProjectId)) {
+        return configuredProjectId
+    }
     def stream = new ByteArrayOutputStream()
     exec {
         executable 'gcloud'
@@ -110,11 +115,8 @@ String getAppUrl(String project, String service, String version) {
 }
 
 tasks.register("runInteropTestRemote") {
-    dependsOn appengineDeploy
+    mustRunAfter appengineDeploy
     doLast {
-        // give remote app some time to settle down
-        sleep(20000)
-
         def appUrl = getAppUrl(
                 getGaeProject(),
                 getService(project.getProjectDir().toPath()),

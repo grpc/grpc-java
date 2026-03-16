@@ -150,8 +150,8 @@ final class SslContextFactory {
         ProtoUtil.buildTlsProtocolVersionSet(
             clientTlsConfiguration.getMinTlsVersion(), clientTlsConfiguration.getMaxTlsVersion());
     if (tlsVersions.isEmpty()) {
-      throw new S2AConnectionException("Set of TLS versions received from S2A server is"
-        + " empty or not supported.");
+      throw new S2AConnectionException(
+          "Set of TLS versions received from S2A server is empty or not supported.");
     }
     sslContextBuilder.protocols(tlsVersions);
   }

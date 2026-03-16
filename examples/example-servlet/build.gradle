@@ -1,5 +1,5 @@
 plugins {
-    id 'com.google.protobuf' version '0.9.4'
+    id 'com.google.protobuf' version '0.9.5'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
     id 'war'
@@ -15,16 +15,15 @@ java {
     targetCompatibility = JavaVersion.VERSION_1_8
 }
 
-def grpcVersion = '1.73.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.5'
+def grpcVersion = '1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protocVersion = '3.25.8'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}",
             "io.grpc:grpc-servlet:${grpcVersion}",
             "io.grpc:grpc-stub:${grpcVersion}"
 
-    compileOnly "javax.servlet:javax.servlet-api:4.0.1",
-            "org.apache.tomcat:annotations-api:6.0.53"
+    compileOnly "javax.servlet:javax.servlet-api:4.0.1"
 }
 
 protobuf {
@@ -32,15 +31,5 @@ protobuf {
     plugins { grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" } }
     generateProtoTasks {
         all()*.plugins { grpc {} }
-    }
-}
-
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
-        }
     }
 }

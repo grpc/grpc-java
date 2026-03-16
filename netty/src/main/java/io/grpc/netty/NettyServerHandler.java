@@ -60,6 +60,8 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http2.DecoratingHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DecoratingHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
@@ -67,8 +69,10 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.DefaultHttp2HeadersEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
+import io.netty.handler.codec.http2.EmptyHttp2Headers;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2ConnectionAdapter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
@@ -82,7 +86,9 @@ import io.netty.handler.codec.http2.Http2FrameReader;
 import io.netty.handler.codec.http2.Http2FrameWriter;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2HeadersDecoder;
+import io.netty.handler.codec.http2.Http2HeadersEncoder;
 import io.netty.handler.codec.http2.Http2InboundFrameLogger;
+import io.netty.handler.codec.http2.Http2LifecycleManager;
 import io.netty.handler.codec.http2.Http2OutboundFrameLogger;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.codec.http2.Http2Stream;
@@ -125,13 +131,11 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionAgeInNanos;
   private final long maxConnectionAgeGraceInNanos;
-  private final int maxRstCount;
-  private final long maxRstPeriodNanos;
+  private final RstStreamCounter rstStreamCounter;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
   private final Attributes eagAttributes;
-  private final Ticker ticker;
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
   private InternalChannelz.Security securityInfo;
@@ -149,8 +153,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   private ScheduledFuture<?> maxConnectionAgeMonitor;
   @CheckForNull
   private GracefulShutdown gracefulShutdown;
-  private int rstCount;
-  private long lastRstNanoTime;
 
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
@@ -179,8 +181,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ServerHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new Http2InboundFrameLogger(
         new DefaultHttp2FrameReader(headersDecoder), frameLogger);
+    Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
+        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
     Http2FrameWriter frameWriter =
-        new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(), frameLogger);
+        new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(encoder), frameLogger);
     return newHandler(
         channelUnused,
         frameReader,
@@ -251,6 +255,12 @@ class NettyServerHandler extends AbstractNettyHandler {
     final KeepAliveEnforcer keepAliveEnforcer = new KeepAliveEnforcer(
         permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, TimeUnit.NANOSECONDS);
 
+    if (ticker == null) {
+      ticker = Ticker.systemTicker();
+    }
+
+    RstStreamCounter rstStreamCounter
+        = new RstStreamCounter(maxRstCount, maxRstPeriodNanos, ticker);
     // Create the local flow controller configured to auto-refill the connection window.
     connection.local().flowController(
         new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
@@ -258,6 +268,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2ConnectionEncoder encoder =
         new DefaultHttp2ConnectionEncoder(connection, frameWriter);
     encoder = new Http2ControlFrameLimitEncoder(encoder, 10000);
+    encoder = new Http2RstCounterEncoder(encoder, rstStreamCounter);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
 
@@ -265,10 +276,6 @@ class NettyServerHandler extends AbstractNettyHandler {
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(maxStreams);
     settings.maxHeaderListSize(maxHeaderListSize);
-
-    if (ticker == null) {
-      ticker = Ticker.systemTicker();
-    }
 
     return new NettyServerHandler(
         channelUnused,
@@ -286,8 +293,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
         keepAliveEnforcer,
         autoFlowControl,
-        maxRstCount,
-        maxRstPeriodNanos,
+        rstStreamCounter,
         eagAttributes, ticker);
   }
 
@@ -310,8 +316,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       final KeepAliveEnforcer keepAliveEnforcer,
       boolean autoFlowControl,
-      int maxRstCount,
-      long maxRstPeriodNanos,
+      RstStreamCounter rstStreamCounter,
       Attributes eagAttributes,
       Ticker ticker) {
     super(
@@ -363,12 +368,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     this.maxConnectionAgeInNanos = maxConnectionAgeInNanos;
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.keepAliveEnforcer = checkNotNull(keepAliveEnforcer, "keepAliveEnforcer");
-    this.maxRstCount = maxRstCount;
-    this.maxRstPeriodNanos = maxRstPeriodNanos;
+    this.rstStreamCounter = rstStreamCounter;
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
-    this.ticker = checkNotNull(ticker, "ticker");
 
-    this.lastRstNanoTime = ticker.read();
     streamKey = encoder.connection().newKey();
     this.transportListener = checkNotNull(transportListener, "transportListener");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
@@ -484,8 +486,10 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
 
       if (!HTTP_METHOD.contentEquals(headers.method())) {
+        Http2Headers extraHeaders = new DefaultHttp2Headers();
+        extraHeaders.add(HttpHeaderNames.ALLOW, HTTP_METHOD);
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
-            String.format("Method '%s' is not supported", headers.method()));
+            String.format("Method '%s' is not supported", headers.method()), extraHeaders);
         return;
       }
 
@@ -575,24 +579,9 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private void onRstStreamRead(int streamId, long errorCode) throws Http2Exception {
-    if (maxRstCount > 0) {
-      long now = ticker.read();
-      if (now - lastRstNanoTime > maxRstPeriodNanos) {
-        lastRstNanoTime = now;
-        rstCount = 1;
-      } else {
-        rstCount++;
-        if (rstCount > maxRstCount) {
-          throw new Http2Exception(Http2Error.ENHANCE_YOUR_CALM, "too_many_rststreams") {
-            @SuppressWarnings("UnsynchronizedOverridesSynchronized") // No memory accesses
-            @Override
-            public Throwable fillInStackTrace() {
-              // Avoid the CPU cycles, since the resets may be a CPU consumption attack
-              return this;
-            }
-          };
-        }
-      }
+    Http2Exception tooManyRstStream = rstStreamCounter.countRstStream();
+    if (tooManyRstStream != null) {
+      throw tooManyRstStream;
     }
 
     try {
@@ -888,6 +877,12 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void respondWithHttpError(
       ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg) {
+    respondWithHttpError(ctx, streamId, code, statusCode, msg, EmptyHttp2Headers.INSTANCE);
+  }
+
+  private void respondWithHttpError(
+      ChannelHandlerContext ctx, int streamId, int code, Status.Code statusCode, String msg,
+      Http2Headers extraHeaders) {
     Metadata metadata = new Metadata();
     metadata.put(InternalStatus.CODE_KEY, statusCode.toStatus());
     metadata.put(InternalStatus.MESSAGE_KEY, msg);
@@ -899,6 +894,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     for (int i = 0; i < serialized.length; i += 2) {
       headers.add(new AsciiString(serialized[i], false), new AsciiString(serialized[i + 1], false));
     }
+    headers.add(extraHeaders);
     encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
     ByteBuf msgBuf = ByteBufUtil.writeUtf8(ctx.alloc(), msg);
     encoder().writeData(ctx, streamId, msgBuf, 0, true, ctx.newPromise());
@@ -1177,6 +1173,81 @@ class NettyServerHandler extends AbstractNettyHandler {
       keepAliveEnforcer.resetCounters();
       return super.writeHeaders(ctx, streamId, headers, streamDependency, weight, exclusive,
           padding, endStream, promise);
+    }
+  }
+
+  private static final class Http2RstCounterEncoder extends DecoratingHttp2ConnectionEncoder {
+    private final RstStreamCounter rstStreamCounter;
+    private Http2LifecycleManager lifecycleManager;
+
+    Http2RstCounterEncoder(Http2ConnectionEncoder encoder, RstStreamCounter rstStreamCounter) {
+      super(encoder);
+      this.rstStreamCounter = rstStreamCounter;
+    }
+
+    @Override
+    public void lifecycleManager(Http2LifecycleManager lifecycleManager) {
+      this.lifecycleManager = lifecycleManager;
+      super.lifecycleManager(lifecycleManager);
+    }
+
+    @Override
+    public ChannelFuture writeRstStream(
+        ChannelHandlerContext ctx, int streamId, long errorCode, ChannelPromise promise) {
+      ChannelFuture future = super.writeRstStream(ctx, streamId, errorCode, promise);
+      // We want to count "induced" RST_STREAM, where the server sent a reset because of a malformed
+      // frame.
+      boolean normalRst
+          = errorCode == Http2Error.NO_ERROR.code() || errorCode == Http2Error.CANCEL.code();
+      if (!normalRst) {
+        Http2Exception tooManyRstStream = rstStreamCounter.countRstStream();
+        if (tooManyRstStream != null) {
+          lifecycleManager.onError(ctx, true, tooManyRstStream);
+          ctx.close();
+        }
+      }
+      return future;
+    }
+  }
+
+  private static final class RstStreamCounter {
+    private final int maxRstCount;
+    private final long maxRstPeriodNanos;
+    private final Ticker ticker;
+    private int rstCount;
+    private long lastRstNanoTime;
+
+    RstStreamCounter(int maxRstCount, long maxRstPeriodNanos, Ticker ticker) {
+      checkArgument(maxRstCount >= 0, "maxRstCount must be non-negative: %s", maxRstCount);
+      this.maxRstCount = maxRstCount;
+      this.maxRstPeriodNanos = maxRstPeriodNanos;
+      this.ticker = checkNotNull(ticker, "ticker");
+      this.lastRstNanoTime = ticker.read();
+    }
+
+    /** Returns non-{@code null} when the connection should be killed by the caller. */
+    private Http2Exception countRstStream() {
+      if (maxRstCount == 0) {
+        return null;
+      }
+      long now = ticker.read();
+      if (now - lastRstNanoTime > maxRstPeriodNanos) {
+        lastRstNanoTime = now;
+        rstCount = 1;
+      } else {
+        rstCount++;
+        if (rstCount > maxRstCount) {
+          return new Http2Exception(Http2Error.ENHANCE_YOUR_CALM, "too_many_rststreams") {
+            @SuppressWarnings("UnsynchronizedOverridesSynchronized") // No memory accesses
+            @Override
+            public Throwable fillInStackTrace() {
+              // Avoid the CPU cycles, since the resets may be a CPU consumption attack
+              return this;
+            }
+          };
+        }
+      }
+      return null;
     }
   }
 

@@ -42,6 +42,7 @@ import io.grpc.ServerInterceptor;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.GrpcUtil;
@@ -56,6 +57,7 @@ import io.grpc.xds.VirtualHost.Route;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.XdsServerBuilder.XdsServingStatusListener;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
@@ -103,6 +105,7 @@ final class XdsServerWrapper extends Server {
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
   private final XdsClientPoolFactory xdsClientPoolFactory;
+  private final @Nullable Map<String, ?> bootstrapOverride;
   private final XdsServingStatusListener listener;
   private final FilterChainSelectorManager filterChainSelectorManager;
   private final AtomicBoolean started = new AtomicBoolean(false);
@@ -131,9 +134,17 @@ final class XdsServerWrapper extends Server {
       XdsServingStatusListener listener,
       FilterChainSelectorManager filterChainSelectorManager,
       XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
       FilterRegistry filterRegistry) {
-    this(listenerAddress, delegateBuilder, listener, filterChainSelectorManager,
-        xdsClientPoolFactory, filterRegistry, SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
   }
 
@@ -144,6 +155,7 @@ final class XdsServerWrapper extends Server {
           XdsServingStatusListener listener,
           FilterChainSelectorManager filterChainSelectorManager,
           XdsClientPoolFactory xdsClientPoolFactory,
+          @Nullable Map<String, ?> bootstrapOverride,
           FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
@@ -153,6 +165,7 @@ final class XdsServerWrapper extends Server {
     this.filterChainSelectorManager
         = checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
+    this.bootstrapOverride = bootstrapOverride;
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
@@ -182,7 +195,14 @@ final class XdsServerWrapper extends Server {
 
   private void internalStart() {
     try {
-      xdsClientPool = xdsClientPoolFactory.getOrCreate("#server", new MetricRecorder() {});
+      BootstrapInfo bootstrapInfo;
+      if (bootstrapOverride == null) {
+        bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
+      } else {
+        bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
+      }
+      xdsClientPool = xdsClientPoolFactory.getOrCreate(
+          "#server", bootstrapInfo, new MetricRecorder() {});
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -382,18 +402,30 @@ final class XdsServerWrapper extends Server {
     }
 
     @Override
-    public void onChanged(final LdsUpdate update) {
+    public void onResourceChanged(final StatusOr<LdsUpdate> update) {
       if (stopped) {
         return;
       }
-      logger.log(Level.FINEST, "Received Lds update {0}", update);
-      if (update.listener() == null) {
-        onResourceDoesNotExist("Non-API");
+
+      if (!update.hasValue()) {
+        Status status = update.getStatus();
+        StatusException statusException = Status.UNAVAILABLE.withDescription(
+                String.format("Listener %s unavailable: %s", resourceName, status.getDescription()))
+            .withCause(status.asException())
+            .asException();
+        handleConfigNotFoundOrMismatch(statusException);
         return;
       }
 
-      String ldsAddress = update.listener().address();
-      if (ldsAddress == null || update.listener().protocol() != Protocol.TCP
+      final LdsUpdate ldsUpdate = update.getValue();
+      logger.log(Level.FINEST, "Received Lds update {0}", ldsUpdate);
+      if (ldsUpdate.listener() == null) {
+        handleConfigNotFoundOrMismatch(
+            Status.NOT_FOUND.withDescription("Listener is null in LdsUpdate").asException());
+        return;
+      }
+      String ldsAddress = ldsUpdate.listener().address();
+      if (ldsAddress == null || ldsUpdate.listener().protocol() != Protocol.TCP
           || !ipAddressesMatch(ldsAddress)) {
         handleConfigNotFoundOrMismatch(
             Status.UNKNOWN.withDescription(
@@ -402,16 +434,15 @@ final class XdsServerWrapper extends Server {
                     listenerAddress, ldsAddress)).asException());
         return;
       }
+
       if (!pendingRds.isEmpty()) {
         // filter chain state has not yet been applied to filterChainSelectorManager and there
-        // are two sets of sslContextProviderSuppliers, so we release the old ones.
         releaseSuppliersInFlight();
         pendingRds.clear();
       }
 
-      filterChains = update.listener().filterChains();
-      defaultFilterChain = update.listener().defaultFilterChain();
-      // Filters are loaded even if the server isn't serving yet.
+      filterChains = ldsUpdate.listener().filterChains();
+      defaultFilterChain = ldsUpdate.listener().defaultFilterChain();
       updateActiveFilters();
 
       List<FilterChain> allFilterChains = filterChains;
@@ -450,6 +481,21 @@ final class XdsServerWrapper extends Server {
       }
     }
 
+    @Override
+    public void onAmbientError(final Status error) {
+      if (stopped) {
+        return;
+      }
+      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+      Status errorWithNodeId = error.withDescription(
+          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
+
+      if (!isServing) {
+        listener.onNotServing(errorWithNodeId.asException());
+      }
+    }
+
     private boolean ipAddressesMatch(String ldsAddress) {
       HostAndPort ldsAddressHnP = HostAndPort.fromString(ldsAddress);
       HostAndPort listenerAddressHnP = HostAndPort.fromString(listenerAddress);
@@ -460,31 +506,6 @@ final class XdsServerWrapper extends Server {
       InetAddress listenerIp = InetAddresses.forString(listenerAddressHnP.getHost());
       InetAddress ldsIp = InetAddresses.forString(ldsAddressHnP.getHost());
       return listenerIp.equals(ldsIp);
-    }
-
-    @Override
-    public void onResourceDoesNotExist(final String resourceName) {
-      if (stopped) {
-        return;
-      }
-      StatusException statusException = Status.UNAVAILABLE.withDescription(
-          String.format("Listener %s unavailable, xDS node ID: %s", resourceName,
-              xdsClient.getBootstrapInfo().node().getId())).asException();
-      handleConfigNotFoundOrMismatch(statusException);
-    }
-
-    @Override
-    public void onError(final Status error) {
-      if (stopped) {
-        return;
-      }
-      String description = error.getDescription() == null ? "" : error.getDescription() + " ";
-      Status errorWithNodeId = error.withDescription(
-          description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
-      logger.log(Level.FINE, "Error from XdsClient", errorWithNodeId);
-      if (!isServing) {
-        listener.onNotServing(errorWithNodeId.asException());
-      }
     }
 
     private void shutdown() {
@@ -775,54 +796,42 @@ final class XdsServerWrapper extends Server {
       }
 
       @Override
-      public void onChanged(final RdsUpdate update) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
+      public void onResourceChanged(final StatusOr<RdsUpdate> update) {
+        syncContext.execute(() -> {
+          if (!routeDiscoveryStates.containsKey(resourceName)) {
+            return; // Watcher has been cancelled.
+          }
+
+          if (update.hasValue()) {
             if (savedVirtualHosts == null && !isPending) {
               logger.log(Level.WARNING, "Received valid Rds {0} configuration.", resourceName);
             }
-            savedVirtualHosts = ImmutableList.copyOf(update.virtualHosts);
-            updateRdsRoutingConfig();
-            maybeUpdateSelector();
-          }
-        });
-      }
-
-      @Override
-      public void onResourceDoesNotExist(final String resourceName) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
-            logger.log(Level.WARNING, "Rds {0} unavailable", resourceName);
+            savedVirtualHosts = ImmutableList.copyOf(update.getValue().virtualHosts);
+          } else {
+            logger.log(Level.WARNING, "Rds {0} unavailable: {1}",
+                new Object[]{resourceName, update.getStatus()});
             savedVirtualHosts = null;
-            updateRdsRoutingConfig();
-            maybeUpdateSelector();
           }
+          // In both cases, a change has occurred that requires a config update.
+          updateRdsRoutingConfig();
+          maybeUpdateSelector();
         });
       }
 
       @Override
-      public void onError(final Status error) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            if (!routeDiscoveryStates.containsKey(resourceName)) {
-              return;
-            }
-            String description = error.getDescription() == null ? "" : error.getDescription() + " ";
-            Status errorWithNodeId = error.withDescription(
-                    description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
-            logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
-                    new Object[]{resourceName, errorWithNodeId});
-            maybeUpdateSelector();
+      public void onAmbientError(final Status error) {
+        syncContext.execute(() -> {
+          if (!routeDiscoveryStates.containsKey(resourceName)) {
+            return; // Watcher has been cancelled.
           }
+          String description = error.getDescription() == null ? "" : error.getDescription() + " ";
+          Status errorWithNodeId = error.withDescription(
+              description + "xDS node ID: " + xdsClient.getBootstrapInfo().node().getId());
+          logger.log(Level.WARNING, "Error loading RDS resource {0} from XdsClient: {1}.",
+              new Object[]{resourceName, errorWithNodeId});
+
+          // Per gRFC A88, ambient errors should not trigger a configuration change.
+          // Therefore, we do NOT call maybeUpdateSelector() here.
         });
       }
 

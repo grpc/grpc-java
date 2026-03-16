@@ -87,8 +87,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       }
     }
     targets = newTargets;
+    Status status = Status.OK;
     for (String targetName : targets.keySet()) {
-      childBalancers.get(targetName).handleResolvedAddresses(
+      Status newStatus = childBalancers.get(targetName).acceptResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAddresses(AddressFilter.filter(resolvedAddresses.getAddresses(), targetName))
               .setLoadBalancingPolicyConfig(targets.get(targetName).childConfig)
@@ -96,6 +97,9 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
                 .set(CHILD_NAME, targetName)
                 .build())
               .build());
+      if (!newStatus.isOk()) {
+        status = newStatus;
+      }
     }
 
     // Cleanup removed targets.
@@ -108,7 +112,7 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
     childBalancers.keySet().retainAll(targets.keySet());
     childHelpers.keySet().retainAll(targets.keySet());
     updateOverallBalancingState();
-    return Status.OK;
+    return status;
   }
 
   @Override

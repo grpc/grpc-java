@@ -69,8 +69,8 @@ import javax.annotation.Nullable;
 
 class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
-  private static final String GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE =
-      "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE";
+  private static final boolean isXdsAuthorityRewriteEnabled = GrpcUtil.getFlag(
+      "GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", true);
   @VisibleForTesting
   static boolean enableRouteLookup = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_RLS_LB", true);
 
@@ -475,8 +475,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
       case CLUSTER:
         return StructOrError.fromStruct(RouteAction.forCluster(
             proto.getCluster(), hashPolicies, timeoutNano, retryPolicy,
-            GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-            && args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
+            isXdsAuthorityRewriteEnabled && args.getServerInfo().isTrustedXdsServer()
+                && proto.getAutoHostRewrite().getValue()));
       case CLUSTER_HEADER:
         return null;
       case WEIGHTED_CLUSTERS:
@@ -510,8 +510,8 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         }
         return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forWeightedClusters(
             weightedClusters, hashPolicies, timeoutNano, retryPolicy,
-            GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-            && args.getServerInfo().isTrustedXdsServer() && proto.getAutoHostRewrite().getValue()));
+            isXdsAuthorityRewriteEnabled && args.getServerInfo().isTrustedXdsServer()
+                && proto.getAutoHostRewrite().getValue()));
       case CLUSTER_SPECIFIER_PLUGIN:
         if (enableRouteLookup) {
           String pluginName = proto.getClusterSpecifierPlugin();
@@ -527,8 +527,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
           NamedPluginConfig namedPluginConfig = NamedPluginConfig.create(pluginName, pluginConfig);
           return StructOrError.fromStruct(VirtualHost.Route.RouteAction.forClusterSpecifierPlugin(
               namedPluginConfig, hashPolicies, timeoutNano, retryPolicy,
-              GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE, false)
-              && args.getServerInfo().isTrustedXdsServer()
+              isXdsAuthorityRewriteEnabled && args.getServerInfo().isTrustedXdsServer()
                   && proto.getAutoHostRewrite().getValue()));
         } else {
           return null;

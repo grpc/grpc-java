@@ -7,9 +7,6 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * AnotherDynamicService
  * </pre>
  */
-@javax.annotation.Generated(
-    value = "by gRPC proto compiler",
-    comments = "Source: io/grpc/reflection/testing/dynamic_reflection_test.proto")
 @io.grpc.stub.annotations.GrpcGenerated
 public final class AnotherDynamicServiceGrpc {
 
@@ -195,8 +192,8 @@ public final class AnotherDynamicServiceGrpc {
      * A method
      * </pre>
      */
-    public io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) {
-      return io.grpc.stub.ClientCalls.blockingUnaryCall(
+    public io.grpc.reflection.testing.DynamicReply method(io.grpc.reflection.testing.DynamicRequest request) throws io.grpc.StatusException {
+      return io.grpc.stub.ClientCalls.blockingV2UnaryCall(
           getChannel(), getMethodMethod(), getCallOptions(), request);
     }
   }

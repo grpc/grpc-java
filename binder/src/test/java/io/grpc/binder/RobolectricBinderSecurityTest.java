@@ -22,12 +22,13 @@ import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
-import android.content.ComponentName;
-import android.content.Intent;
-import android.os.IBinder;
-import android.os.Looper;
-import androidx.lifecycle.LifecycleService;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.ServiceInfo;
 import androidx.test.core.app.ApplicationProvider;
+import androidx.test.core.content.pm.ApplicationInfoBuilder;
+import androidx.test.core.content.pm.PackageInfoBuilder;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -42,99 +43,148 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.binder.internal.MainThreadScheduledExecutorService;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.android.controller.ServiceController;
+import org.robolectric.ParameterizedRobolectricTestRunner;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
+import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
+import org.robolectric.annotation.LooperMode;
+import org.robolectric.annotation.LooperMode.Mode;
 
-@RunWith(RobolectricTestRunner.class)
+@RunWith(ParameterizedRobolectricTestRunner.class)
+@LooperMode(Mode.INSTRUMENTATION_TEST)
 public final class RobolectricBinderSecurityTest {
 
   private static final String SERVICE_NAME = "fake_service";
   private static final String FULL_METHOD_NAME = "fake_service/fake_method";
   private final Application context = ApplicationProvider.getApplicationContext();
-  private ServiceController<SomeService> controller;
-  private SomeService service;
+  private final ArrayBlockingQueue<SettableFuture<Status>> statusesToSet =
+      new ArrayBlockingQueue<>(128);
   private ManagedChannel channel;
+  private Server server;
+
+  @Parameter public boolean preAuthServersParam;
+
+  @Parameters(name = "preAuthServersParam={0}")
+  public static ImmutableList<Boolean> data() {
+    return ImmutableList.of(true, false);
+  }
 
   @Before
   public void setUp() {
-    controller = Robolectric.buildService(SomeService.class);
-    service = controller.create().get();
+    ApplicationInfo serverAppInfo =
+        ApplicationInfoBuilder.newBuilder().setPackageName(context.getPackageName()).build();
+    serverAppInfo.uid = android.os.Process.myUid();
+    PackageInfo serverPkgInfo =
+        PackageInfoBuilder.newBuilder()
+            .setPackageName(serverAppInfo.packageName)
+            .setApplicationInfo(serverAppInfo)
+            .build();
+    shadowOf(context.getPackageManager()).installPackage(serverPkgInfo);
 
-    AndroidComponentAddress listenAddress = AndroidComponentAddress.forContext(service);
-    ScheduledExecutorService executor = service.getExecutor();
+    ServiceInfo serviceInfo = new ServiceInfo();
+    serviceInfo.name = "SomeService";
+    serviceInfo.packageName = serverAppInfo.packageName;
+    serviceInfo.applicationInfo = serverAppInfo;
+    shadowOf(context.getPackageManager()).addOrUpdateService(serviceInfo);
+
+    AndroidComponentAddress listenAddress =
+        AndroidComponentAddress.forRemoteComponent(serviceInfo.packageName, serviceInfo.name);
+
+    MethodDescriptor<Empty, Empty> methodDesc = getMethodDescriptor();
+    ServerCallHandler<Empty, Empty> callHandler =
+        ServerCalls.asyncUnaryCall(
+            (req, respObserver) -> {
+              respObserver.onNext(req);
+              respObserver.onCompleted();
+            });
+    ServerMethodDefinition<Empty, Empty> methodDef =
+        ServerMethodDefinition.create(methodDesc, callHandler);
+    ServerServiceDefinition def =
+        ServerServiceDefinition.builder(SERVICE_NAME).addMethod(methodDef).build();
+
+    IBinderReceiver binderReceiver = new IBinderReceiver();
+    server =
+        BinderServerBuilder.forAddress(listenAddress, binderReceiver)
+            .addService(def)
+            .securityPolicy(
+                ServerSecurityPolicy.newBuilder()
+                    .servicePolicy(
+                        SERVICE_NAME,
+                        new AsyncSecurityPolicy() {
+                          @Override
+                          public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
+                            SettableFuture<Status> status = SettableFuture.create();
+                            statusesToSet.add(status);
+                            return status;
+                          }
+                        })
+                    .build())
+            .build();
+    try {
+      server.start();
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+
+    shadowOf(context)
+        .setComponentNameAndServiceForBindServiceForIntent(
+            listenAddress.asBindIntent(),
+            listenAddress.getComponent(),
+            checkNotNull(binderReceiver.get()));
     channel =
         BinderChannelBuilder.forAddress(listenAddress, context)
-            .executor(executor)
-            .scheduledExecutorService(executor)
-            .offloadExecutor(executor)
+            .preAuthorizeServers(preAuthServersParam)
             .build();
-    idleLoopers();
   }
 
   @After
   public void tearDown() {
     channel.shutdownNow();
-    controller.destroy();
+    server.shutdownNow();
   }
 
   @Test
   public void testAsyncServerSecurityPolicy_failed_returnsFailureStatus() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    service.setSecurityPolicyStatusWhenReady(Status.ALREADY_EXISTS);
-    idleLoopers();
+    statusesToSet.take().set(Status.ALREADY_EXISTS);
 
-    assertThat(Futures.getDone(status).getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
+    assertThat(status.get().getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
   }
 
   @Test
   public void testAsyncServerSecurityPolicy_failedFuture_failsWithCodeInternal() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    service.setSecurityPolicyFailed(new IllegalStateException("oops"));
-    idleLoopers();
+    statusesToSet.take().setException(new IllegalStateException("oops"));
 
-    assertThat(Futures.getDone(status).getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(status.get().getCode()).isEqualTo(Status.Code.INTERNAL);
   }
 
   @Test
   public void testAsyncServerSecurityPolicy_allowed_returnsOkStatus() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    service.setSecurityPolicyStatusWhenReady(Status.OK);
-    idleLoopers();
+    statusesToSet.take().set(Status.OK);
 
-    assertThat(Futures.getDone(status).getCode()).isEqualTo(Status.Code.OK);
+    assertThat(status.get().getCode()).isEqualTo(Status.Code.OK);
   }
 
   private ListenableFuture<Status> makeCall() {
-    ClientCall<Empty, Empty> call =
-        channel.newCall(
-            getMethodDescriptor(), CallOptions.DEFAULT.withExecutor(service.getExecutor()));
+    ClientCall<Empty, Empty> call = channel.newCall(getMethodDescriptor(), CallOptions.DEFAULT);
     ListenableFuture<Empty> responseFuture =
         ClientCalls.futureUnaryCall(call, Empty.getDefaultInstance());
-
-    idleLoopers();
 
     return Futures.catching(
         Futures.transform(responseFuture, unused -> Status.OK, directExecutor()),
         StatusRuntimeException.class,
         StatusRuntimeException::getStatus,
         directExecutor());
-  }
-
-  private static void idleLoopers() {
-    shadowOf(Looper.getMainLooper()).idle();
   }
 
   private static MethodDescriptor<Empty, Empty> getMethodDescriptor() {
@@ -146,107 +196,5 @@ public final class RobolectricBinderSecurityTest {
         .setType(MethodDescriptor.MethodType.UNARY)
         .setSampledToLocalTracing(true)
         .build();
-  }
-
-  private static class SomeService extends LifecycleService {
-
-    private final IBinderReceiver binderReceiver = new IBinderReceiver();
-    private final ArrayBlockingQueue<SettableFuture<Status>> statusesToSet =
-        new ArrayBlockingQueue<>(128);
-    private Server server;
-    private final ScheduledExecutorService scheduledExecutorService =
-        new MainThreadScheduledExecutorService();
-
-    @Override
-    public void onCreate() {
-      super.onCreate();
-
-      MethodDescriptor<Empty, Empty> methodDesc = getMethodDescriptor();
-      ServerCallHandler<Empty, Empty> callHandler =
-          ServerCalls.asyncUnaryCall(
-              (req, respObserver) -> {
-                respObserver.onNext(req);
-                respObserver.onCompleted();
-              });
-      ServerMethodDefinition<Empty, Empty> methodDef =
-          ServerMethodDefinition.create(methodDesc, callHandler);
-      ServerServiceDefinition def =
-          ServerServiceDefinition.builder(SERVICE_NAME).addMethod(methodDef).build();
-
-      server =
-          BinderServerBuilder.forAddress(AndroidComponentAddress.forContext(this), binderReceiver)
-              .addService(def)
-              .securityPolicy(
-                  ServerSecurityPolicy.newBuilder()
-                      .servicePolicy(
-                          SERVICE_NAME,
-                          new AsyncSecurityPolicy() {
-                            @Override
-                            public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-                              return Futures.submitAsync(
-                                  () -> {
-                                    SettableFuture<Status> status = SettableFuture.create();
-                                    statusesToSet.add(status);
-                                    return status;
-                                  },
-                                  getExecutor());
-                            }
-                          })
-                      .build())
-              .executor(getExecutor())
-              .scheduledExecutorService(getExecutor())
-              .build();
-      try {
-        server.start();
-      } catch (IOException e) {
-        throw new IllegalStateException(e);
-      }
-
-      Application context = ApplicationProvider.getApplicationContext();
-      ComponentName componentName = new ComponentName(context, SomeService.class);
-      shadowOf(context)
-          .setComponentNameAndServiceForBindService(
-              componentName, checkNotNull(binderReceiver.get()));
-    }
-
-    /**
-     * Returns an {@link ScheduledExecutorService} under which all of the gRPC computations run. The
-     * execution of any pending tasks on this executor can be triggered via {@link #idleLoopers()}.
-     */
-    ScheduledExecutorService getExecutor() {
-      return scheduledExecutorService;
-    }
-
-    void setSecurityPolicyStatusWhenReady(Status status) {
-      getNextEnqueuedStatus().set(status);
-    }
-
-    void setSecurityPolicyFailed(Exception e) {
-      getNextEnqueuedStatus().setException(e);
-    }
-
-    private SettableFuture<Status> getNextEnqueuedStatus() {
-      @Nullable SettableFuture<Status> future = statusesToSet.poll();
-      while (future == null) {
-        // Keep idling until the future is available.
-        idleLoopers();
-        future = statusesToSet.poll();
-      }
-      return checkNotNull(future);
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-      super.onBind(intent);
-      return checkNotNull(binderReceiver.get());
-    }
-
-    @Override
-    public void onDestroy() {
-      super.onDestroy();
-      server.shutdownNow();
-    }
-
-    /** A future representing a task submitted to a {@link Handler}. */
   }
 }

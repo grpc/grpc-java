@@ -18,8 +18,11 @@ package io.grpc.opentelemetry;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.HEDGE_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.RETRY_BUCKETS;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.SIZE_BUCKETS;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.TRANSPARENT_RETRY_BUCKETS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -45,6 +48,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  *  The entrypoint for OpenTelemetry metrics functionality in gRPC.
@@ -64,8 +70,8 @@ public final class GrpcOpenTelemetry {
   };
 
   @VisibleForTesting
-  static boolean ENABLE_OTEL_TRACING = GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING",
-      false);
+  static boolean ENABLE_OTEL_TRACING =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING", false);
 
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
@@ -94,7 +100,8 @@ public final class GrpcOpenTelemetry {
     this.resource = createMetricInstruments(meter, enableMetrics, disableDefault);
     this.optionalLabels = ImmutableList.copyOf(builder.optionalLabels);
     this.openTelemetryMetricsModule = new OpenTelemetryMetricsModule(
-        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins);
+        STOPWATCH_SUPPLIER, resource, optionalLabels, builder.plugins,
+        builder.targetFilter);
     this.openTelemetryTracingModule = new OpenTelemetryTracingModule(openTelemetrySdk);
     this.sink = new OpenTelemetryMetricSink(meter, enableMetrics, disableDefault, optionalLabels);
   }
@@ -138,6 +145,11 @@ public final class GrpcOpenTelemetry {
     return this.openTelemetryTracingModule.getTracer();
   }
 
+  @VisibleForTesting
+  TargetFilter getTargetAttributeFilter() {
+    return this.openTelemetryMetricsModule.getTargetAttributeFilter();
+  }
+
   /**
    * Registers GrpcOpenTelemetry globally, applying its configuration to all subsequently created
    * gRPC channels and servers.
@@ -176,12 +188,14 @@ public final class GrpcOpenTelemetry {
    * @param serverBuilder the server builder to configure
    */
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
-    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
+    /* To ensure baggage propagation to metrics, we need the tracing
+    tracers to be initialised before metrics */
     if (ENABLE_OTEL_TRACING) {
       serverBuilder.addStreamTracerFactory(
           openTelemetryTracingModule.getServerTracerFactory());
       serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
     }
+    serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
   }
 
   @VisibleForTesting
@@ -241,6 +255,54 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
+    if (isMetricEnabled("grpc.client.call.retries", enableMetrics, disableDefault)) {
+      builder.clientCallRetriesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.retries")
+              .setUnit("{retry}")
+              .setDescription("Number of retries during the client call. "
+                  + "If there were no retries, 0 is not reported.")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(RETRY_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.transparent_retries", enableMetrics,
+        disableDefault)) {
+      builder.clientCallTransparentRetriesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.transparent_retries")
+              .setUnit("{transparent_retry}")
+              .setDescription("Number of transparent retries during the client call. "
+                  + "If there were no transparent retries, 0 is not reported.")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(TRANSPARENT_RETRY_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.hedges", enableMetrics, disableDefault)) {
+      builder.clientCallHedgesCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.hedges")
+              .setUnit("{hedge}")
+              .setDescription("Number of hedges during the client call. "
+                  + "If there were no hedges, 0 is not reported.")
+              .ofLongs()
+              .setExplicitBucketBoundariesAdvice(HEDGE_BUCKETS)
+              .build());
+    }
+
+    if (isMetricEnabled("grpc.client.call.retry_delay", enableMetrics, disableDefault)) {
+      builder.clientCallRetryDelayCounter(
+          meter.histogramBuilder(
+                  "grpc.client.call.retry_delay")
+              .setUnit("s")
+              .setDescription("Total time of delay while there is no active attempt during the "
+                  + "client call")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
+              .build());
+    }
+
     if (isMetricEnabled("grpc.server.call.started", enableMetrics, disableDefault)) {
       builder.serverCallCountCounter(
           meter.counterBuilder("grpc.server.call.started")
@@ -259,8 +321,8 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.server.call.sent_total_compressed_message_size", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.server.call.sent_total_compressed_message_size",
+        enableMetrics, disableDefault)) {
       builder.serverTotalSentCompressedMessageSizeCounter(
           meter.histogramBuilder(
                   "grpc.server.call.sent_total_compressed_message_size")
@@ -271,8 +333,8 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
-    if (isMetricEnabled("grpc.server.call.rcvd_total_compressed_message_size", enableMetrics,
-        disableDefault)) {
+    if (isMetricEnabled("grpc.server.call.rcvd_total_compressed_message_size",
+        enableMetrics, disableDefault)) {
       builder.serverTotalReceivedCompressedMessageSizeCounter(
           meter.histogramBuilder(
                   "grpc.server.call.rcvd_total_compressed_message_size")
@@ -296,6 +358,13 @@ public final class GrpcOpenTelemetry {
         && !disableDefault;
   }
 
+  /**
+   * Internal interface to avoid storing a {@link java.util.function.Predicate} directly, ensuring
+   * compatibility with Android devices (API level < 24) that do not use library desugaring.
+   */
+  interface TargetFilter {
+    boolean test(String target);
+  }
 
   /**
    * Builder for configuring {@link GrpcOpenTelemetry}.
@@ -306,6 +375,8 @@ public final class GrpcOpenTelemetry {
     private final Collection<String> optionalLabels = new ArrayList<>();
     private final Map<String, Boolean> enableMetrics = new HashMap<>();
     private boolean disableAll;
+    @Nullable
+    private TargetFilter targetFilter;
 
     private Builder() {}
 
@@ -365,6 +436,26 @@ public final class GrpcOpenTelemetry {
 
     Builder enableTracing(boolean enable) {
       ENABLE_OTEL_TRACING = enable;
+      return this;
+    }
+
+    /**
+     * Sets an optional filter to control recording of the {@code grpc.target} metric
+     * attribute.
+     *
+     * <p>If the predicate returns {@code true}, the original target is recorded. Otherwise,
+     * the target is recorded as {@code "other"} to limit metric cardinality.
+     *
+     * <p>If unset, all targets are recorded as-is.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12595")
+    @IgnoreJRERequirement
+    public Builder targetAttributeFilter(@Nullable Predicate<String> filter) {
+      if (filter == null) {
+        this.targetFilter = null;
+      } else {
+        this.targetFilter = filter::test;
+      }
       return this;
     }
 

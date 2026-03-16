@@ -30,7 +30,6 @@ import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
-import io.grpc.grpclb.GrpclbConstants;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalProtocolNegotiator;
@@ -299,9 +298,7 @@ public final class AltsProtocolNegotiator {
         isXdsDirectPath = isDirectPathCluster(
             grpcHandler.getEagAttributes().get(clusterNameAttrKey));
       }
-      if (grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_ADDR_AUTHORITY) != null
-          || grpcHandler.getEagAttributes().get(GrpclbConstants.ATTR_LB_PROVIDED_BACKEND) != null
-          || isXdsDirectPath) {
+      if (isXdsDirectPath) {
         TsiHandshaker handshaker =
             handshakerFactory.newHandshaker(grpcHandler.getAuthority(), negotiationLogger); 
         NettyTsiHandshaker nettyHandshaker = new NettyTsiHandshaker(handshaker);

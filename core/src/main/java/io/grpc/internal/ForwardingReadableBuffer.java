@@ -68,11 +68,6 @@ public abstract class ForwardingReadableBuffer implements ReadableBuffer {
   }
 
   @Override
-  public void readBytes(ByteBuffer dest) {
-    buf.readBytes(dest);
-  }
-
-  @Override
   public void readBytes(OutputStream dest, int length) throws IOException {
     buf.readBytes(dest, length);
   }

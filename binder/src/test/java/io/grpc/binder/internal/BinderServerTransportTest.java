@@ -16,24 +16,25 @@
 
 package io.grpc.binder.internal;
 
-import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
+import android.os.RemoteException;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
-import io.grpc.Metadata;
+import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.FixedObjectPool;
-import io.grpc.internal.ServerStream;
-import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.MockServerTransportListener;
+import io.grpc.internal.ObjectPool;
+import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
 import org.junit.Rule;
@@ -55,61 +56,114 @@ public final class BinderServerTransportTest {
   @Rule public MockitoRule mocks = MockitoJUnit.rule();
 
   private final ScheduledExecutorService executorService = new MainThreadScheduledExecutorService();
-  private final TestTransportListener transportListener = new TestTransportListener();
+  private MockServerTransportListener transportListener;
 
   @Mock IBinder mockBinder;
 
-  BinderTransport.BinderServerTransport transport;
+  BinderServerTransport transport;
 
   @Before
   public void setUp() throws Exception {
-    transport =
-        new BinderTransport.BinderServerTransport(
-            new FixedObjectPool<>(executorService),
-            Attributes.EMPTY,
-            ImmutableList.of(),
-            OneWayBinderProxy.IDENTITY_DECORATOR,
-            mockBinder);
+    transportListener = new MockServerTransportListener(transport);
+  }
+
+  // Provide defaults so that we can "include only relevant details in tests."
+  BinderServerTransportBuilder newBinderServerTransportBuilder() {
+    return new BinderServerTransportBuilder()
+        .setExecutorServicePool(new FixedObjectPool<>(executorService))
+        .setAttributes(Attributes.EMPTY)
+        .setStreamTracerFactories(ImmutableList.of())
+        .setBinderDecorator(OneWayBinderProxy.IDENTITY_DECORATOR)
+        .setCallbackBinder(mockBinder);
   }
 
   @Test
-  public void testSetupTransactionFailureCausesMultipleShutdowns_b153460678() throws Exception {
+  public void testSetupTransactionFailureReportsMultipleTerminations_b153460678() throws Exception {
     // Make the binder fail the setup transaction.
-    when(mockBinder.transact(anyInt(), any(Parcel.class), isNull(), anyInt())).thenReturn(false);
-    transport.setServerTransportListener(transportListener);
+    doThrow(new RemoteException())
+        .when(mockBinder)
+        .transact(anyInt(), any(Parcel.class), isNull(), anyInt());
+    transport = newBinderServerTransportBuilder().setCallbackBinder(mockBinder).build();
+    shadowOf(Looper.getMainLooper()).idle();
+    transport.start(transportListener);
 
-    // Now shut it down.
+    // Now shut it down externally *before* executing Runnables scheduled on the executor.
     transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
     shadowOf(Looper.getMainLooper()).idle();
 
-    assertThat(transportListener.terminated).isTrue();
+    assertThat(transportListener.isTerminated()).isTrue();
   }
 
-  private static final class TestTransportListener implements ServerTransportListener {
+  @Test
+  public void testClientBinderIsDeadOnArrival() throws Exception {
+    transport = newBinderServerTransportBuilder()
+        .setCallbackBinder(new FakeDeadBinder())
+        .build();
+    transport.start(transportListener);
+    shadowOf(Looper.getMainLooper()).idle();
 
-    public boolean ready;
-    public boolean terminated;
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
 
-    /**
-     * Called when a new stream was created by the remote client.
-     *
-     * @param stream the newly created stream.
-     * @param method the fully qualified method name being called on the server.
-     * @param headers containing metadata for the call.
-     */
-    @Override
-    public void streamCreated(ServerStream stream, String method, Metadata headers) {}
+  @Test
+  public void testStartAfterShutdownAndIdle() throws Exception {
+    transport = newBinderServerTransportBuilder().build();
+    transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    shadowOf(Looper.getMainLooper()).idle();
+    transport.start(transportListener);
+    shadowOf(Looper.getMainLooper()).idle();
 
-    @Override
-    public Attributes transportReady(Attributes attributes) {
-      ready = true;
-      return attributes;
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  @Test
+  public void testStartAfterShutdownNoIdle() throws Exception {
+    transport = newBinderServerTransportBuilder().build();
+    transport.shutdownNow(Status.UNKNOWN.withDescription("reasons"));
+    transport.start(transportListener);
+    shadowOf(Looper.getMainLooper()).idle();
+
+    assertThat(transportListener.isTerminated()).isTrue();
+  }
+
+  static class BinderServerTransportBuilder {
+    ObjectPool<ScheduledExecutorService> executorServicePool;
+    Attributes attributes;
+    List<ServerStreamTracer.Factory> streamTracerFactories;
+    OneWayBinderProxy.Decorator binderDecorator;
+    IBinder callbackBinder;
+
+    public BinderServerTransport build() {
+      return BinderServerTransport.create(
+          executorServicePool, attributes, streamTracerFactories, binderDecorator, callbackBinder);
     }
 
-    @Override
-    public void transportTerminated() {
-      checkState(!terminated, "Terminated twice");
-      terminated = true;
+    public BinderServerTransportBuilder setExecutorServicePool(
+        ObjectPool<ScheduledExecutorService> executorServicePool) {
+      this.executorServicePool = executorServicePool;
+      return this;
+    }
+
+    public BinderServerTransportBuilder setAttributes(Attributes attributes) {
+      this.attributes = attributes;
+      return this;
+    }
+
+    public BinderServerTransportBuilder setStreamTracerFactories(
+        List<ServerStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = streamTracerFactories;
+      return this;
+    }
+
+    public BinderServerTransportBuilder setBinderDecorator(
+        OneWayBinderProxy.Decorator binderDecorator) {
+      this.binderDecorator = binderDecorator;
+      return this;
+    }
+
+    public BinderServerTransportBuilder setCallbackBinder(IBinder callbackBinder) {
+      this.callbackBinder = callbackBinder;
+      return this;
     }
   }
 }

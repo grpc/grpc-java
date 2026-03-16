@@ -122,10 +122,10 @@ class Utils {
       EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE = epollDomainSocketChannelType();
       DEFAULT_SERVER_CHANNEL_FACTORY = new ReflectiveChannelFactory<>(epollServerChannelType());
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
-      DEFAULT_BOSS_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
-      DEFAULT_WORKER_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
+      DEFAULT_BOSS_EVENT_LOOP_GROUP = new DefaultEventLoopGroupResource(
+          1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
+      DEFAULT_WORKER_EVENT_LOOP_GROUP = new DefaultEventLoopGroupResource(
+          0, "grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
     } else {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
       DEFAULT_SERVER_CHANNEL_FACTORY = nioServerChannelFactory();
