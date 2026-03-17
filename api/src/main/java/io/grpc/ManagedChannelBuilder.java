@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import java.nio.channels.Channel;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -269,7 +270,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
   /**
    * Sets the default load-balancing policy that will be used if the service config doesn't specify
-   * one.  If not set, the default will be the "pick_first" policy.
+   * one. If not set, the default will be the "pick_first" policy.
    *
    * <p>Policy implementations are looked up in the
    * {@link LoadBalancerRegistry#getDefaultRegistry default LoadBalancerRegistry}.
@@ -283,9 +284,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public T defaultLoadBalancingPolicy(String policy) {
     Preconditions.checkArgument(
-      LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null,
-      "invalid load balancing policy %s", policy
-    );
+        LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null,
+        "invalid load balancing policy %s", policy);
     throw new UnsupportedOperationException();
   }
 

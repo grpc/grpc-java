@@ -213,11 +213,11 @@ public final class ManagedChannelImplBuilder
   private boolean recordRetryMetrics = true;
   private boolean tracingEnabled = true;
   List<MetricSink> metricSinks = new ArrayList<>();
-
   /**
    * An interface for Transport implementors to provide the {@link ClientTransportFactory}
    * appropriate for the channel.
    */
+
   public interface ClientTransportFactoryBuilder {
     ClientTransportFactory buildClientTransportFactory();
   }
@@ -448,12 +448,9 @@ public final class ManagedChannelImplBuilder
         "directServerAddress is set (%s), which forbids the use of load-balancing policy",
         directServerAddress);
     Preconditions.checkArgument(policy != null, "policy cannot be null");
-
-    Preconditions.checkArgument(
-      LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null,
-      "invalid load-balancing policy %s", policy
-    );
-
+  Preconditions.checkArgument( // (4 spaces)
+        LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null, // (8 spaces)
+        "invalid load-balancing policy %s", policy); // (8 spaces)
     this.defaultLbPolicy = policy;
     return this;
   }
