@@ -349,6 +349,7 @@ public class ExternalProcessorFilter implements Filter {
       private final java.util.Queue<Runnable> pendingActions = new java.util.concurrent.ConcurrentLinkedQueue<>();
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
+      final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
 
       protected ExtProcClientCall(ClientCall<InputStream, InputStream> delegate,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
@@ -376,8 +377,8 @@ public class ExternalProcessorFilter implements Filter {
             }
 
             if (response.getRequestDrain()) {
-              handleFailOpen(wrappedListener);
-              extProcClientCallRequestObserver.onCompleted();
+              drainingExtProcStream.set(true);
+              extProcClientCallRequestObserver.onCompleted(); // Sends half-close to ext_proc
               return;
             }
 
@@ -458,6 +459,7 @@ public class ExternalProcessorFilter implements Filter {
 
           @Override
           public void onCompleted() {
+            drainingExtProcStream.set(false); // Reset draining flag
             handleFailOpen(wrappedListener);
           }
         });
@@ -488,10 +490,16 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public boolean isReady() {
-        if (!config.getObservabilityMode() || extProcStreamCompleted.get()) {
+        if (extProcStreamCompleted.get()) {
           return super.isReady();
         }
-        return super.isReady() && extProcClientCallRequestObserver.isReady();
+        if (drainingExtProcStream.get()) { // If draining, apply backpressure
+          return false;
+        }
+        if (config.getObservabilityMode()) {
+          return super.isReady() && extProcClientCallRequestObserver.isReady();
+        }
+        return super.isReady();
       }
 
       @Override
@@ -556,11 +564,9 @@ public class ExternalProcessorFilter implements Filter {
       private void handleRequestBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
-          if (mutation.hasBody()) {
+          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Only send if body is not empty
             byte[] mutatedBody = mutation.getBody().toByteArray();
-            if (mutatedBody.length > 0) {
-              super.sendMessage(new ByteArrayInputStream(mutatedBody));
-            }
+            super.sendMessage(new ByteArrayInputStream(mutatedBody));
           } else if (mutation.getClearBody()) {
             super.sendMessage(new ByteArrayInputStream(new byte[0]));
           }
@@ -573,7 +579,7 @@ public class ExternalProcessorFilter implements Filter {
       private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExtProcListener listener) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
-          if (mutation.hasBody()) {
+          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Only send if body is not empty
             listener.onExternalBody(mutation.getBody());
           } else if (mutation.getClearBody()) {
             listener.onExternalBody(com.google.protobuf.ByteString.EMPTY);
@@ -626,6 +632,9 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onReady() {
+        if (extProcClientCall.drainingExtProcStream.get()) { // Suppress onReady during drain
+          return;
+        }
         if (extProcClientCall.isReady()) {
           super.onReady();
         }
@@ -692,7 +701,7 @@ public class ExternalProcessorFilter implements Filter {
         sendResponseBodyToExtProc(null, true);
 
         // Event 6: Server Trailers with ACTUAL data
-        extProcClientCall.extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
+        extProcClientCall.extProcClientCallRequestObserver.onNext(ProcessingRequest.newBuilder()
             .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
                 .setTrailers(toHeaderMap(savedTrailers)) // Map the captured trailers here
                 .build())
@@ -716,7 +725,7 @@ public class ExternalProcessorFilter implements Filter {
         }
         bodyBuilder.setEndOfStream(endOfStream);
 
-        extProcClientCall.extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
+        extProcClientCall.extProcClientCallRequestObserver.onNext(ProcessingRequest.newBuilder()
             .setResponseBody(bodyBuilder.build())
             .build());
       }
