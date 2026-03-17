@@ -105,7 +105,8 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<FaultConfig> parseFilterConfig(Message rawProtoMessage) {
+    public ConfigOrError<FaultConfig> parseFilterConfig(
+        Message rawProtoMessage, FilterContext context) {
       HTTPFault httpFaultProto;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -120,8 +121,9 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<FaultConfig> parseFilterConfigOverride(Message rawProtoMessage) {
-      return parseFilterConfig(rawProtoMessage);
+    public ConfigOrError<FaultConfig> parseFilterConfigOverride(
+        Message rawProtoMessage, FilterContext context) {
+      return parseFilterConfig(rawProtoMessage, context);
     }
 
     private static ConfigOrError<FaultConfig> parseHttpFault(HTTPFault httpFault) {
