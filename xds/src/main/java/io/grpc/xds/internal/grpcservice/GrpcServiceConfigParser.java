@@ -29,7 +29,6 @@ import io.grpc.CompositeCallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
 import io.grpc.SecurityLevel;
-import io.grpc.Status;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.XdsChannelCredentials;
@@ -258,12 +257,11 @@ public final class GrpcServiceConfigParser {
     @Override
     public void applyRequestMetadata(RequestInfo requestInfo, Executor appExecutor,
         MetadataApplier applier) {
-      if (requestInfo.getSecurityLevel() != SecurityLevel.PRIVACY_AND_INTEGRITY) {
-        applier.fail(Status.UNAUTHENTICATED.withDescription(
-            "OAuth2 credentials require connection with PRIVACY_AND_INTEGRITY security level"));
-        return;
+      if (requestInfo.getSecurityLevel() == SecurityLevel.PRIVACY_AND_INTEGRITY) {
+        delegate.applyRequestMetadata(requestInfo, appExecutor, applier);
+      } else {
+        applier.apply(new Metadata());
       }
-      delegate.applyRequestMetadata(requestInfo, appExecutor, applier);
     }
   }
 
