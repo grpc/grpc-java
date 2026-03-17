@@ -356,6 +356,15 @@ public final class Uri {
   /**
    * Returns the percent-decoded "Authority" component of this URI, or null if not present.
    *
+   * <p>NB: This method's decoding is lossy -- It only exists for compatibility with {@link
+   * java.net.URI}. Prefer {@link #getRawAuthority()} or work instead with authority in terms of its
+   * individual components ({@link #getUserInfo()}, {@link #getHost()} and {@link #getPort()}). The
+   * problem with getAuthority() is that it returns the delimited concatenation of the percent-
+   * decoded userinfo, host and port components. But both userinfo and host can contain the '@'
+   * character, which becomes indistinguishable from the userinfo/host delimiter after decoding. For
+   * example, URIs <code>scheme://x@y%40z</code> and <code>scheme://x%40y@z</code> have different
+   * userinfo and host components but getAuthority() returns "x@y@z" for both of them.
+   *
    * <p>NB: This method assumes the "host" component was encoded as UTF-8, as mandated by RFC 3986.
    * This method also assumes the "user information" part of authority was encoded as UTF-8,
    * although RFC 3986 doesn't specify an encoding.
