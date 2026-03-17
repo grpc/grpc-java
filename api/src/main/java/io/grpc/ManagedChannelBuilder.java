@@ -282,6 +282,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public T defaultLoadBalancingPolicy(String policy) {
+    Preconditions.checkArgument(
+      LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null,
+      "invalid load balancing policy %s", policy
+    );
     throw new UnsupportedOperationException();
   }
 

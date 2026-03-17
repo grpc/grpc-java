@@ -39,6 +39,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalFeatureFlags;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
@@ -447,6 +448,12 @@ public final class ManagedChannelImplBuilder
         "directServerAddress is set (%s), which forbids the use of load-balancing policy",
         directServerAddress);
     Preconditions.checkArgument(policy != null, "policy cannot be null");
+
+    Preconditions.checkArgument(
+      LoadBalancerRegistry.getDefaultRegistry().getProvider(policy) != null,
+      "invalid load-balancing policy %s", policy
+    );
+
     this.defaultLbPolicy = policy;
     return this;
   }
