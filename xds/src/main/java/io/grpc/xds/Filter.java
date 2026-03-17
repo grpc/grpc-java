@@ -16,10 +16,12 @@
 
 package io.grpc.xds;
 
+
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.io.Closeable;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
@@ -93,13 +95,15 @@ interface Filter extends Closeable {
      * Parses the top-level filter config from raw proto message. The message may be either a {@link
      * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
-    ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
+    ConfigOrError<? extends FilterConfig> parseFilterConfig(
+        Message rawProtoMessage, FilterContext context);
 
     /**
      * Parses the per-filter override filter config from raw proto message. The message may be
      * either a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
-    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
+    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+        Message rawProtoMessage, FilterContext context);
   }
 
   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */
@@ -124,6 +128,25 @@ interface Filter extends Closeable {
    */
   @Override
   default void close() {}
+
+  /** Context carrying dynamic metadata for a filter. */
+  @com.google.auto.value.AutoValue
+  abstract class FilterContext {
+    public abstract GrpcServiceXdsContextProvider grpcServiceContextProvider();
+
+    public static Builder builder() {
+      return new AutoValue_Filter_FilterContext.Builder();
+    }
+
+
+    @com.google.auto.value.AutoValue.Builder
+    public abstract static class Builder {
+      public abstract Builder grpcServiceContextProvider(
+          GrpcServiceXdsContextProvider provider);
+
+      public abstract FilterContext build();
+    }
+  }
 
   /** Filter config with instance name. */
   final class NamedFilterConfig {
