@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
 
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.extensions.filters.http.fault.v3.FaultAbort;
@@ -26,6 +27,7 @@ import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.Status.Code;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -45,11 +47,14 @@ public class FaultFilterTest {
   public void parseFaultAbort_convertHttpStatus() {
     Any rawConfig = Any.pack(
         HTTPFault.newBuilder().setAbort(FaultAbort.newBuilder().setHttpStatus(404)).build());
-    FaultConfig faultConfig = FILTER_PROVIDER.parseFilterConfig(rawConfig).config;
+    FaultConfig faultConfig = FILTER_PROVIDER.parseFilterConfig(
+            rawConfig, getFilterContext()).config;
     assertThat(faultConfig.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
 
-    FaultConfig faultConfigOverride = FILTER_PROVIDER.parseFilterConfigOverride(rawConfig).config;
+    FaultConfig faultConfigOverride =
+        FILTER_PROVIDER.parseFilterConfigOverride(
+                    rawConfig, getFilterContext()).config;
     assertThat(faultConfigOverride.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
   }
@@ -94,5 +99,10 @@ public class FaultFilterTest {
     assertThat(faultAbort.percent().denominatorType())
         .isEqualTo(FaultConfig.FractionalPercent.DenominatorType.MILLION);
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+  }
+
+  private static Filter.FilterContext getFilterContext() {
+    return Filter.FilterContext.builder()
+        .grpcServiceContextProvider(mock(GrpcServiceXdsContextProvider.class)).build();
   }
 }
