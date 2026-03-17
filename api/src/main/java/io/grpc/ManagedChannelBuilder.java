@@ -160,10 +160,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
-   * Adds a factory that will construct an interceptor based on the channel's target.
+   * Internal-only: Adds a factory that will construct an interceptor based on the channel's target.
    * This can be used to work around nameResolverFactory() changing the target string.
    */
-  public T interceptWithTarget(InterceptorFactory factory) {
+  @Internal
+  protected T interceptWithTarget(InterceptorFactory factory) {
     throw new UnsupportedOperationException();
   }
 
@@ -664,12 +665,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
    * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
    *
-   * @param childChannelConfigurer the configurer to apply.
+   * @param channelConfigurer the configurer to apply.
    * @return this
-   * @since 1.79.0
+   * @since 1.81.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
     throw new UnsupportedOperationException("Not implemented");
   }
 

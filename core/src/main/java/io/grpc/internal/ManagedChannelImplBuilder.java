@@ -29,8 +29,8 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelCredentials;
-import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientTransportFilter;
@@ -128,12 +128,13 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-  ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
+  ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
 
   @Override
   public ManagedChannelImplBuilder childChannelConfigurer(
-      ChildChannelConfigurer childChannelConfigurer) {
-    this.childChannelConfigurer = checkNotNull(childChannelConfigurer, "childChannelConfigurer");
+      ChannelConfigurer channelConfigurer) {
+    this.channelConfigurer = checkNotNull(channelConfigurer,
+        "childChannelConfigurer");
     return this;
   }
 
@@ -726,8 +727,6 @@ public final class ManagedChannelImplBuilder
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
     return this;
   }
-
-
 
   @Override
   public ManagedChannel build() {

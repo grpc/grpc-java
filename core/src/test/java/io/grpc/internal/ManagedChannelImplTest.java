@@ -299,6 +299,7 @@ public class ManagedChannelImplTest {
   private boolean panicExpected;
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressCaptor;
+
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
 
@@ -4748,6 +4749,4 @@ public class ManagedChannelImplTest {
     return ManagedChannelServiceConfig
         .fromServiceConfig(rawServiceConfig, true, 3, 4, policySelection);
   }
-
-
 }

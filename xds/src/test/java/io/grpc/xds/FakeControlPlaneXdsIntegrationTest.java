@@ -54,7 +54,7 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
@@ -358,7 +358,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurer_passesMetricSinkToChannel_E2E() {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockSink);
@@ -387,7 +387,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurer_passesMetricSinkToServer_E2E() throws Exception {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         // Child channels (xDS client connections) created by this server get the sink.

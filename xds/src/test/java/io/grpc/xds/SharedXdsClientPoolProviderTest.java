@@ -28,7 +28,7 @@ import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallCredentials;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -226,7 +226,7 @@ public class SharedXdsClientPoolProviderTest {
   }
 
   @Test
-  public void xdsClient_usesChildChannelConfigurer() throws Exception {
+  public void xdsClient_usesChannelConfigurer() throws Exception {
     // Set up fake xDS server
     XdsTestControlPlaneService fakeXdsService = new XdsTestControlPlaneService();
     CallCredsServerInterceptor callInterceptor = new CallCredsServerInterceptor();
@@ -262,14 +262,14 @@ public class SharedXdsClientPoolProviderTest {
       }
     };
 
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(testInterceptor);
       }
     };
 
-    // Create xDS client that uses the ChildChannelConfigurer on the transport
+    // Create xDS client that uses the ChannelConfigurer on the transport
     ObjectPool<XdsClient> xdsClientPool =
         provider.getOrCreate("target", bootstrapInfo, metricRecorder, null, configurer);
     XdsClient xdsClient = xdsClientPool.getObject();

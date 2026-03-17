@@ -16,7 +16,7 @@
 
 package io.grpc.xds;
 
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -33,7 +33,7 @@ interface XdsClientPoolFactory {
 
   ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-      ChildChannelConfigurer childChannelConfigurer);
+      ChannelConfigurer channelConfigurer);
 
   List<String> getTargets();
 }

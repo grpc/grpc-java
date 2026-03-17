@@ -358,7 +358,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
-    @Nullable private final ChildChannelConfigurer childChannelConfigurer;
+    @Nullable private final ChannelConfigurer channelConfigurer;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -373,7 +373,7 @@ public abstract class NameResolver {
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
-      this.childChannelConfigurer = builder.childChannelConfigurer;
+      this.channelConfigurer = builder.channelConfigurer;
     }
 
     /**
@@ -479,8 +479,8 @@ public abstract class NameResolver {
      */
     @Nullable
     @Internal
-    public ChildChannelConfigurer getChildChannelConfigurer() {
-      return childChannelConfigurer;
+    public ChannelConfigurer getChildChannelConfigurer() {
+      return channelConfigurer;
     }
 
     /**
@@ -592,7 +592,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
-      private ChildChannelConfigurer childChannelConfigurer;
+      private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
 
       Builder() {
       }
@@ -713,8 +713,8 @@ public abstract class NameResolver {
        *
        * @since 1.81.0
        */
-      public Builder setChildChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
-        this.childChannelConfigurer = childChannelConfigurer;
+      public Builder setChildChannelConfigurer(ChannelConfigurer channelConfigurer) {
+        this.channelConfigurer = channelConfigurer;
         return this;
       }
 

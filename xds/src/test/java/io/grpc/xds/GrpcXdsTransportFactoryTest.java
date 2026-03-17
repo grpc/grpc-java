@@ -29,7 +29,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -159,7 +159,7 @@ public class GrpcXdsTransportFactoryTest {
         .thenReturn(new io.grpc.NoopClientCall<>());
 
     // Create Configurer that adds the interceptor
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(mockInterceptor);
@@ -195,9 +195,9 @@ public class GrpcXdsTransportFactoryTest {
   }
 
   @Test
-  public void useChildChannelConfigurer() {
+  public void useChannelConfigurer() {
     // Mock Configurer
-    ChildChannelConfigurer mockConfigurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
 
     // Create Factory
     GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
@@ -220,7 +220,7 @@ public class GrpcXdsTransportFactoryTest {
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
 
     // Create Configurer that modifies message size
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.maxInboundMessageSize(1024);
@@ -239,7 +239,7 @@ public class GrpcXdsTransportFactoryTest {
     ClientInterceptor interceptor1 = mock(ClientInterceptor.class);
     ClientInterceptor interceptor2 = mock(ClientInterceptor.class);
 
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(interceptor1);

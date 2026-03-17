@@ -32,8 +32,7 @@ package io.grpc;
  * <p><strong>Usage Example:</strong>
  * <pre>{@code
  * // 1. Define the configurer
- * ChildChannelConfigurer configurer = builder -> {
- *   builder.intercept(new MyAuthInterceptor());
+ * ChannelConfigurer configurer = builder -> {
  *   builder.maxInboundMessageSize(4 * 1024 * 1024);
  * };
  *
@@ -47,10 +46,10 @@ package io.grpc;
  * <p>Implementations must be thread-safe as the configure methods may be invoked concurrently
  * by multiple internal components.
  *
- * @since 1.79.0
+ * @since 1.81.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-public interface ChildChannelConfigurer {
+public interface ChannelConfigurer {
 
   /**
    * Configures a builder for a new child channel.

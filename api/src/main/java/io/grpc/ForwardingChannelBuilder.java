@@ -244,8 +244,8 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
 
 
   @Override
-  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
-    delegate().childChannelConfigurer(childChannelConfigurer);
+  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
+    delegate().childChannelConfigurer(channelConfigurer);
     return thisT();
   }
 

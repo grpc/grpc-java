@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -44,6 +44,7 @@ import io.grpc.FlagResetRule;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalFeatureFlags;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -73,7 +74,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
@@ -786,9 +786,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void childChannelConfigurer_setsField() {
-    ChildChannelConfigurer configurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer configurer = mock(ChannelConfigurer.class);
     assertSame(builder, builder.childChannelConfigurer(configurer));
-    assertSame(configurer, builder.childChannelConfigurer);
+    assertSame(configurer, builder.channelConfigurer);
   }
 
   @Test
@@ -805,13 +805,12 @@ public class ManagedChannelImplBuilderTest {
     ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
 
     // Define the Configurer
-    ChildChannelConfigurer configurer = new ChildChannelConfigurer() {
+    ChannelConfigurer configurer = new ChannelConfigurer() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockMetricSink);
 
-        // Assuming InternalInterceptorFactory is also accessible
-        builder.interceptWithTarget(target -> mockInterceptor);
+        InternalManagedChannelBuilder.interceptWithTarget(builder, target -> mockInterceptor);
       }
     };
 
@@ -821,7 +820,7 @@ public class ManagedChannelImplBuilderTest {
     NameResolver mockNameResolver = mock(NameResolver.class);
     when(mockNameResolver.getServiceAuthority()).thenReturn("foo.authority");
     ArgumentCaptor<NameResolver.Args> argsCaptor = ArgumentCaptor.forClass(NameResolver.Args.class);
-    when(mockNameResolverFactory.newNameResolver(any(),
+    when(mockNameResolverFactory.newNameResolver((URI) any(),
         argsCaptor.capture())).thenReturn(mockNameResolver);
 
     // Use the configurer and the mock factory
@@ -839,16 +838,16 @@ public class ManagedChannelImplBuilderTest {
     grpcCleanupRule.register(channel);
 
     // Verify that newNameResolver was called
-    verify(mockNameResolverFactory).newNameResolver(any(), any());
+    verify(mockNameResolverFactory).newNameResolver((URI) any(), any());
 
     // Extract the childChannelConfigurer from Args
     NameResolver.Args args = argsCaptor.getValue();
-    ChildChannelConfigurer childChannelConfigurerInArgs = args.getChildChannelConfigurer();
+    ChannelConfigurer channelConfigurerInArgs = args.getChildChannelConfigurer();
     assertNotNull("Child channel configurer should be present in NameResolver.Args",
-        childChannelConfigurerInArgs);
+        channelConfigurerInArgs);
 
     // Verify the configurer is the one we passed
-    assertThat(childChannelConfigurerInArgs).isSameInstanceAs(configurer);
+    assertThat(channelConfigurerInArgs).isSameInstanceAs(configurer);
 
     // Verify the configurer logically applies (by running it on a mock)
     ManagedChannelBuilder<?> mockChildBuilder = mock(ManagedChannelBuilder.class);
@@ -857,7 +856,6 @@ public class ManagedChannelImplBuilderTest {
 
     configurer.configureChannelBuilder(mockChildBuilder);
     verify(mockChildBuilder).addMetricSink(mockMetricSink);
-    verify(mockChildBuilder).interceptWithTarget(any());
   }
 
   @Test

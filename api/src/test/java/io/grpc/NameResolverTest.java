@@ -105,7 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChildChannelConfigurer childChannelConfigurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer channelConfigurer = mock(ChannelConfigurer.class);
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -117,15 +117,14 @@ public class NameResolverTest {
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
         .setArg(FOO_ARG_KEY, customArgValue)
-        .setChildChannelConfigurer(childChannelConfigurer)
+        .setChildChannelConfigurer(channelConfigurer)
         .build();
   }
 
   @Test
   public void args_childChannelConfigurer() {
-    ChildChannelConfigurer childChannelConfigurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer channelConfigurer = mock(ChannelConfigurer.class);
 
-    // Create a real SynchronizationContext instead of mocking it
     SynchronizationContext realSyncContext = new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
           @Override
@@ -140,15 +139,15 @@ public class NameResolverTest {
         .setSynchronizationContext(realSyncContext)
         .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
-        .setChildChannelConfigurer(childChannelConfigurer)
+        .setChildChannelConfigurer(channelConfigurer)
         .build();
 
-    assertThat(args.getChildChannelConfigurer()).isSameInstanceAs(childChannelConfigurer);
+    assertThat(args.getChildChannelConfigurer()).isSameInstanceAs(channelConfigurer);
     
     // Validate configurer accepts builders
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
     args.getChildChannelConfigurer().configureChannelBuilder(mockBuilder);
-    verify(childChannelConfigurer).configureChannelBuilder(mockBuilder);
+    verify(channelConfigurer).configureChannelBuilder(mockBuilder);
   }
 
   @Test

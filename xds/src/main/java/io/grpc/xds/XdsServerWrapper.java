@@ -29,7 +29,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -129,7 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  private ChildChannelConfigurer childChannelConfigurer = new ChildChannelConfigurer() {};
+  private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
 
   XdsServerWrapper(
       String listenerAddress,
@@ -159,7 +159,7 @@ final class XdsServerWrapper extends Server {
       XdsClientPoolFactory xdsClientPoolFactory,
       @Nullable Map<String, ?> bootstrapOverride,
       FilterRegistry filterRegistry,
-      ChildChannelConfigurer childChannelConfigurer) {
+      ChannelConfigurer channelConfigurer) {
     this(
         listenerAddress,
         delegateBuilder,
@@ -170,8 +170,8 @@ final class XdsServerWrapper extends Server {
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
-    if (childChannelConfigurer != null) {
-      this.childChannelConfigurer = childChannelConfigurer;
+    if (channelConfigurer != null) {
+      this.channelConfigurer = channelConfigurer;
     }
   }
 
@@ -230,7 +230,7 @@ final class XdsServerWrapper extends Server {
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
           "#server", bootstrapInfo, new MetricRecorder() {},
-          childChannelConfigurer);
+          channelConfigurer);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -255,7 +255,6 @@ final class XdsServerWrapper extends Server {
     }
     discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
   }
-
 
   @Override
   public Server shutdown() {

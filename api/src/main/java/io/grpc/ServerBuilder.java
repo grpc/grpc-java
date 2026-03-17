@@ -432,12 +432,12 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections
    * or OOB load balancing channels.
    *
-   * @param childChannelConfigurer the configurer to apply.
+   * @param channelConfigurer the configurer to apply.
    * @return this
-   * @since 1.79.0
+   * @since 1.81.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T childChannelConfigurer(ChildChannelConfigurer childChannelConfigurer) {
+  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
     throw new UnsupportedOperationException("Not implemented");
   }
 

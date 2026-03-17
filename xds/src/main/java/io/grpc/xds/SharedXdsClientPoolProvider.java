@@ -22,7 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -107,9 +107,9 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @Override
   public ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-      ChildChannelConfigurer childChannelConfigurer) {
+      ChannelConfigurer channelConfigurer) {
     return getOrCreate(target, bootstrapInfo, metricRecorder, null,
-        childChannelConfigurer);
+        channelConfigurer);
   }
 
   public ObjectPool<XdsClient> getOrCreate(
@@ -117,7 +117,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       BootstrapInfo bootstrapInfo,
       MetricRecorder metricRecorder,
       CallCredentials transportCallCredentials,
-      ChildChannelConfigurer childChannelConfigurer) {
+      ChannelConfigurer channelConfigurer) {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
@@ -126,7 +126,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           ref =
               new RefCountedXdsClientObjectPool(
                   bootstrapInfo, target, metricRecorder, transportCallCredentials,
-                  childChannelConfigurer);
+                  channelConfigurer);
           targetToXdsClientMap.put(target, ref);
         }
       }
@@ -151,7 +151,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private final String target; // The target associated with the xDS client.
     private final MetricRecorder metricRecorder;
     private final CallCredentials transportCallCredentials;
-    private final ChildChannelConfigurer childChannelConfigurer;
+    private final ChannelConfigurer channelConfigurer;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -174,12 +174,12 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         String target,
         MetricRecorder metricRecorder,
         CallCredentials transportCallCredentials,
-        ChildChannelConfigurer childChannelConfigurer) {
+        ChannelConfigurer channelConfigurer) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
       this.target = target;
       this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
       this.transportCallCredentials = transportCallCredentials;
-      this.childChannelConfigurer = childChannelConfigurer;
+      this.channelConfigurer = channelConfigurer;
     }
 
     @Override
@@ -192,7 +192,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
           scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
           metricReporter = new XdsClientMetricReporterImpl(metricRecorder, target);
           GrpcXdsTransportFactory xdsTransportFactory =
-              new GrpcXdsTransportFactory(transportCallCredentials, childChannelConfigurer);
+              new GrpcXdsTransportFactory(transportCallCredentials, channelConfigurer);
           xdsClient =
               new XdsClientImpl(
                   xdsTransportFactory,

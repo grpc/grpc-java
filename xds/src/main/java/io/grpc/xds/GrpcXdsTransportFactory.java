@@ -21,8 +21,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelCredentials;
-import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Grpc;
@@ -38,18 +38,18 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
-  private final ChildChannelConfigurer childChannelConfigurer;
+  private final ChannelConfigurer channelConfigurer;
 
 
   GrpcXdsTransportFactory(CallCredentials callCredentials,
-                          ChildChannelConfigurer childChannelConfigurer) {
+                          ChannelConfigurer channelConfigurer) {
     this.callCredentials = callCredentials;
-    this.childChannelConfigurer = childChannelConfigurer;
+    this.channelConfigurer = channelConfigurer;
   }
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-    return new GrpcXdsTransport(serverInfo, callCredentials, childChannelConfigurer);
+    return new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurer);
   }
 
   @VisibleForTesting
@@ -81,14 +81,15 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       this.callCredentials = callCredentials;
     }
 
-    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials,
-                            ChildChannelConfigurer childChannelConfigurer) {
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
+                            CallCredentials callCredentials,
+                            ChannelConfigurer channelConfigurer) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES);
-      if (childChannelConfigurer != null) {
-        childChannelConfigurer.configureChannelBuilder(channelBuilder);
+      if (channelConfigurer != null) {
+        channelConfigurer.configureChannelBuilder(channelBuilder);
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;

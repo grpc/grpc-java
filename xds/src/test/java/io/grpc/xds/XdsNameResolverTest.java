@@ -48,8 +48,8 @@ import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelLogger;
-import io.grpc.ChildChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -2499,7 +2499,7 @@ public class XdsNameResolverTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ChildChannelConfigurer childChannelConfigurer) {
+        ChannelConfigurer channelConfigurer) {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override
@@ -2955,7 +2955,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void start_passesParentChannelToClientPoolFactory() {
-    ChildChannelConfigurer mockChildChannelConfigurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer mockChannelConfigurer = mock(ChannelConfigurer.class);
 
     // Build NameResolver.Args containing the child channel configurer
     NameResolver.Args args = NameResolver.Args.newBuilder()
@@ -2964,7 +2964,7 @@ public class XdsNameResolverTest {
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(serviceConfigParser)
         .setChannelLogger(mock(ChannelLogger.class))
-        .setChildChannelConfigurer(mockChildChannelConfigurer)
+        .setChildChannelConfigurer(mockChannelConfigurer)
         .build();
 
     // Mock the XdsClientPoolFactory
@@ -2979,7 +2979,7 @@ public class XdsNameResolverTest {
         anyString(),
         any(BootstrapInfo.class),
         any(MetricRecorder.class),
-        any(ChildChannelConfigurer.class)))
+        any(ChannelConfigurer.class)))
         .thenReturn(mockObjectPool);
 
     XdsNameResolver resolver = new XdsNameResolver(
@@ -3004,7 +3004,7 @@ public class XdsNameResolverTest {
         eq(AUTHORITY),
         any(BootstrapInfo.class),
         eq(metricRecorder),
-        eq(mockChildChannelConfigurer));
+        eq(mockChannelConfigurer));
 
     resolver.shutdown();
   }

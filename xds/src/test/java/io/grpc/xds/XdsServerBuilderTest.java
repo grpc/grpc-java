@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
-import io.grpc.ChildChannelConfigurer;
+import io.grpc.ChannelConfigurer;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -331,7 +331,7 @@ public class XdsServerBuilderTest {
 
   @Test
   public void start_passesParentServerToClientPoolFactory() throws Exception {
-    ChildChannelConfigurer mockConfigurer = mock(ChildChannelConfigurer.class);
+    ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
     XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
     @SuppressWarnings("unchecked")
     ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
