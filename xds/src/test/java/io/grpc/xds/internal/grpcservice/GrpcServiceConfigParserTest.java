@@ -387,4 +387,141 @@ public class GrpcServiceConfigParserTest {
     assertThat(exception).hasMessageThat()
         .contains("Target URI scheme is not resolvable");
   }
+
+  static class RecordingMetadataApplier extends io.grpc.CallCredentials.MetadataApplier {
+    boolean applied = false;
+    boolean failed = false;
+    io.grpc.Metadata appliedHeaders = null;
+
+    @Override
+    public void apply(io.grpc.Metadata headers) {
+      applied = true;
+      appliedHeaders = headers;
+    }
+
+    @Override
+    public void fail(io.grpc.Status status) {
+      failed = true;
+    }
+  }
+
+  static class FakeRequestInfo extends io.grpc.CallCredentials.RequestInfo {
+    private final io.grpc.SecurityLevel securityLevel;
+    private final io.grpc.MethodDescriptor<?, ?> methodDescriptor;
+
+    FakeRequestInfo(io.grpc.SecurityLevel securityLevel) {
+      this.securityLevel = securityLevel;
+      this.methodDescriptor = io.grpc.MethodDescriptor.<Void, Void>newBuilder()
+          .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("test_service/test_method")
+          .setRequestMarshaller(new NoopMarshaller<Void>())
+          .setResponseMarshaller(new NoopMarshaller<Void>())
+          .build();
+    }
+
+    private static class NoopMarshaller<T> implements io.grpc.MethodDescriptor.Marshaller<T> {
+      @Override
+      public java.io.InputStream stream(T value) {
+        return null;
+      }
+
+      @Override
+      public T parse(java.io.InputStream stream) {
+        return null;
+      }
+    }
+
+    @Override
+    public io.grpc.MethodDescriptor<?, ?> getMethodDescriptor() {
+      return methodDescriptor;
+    }
+
+    @Override
+    public io.grpc.SecurityLevel getSecurityLevel() {
+      return securityLevel;
+    }
+
+    @Override
+    public String getAuthority() {
+      return "dummy-authority";
+    }
+
+    @Override
+    public io.grpc.Attributes getTransportAttrs() {
+      return io.grpc.Attributes.EMPTY;
+    }
+  }
+
+
+  @Test
+  public void securityAwareCredentials_secureConnection_appliesToken() throws Exception {
+    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
+    Any accessTokenCreds =
+        Any.pack(AccessTokenCredentials.newBuilder().setToken("test_token").build());
+    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder()
+        .setTargetUri("test_uri")
+        .addChannelCredentialsPlugin(insecureCreds)
+        .addCallCredentialsPlugin(accessTokenCreds)
+        .build();
+    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
+
+    GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
+        io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+
+    io.grpc.CallCredentials creds = config.googleGrpc().callCredentials().get();
+    RecordingMetadataApplier applier = new RecordingMetadataApplier();
+    java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+
+    creds.applyRequestMetadata(
+        new FakeRequestInfo(io.grpc.SecurityLevel.PRIVACY_AND_INTEGRITY),
+        Runnable::run, // Use direct executor to avoid async issues in test
+        new io.grpc.CallCredentials.MetadataApplier() {
+          @Override
+          public void apply(io.grpc.Metadata headers) {
+            applier.apply(headers);
+            latch.countDown();
+          }
+
+          @Override
+          public void fail(io.grpc.Status status) {
+            applier.fail(status);
+            latch.countDown();
+          }
+        });
+
+    latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+    assertThat(applier.applied).isTrue();
+    assertThat(applier.appliedHeaders.get(
+        io.grpc.Metadata.Key.of("Authorization", io.grpc.Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("Bearer test_token");
+  }
+
+  @Test
+  public void securityAwareCredentials_insecureConnection_appliesEmptyMetadata() throws Exception {
+    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
+    Any accessTokenCreds =
+        Any.pack(AccessTokenCredentials.newBuilder().setToken("test_token").build());
+    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder()
+        .setTargetUri("test_uri")
+        .addChannelCredentialsPlugin(insecureCreds)
+        .addCallCredentialsPlugin(accessTokenCreds)
+        .build();
+    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
+
+    GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
+        io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+
+    io.grpc.CallCredentials creds = config.googleGrpc().callCredentials().get();
+    RecordingMetadataApplier applier = new RecordingMetadataApplier();
+
+    creds.applyRequestMetadata(
+        new FakeRequestInfo(io.grpc.SecurityLevel.NONE),
+        Runnable::run,
+        applier);
+
+    assertThat(applier.applied).isTrue();
+    assertThat(applier.appliedHeaders.get(
+        io.grpc.Metadata.Key.of("Authorization", io.grpc.Metadata.ASCII_STRING_MARSHALLER)))
+        .isNull();
+  }
 }
