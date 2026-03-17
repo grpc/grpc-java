@@ -56,7 +56,7 @@ public final class ExtAuthzConfigParser {
     } catch (GrpcServiceParseException e) {
       throw new ExtAuthzParseException("Failed to parse GrpcService config: " + e.getMessage(), e);
     }
-    ExtAuthzConfig.Builder builder = ExtAuthzConfig.newBuilder().grpcService(grpcServiceConfig)
+    ExtAuthzConfig.Builder builder = ExtAuthzConfig.builder().grpcService(grpcServiceConfig)
         .failureModeAllow(extAuthzProto.getFailureModeAllow())
         .failureModeAllowHeaderAdd(extAuthzProto.getFailureModeAllowHeaderAdd())
         .includePeerCertificate(extAuthzProto.getIncludePeerCertificate())
