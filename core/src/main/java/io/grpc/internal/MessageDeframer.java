@@ -314,6 +314,11 @@ public class MessageDeframer implements Closeable, Deframer {
     int totalBytesRead = 0;
     int deflatedBytesRead = 0;
     try {
+      // Avoid allocating nextFrame when idle
+      if (fullStreamDecompressor == null && unprocessed.readableBytes() == 0) {
+        return false;
+      }
+
       if (nextFrame == null) {
         nextFrame = new CompositeReadableBuffer();
       }

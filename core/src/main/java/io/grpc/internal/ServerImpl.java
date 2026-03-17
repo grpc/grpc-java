@@ -151,7 +151,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
     // Fork from the passed in context so that it does not propagate cancellation, it only
     // inherits values.
-    this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext").fork();
+    this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext")
+        .fork()
+        .withValue(io.grpc.InternalServer.SERVER_CONTEXT_KEY, ServerImpl.this);
     this.decompressorRegistry = builder.decompressorRegistry;
     this.compressorRegistry = builder.compressorRegistry;
     this.transportFilters = Collections.unmodifiableList(
@@ -622,19 +624,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           // An extremely short deadline may expire before stream.setListener(jumpListener).
           // This causes NPE as in issue: https://github.com/grpc/grpc-java/issues/6300
           // Delay of setting cancellationListener to context will fix the issue.
-          final class ServerStreamCancellationListener implements Context.CancellationListener {
-            @Override
-            public void cancelled(Context context) {
-              Status status = statusFromCancelled(context);
-              if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-                // This should rarely get run, since the client will likely cancel the stream
-                // before the timeout is reached.
-                stream.cancel(status);
-              }
-            }
-          }
-
-          context.addListener(new ServerStreamCancellationListener(), directExecutor());
+          context.addListener(new ServerStreamCancellationListener(stream), directExecutor());
         }
       }
 
@@ -648,8 +638,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       Context baseContext =
           statsTraceCtx
-              .serverFilterContext(rootContext)
-              .withValue(io.grpc.InternalServer.SERVER_CONTEXT_KEY, ServerImpl.this);
+              .serverFilterContext(rootContext);
 
       if (timeoutNanos == null) {
         return baseContext.withCancellation();
@@ -704,6 +693,31 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
                 "startCall() returned a null listener for method " + fullMethodName);
       }
       return params.call.newServerStreamListener(callListener);
+    }
+  }
+
+  /**
+   * Propagates context cancellation to the ServerStream.
+   *
+   * This is outside of HandleServerCall because that class holds Metadata and other state needed
+   * only when starting the RPC. The cancellation listener will live for the life of the call, so we
+   * avoid that useless state being retained.
+   */
+  static final class ServerStreamCancellationListener implements Context.CancellationListener {
+    private final ServerStream stream;
+
+    ServerStreamCancellationListener(ServerStream stream) {
+      this.stream = checkNotNull(stream, "stream");
+    }
+
+    @Override
+    public void cancelled(Context context) {
+      Status status = statusFromCancelled(context);
+      if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
+        // This should rarely get run, since the client will likely cancel the stream
+        // before the timeout is reached.
+        stream.cancel(status);
+      }
     }
   }
 
