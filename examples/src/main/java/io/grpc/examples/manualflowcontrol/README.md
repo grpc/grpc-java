@@ -1,5 +1,5 @@
-gRPC Manual Flow Control Example
-=====================
+# gRPC Manual Flow Control Example
+
 Flow control is relevant for streaming RPC calls.
 
 By default, gRPC will handle dealing with flow control. However, for specific
@@ -25,14 +25,7 @@ value.
 
 ### Outgoing Flow Control
 
-The underlying layer (such as Netty) will make the write wait when there is no
-space to write the next message. This causes the request stream to go into
-a not ready state and the outgoing onNext method invocation waits. You can
-explicitly check that the stream is ready for writing before calling onNext to
-avoid blocking. This is done with `CallStreamObserver.isReady()`. You can
-utilize this to start doing reads, which may allow
-the other side of the channel to complete a write and then to do its own reads,
-thereby avoiding deadlock.
+The underlying layer (such as Netty) manages a buffer for outgoing messages. If you write messages faster than they can be sent over the network, this buffer will grow, which can eventually lead to an OutOfMemoryError. The outgoing onNext method invocation does not block when this happens. Therefore, you should explicitly check that the stream is ready for writing via CallStreamObserver.isReady() before calling onNext to avoid buffering excessive amounts of data in memory.
 
 ### Incoming Manual Flow Control
 
@@ -71,6 +64,7 @@ When you are ready to begin processing the next value from the stream call
 `serverCallStreamObserver.request(1)`
 
 ### Related documents
+
 Also see [gRPC Flow Control Users Guide][user guide]
 
- [user guide]: https://grpc.io/docs/guides/flow-control
+[user guide]: https://grpc.io/docs/guides/flow-control
