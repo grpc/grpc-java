@@ -68,16 +68,16 @@ public class CachedChannelManagerTest {
   private GrpcServiceConfig buildConfig(String target, String credsType) {
     ChannelCredsConfig credsConfig = mock(ChannelCredsConfig.class);
     when(credsConfig.type()).thenReturn(credsType);
-    
+
     ConfiguredChannelCredentials creds = ConfiguredChannelCredentials.create(
         mock(io.grpc.ChannelCredentials.class), credsConfig);
-        
+
     GoogleGrpcConfig googleGrpc = GoogleGrpcConfig.builder()
         .target(target)
         .configuredChannelCredentials(creds)
         .build();
-        
-    return GrpcServiceConfig.newBuilder()
+
+    return GrpcServiceConfig.builder()
         .googleGrpc(googleGrpc)
         .initialMetadata(ImmutableList.of())
         .build();
