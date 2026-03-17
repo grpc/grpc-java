@@ -81,7 +81,7 @@ public final class GrpcServiceConfigParser {
     GrpcServiceConfig.GoogleGrpcConfig googleGrpcConfig =
         parseGoogleGrpcConfig(grpcServiceProto.getGoogleGrpc(), contextProvider);
 
-    GrpcServiceConfig.Builder builder = GrpcServiceConfig.newBuilder().googleGrpc(googleGrpcConfig);
+    GrpcServiceConfig.Builder builder = GrpcServiceConfig.builder().googleGrpc(googleGrpcConfig);
 
     ImmutableList.Builder<HeaderValue> initialMetadata = ImmutableList.builder();
     for (io.envoyproxy.envoy.config.core.v3.HeaderValue header : grpcServiceProto

@@ -35,7 +35,7 @@ import java.util.Optional;
 public abstract class ExtAuthzConfig {
 
   /** Creates a new builder for creating {@link ExtAuthzConfig} instances. */
-  public static Builder newBuilder() {
+  public static Builder builder() {
     return new AutoValue_ExtAuthzConfig.Builder().allowedHeaders(ImmutableList.of())
         .disallowedHeaders(ImmutableList.of()).statusOnError(Status.PERMISSION_DENIED)
         .filterEnabled(Matchers.FractionMatcher.create(100, 100));
