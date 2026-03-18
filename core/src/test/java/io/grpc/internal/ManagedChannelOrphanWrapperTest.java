@@ -125,7 +125,7 @@ public final class ManagedChannelOrphanWrapperTest {
     });
 
     try {
-      wrapper.shutdownNow(); 
+      wrapper.shutdown(); 
       wrapper = null; 
       
       // Wait for the WRAPPER itself to be garbage collected
