@@ -126,15 +126,18 @@ fi
 
 # Update the statuses with the deltas
 
+set +x
 gsutil cp gs://grpc-testing-secrets/github_credentials/oauth_token.txt ~/
 
 desc="New DEX reference count: $(printf "%'d" "$new_dex_count") (delta: $(printf "%'d" "$dex_count_delta"))"
+echo "Setting status: $desc"
 curl -f -s -X POST -H "Content-Type: application/json" \
     -H "Authorization: token $(cat ~/oauth_token.txt | tr -d '\n')" \
     -d '{"state": "success", "context": "android/dex_diff", "description": "'"${desc}"'"}' \
     "https://api.github.com/repos/grpc/grpc-java/statuses/${KOKORO_GITHUB_PULL_REQUEST_COMMIT}"
 
 desc="New APK size in bytes: $(printf "%'d" "$new_apk_size") (delta: $(printf "%'d" "$apk_size_delta"))"
+echo "Setting status: $desc"
 curl -f -s -X POST -H "Content-Type: application/json" \
     -H "Authorization: token $(cat ~/oauth_token.txt | tr -d '\n')" \
     -d '{"state": "success", "context": "android/apk_diff", "description": "'"${desc}"'"}' \
