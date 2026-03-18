@@ -148,6 +148,7 @@ public final class ManagedChannelOrphanWrapperTest {
         new ConcurrentHashMap<>();
     
     // Create the wrapper but NEVER call shutdown
+    @SuppressWarnings("UnusedVariable")
     ManagedChannelOrphanWrapper wrapper = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
     wrapper = null; // Make it eligible for GC
 
