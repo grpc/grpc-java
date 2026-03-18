@@ -62,14 +62,24 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
   @Override
   public ManagedChannel shutdown() {
+    ManagedChannel result = super.shutdown();
     phantom.clearSafely();
-    return super.shutdown();
+    // This dummy check prevents the JIT from collecting 'this' too early
+    if (this.getClass() == null) {
+      throw new AssertionError();
+    }
+    return result;
   }
 
   @Override
   public ManagedChannel shutdownNow() {
+    ManagedChannel result = super.shutdownNow();
     phantom.clearSafely();
-    return super.shutdownNow();
+    // This dummy check prevents the JIT from collecting 'this' too early
+    if (this.getClass() == null) {
+      throw new AssertionError();
+    }
+    return result;
   }
 
   @VisibleForTesting
@@ -151,8 +161,9 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
       int orphanedChannels = 0;
       while ((ref = (ManagedChannelReference) refqueue.poll()) != null) {
         RuntimeException maybeAllocationSite = ref.allocationSite.get();
+        boolean wasShutdown = ref.shutdown.get();
         ref.clearInternal(); // technically the reference is gone already.
-        if (!ref.shutdown.get()) {
+        if (!wasShutdown) {
           orphanedChannels++;
           Level level = Level.SEVERE;
           if (logger.isLoggable(level)) {

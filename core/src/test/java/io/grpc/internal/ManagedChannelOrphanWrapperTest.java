@@ -102,6 +102,45 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   @Test
+  public void shutdownNow_withDelegateStillReferenced_doesNotLogWarning() {
+    ManagedChannel mc = new TestManagedChannel();
+    final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue = new ReferenceQueue<>();
+    ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
+        new ConcurrentHashMap<>();
+    
+    ManagedChannelOrphanWrapper wrapper = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
+    WeakReference<ManagedChannelOrphanWrapper> wrapperWeakRef = new WeakReference<>(wrapper);
+
+    final List<LogRecord> records = new ArrayList<>();
+    Logger orphanLogger = Logger.getLogger(ManagedChannelOrphanWrapper.class.getName());
+    Filter oldFilter = orphanLogger.getFilter();
+    orphanLogger.setFilter(new Filter() {
+      @Override
+      public boolean isLoggable(LogRecord record) {
+        synchronized (records) { 
+          records.add(record); 
+        }
+        return false;
+      }
+    });
+
+    try {
+      wrapper.shutdownNow(); 
+      wrapper = null; 
+      
+      // Wait for the WRAPPER itself to be garbage collected
+      GcFinalization.awaitClear(wrapperWeakRef);
+      ManagedChannelReference.cleanQueue(refqueue);
+
+      synchronized (records) {
+        assertEquals("Warning was logged even though shutdownNow() was called!", 0, records.size());
+      }
+    } finally {
+      orphanLogger.setFilter(oldFilter);
+    }
+  }
+
+  @Test
   public void refCycleIsGCed() {
     ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
         new ReferenceQueue<>();
