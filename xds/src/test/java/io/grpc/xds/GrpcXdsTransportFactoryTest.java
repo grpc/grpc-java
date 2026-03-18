@@ -136,7 +136,7 @@ public class GrpcXdsTransportFactoryTest {
     Bootstrapper.ServerInfo xdsServerInfo =
         Bootstrapper.ServerInfo.create(
             "localhost:" + server.getPort(), InsecureChannelCredentials.create());
-    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null, null);
     // Calling create() for the first time creates a new GrpcXdsTransport instance.
     // The ref count was previously 0 and now is 1.
     XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo);
@@ -168,7 +168,7 @@ public class GrpcXdsTransportFactoryTest {
     Bootstrapper.ServerInfo xdsServerInfo2 =
         Bootstrapper.ServerInfo.create(
             "localhost:" + server2.getPort(), InsecureChannelCredentials.create());
-    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null, null);
     // Calling create() to the first xDS server creates a new GrpcXdsTransport instance.
     // The ref count was previously 0 and now is 1.
     XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo1);

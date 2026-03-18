@@ -54,9 +54,8 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
-<<<<<<< child-channel-plugin
   private final ChannelConfigurer channelConfigurer;
-=======
+
   // The map of xDS server info to its corresponding gRPC xDS transport.
   // This enables reusing and sharing the same underlying gRPC channel.
   //
@@ -65,8 +64,6 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   // for reference counting of each GrpcXdsTransport instance.
   private static final Map<Bootstrapper.ServerInfo, GrpcXdsTransport> xdsServerInfoToTransportMap =
       new ConcurrentHashMap<>();
->>>>>>> master
-
 
   GrpcXdsTransportFactory(CallCredentials callCredentials,
                           ChannelConfigurer channelConfigurer) {
@@ -76,19 +73,15 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   @Override
   public XdsTransport create(Bootstrapper.ServerInfo serverInfo) {
-<<<<<<< child-channel-plugin
-    return new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurer);
-=======
     return xdsServerInfoToTransportMap.compute(
         serverInfo,
         (info, transport) -> {
           if (transport == null) {
-            transport = new GrpcXdsTransport(serverInfo, callCredentials);
+            transport = new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurer);
           }
           ++transport.refCount;
           return transport;
         });
->>>>>>> master
   }
 
   @VisibleForTesting
@@ -136,6 +129,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;
+      this.serverInfo = serverInfo;
     }
 
     @VisibleForTesting

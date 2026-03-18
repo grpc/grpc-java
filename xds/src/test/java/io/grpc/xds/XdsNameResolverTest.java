@@ -2946,10 +2946,10 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void start_passesParentChannelToClientPoolFactory() {
+  public void start_passesChannelConfigurerToClientPoolFactory() {
     ChannelConfigurer mockChannelConfigurer = mock(ChannelConfigurer.class);
 
-    // Build NameResolver.Args containing the child channel configurer
+    // Build NameResolver.Args containing the channel configurer
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(mock(ProxyDetector.class))
@@ -2975,7 +2975,7 @@ public class XdsNameResolverTest {
         .thenReturn(mockObjectPool);
 
     XdsNameResolver resolver = new XdsNameResolver(
-        URI.create(AUTHORITY),
+        targetUri,
         null, // targetAuthority (nullable)
         AUTHORITY, // name
         null, // overrideAuthority (nullable)

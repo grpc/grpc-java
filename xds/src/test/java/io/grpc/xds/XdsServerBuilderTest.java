@@ -330,7 +330,7 @@ public class XdsServerBuilderTest {
   }
 
   @Test
-  public void start_passesParentServerToClientPoolFactory() throws Exception {
+  public void start_passesChannelConfigurerToClientPoolFactory() throws Exception {
     ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
     XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
     @SuppressWarnings("unchecked")
@@ -345,7 +345,7 @@ public class XdsServerBuilderTest {
 
     Future<?> unused = startServerAsync();
 
-    // Verify getOrCreate called with the server instance
+    // Verify getOrCreate called with the ChannelConfigurer instance
     verify(mockPoolFactory).getOrCreate(
         any(), any(), any(), org.mockito.ArgumentMatchers.eq(mockConfigurer));
   }
