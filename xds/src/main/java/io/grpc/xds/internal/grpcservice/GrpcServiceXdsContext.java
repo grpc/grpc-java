@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.grpcservice;
 
 import com.google.auto.value.AutoValue;
-import io.grpc.CallCredentials;
 import io.grpc.Internal;
 import java.util.Optional;
 
@@ -45,27 +44,4 @@ public abstract class GrpcServiceXdsContext {
         isTargetUriSchemeSupported);
   }
 
-  /**
-   * Represents an allowed gRPC service configuration with local credentials.
-   */
-  @AutoValue
-  public abstract static class AllowedGrpcService {
-    public abstract ConfiguredChannelCredentials configuredChannelCredentials();
-
-    public abstract Optional<CallCredentials> callCredentials();
-
-    public static Builder builder() {
-      return new AutoValue_GrpcServiceXdsContext_AllowedGrpcService.Builder();
-    }
-
-    @AutoValue.Builder
-    public abstract static class Builder {
-      public abstract Builder configuredChannelCredentials(
-          ConfiguredChannelCredentials credentials);
-
-      public abstract Builder callCredentials(CallCredentials callCredentials);
-
-      public abstract AllowedGrpcService build();
-    }
-  }
 }

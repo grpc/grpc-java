@@ -37,7 +37,8 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext.AllowedGrpcService;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -117,13 +118,10 @@ public class GrpcBootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    @SuppressWarnings("unchecked")
-    Map<String, AllowedGrpcService> allowed =
-        (Map<String, AllowedGrpcService>) info.allowedGrpcServices().get();
-
+    AllowedGrpcServices allowed = (AllowedGrpcServices) info.allowedGrpcServices();
     assertThat(allowed).isNotNull();
-    assertThat(allowed).containsKey("dns:///foo.com:443");
-    AllowedGrpcService service = allowed.get("dns:///foo.com:443");
+    assertThat(allowed.services()).containsKey("dns:///foo.com:443");
+    AllowedGrpcService service = allowed.services().get("dns:///foo.com:443");
     assertThat(service.configuredChannelCredentials().channelCredentials())
         .isInstanceOf(InsecureChannelCredentials.class);
     assertThat(service.callCredentials().isPresent()).isFalse();

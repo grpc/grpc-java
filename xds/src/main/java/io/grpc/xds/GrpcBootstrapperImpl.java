@@ -25,9 +25,10 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.xds.client.BootstrapperImpl;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -163,7 +164,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
 
         ChannelCredentials creds = provider.newChannelCredentials(config);
         if (creds == null) {
-          continue;
+          return null;
         }
         return ConfiguredChannelCredentials.create(creds, new JsonChannelCredsConfig(type, config));
       }
@@ -172,10 +173,14 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @Override
-  protected Optional<Object> parseAllowedGrpcServices(
+  protected Object parseAllowedGrpcServices(
       Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
-    ImmutableMap.Builder<String, GrpcServiceXdsContext.AllowedGrpcService> builder =
+    if (rawAllowedGrpcServices == null || rawAllowedGrpcServices.isEmpty()) {
+      return AllowedGrpcServices.empty();
+    }
+
+    ImmutableMap.Builder<String, AllowedGrpcService> builder =
         ImmutableMap.builder();
     for (String targetUri : rawAllowedGrpcServices.keySet()) {
       Map<String, ?> serviceConfig = JsonUtil.getObject(rawAllowedGrpcServices, targetUri);
@@ -193,13 +198,12 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
             parseCallCredentials(JsonUtil.checkObjectList(rawCallCredsList), targetUri);
       }
 
-      GrpcServiceXdsContext.AllowedGrpcService.Builder b = GrpcServiceXdsContext.AllowedGrpcService
-          .builder().configuredChannelCredentials(configuredChannel);
+      AllowedGrpcService.Builder b = AllowedGrpcService.builder()
+          .configuredChannelCredentials(configuredChannel);
       callCredentials.ifPresent(b::callCredentials);
       builder.put(targetUri, b.build());
     }
-    ImmutableMap<String, GrpcServiceXdsContext.AllowedGrpcService> parsed = builder.buildOrThrow();
-    return parsed.isEmpty() ? Optional.empty() : Optional.of(parsed);
+    return AllowedGrpcServices.create(builder.build());
   }
 
   @SuppressWarnings("unused")
