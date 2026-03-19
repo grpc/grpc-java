@@ -81,9 +81,7 @@ dependencies {
     }
 
     androidTestImplementation libraries.androidx.test.ext.junit,
-            libraries.androidx.test.runner,
-            libraries.androidx.test.rules,
-            libraries.androidx.test.core
+            libraries.androidx.test.runner
 }
 
 // Checkstyle doesn't run automatically with android
