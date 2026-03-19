@@ -72,6 +72,7 @@ dependencies {
             libraries.junit,
             libraries.truth,
             libraries.androidx.test.rules,
+            libraries.androidx.test.core,
             libraries.opencensus.contrib.grpc.metrics
 
     implementation (project(':grpc-services')) {
@@ -81,6 +82,8 @@ dependencies {
 
     androidTestImplementation libraries.androidx.test.ext.junit,
             libraries.androidx.test.runner
+            libraries.androidx.test.rules,
+            libraries.androidx.test.core
 }
 
 // Checkstyle doesn't run automatically with android
