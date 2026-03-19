@@ -130,7 +130,7 @@ public final class GrpcServiceConfigParser {
     }
 
     if (!context.isTrustedControlPlane()) {
-      Optional<GrpcServiceXdsContext.AllowedGrpcService> override =
+      Optional<AllowedGrpcService> override =
           context.validAllowedGrpcService();
       if (!override.isPresent()) {
         throw new GrpcServiceParseException(

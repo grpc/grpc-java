@@ -29,7 +29,6 @@ import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.insecure.
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.local.v3.LocalCredentials;
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.xds.v3.XdsCredentials;
 import io.grpc.InsecureChannelCredentials;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext.AllowedGrpcService;
 import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 import org.junit.runner.RunWith;

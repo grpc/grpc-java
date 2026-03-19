@@ -240,17 +240,15 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     }
 
     Map<String, ?> rawAllowedGrpcServices = JsonUtil.getObject(rawData, "allowed_grpc_services");
-    if (rawAllowedGrpcServices != null) {
-      builder.allowedGrpcServices(parseAllowedGrpcServices(rawAllowedGrpcServices));
-    }
+    builder.allowedGrpcServices(parseAllowedGrpcServices(rawAllowedGrpcServices));
 
     return builder;
   }
 
-  protected java.util.Optional<Object> parseAllowedGrpcServices(
+  protected Object parseAllowedGrpcServices(
       Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
-    return java.util.Optional.empty();
+    return io.grpc.xds.internal.grpcservice.AllowedGrpcServices.empty();
   }
 
   private List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)
