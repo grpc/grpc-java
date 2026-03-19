@@ -81,7 +81,7 @@ dependencies {
     }
 
     androidTestImplementation libraries.androidx.test.ext.junit,
-            libraries.androidx.test.runner
+            libraries.androidx.test.runner,
             libraries.androidx.test.rules,
             libraries.androidx.test.core
 }
