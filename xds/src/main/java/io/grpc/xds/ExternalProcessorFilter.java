@@ -547,7 +547,7 @@ public class ExternalProcessorFilter implements Filter {
         // Signal end of request body stream to the external processor.
         extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
             .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
-                .setEndOfStream(true)
+                .setEndOfStreamWithoutMessage(true)
                 .build())
             .build());
         super.halfClose();
