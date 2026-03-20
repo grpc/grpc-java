@@ -497,9 +497,18 @@ public class ExternalProcessorFilter implements Filter {
           return false;
         }
         if (config.getObservabilityMode()) {
-          return super.isReady() && extProcClientCallRequestObserver.isReady();
+          return super.isReady() && extProcClientCallRequestObserver != null
+              && extProcClientCallRequestObserver.isReady();
         }
         return super.isReady();
+      }
+
+      @Override
+      public void request(int numMessages) {
+        if (config.getObservabilityMode() && !isReady()) {
+          return;
+        }
+        super.request(numMessages);
       }
 
       @Override
