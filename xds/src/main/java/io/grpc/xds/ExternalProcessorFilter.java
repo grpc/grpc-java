@@ -360,6 +360,14 @@ public class ExternalProcessorFilter implements Filter {
         this.config = config;
       }
 
+      private void sendToDataPlane(Runnable action) {
+        if (headersSent) {
+          action.run();
+        } else {
+          pendingActions.add(action);
+        }
+      }
+
       @Override
       public void start(Listener<InputStream> responseListener, Metadata headers) {
         this.requestHeaders = headers;
@@ -531,30 +539,21 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (!headersSent && !config.getObservabilityMode()) {
-          // If headers haven't been cleared by ext_proc yet, buffer the whole action
-          try {
-            byte[] bodyBytes = ByteStreams.toByteArray(message);
-            pendingActions.add(() -> sendMessage(new ByteArrayInputStream(bodyBytes)));
-          } catch (IOException e) {
-            delegate().cancel("Failed to read message", e);
-          }
-          return;
-        }
-
         try {
           byte[] bodyBytes = ByteStreams.toByteArray(message);
           synchronized (lock) {
-            extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
-                .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
-                    .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
-                    .setEndOfStream(false)
-                    .build())
-                .build());
+            if (!extProcStreamCompleted.get()) {
+              extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
+                  .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
+                      .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
+                      .setEndOfStream(false)
+                      .build())
+                  .build());
+            }
           }
 
           if (config.getObservabilityMode()) {
-            super.sendMessage(new ByteArrayInputStream(bodyBytes));
+            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(bodyBytes)));
           }
         } catch (IOException e) {
           delegate().cancel("Failed to serialize message for External Processor", e);
@@ -570,13 +569,16 @@ public class ExternalProcessorFilter implements Filter {
 
         // Signal end of request body stream to the external processor.
         synchronized (lock) {
-          extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
-              .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
-                  .setEndOfStreamWithoutMessage(true)
-                  .build())
-              .build());
+          if (!extProcStreamCompleted.get()) {
+            extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
+                .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
+                    .setEndOfStreamWithoutMessage(true)
+                    .build())
+                .build());
+          }
         }
-        super.halfClose();
+
+        sendToDataPlane(super::halfClose);
       }
 
       @Override
@@ -592,24 +594,21 @@ public class ExternalProcessorFilter implements Filter {
       private void handleRequestBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
-          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Only send if body is not empty
+          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Mutation present
             byte[] mutatedBody = mutation.getBody().toByteArray();
-            super.sendMessage(new ByteArrayInputStream(mutatedBody));
-          } else if (mutation.getClearBody()) {
-            super.sendMessage(new ByteArrayInputStream(new byte[0]));
+            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(mutatedBody)));
+          } else if (mutation.getClearBody()) { // Explicitly clear body
+            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(new byte[0])));
           }
-          // If body mutation is present but has no body and clear_body is false, do nothing.
-          // This means the processor chose to drop the message.
         }
-        // If no response is present, the processor chose to drop the message.
       }
 
       private void handleResponseBodyResponse(io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse bodyResponse, ExtProcListener listener) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
-          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Only send if body is not empty
+          if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Mutation present
             listener.onExternalBody(mutation.getBody());
-          } else if (mutation.getClearBody()) {
+          } else if (mutation.getClearBody()) { // Explicitly clear body
             listener.onExternalBody(com.google.protobuf.ByteString.EMPTY);
           }
         }
@@ -636,9 +635,9 @@ public class ExternalProcessorFilter implements Filter {
           if (!headersSent) {
             headersSent = true;
             delegate().start(listener, requestHeaders);
-            drainQueue();
           }
           listener.unblockAfterStreamComplete();
+          drainQueue();
         }
       }
     }
@@ -656,6 +655,11 @@ public class ExternalProcessorFilter implements Filter {
         super(delegate);
         this.callDelegate = callDelegate;
         this.extProcClientCall = extProcClientCall;
+      }
+
+      private void sendToApp(Runnable action) {
+        // Response messages are delivered to the app listener, which gRPC handles via serialization.
+        action.run();
       }
 
       void setStream(ClientCallStreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream) { this.stream = stream; }
@@ -711,7 +715,7 @@ public class ExternalProcessorFilter implements Filter {
           sendResponseBodyToExtProc(bodyBytes, false);
 
           if (extProcClientCall.config.getObservabilityMode()) {
-            super.onMessage(new ByteArrayInputStream(bodyBytes));
+            sendToApp(() -> super.onMessage(new ByteArrayInputStream(bodyBytes)));
           }
         } catch (IOException e) {
            callDelegate.cancel("Failed to read server response", e);
@@ -789,9 +793,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onExternalBody(com.google.protobuf.ByteString body) {
-         if (body.size() > 0) {
-           super.onMessage(body.newInput());
-         }
+         sendToApp(() -> super.onMessage(body.newInput()));
       }
 
       void unblockAfterStreamComplete() {
