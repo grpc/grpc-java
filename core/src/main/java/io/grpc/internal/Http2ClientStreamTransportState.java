@@ -223,8 +223,11 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
     }
     String contentType = headers.get(GrpcUtil.CONTENT_TYPE_KEY);
     if (!GrpcUtil.isGrpcContentType(contentType)) {
-      return GrpcUtil.httpStatusToGrpcStatus(httpStatus)
-          .augmentDescription("invalid content-type: " + contentType);
+      Status status = GrpcUtil.httpStatusToGrpcStatus(httpStatus);
+      if (contentType == null) {
+        return status.augmentDescription("missing content-type in response headers");
+      }
+      return status.augmentDescription("invalid content-type: " + contentType);
     }
     return null;
   }
