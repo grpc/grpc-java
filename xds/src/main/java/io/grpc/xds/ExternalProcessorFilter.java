@@ -361,10 +361,12 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendToDataPlane(Runnable action) {
-        if (headersSent) {
-          action.run();
-        } else {
-          pendingActions.add(action);
+        synchronized (lock) {
+          if (headersSent) {
+            action.run();
+          } else {
+            pendingActions.add(action);
+          }
         }
       }
 
@@ -400,9 +402,11 @@ public class ExternalProcessorFilter implements Filter {
               if (response.getRequestHeaders().hasResponse()) {
                 applyHeaderMutations(requestHeaders, response.getRequestHeaders().getResponse().getHeaderMutation());
               }
-              headersSent = true;
-              delegate().start(wrappedListener, requestHeaders);
-              drainQueue();
+              synchronized (lock) {
+                headersSent = true;
+                delegate().start(wrappedListener, requestHeaders);
+                drainQueue();
+              }
             }
             // 2. Client Message (Request Body)
             else if (response.hasRequestBody()) {
@@ -496,8 +500,10 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         if (config.getObservabilityMode()) {
-          headersSent = true;
-          delegate().start(wrappedListener, headers);
+          synchronized (lock) {
+            headersSent = true;
+            delegate().start(wrappedListener, headers);
+          }
         }
       }
 
@@ -632,12 +638,14 @@ public class ExternalProcessorFilter implements Filter {
         if (extProcStreamCompleted.compareAndSet(false, true)) {
           // The ext_proc stream is gone. "Fail open" means we proceed with the RPC
           // without any more processing.
-          if (!headersSent) {
-            headersSent = true;
-            delegate().start(listener, requestHeaders);
+          synchronized (lock) {
+            if (!headersSent) {
+              headersSent = true;
+              delegate().start(listener, requestHeaders);
+            }
+            drainQueue();
           }
           listener.unblockAfterStreamComplete();
-          drainQueue();
         }
       }
     }
