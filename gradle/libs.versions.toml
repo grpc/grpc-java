@@ -52,9 +52,9 @@ errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 # 2.11.0+ requires JDK 11+ (See https://github.com/google/error-prone/releases/tag/v2.11.0)
 # checkForUpdates: errorprone-corejava8:2.10.+
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.67.0"
-google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.43.0"
-google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.43.0"
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.63.2"
+google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.41.0"
+google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.41.0"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.9"
 gson = "com.google.code.gson:gson:2.13.2"
