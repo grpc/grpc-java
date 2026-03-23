@@ -102,7 +102,7 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   @Test
-  public void shutdownNow_withDelegateStillReferenced_doesNotLogWarning() {
+  public void shutdown_withDelegateStillReferenced_doesNotLogWarning() {
     ManagedChannel mc = new TestManagedChannel();
     final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue = new ReferenceQueue<>();
     ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
