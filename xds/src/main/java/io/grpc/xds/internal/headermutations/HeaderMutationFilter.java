@@ -92,14 +92,14 @@ public class HeaderMutationFilter {
         .orElse(true);
   }
 
-  private boolean isHeaderMutationAllowed(String lowerCaseHeaderName,
-      HeaderMutationRulesConfig rules) {
+  private boolean isHeaderMutationAllowed(String headerName,
+          HeaderMutationRulesConfig rules) {
     if (rules.disallowExpression().isPresent()
-        && rules.disallowExpression().get().matcher(lowerCaseHeaderName).matches()) {
+        && rules.disallowExpression().get().matcher(headerName).matches()) {
       return false;
     }
     if (rules.allowExpression().isPresent()) {
-      return rules.allowExpression().get().matcher(lowerCaseHeaderName).matches();
+      return rules.allowExpression().get().matcher(headerName).matches();
     }
     return !rules.disallowAll();
   }
