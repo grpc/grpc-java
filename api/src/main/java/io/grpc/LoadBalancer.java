@@ -163,8 +163,7 @@ public abstract class LoadBalancer {
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
    *
-   * @deprecated  As of release 1.69.0, use instead
-   *     {@link #acceptResolvedAddresses(ResolvedAddresses)}
+   * @deprecated  Use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
   @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -184,11 +183,9 @@ public abstract class LoadBalancer {
    * <p>Implementations can choose to reject the given addresses by returning
    * {@code Status.UNAVAILABLE}.
    *
-   * <p>Implementations should not modify the given {@code resolvedAddresses}.
-   *
-   * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code Status.OK} if the resolved addresses were accepted. {@code Status.UNAVAILABLE}
-   *     if rejected.
+   * @param resolvedAddresses the resolved server addresses, attributes, and config
+   * @return {@code Status.OK} if the resolved addresses were accepted, otherwise an error to report
+   *     to the name resolver
    *
    * @since 1.49.0
    */
