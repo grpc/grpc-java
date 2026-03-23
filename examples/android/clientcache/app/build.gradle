@@ -10,9 +10,8 @@ android {
 
     defaultConfig {
         applicationId "io.grpc.clientcacheexample"
-        minSdkVersion 21
+        minSdkVersion 23
         targetSdkVersion 33
-        multiDexEnabled true
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
@@ -34,7 +33,7 @@ android {
 protobuf {
     protoc { artifact = 'com.google.protobuf:protoc:3.25.1' }
     plugins {
-        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -54,11 +53,11 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.0.0'
 
     // You need to build grpc-java to obtain these libraries below.
-    implementation 'io.grpc:grpc-okhttp:1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-protobuf-lite:1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    implementation 'io.grpc:grpc-stub:1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-okhttp:1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-protobuf-lite:1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-stub:1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'com.google.truth:truth:1.4.5'
-    testImplementation 'io.grpc:grpc-testing:1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    testImplementation 'io.grpc:grpc-testing:1.81.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }

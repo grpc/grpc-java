@@ -104,8 +104,6 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -201,7 +199,7 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private URI targetUri;
+  private String targetUri = AUTHORITY;
   private final NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
@@ -215,12 +213,6 @@ public class XdsNameResolverTest {
   @Before
   public void setUp() {
     lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
-
-    try {
-      targetUri = new URI(AUTHORITY);
-    } catch (URISyntaxException e) {
-      targetUri = null;
-    }
 
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
@@ -2018,6 +2010,48 @@ public class XdsNameResolverTest {
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
             null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
+  }
+
+  @Test
+  public void matchHostName_exactlyMatch() {
+    String pattern = "foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("fo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("oo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
+  }
+
+  @Test
+  public void matchHostName_prefixWildcard() {
+    String pattern = "*.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar-baz.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isTrue();
+    pattern = "*-bar.foo.googleapis.com";
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("-bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("baz-bar.foo.googleapis.com", pattern))
+        .isTrue();
+  }
+
+  @Test
+  public void matchHostName_postfixWildCard() {
+    String pattern = "foo.*";
+    assertThat(XdsNameResolver.matchHostName("bar.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo.com", pattern)).isTrue();
+    pattern = "foo-*";
+    assertThat(XdsNameResolver.matchHostName("bar-.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo.googleapis.com", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-", pattern)).isFalse();
+    assertThat(XdsNameResolver.matchHostName("foo-bar.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-.com", pattern)).isTrue();
+    assertThat(XdsNameResolver.matchHostName("foo-bar", pattern)).isTrue();
   }
 
   @Test
