@@ -180,9 +180,6 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning
-   * {@code Status.UNAVAILABLE}.
-   *
    * @param resolvedAddresses the resolved server addresses, attributes, and config
    * @return {@code Status.OK} if the resolved addresses were accepted, otherwise an error to report
    *     to the name resolver
