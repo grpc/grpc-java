@@ -341,7 +341,9 @@ public class ExternalProcessorFilter implements Filter {
     private static class ExtProcClientCall extends SimpleForwardingClientCall<InputStream, InputStream> {
       private final ExternalProcessorGrpc.ExternalProcessorStub stub;
       private final ExternalProcessor config;
-      private final Object lock = new Object();
+      private final Object requestLock = new Object();
+      private final Object responseLock = new Object();
+      private final Object streamLock = new Object();
       private ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private ExtProcListener wrappedListener;
 
@@ -361,7 +363,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendToDataPlane(Runnable action) {
-        synchronized (lock) {
+        synchronized (requestLock) {
           if (headersSent) {
             action.run();
           } else {
@@ -389,7 +391,7 @@ public class ExternalProcessorFilter implements Filter {
 
             if (response.getRequestDrain()) {
               drainingExtProcStream.set(true);
-              synchronized (lock) {
+              synchronized (streamLock) {
                 extProcClientCallRequestObserver.onCompleted(); // Sends half-close to ext_proc
               }
               return;
@@ -402,7 +404,7 @@ public class ExternalProcessorFilter implements Filter {
               if (response.getRequestHeaders().hasResponse()) {
                 applyHeaderMutations(requestHeaders, response.getRequestHeaders().getResponse().getHeaderMutation());
               }
-              synchronized (lock) {
+              synchronized (requestLock) {
                 headersSent = true;
                 delegate().start(wrappedListener, requestHeaders);
                 drainQueue();
@@ -417,7 +419,7 @@ public class ExternalProcessorFilter implements Filter {
                 io.grpc.StatusRuntimeException ex = io.grpc.Status.INTERNAL
                     .withDescription("gRPC message compression not supported in ext_proc")
                     .asRuntimeException();
-                synchronized (lock) {
+                synchronized (streamLock) {
                   extProcClientCallRequestObserver.onError(ex);
                 }
                 onError(ex);
@@ -442,7 +444,7 @@ public class ExternalProcessorFilter implements Filter {
                 io.grpc.StatusRuntimeException ex = io.grpc.Status.INTERNAL
                     .withDescription("gRPC message compression not supported in ext_proc")
                     .asRuntimeException();
-                synchronized (lock) {
+                synchronized (streamLock) {
                   extProcClientCallRequestObserver.onError(ex);
                 }
                 onError(ex);
@@ -461,7 +463,7 @@ public class ExternalProcessorFilter implements Filter {
               }
               // Finally notify the local app of the completion
               wrappedListener.proceedWithClose();
-              synchronized (lock) {
+              synchronized (streamLock) {
                 extProcClientCallRequestObserver.onCompleted();
               }
             }
@@ -491,7 +493,7 @@ public class ExternalProcessorFilter implements Filter {
 
         wrappedListener.setStream(extProcClientCallRequestObserver);
 
-        synchronized (lock) {
+        synchronized (streamLock) {
           extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
               .setRequestHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders.newBuilder()
                   .setHeaders(toHeaderMap(headers))
@@ -500,7 +502,7 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         if (config.getObservabilityMode()) {
-          synchronized (lock) {
+          synchronized (requestLock) {
             headersSent = true;
             delegate().start(wrappedListener, headers);
           }
@@ -522,7 +524,7 @@ public class ExternalProcessorFilter implements Filter {
           return false;
         }
         if (config.getObservabilityMode()) {
-          synchronized (lock) {
+          synchronized (streamLock) {
             return super.isReady() && extProcClientCallRequestObserver != null
                 && extProcClientCallRequestObserver.isReady();
           }
@@ -547,7 +549,7 @@ public class ExternalProcessorFilter implements Filter {
 
         try {
           byte[] bodyBytes = ByteStreams.toByteArray(message);
-          synchronized (lock) {
+          synchronized (streamLock) {
             if (!extProcStreamCompleted.get()) {
               extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
                   .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
@@ -574,7 +576,7 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         // Signal end of request body stream to the external processor.
-        synchronized (lock) {
+        synchronized (streamLock) {
           if (!extProcStreamCompleted.get()) {
             extProcClientCallRequestObserver.onNext(io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest.newBuilder()
                 .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
@@ -589,7 +591,7 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
-        synchronized (lock) {
+        synchronized (streamLock) {
           if (extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
           }
@@ -628,8 +630,10 @@ public class ExternalProcessorFilter implements Filter {
       private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener) {
         io.grpc.Status status = io.grpc.Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
         delegate().cancel("Rejected by ExtProc", null);
-        listener.onClose(status, new Metadata());
-        synchronized (lock) {
+        synchronized (responseLock) {
+          listener.onClose(status, new Metadata());
+        }
+        synchronized (streamLock) {
           extProcClientCallRequestObserver.onCompleted();
         }
       }
@@ -638,7 +642,7 @@ public class ExternalProcessorFilter implements Filter {
         if (extProcStreamCompleted.compareAndSet(false, true)) {
           // The ext_proc stream is gone. "Fail open" means we proceed with the RPC
           // without any more processing.
-          synchronized (lock) {
+          synchronized (requestLock) {
             if (!headersSent) {
               headersSent = true;
               delegate().start(listener, requestHeaders);
@@ -665,11 +669,6 @@ public class ExternalProcessorFilter implements Filter {
         this.extProcClientCall = extProcClientCall;
       }
 
-      private void sendToApp(Runnable action) {
-        // Response messages are delivered to the app listener, which gRPC handles via serialization.
-        action.run();
-      }
-
       void setStream(ClientCallStreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream) { this.stream = stream; }
 
       @Override
@@ -678,18 +677,24 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
         if (extProcClientCall.isReady()) {
-          super.onReady();
+          synchronized (extProcClientCall.responseLock) {
+            super.onReady();
+          }
         }
       }
 
       @Override
       public void onHeaders(Metadata headers) {
         if (extProcClientCall.extProcStreamCompleted.get()) {
-          super.onHeaders(headers);
+          synchronized (extProcClientCall.responseLock) {
+            super.onHeaders(headers);
+          }
           return;
         }
-        synchronized (extProcClientCall.lock) {
+        synchronized (extProcClientCall.responseLock) {
           this.savedHeaders = headers;
+        }
+        synchronized (extProcClientCall.streamLock) {
           extProcClientCall.extProcClientCallRequestObserver.onNext(ProcessingRequest.newBuilder()
               .setResponseHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders.newBuilder()
                   .setHeaders(toHeaderMap(headers))
@@ -698,12 +703,14 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         if (extProcClientCall.config.getObservabilityMode()) {
-          super.onHeaders(headers);
+          synchronized (extProcClientCall.responseLock) {
+            super.onHeaders(headers);
+          }
         }
       }
 
       void proceedWithHeaders() {
-        synchronized (extProcClientCall.lock) {
+        synchronized (extProcClientCall.responseLock) {
           if (savedHeaders != null) {
             super.onHeaders(savedHeaders);
             savedHeaders = null;
@@ -714,7 +721,9 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void onMessage(InputStream message) {
         if (extProcClientCall.extProcStreamCompleted.get()) {
-          super.onMessage(message);
+          synchronized (extProcClientCall.responseLock) {
+            super.onMessage(message);
+          }
           return;
         }
 
@@ -723,7 +732,9 @@ public class ExternalProcessorFilter implements Filter {
           sendResponseBodyToExtProc(bodyBytes, false);
 
           if (extProcClientCall.config.getObservabilityMode()) {
-            sendToApp(() -> super.onMessage(new ByteArrayInputStream(bodyBytes)));
+            synchronized (extProcClientCall.responseLock) {
+              super.onMessage(new ByteArrayInputStream(bodyBytes));
+            }
           }
         } catch (IOException e) {
            callDelegate.cancel("Failed to read server response", e);
@@ -737,21 +748,27 @@ public class ExternalProcessorFilter implements Filter {
           // The incoming status will be CANCELLED. We must not attempt to forward the server's
           // response trailers to the now-dead ext_proc stream. Instead, we close the
           // application's call with UNAVAILABLE as per the gRFC.
-          super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
+          synchronized (extProcClientCall.responseLock) {
+            super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
+          }
           return;
         }
         if (extProcClientCall.extProcStreamCompleted.get()) {
-          super.onClose(status, trailers);
+          synchronized (extProcClientCall.responseLock) {
+            super.onClose(status, trailers);
+          }
           return;
         }
 
-        synchronized (extProcClientCall.lock) {
+        synchronized (extProcClientCall.responseLock) {
           this.savedStatus = status;
           this.savedTrailers = trailers;
+        }
 
-          // Signal end of response body stream to the external processor.
-          sendResponseBodyToExtProc(null, true);
+        // Signal end of response body stream to the external processor.
+        sendResponseBodyToExtProc(null, true);
 
+        synchronized (extProcClientCall.streamLock) {
           // Event 6: Server Trailers with ACTUAL data
           extProcClientCall.extProcClientCallRequestObserver.onNext(ProcessingRequest.newBuilder()
               .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
@@ -761,8 +778,10 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         if (extProcClientCall.config.getObservabilityMode()) {
-          super.onClose(status, trailers);
-          synchronized (extProcClientCall.lock) {
+          synchronized (extProcClientCall.responseLock) {
+            super.onClose(status, trailers);
+          }
+          synchronized (extProcClientCall.streamLock) {
             extProcClientCall.extProcClientCallRequestObserver.onCompleted();
           }
         }
@@ -780,7 +799,7 @@ public class ExternalProcessorFilter implements Filter {
         }
         bodyBuilder.setEndOfStream(endOfStream);
 
-        synchronized (extProcClientCall.lock) {
+        synchronized (extProcClientCall.streamLock) {
           extProcClientCall.extProcClientCallRequestObserver.onNext(ProcessingRequest.newBuilder()
               .setResponseBody(bodyBuilder.build())
               .build());
@@ -791,7 +810,7 @@ public class ExternalProcessorFilter implements Filter {
        * Called when ExtProc gives the final "OK" for the trailers phase.
        */
       void proceedWithClose() {
-        synchronized (extProcClientCall.lock) {
+        synchronized (extProcClientCall.responseLock) {
           if (savedStatus != null) {
             super.onClose(savedStatus, savedTrailers);
             savedStatus = null;
@@ -801,7 +820,9 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onExternalBody(com.google.protobuf.ByteString body) {
-         sendToApp(() -> super.onMessage(body.newInput()));
+        synchronized (extProcClientCall.responseLock) {
+          super.onMessage(body.newInput());
+        }
       }
 
       void unblockAfterStreamComplete() {
