@@ -25,7 +25,13 @@ value.
 
 ### Outgoing Flow Control
 
-The underlying layer (such as Netty) manages a buffer for outgoing messages. If you write messages faster than they can be sent over the network, this buffer will grow, which can eventually lead to an OutOfMemoryError. The outgoing onNext method invocation does not block when this happens. Therefore, you should explicitly check that the stream is ready for writing via `CallStreamObserver.isReady()` before calling onNext to avoid buffering excessive amounts of data in memory.
+The underlying layer (such as Netty) manages a buffer for outgoing messages. If
+you write messages faster than they can be sent over the network, this buffer
+will grow, which can eventually lead to an OutOfMemoryError. The outgoing onNext
+method invocation does not block when this happens. Therefore, you should
+explicitly check that the stream is ready for writing via
+`CallStreamObserver.isReady()` before generating messages to avoid buffering
+excessive amounts of data in memory.
 
 ### Incoming Manual Flow Control
 
