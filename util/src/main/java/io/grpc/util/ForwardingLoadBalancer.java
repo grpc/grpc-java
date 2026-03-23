@@ -30,6 +30,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   protected abstract LoadBalancer delegate();
 
   @Deprecated
+  @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     delegate().handleResolvedAddresses(resolvedAddresses);
   }
