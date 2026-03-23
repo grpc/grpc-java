@@ -72,6 +72,7 @@ dependencies {
             libraries.junit,
             libraries.truth,
             libraries.androidx.test.rules,
+            libraries.androidx.test.core,
             libraries.opencensus.contrib.grpc.metrics
 
     implementation (project(':grpc-services')) {
