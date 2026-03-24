@@ -29,6 +29,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.ChannelConfigurer;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -128,6 +129,8 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
+  private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
+
   XdsServerWrapper(
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
@@ -146,6 +149,30 @@ final class XdsServerWrapper extends Server {
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
+  }
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      FilterRegistry filterRegistry,
+      ChannelConfigurer channelConfigurer) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+    sharedTimeService = true;
+    if (channelConfigurer != null) {
+      this.channelConfigurer = channelConfigurer;
+    }
   }
 
   @VisibleForTesting
@@ -202,7 +229,8 @@ final class XdsServerWrapper extends Server {
         bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
-          "#server", bootstrapInfo, new MetricRecorder() {});
+          "#server", bootstrapInfo, new MetricRecorder() {},
+          channelConfigurer);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();

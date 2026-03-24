@@ -37,6 +37,7 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -154,6 +155,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
       };
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
+
+  /**
+   * Retrieves the user-provided configuration function for internal child channels.
+   *
+   * <p>This is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   */
+  private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
 
   private final InternalLogId logId;
   private final String target;
@@ -545,6 +554,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
+    if (builder.channelConfigurer != null) {
+      this.channelConfigurer = builder.channelConfigurer;
+    }
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
@@ -589,7 +601,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
-            .setNameResolverRegistry(builder.nameResolverRegistry);
+            .setNameResolverRegistry(builder.nameResolverRegistry)
+            .setChildChannelConfigurer(this.channelConfigurer);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -1485,6 +1498,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder();
+
+      // Note that we follow the global configurator pattern and try to fuse the configurations as
+      // soon as the builder gets created
+      if (channelConfigurer != null) {
+        channelConfigurer.configureChannelBuilder(builder);
+      }
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

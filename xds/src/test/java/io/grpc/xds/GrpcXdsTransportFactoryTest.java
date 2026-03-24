@@ -17,15 +17,24 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryRequest;
 import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.BindableService;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
+import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -96,7 +105,7 @@ public class GrpcXdsTransportFactoryTest {
   @Test
   public void callApis() throws Exception {
     XdsTransportFactory.XdsTransport xdsTransport =
-        new GrpcXdsTransportFactory(null)
+        new GrpcXdsTransportFactory(null, null)
             .create(
                 Bootstrapper.ServerInfo.create(
                     "localhost:" + server.getPort(), InsecureChannelCredentials.create()));
@@ -127,7 +136,7 @@ public class GrpcXdsTransportFactoryTest {
     Bootstrapper.ServerInfo xdsServerInfo =
         Bootstrapper.ServerInfo.create(
             "localhost:" + server.getPort(), InsecureChannelCredentials.create());
-    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null, null);
     // Calling create() for the first time creates a new GrpcXdsTransport instance.
     // The ref count was previously 0 and now is 1.
     XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo);
@@ -159,7 +168,7 @@ public class GrpcXdsTransportFactoryTest {
     Bootstrapper.ServerInfo xdsServerInfo2 =
         Bootstrapper.ServerInfo.create(
             "localhost:" + server2.getPort(), InsecureChannelCredentials.create());
-    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null);
+    GrpcXdsTransportFactory xdsTransportFactory = new GrpcXdsTransportFactory(null, null);
     // Calling create() to the first xDS server creates a new GrpcXdsTransport instance.
     // The ref count was previously 0 and now is 1.
     XdsTransportFactory.XdsTransport transport1 = xdsTransportFactory.create(xdsServerInfo1);
@@ -195,6 +204,111 @@ public class GrpcXdsTransportFactoryTest {
     public void onStatusReceived(Status status) {
       endFuture.set(status);
     }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void verifyConfigApplied_interceptor() {
+    // Create a mock Interceptor
+    final ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
+    when(mockInterceptor.interceptCall(any(MethodDescriptor.class),
+        any(CallOptions.class), any(Channel.class)))
+        .thenReturn(new io.grpc.NoopClientCall<>());
+
+    // Create Configurer that adds the interceptor
+    ChannelConfigurer configurer = new ChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.intercept(mockInterceptor);
+      }
+    };
+
+    // Create Factory
+    GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
+        null,
+        configurer);
+
+    // Create Transport
+    XdsTransportFactory.XdsTransport transport = factory.create(
+        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+
+    // Create a Call to trigger interceptors
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(mock(MethodDescriptor.Marshaller.class))
+        .setResponseMarshaller(mock(MethodDescriptor.Marshaller.class))
+        .build();
+
+    transport.createStreamingCall(method.getFullMethodName(), method.getRequestMarshaller(),
+        method.getResponseMarshaller());
+
+    // Verify interceptor was invoked
+    verify(mockInterceptor).interceptCall(any(MethodDescriptor.class),
+        any(CallOptions.class), any(Channel.class));
+
+    transport.shutdown();
+  }
+
+  @Test
+  public void useChannelConfigurer() {
+    // Mock Configurer
+    ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
+
+    // Create Factory
+    GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
+        null, // CallCredentials
+        mockConfigurer);
+
+    // Create Transport (triggers channel creation)
+    XdsTransportFactory.XdsTransport transport = factory.create(
+        Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+
+    // Verify Configurer was accessed and applied
+    verify(mockConfigurer).configureChannelBuilder(any(ManagedChannelBuilder.class));
+
+    transport.shutdown();
+  }
+
+  @Test
+  public void verifyConfigApplied_maxInboundMessageSize() {
+    // Create a mock Builder
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+
+    // Create Configurer that modifies message size
+    ChannelConfigurer configurer = new ChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.maxInboundMessageSize(1024);
+      }
+    };
+
+    // Apply configurer to builder
+    configurer.configureChannelBuilder(mockBuilder);
+
+    // Verify builder was modified
+    verify(mockBuilder).maxInboundMessageSize(1024);
+  }
+
+  @Test
+  public void verifyConfigApplied_interceptors() {
+    ClientInterceptor interceptor1 = mock(ClientInterceptor.class);
+    ClientInterceptor interceptor2 = mock(ClientInterceptor.class);
+
+    ChannelConfigurer configurer = new ChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.intercept(interceptor1);
+        builder.intercept(interceptor2);
+      }
+    };
+
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+    configurer.configureChannelBuilder(mockBuilder);
+
+    verify(mockBuilder).intercept(interceptor1);
+    verify(mockBuilder).intercept(interceptor2);
   }
 }
 

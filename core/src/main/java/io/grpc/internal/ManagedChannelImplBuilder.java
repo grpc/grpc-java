@@ -29,6 +29,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -126,6 +127,16 @@ public final class ManagedChannelImplBuilder
   static final Pattern URI_PATTERN = Pattern.compile("[a-zA-Z][a-zA-Z0-9+.-]*:/.*");
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
+
+  ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
+
+  @Override
+  public ManagedChannelImplBuilder childChannelConfigurer(
+      ChannelConfigurer channelConfigurer) {
+    this.channelConfigurer = checkNotNull(channelConfigurer,
+        "childChannelConfigurer");
+    return this;
+  }
 
   static {
     Method getClientInterceptorMethod = null;
@@ -403,7 +414,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  protected ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
+  public ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
     // Add a placeholder instance to the interceptor list, and replace it with a real instance
     // during build().
     this.interceptors.add(new InterceptorFactoryWrapper(factory));
@@ -712,7 +723,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  protected ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
+  public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
     return this;
   }

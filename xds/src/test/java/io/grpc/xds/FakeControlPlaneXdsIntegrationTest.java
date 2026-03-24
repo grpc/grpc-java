@@ -22,6 +22,13 @@ import static io.grpc.xds.DataPlaneRule.ENDPOINT_HOST_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
@@ -47,15 +54,23 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.Grpc;
+import io.grpc.InsecureChannelCredentials;
+import io.grpc.InsecureServerCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricSink;
+import io.grpc.NoopMetricSink;
+import io.grpc.Server;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -337,6 +352,65 @@ public class FakeControlPlaneXdsIntegrationTest {
       assertEquals(goldenResponse, blockingStub.unaryRpc(request));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
+    }
+  }
+
+  @Test
+  public void childChannelConfigurer_passesMetricSinkToChannel_E2E() {
+    MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    ChannelConfigurer configurer = new ChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        builder.addMetricSink(mockSink);
+      }
+    };
+
+    ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
+            InsecureChannelCredentials.create())
+        .childChannelConfigurer(configurer)
+        .build();
+
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+          channel);
+      blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
+
+      // The xDS client inside the channel configurer will have created an ADS stream.
+      // The metric sink should have received attempt or connection metrics.
+      verify(mockSink, timeout(5000).atLeastOnce())
+          .addLongCounter(any(), anyLong(), anyList(), anyList());
+    } finally {
+      channel.shutdownNow();
+    }
+  }
+
+  @Test
+  public void childChannelConfigurer_passesMetricSinkToServer_E2E() throws Exception {
+    MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    ChannelConfigurer configurer = new ChannelConfigurer() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        // Child channels (xDS client connections) created by this server get the sink.
+        builder.addMetricSink(mockSink);
+      }
+    };
+
+    // We start an XdsServer manually.
+    // XdsServer needs RDS, LDS, etc. from control plane.
+    XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
+            0, InsecureServerCredentials.create())
+        .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {})
+        .overrideBootstrapForTest(controlPlane.defaultBootstrapOverride())
+        .childChannelConfigurer(configurer);
+        
+    Server childServer = serverBuilder.build().start();
+
+    try {
+      // The server xDS client will connect to control plane to get LDS.
+      verify(mockSink, timeout(5000).atLeastOnce())
+          .addLongCounter(any(), anyLong(), anyList(), anyList());
+    } finally {
+      childServer.shutdownNow();
     }
   }
 }

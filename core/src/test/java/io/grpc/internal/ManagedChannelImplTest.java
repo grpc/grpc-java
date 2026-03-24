@@ -303,6 +303,7 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
 
+
   private void createChannel(ClientInterceptor... interceptors) {
     createChannel(false, interceptors);
   }

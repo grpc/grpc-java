@@ -27,6 +27,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
@@ -47,6 +48,7 @@ import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurer;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -67,6 +69,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
@@ -2486,6 +2489,24 @@ public class XdsNameResolverTest {
     }
 
     @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ChannelConfigurer channelConfigurer) {
+      targets.add(target);
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+
+    @Override
     public List<String> getTargets() {
       if (targets.isEmpty()) {
         List<String> targetList = new ArrayList<>();
@@ -2922,5 +2943,61 @@ public class XdsNameResolverTest {
     void deliverErrorStatus() {
       listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
+  }
+
+  @Test
+  public void start_passesChannelConfigurerToClientPoolFactory() {
+    ChannelConfigurer mockChannelConfigurer = mock(ChannelConfigurer.class);
+
+    // Build NameResolver.Args containing the channel configurer
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(serviceConfigParser)
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurer(mockChannelConfigurer)
+        .build();
+
+    // Mock the XdsClientPoolFactory
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockObjectPool = mock(ObjectPool.class);
+    XdsClient mockXdsClient = mock(XdsClient.class);
+    when(mockObjectPool.getObject()).thenReturn(mockXdsClient);
+    when(mockXdsClient.getBootstrapInfo()).thenReturn(bootstrapInfo);
+
+    when(mockPoolFactory.getOrCreate(
+        anyString(),
+        any(BootstrapInfo.class),
+        any(MetricRecorder.class),
+        any(ChannelConfigurer.class)))
+        .thenReturn(mockObjectPool);
+
+    XdsNameResolver resolver = new XdsNameResolver(
+        targetUri,
+        null, // targetAuthority (nullable)
+        AUTHORITY, // name
+        null, // overrideAuthority (nullable)
+        serviceConfigParser,
+        syncContext,
+        scheduler,
+        mockPoolFactory,
+        mockRandom,
+        FilterRegistry.getDefaultRegistry(),
+        rawBootstrap,
+        metricRecorder,
+        args);
+
+    // Start the resolver (this triggers the factory call)
+    resolver.start(mockListener);
+
+    verify(mockPoolFactory).getOrCreate(
+        eq(AUTHORITY),
+        any(BootstrapInfo.class),
+        eq(metricRecorder),
+        eq(mockChannelConfigurer));
+
+    resolver.shutdown();
   }
 }

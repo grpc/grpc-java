@@ -424,6 +424,24 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
     throw new UnsupportedOperationException();
   }
 
+
+  /**
+   * Sets a configurer that will be applied to all internal child channels created by this server.
+   *
+   * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections
+   * or OOB load balancing channels.
+   *
+   * @param channelConfigurer the configurer to apply.
+   * @return this
+   * @since 1.81.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+
   /**
    * Builds a server using the given parameters.
    *

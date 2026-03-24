@@ -358,6 +358,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
+    @Nullable private final ChannelConfigurer channelConfigurer;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -372,6 +373,7 @@ public abstract class NameResolver {
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
+      this.channelConfigurer = builder.channelConfigurer;
     }
 
     /**
@@ -468,6 +470,17 @@ public abstract class NameResolver {
         throw new IllegalStateException("ChannelLogger is not set in Builder");
       }
       return channelLogger;
+    }
+
+    /**
+     * Returns the configurer for child channels.
+     *
+     * @since 1.81.0
+     */
+    @Nullable
+    @Internal
+    public ChannelConfigurer getChildChannelConfigurer() {
+      return channelConfigurer;
     }
 
     /**
@@ -579,6 +592,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
+      private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
 
       Builder() {
       }
@@ -691,6 +705,16 @@ public abstract class NameResolver {
        */
       public Builder setNameResolverRegistry(NameResolverRegistry registry) {
         this.nameResolverRegistry = registry;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getChildChannelConfigurer()}. This is an optional field.
+       *
+       * @since 1.81.0
+       */
+      public Builder setChildChannelConfigurer(ChannelConfigurer channelConfigurer) {
+        this.channelConfigurer = channelConfigurer;
         return this;
       }
 

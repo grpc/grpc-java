@@ -258,7 +258,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  protected T addMetricSink(MetricSink metricSink) {
+  public T addMetricSink(MetricSink metricSink) {
     delegate().addMetricSink(metricSink);
     return thisT();
   }
@@ -266,6 +266,13 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   @Override
   public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     delegate().setNameResolverArg(key, value);
+    return thisT();
+  }
+
+
+  @Override
+  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
+    delegate().childChannelConfigurer(channelConfigurer);
     return thisT();
   }
 
