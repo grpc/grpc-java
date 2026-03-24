@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -92,14 +91,17 @@ public class AdvancedTlsX509KeyManagerTest {
     assertEquals(AdvancedTlsX509KeyManager.ALIAS_PREFIX + "2", alias2);
     assertEquals(clientKey0, serverKeyManager.getPrivateKey(alias2));
     assertArrayEquals(clientCert0, serverKeyManager.getCertificateChain(alias2));
-    // Old alias no longer resolves — ensures alias stability contract is enforced.
-    assertNull(serverKeyManager.getPrivateKey(alias1));
+    // Previous alias still resolves — retained to allow in-progress handshakes to complete.
+    assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias1));
+    assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias1));
 
     serverKeyManager.updateIdentityCredentials(serverCert0File, serverKey0File, 1,
         TimeUnit.MINUTES, executor);
     String alias3 = serverKeyManager.chooseEngineServerAlias(null, null, null);
     assertEquals(serverKey0, serverKeyManager.getPrivateKey(alias3));
     assertArrayEquals(serverCert0, serverKeyManager.getCertificateChain(alias3));
+    // alias1 is now two rotations back — no longer retained.
+    assertNull(serverKeyManager.getPrivateKey(alias1));
 
     serverKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
     String alias4 = serverKeyManager.chooseEngineServerAlias(null, null, null);
@@ -133,46 +135,6 @@ public class AdvancedTlsX509KeyManagerTest {
     assertEquals(expectedAlias, keyManager.chooseEngineServerAlias(null, null, null));
     assertArrayEquals(new String[]{expectedAlias}, keyManager.getClientAliases(null, null));
     assertArrayEquals(new String[]{expectedAlias}, keyManager.getServerAliases(null, null));
-  }
-
-  @Test
-  public void revisionWarningThreshold_logsWarningAtThreshold() throws Exception {
-    Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
-    TestHandler handler = new TestHandler();
-    log.addHandler(handler);
-    log.setUseParentHandlers(false);
-    log.setLevel(Level.ALL);
-
-    try {
-      // Custom threshold: warning when revision reaches threshold.
-      int threshold = 3;
-      AdvancedTlsX509KeyManager customKeyManager = new AdvancedTlsX509KeyManager(threshold);
-      for (int i = 0; i < threshold; i++) {
-        customKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
-      }
-      assertFalse(hasRevisionWarning(handler));
-      customKeyManager.updateIdentityCredentials(serverCert0, serverKey0);
-      assertTrue(hasRevisionWarning(handler));
-
-      // Key manager must still provide credentials correctly after soft threshold is exceeded.
-      String alias = customKeyManager.chooseEngineServerAlias(null, null, null);
-      assertEquals(serverKey0, customKeyManager.getPrivateKey(alias));
-      assertArrayEquals(serverCert0, customKeyManager.getCertificateChain(alias));
-
-      // Further credential updates must also work.
-      customKeyManager.updateIdentityCredentials(clientCert0File, clientKey0File);
-      String newAlias = customKeyManager.chooseEngineServerAlias(null, null, null);
-      assertEquals(clientKey0, customKeyManager.getPrivateKey(newAlias));
-      assertArrayEquals(clientCert0, customKeyManager.getCertificateChain(newAlias));
-    } finally {
-      log.removeHandler(handler);
-    }
-  }
-
-  private static boolean hasRevisionWarning(TestHandler handler) {
-    return handler.getRecords().stream()
-        .anyMatch(r -> Level.WARNING.equals(r.getLevel())
-            && r.getMessage().contains("revision counter has reached"));
   }
 
   @Test

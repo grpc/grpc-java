@@ -42,10 +42,10 @@ import javax.net.ssl.X509ExtendedKeyManager;
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
  *
- * <p>The key material alias increments on every credential load (e.g. {@code "key-1"},
- * {@code "key-2"}, ...), ensuring the same alias always maps to the same key material. This is
- * required by Netty's {@code OpenSslCachingX509KeyManagerFactory} to correctly cache key
- * material and create a new cache entry on cert reload.
+ * <p>The alias increments on every credential load (e.g. {@code "key-1"}, {@code "key-2"}, ...),
+ * so the same alias always maps to the same key material. The previous alias is retained for one
+ * rotation to allow in-progress handshakes to complete. This is required by Netty's
+ * {@code OpenSslCachingX509KeyManagerFactory} to cache key material across cert reloads.
  *
  * <p>When using {@code SslProvider.OPENSSL}, wrap this key manager in Netty's
  * {@code OpenSslCachingX509KeyManagerFactory} to avoid per-handshake key material encoding
@@ -61,44 +61,39 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   static final String ALIAS_PREFIX = "key-";
 
   private final AtomicInteger revision = new AtomicInteger(0);
-  private final int revisionWarningThreshold;
-  // The credential information to be sent to peers to prove our identity.
-  private volatile KeyInfo keyInfo;
+  // Snapshot of current and previous KeyInfo; previous is retained for in-progress handshakes
+  // after one rotation.
+  private volatile KeyInfoSnapshot snapshot = new KeyInfoSnapshot(null, null);
 
-  public AdvancedTlsX509KeyManager() {
-    // Netty's default OpenSslCachingX509KeyManagerFactory maxCachedEntries.
-    this(1024);
-  }
-
-  /**
-   * Creates a key manager with a custom revision warning threshold.
-   * @param revisionWarningThreshold the number of credential loads after which a warning is logged.
-   *     Only relevant when using {@code SslProvider.OPENSSL} with
-   *     {@code OpenSslCachingX509KeyManagerFactory}.
-   */
-  public AdvancedTlsX509KeyManager(int revisionWarningThreshold) {
-    this.revisionWarningThreshold = revisionWarningThreshold;
-  }
+  public AdvancedTlsX509KeyManager() {}
 
   private String alias() {
-    KeyInfo info = this.keyInfo;
-    if (info == null) {
-      return null;
-    }
-    return info.alias;
+    KeyInfo curr = this.snapshot.current;
+    return curr != null ? curr.alias : null;
   }
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    KeyInfo info = this.keyInfo;
-    return info != null && info.alias.equals(alias) ? info.key : null;
+    KeyInfoSnapshot snap = this.snapshot;
+    if (snap.current != null && snap.current.alias.equals(alias)) {
+      return snap.current.key;
+    }
+    if (snap.previous != null && snap.previous.alias.equals(alias)) {
+      return snap.previous.key;
+    }
+    return null;
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    KeyInfo info = this.keyInfo;
-    return info != null && info.alias.equals(alias)
-        ? Arrays.copyOf(info.certs, info.certs.length) : null;
+    KeyInfoSnapshot snap = this.snapshot;
+    if (snap.current != null && snap.current.alias.equals(alias)) {
+      return Arrays.copyOf(snap.current.certs, snap.current.certs.length);
+    }
+    if (snap.previous != null && snap.previous.alias.equals(alias)) {
+      return Arrays.copyOf(snap.previous.certs, snap.previous.certs.length);
+    }
+    return null;
   }
 
   @Override
@@ -155,15 +150,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param key  the private key that is going to be used
    */
   public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key) {
-    // When using SslProvider.OPENSSL with OpenSslCachingX509KeyManagerFactory, its cache stops
-    // accepting new aliases once maxCachedEntries is reached (default: 1024). Beyond this,
-    // handshakes still succeed but per-handshake re-encoding overhead resumes.
-    if (revision.get() >= revisionWarningThreshold) {
-      log.warning("AdvancedTlsX509KeyManager: revision counter has reached "
-          + revisionWarningThreshold);
-    }
-    this.keyInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"),
+    KeyInfo newInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"),
         ALIAS_PREFIX + revision.incrementAndGet());
+    this.snapshot = new KeyInfoSnapshot(newInfo, this.snapshot.current);
   }
 
   /**
@@ -262,7 +251,6 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   }
 
   private static class KeyInfo {
-    // The private key and the cert chain we will use to send to peers to prove our identity.
     final X509Certificate[] certs;
     final PrivateKey key;
     final String alias;
@@ -271,6 +259,16 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
       this.certs = certs;
       this.key = key;
       this.alias = alias;
+    }
+  }
+
+  private static class KeyInfoSnapshot {
+    final KeyInfo current;
+    final KeyInfo previous;
+
+    KeyInfoSnapshot(KeyInfo current, KeyInfo previous) {
+      this.current = current;
+      this.previous = previous;
     }
   }
 
