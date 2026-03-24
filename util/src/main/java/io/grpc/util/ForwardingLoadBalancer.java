@@ -63,6 +63,8 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return delegate().canHandleEmptyAddressListFromNameResolution();
   }
