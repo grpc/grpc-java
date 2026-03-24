@@ -418,10 +418,8 @@ public abstract class LoadBalancer {
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
    * 
-   * <p>
-   * Note that this method is only called when the deprecated
-   * {@code handleResolvedAddresses()}
-   * is overwritten.
+   * <p>Note that this method is only called when implementing {@code handleResolvedAddresses()}
+   * instead of {@code acceptResolvedAddresses()}.
    *
    * @deprecated Instead of overwriting this and {@code handleResolvedAddresses()}, only
    *     overwrite {@code acceptResolvedAddresses()} which indicates if the addresses provided
