@@ -51,28 +51,13 @@ public class MetricReportUtilsTest {
   }
 
   @Test
-  public void getMetric_memoryUtilization() {
+  public void getMetric_memUtilization() {
     MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "memory_utilization");
+    OptionalDouble result = MetricReportUtils.getMetric(report, "mem_utilization");
     assertTrue(result.isPresent());
     assertEquals(0.2, result.getAsDouble(), 0.0001);
   }
 
-  @Test
-  public void getMetric_qps() {
-    MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "qps");
-    assertTrue(result.isPresent());
-    assertEquals(10.0, result.getAsDouble(), 0.0001);
-  }
-
-  @Test
-  public void getMetric_eps() {
-    MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "eps");
-    assertTrue(result.isPresent());
-    assertEquals(5.0, result.getAsDouble(), 0.0001);
-  }
 
   @Test
   public void getMetric_utilizationMetric() {
@@ -88,19 +73,6 @@ public class MetricReportUtilsTest {
     assertFalse(MetricReportUtils.getMetric(report, "utilization.bar").isPresent());
   }
 
-  @Test
-  public void getMetric_requestCostMetric() {
-    Map<String, Double> requestCostMetrics = new HashMap<>();
-    requestCostMetrics.put("foo", 4.56);
-    MetricReport report = InternalCallMetricRecorder.createMetricReport(
-        0, 0, 0, 0, 0, requestCostMetrics, Collections.emptyMap(), Collections.emptyMap());
-
-    OptionalDouble result = MetricReportUtils.getMetric(report, "request_cost.foo");
-    assertTrue(result.isPresent());
-    assertEquals(4.56, result.getAsDouble(), 0.0001);
-
-    assertFalse(MetricReportUtils.getMetric(report, "request_cost.bar").isPresent());
-  }
 
   @Test
   public void getMetric_namedMetric() {

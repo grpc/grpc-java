@@ -33,11 +33,8 @@ public final class MetricReportUtils {
    * <ul>
    * <li>"cpu_utilization" -> getCpuUtilization()</li>
    * <li>"application_utilization" -> getApplicationUtilization()</li>
-   * <li>"memory_utilization" -> getMemoryUtilization()</li>
-   * <li>"qps" -> getQps()</li>
-   * <li>"eps" -> getEps()</li>
+   * <li>"mem_utilization" -> getMemoryUtilization()</li>
    * <li>"utilization." -> lookup in utilizationMetrics</li>
-   * <li>"request_cost." -> lookup in requestCostMetrics</li>
    * <li>"named_metrics." -> lookup in namedMetrics</li>
    * </ul>
    *
@@ -50,21 +47,11 @@ public final class MetricReportUtils {
       return OptionalDouble.of(report.getCpuUtilization());
     } else if (metricName.equals("application_utilization")) {
       return OptionalDouble.of(report.getApplicationUtilization());
-    } else if (metricName.equals("memory_utilization")) {
+    } else if (metricName.equals("mem_utilization")) {
       return OptionalDouble.of(report.getMemoryUtilization());
-    } else if (metricName.equals("qps")) {
-      return OptionalDouble.of(report.getQps());
-    } else if (metricName.equals("eps")) {
-      return OptionalDouble.of(report.getEps());
     } else if (metricName.startsWith("utilization.")) {
       Map<String, Double> map = report.getUtilizationMetrics();
       Double val = map.get(metricName.substring("utilization.".length()));
-      if (val != null) {
-        return OptionalDouble.of(val);
-      }
-    } else if (metricName.startsWith("request_cost.")) {
-      Map<String, Double> map = report.getRequestCostMetrics();
-      Double val = map.get(metricName.substring("request_cost.".length()));
       if (val != null) {
         return OptionalDouble.of(val);
       }
