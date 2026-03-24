@@ -991,7 +991,7 @@ public class PriorityLoadBalancerTest {
     @Override
     public void handleNameResolutionError(Status error) {
     }
-    
+
     @Override
     public void shutdown() {
     }
