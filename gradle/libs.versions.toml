@@ -53,17 +53,17 @@ errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 # checkForUpdates: errorprone-corejava8:2.10.+
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
 # 2.67.0+ requires protobuf 4.x.
-# checkForUpdates: google-api-protos:2.63.+
-google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.63.2"
+# checkForUpdates: google-api-protos:2.64.+
+google-api-protos = "com.google.api.grpc:proto-google-common-protos:2.64.1"
 # 1.43.0+ versions of google-auth-library requires protobuf 4.x
-# checkForUpdates: google-auth-credentials:1.41.+
-google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.41.0"
-# checkForUpdates: google-auth-oauth2Http:1.41.+
-google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.41.0"
+# checkForUpdates: google-auth-credentials:1.42.+
+google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.42.1"
+# checkForUpdates: google-auth-oauth2Http:1.42.+
+google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.42.1"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
 # 3.28.0+ require protobuf 4.x
-# checkForUpdates: google-cloud-logging:3.23.+
-google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.9"
+# checkForUpdates: google-cloud-logging:3.27.+
+google-cloud-logging = "com.google.cloud:google-cloud-logging:3.27.0"
 gson = "com.google.code.gson:gson:2.13.2"
 guava = "com.google.guava:guava:33.5.0-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
