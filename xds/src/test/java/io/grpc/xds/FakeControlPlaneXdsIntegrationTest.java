@@ -50,8 +50,10 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.FlagResetRule;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.InternalFeatureFlags;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -60,10 +62,14 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 /**
  * Xds integration tests using a local control plane, implemented in {@link
@@ -85,13 +91,28 @@ import org.junit.runners.JUnit4;
  * 3) Construct EDS config w/ test server address from 2). Set CDS and EDS Config at the Control
  * Plane. Then start the test xDS client (requires EDS to do xDS name resolution).
  */
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class FakeControlPlaneXdsIntegrationTest {
 
   @Rule(order = 0)
   public ControlPlaneRule controlPlane = new ControlPlaneRule();
   @Rule(order = 1)
   public DataPlaneRule dataPlane = new DataPlaneRule(controlPlane);
+  @Rule(order = 2)
+  public final FlagResetRule flagResetRule = new FlagResetRule();
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
+  @Before
+  public void setupRfc3986UrisFeatureFlag() throws Exception {
+    flagResetRule.setFlagForTest(
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+  }
 
   @Test
   public void pingPong() throws Exception {
