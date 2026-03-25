@@ -33,6 +33,7 @@ public class CachedChannelManager {
   private final Object lock = new Object();
 
   private final AtomicReference<ChannelHolder> channelHolder = new AtomicReference<>();
+  private boolean closed;
 
   /**
    * Default constructor for production that creates a channel using the config's target and
@@ -75,6 +76,9 @@ public class CachedChannelManager {
 
     // 2. Slow path: Update with locking
     synchronized (lock) {
+      if (closed) {
+        throw new IllegalStateException("CachedChannelManager is closed");
+      }
       holder = channelHolder.get(); // Double check
       if (holder != null && holder.channelKey().equals(newChannelKey)) {
         return holder.channel();
@@ -100,9 +104,12 @@ public class CachedChannelManager {
 
   /** Removes underlying resources on shutdown. */
   public void close() {
-    ChannelHolder holder = channelHolder.get();
-    if (holder != null) {
-      holder.channel().shutdown();
+    synchronized (lock) {
+      closed = true;
+      ChannelHolder holder = channelHolder.getAndSet(null);
+      if (holder != null) {
+        holder.channel().shutdown();
+      }
     }
   }
 

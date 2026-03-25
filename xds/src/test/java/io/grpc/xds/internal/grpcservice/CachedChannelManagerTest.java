@@ -120,4 +120,19 @@ public class CachedChannelManagerTest {
 
     verify(mockChannel1).shutdown();
   }
+
+  @Test
+  public void getChannel_afterClose_throwsException() {
+    when(mockCreator.apply(config1)).thenReturn(mockChannel1);
+
+    manager.getChannel(config1);
+    manager.close();
+
+    try {
+      manager.getChannel(config1);
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("CachedChannelManager is closed");
+    }
+  }
 }
