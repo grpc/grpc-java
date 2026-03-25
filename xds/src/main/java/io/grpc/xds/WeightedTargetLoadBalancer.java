@@ -128,6 +128,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return true;
   }
