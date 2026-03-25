@@ -18,13 +18,13 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
 
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricSink;
+import io.grpc.NoopMetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
@@ -134,9 +134,9 @@ public class ServerImplBuilderTest {
 
   @Test
   public void addMetricSink_addsToSinks() {
-    MetricSink mockSink = mock(MetricSink.class);
-    builder.addMetricSink(mockSink);
-    assertThat(builder.metricSinks).containsExactly(mockSink);
+    MetricSink noopMetricSink = new NoopMetricSink();
+    builder.addMetricSink(noopMetricSink);
+    assertThat(builder.metricSinks).containsExactly(noopMetricSink);
   }
 
   @Test

@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.InternalTcpMetrics;
 import io.grpc.MetricRecorder;
 import io.netty.channel.Channel;
@@ -66,7 +67,7 @@ final class TcpMetrics {
     }
   }
 
-  private static EpollInfo loadEpollInfo() {
+  static EpollInfo loadEpollInfo() {
     boolean epollAvailable = false;
     try {
       Class<?> epollClass = Class.forName("io.netty.channel.epoll.Epoll");
@@ -84,10 +85,8 @@ final class TcpMetrics {
             infoClass.getMethod("retrans"),
             infoClass.getMethod("rtt"));
       }
-    } catch (ReflectiveOperationException | RuntimeException e) {
+    } catch (ReflectiveOperationException e) {
       log.log(Level.FINE, "Failed to initialize Epoll tcp_info reflection", e);
-    } catch (Error e) {
-      log.log(Level.FINE, "Failed to load native Epoll library", e);
     } finally {
       log.log(Level.INFO, "Epoll available during static init of TcpMetrics:"
           + "{0}", epollAvailable);
@@ -95,112 +94,108 @@ final class TcpMetrics {
     return null;
   }
 
-  static final class Tracker {
-    private final MetricRecorder metricRecorder;
-    private final Object tcpInfo;
+  private static final long RECORD_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(5);
+  private final MetricRecorder metricRecorder;
+  private final Object tcpInfo;
+  private long lastTotalRetrans = 0;
+  private ScheduledFuture<?> reportTimer;
 
-    private long lastTotalRetrans = 0;
+  TcpMetrics(MetricRecorder metricRecorder) {
+    this.metricRecorder = metricRecorder;
 
-    Tracker(MetricRecorder metricRecorder) {
-      this.metricRecorder = metricRecorder;
-
-      Object tcpInfo = null;
-      if (epollInfo != null) {
-        try {
-          tcpInfo = epollInfo.infoConstructor.newInstance();
-        } catch (ReflectiveOperationException e) {
-          log.log(Level.FINE, "Failed to instantiate EpollTcpInfo", e);
-        }
+    Object tcpInfo = null;
+    if (epollInfo != null) {
+      try {
+        tcpInfo = epollInfo.infoConstructor.newInstance();
+      } catch (ReflectiveOperationException e) {
+        log.log(Level.FINE, "Failed to instantiate EpollTcpInfo", e);
       }
-      this.tcpInfo = tcpInfo;
+    }
+    this.tcpInfo = tcpInfo;
+  }
+
+  void channelActive(Channel channel) {
+    List<String> labelValues = getLabelValues(channel);
+    metricRecorder.addLongCounter(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT, 1,
+        Collections.emptyList(), labelValues);
+    metricRecorder.addLongUpDownCounter(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT, 1,
+        Collections.emptyList(), labelValues);
+    scheduleNextReport(channel, true);
+  }
+
+  private void scheduleNextReport(final Channel channel, boolean isInitial) {
+    if (epollInfo == null || !epollInfo.channelClass.isInstance(channel) || !channel.isActive()) {
+      return;
     }
 
-    private static final long RECORD_INTERVAL_MILLIS = TimeUnit.MINUTES.toMillis(5);
-    private ScheduledFuture<?> reportTimer;
+    // Initial report has a larger jitter range to spread out initial connections.
+    // Subsequent reports have a smaller jitter range to avoid drift.
+    double jitter = isInitial
+        ? 0.1 + ThreadLocalRandom.current().nextDouble() // 10% to 110%
+        : 0.9 + ThreadLocalRandom.current().nextDouble() * 0.2; // 90% to 110%
+    long rearmingDelay = (long) (RECORD_INTERVAL_MILLIS * jitter);
 
-    void channelActive(Channel channel) {
-      List<String> labelValues = getLabelValues(channel);
-      metricRecorder.addLongCounter(InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT, 1,
-          Collections.emptyList(), labelValues);
-      metricRecorder.addLongUpDownCounter(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT, 1,
-          Collections.emptyList(), labelValues);
-      scheduleNextReport(channel, true);
-    }
-
-    private void scheduleNextReport(final Channel channel, boolean isInitial) {
-      if (!channel.isActive()) {
-        return;
+    reportTimer = channel.eventLoop().schedule(() -> {
+      if (channel.isActive()) {
+        recordTcpInfo(channel, false);
+        scheduleNextReport(channel, false); // Re-arm
       }
+    }, rearmingDelay, TimeUnit.MILLISECONDS);
+  }
 
-      double jitter = isInitial
-          ? 0.1 + ThreadLocalRandom.current().nextDouble() // 10% to 110%
-          : 0.9 + ThreadLocalRandom.current().nextDouble() * 0.2; // 90% to 110%
-      long rearmingDelay = (long) (RECORD_INTERVAL_MILLIS * jitter);
-
-      reportTimer = channel.eventLoop().schedule(() -> {
-        if (channel.isActive()) {
-          Tracker.this.recordTcpInfo(channel, false);
-          scheduleNextReport(channel, false); // Re-arm
-        }
-      }, rearmingDelay, TimeUnit.MILLISECONDS);
+  void channelInactive(Channel channel) {
+    if (reportTimer != null) {
+      reportTimer.cancel(false);
     }
-
-    void channelInactive(Channel channel) {
-      if (reportTimer != null) {
-        reportTimer.cancel(false);
-      }
-      List<String> labelValues = getLabelValues(channel);
-      metricRecorder.addLongUpDownCounter(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT, -1,
-          Collections.emptyList(), labelValues);
-      // Final collection on close
+    List<String> labelValues = getLabelValues(channel);
+    metricRecorder.addLongUpDownCounter(InternalTcpMetrics.CONNECTION_COUNT_INSTRUMENT, -1,
+        Collections.emptyList(), labelValues);
+    // Final collection on close
+    if (epollInfo != null && epollInfo.channelClass.isInstance(channel)) {
       recordTcpInfo(channel, true);
     }
+  }
 
-    void recordTcpInfo(Channel channel) {
-      recordTcpInfo(channel, false);
+  void recordTcpInfo(Channel channel) {
+    recordTcpInfo(channel, false);
+  }
+
+  private void recordTcpInfo(Channel channel, boolean isClose) {
+    if (epollInfo == null || !epollInfo.channelClass.isInstance(channel)) {
+      return;
+    }
+    List<String> labelValues = getLabelValues(channel);
+    long totalRetrans;
+    long retransmits;
+    long rtt;
+    try {
+      epollInfo.tcpInfo.invoke(channel, tcpInfo);
+      totalRetrans = (Long) epollInfo.totalRetrans.invoke(tcpInfo);
+      retransmits = (Long) epollInfo.retransmits.invoke(tcpInfo);
+      rtt = (Long) epollInfo.rtt.invoke(tcpInfo);
+    } catch (ReflectiveOperationException e) {
+      log.log(Level.FINE, "Error computing TCP metrics", e);
+      return;
     }
 
-    private void recordTcpInfo(Channel channel, boolean isClose) {
-      if (epollInfo == null) {
-        log.log(Level.FINE, "Skipping recordTcpInfo because"
-            + "epollInfo is null");
-        return;
-      }
-      if (!epollInfo.channelClass.isInstance(channel)) {
-        log.log(Level.FINE, "Skipping recordTcpInfo because channel is not an"
-            + "instance of epollSocketChannelClass: {0}",
-            channel.getClass()
-                .getName());
-        return;
-      }
-      List<String> labelValues = getLabelValues(channel);
-      long totalRetrans;
-      long retransmits;
-      long rtt;
-      try {
-        epollInfo.tcpInfo.invoke(channel, tcpInfo);
-        totalRetrans = (Long) epollInfo.totalRetrans.invoke(tcpInfo);
-        retransmits = (Long) epollInfo.retransmits.invoke(tcpInfo);
-        rtt = (Long) epollInfo.rtt.invoke(tcpInfo);
-      } catch (ReflectiveOperationException e) {
-        log.log(Level.FINE, "Error computing TCP metrics", e);
-        return;
-      }
-
-      long deltaTotal = totalRetrans - lastTotalRetrans;
-      if (deltaTotal > 0) {
-        metricRecorder.addLongCounter(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT,
-            deltaTotal, Collections.emptyList(), labelValues);
-        lastTotalRetrans = totalRetrans;
-      }
-      if (isClose && retransmits > 0) {
-        metricRecorder.addLongCounter(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT,
-            retransmits, Collections.emptyList(), labelValues);
-      }
-      metricRecorder.recordDoubleHistogram(InternalTcpMetrics.MIN_RTT_INSTRUMENT,
-          rtt / 1000000.0, // Convert microseconds to seconds
-          Collections.emptyList(), labelValues);
+    long deltaTotal = totalRetrans - lastTotalRetrans;
+    if (deltaTotal > 0) {
+      metricRecorder.addLongCounter(InternalTcpMetrics.PACKETS_RETRANSMITTED_INSTRUMENT,
+          deltaTotal, Collections.emptyList(), labelValues);
+      lastTotalRetrans = totalRetrans;
     }
+    if (isClose && retransmits > 0) {
+      metricRecorder.addLongCounter(InternalTcpMetrics.RECURRING_RETRANSMITS_INSTRUMENT,
+          retransmits, Collections.emptyList(), labelValues);
+    }
+    metricRecorder.recordDoubleHistogram(InternalTcpMetrics.MIN_RTT_INSTRUMENT,
+        rtt / 1000000.0, // Convert microseconds to seconds
+        Collections.emptyList(), labelValues);
+  }
+
+  @VisibleForTesting
+  ScheduledFuture<?> getReportTimer() {
+    return reportTimer;
   }
 
   private static List<String> getLabelValues(Channel channel) {
@@ -212,20 +207,25 @@ final class TcpMetrics {
     SocketAddress local = channel.localAddress();
     if (local instanceof InetSocketAddress) {
       InetSocketAddress inetLocal = (InetSocketAddress) local;
-      localAddress = inetLocal.getAddress().getHostAddress();
+      if (inetLocal.getAddress() != null) {
+        localAddress = inetLocal.getAddress().getHostAddress();
+      } else if (inetLocal.getHostString() != null) {
+        localAddress = inetLocal.getHostString();
+      }
       localPort = String.valueOf(inetLocal.getPort());
     }
 
     SocketAddress remote = channel.remoteAddress();
     if (remote instanceof InetSocketAddress) {
       InetSocketAddress inetRemote = (InetSocketAddress) remote;
-      peerAddress = inetRemote.getAddress().getHostAddress();
+      if (inetRemote.getAddress() != null) {
+        peerAddress = inetRemote.getAddress().getHostAddress();
+      } else if (inetRemote.getHostString() != null) {
+        peerAddress = inetRemote.getHostString();
+      }
       peerPort = String.valueOf(inetRemote.getPort());
     }
 
     return Arrays.asList(localAddress, localPort, peerAddress, peerPort);
-  }
-
-  private TcpMetrics() {
   }
 }

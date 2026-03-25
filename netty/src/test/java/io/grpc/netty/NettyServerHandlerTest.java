@@ -212,13 +212,11 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     manualSetUp();
     handler().channelActive(ctx());
     // Verify that channelActive triggered TcpMetrics
-    ArgumentCaptor<Long> countCaptor = ArgumentCaptor.forClass(Long.class);
     verify(metricRecorder, atLeastOnce()).addLongCounter(
         eq(io.grpc.InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT),
-        countCaptor.capture(),
+        eq(1L),
         any(),
         any());
-    assertEquals(1L, countCaptor.getValue().longValue());
   }
 
   @Test

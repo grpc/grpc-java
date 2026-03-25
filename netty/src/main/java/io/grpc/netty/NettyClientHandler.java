@@ -124,7 +124,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final Supplier<Stopwatch> stopwatchFactory;
   private final TransportTracer transportTracer;
   private final Attributes eagAttributes;
-  private final TcpMetrics.Tracker tcpMetrics;
+  private final TcpMetrics tcpMetrics;
   private final String authority;
   private final InUseStateAggregator<Http2Stream> inUseState =
       new InUseStateAggregator<Http2Stream>() {
@@ -357,7 +357,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
-    this.tcpMetrics = new TcpMetrics.Tracker(metricRecorder);
+    this.tcpMetrics = new TcpMetrics(metricRecorder);
   }
 
   /**

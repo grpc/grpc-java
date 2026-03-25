@@ -680,7 +680,7 @@ public abstract class NameResolver {
        * See {@link Args#getMetricRecorder()}. This is an optional field.
        */
       public Builder setMetricRecorder(MetricRecorder metricRecorder) {
-        this.metricRecorder = checkNotNull(metricRecorder);
+        this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
         return this;
       }
 
