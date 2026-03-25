@@ -173,11 +173,11 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @Override
-  protected Object parseAllowedGrpcServices(
-      Map<String, ?> rawAllowedGrpcServices)
+  protected Optional<Object> parseAllowedGrpcServices(
+      @Nullable Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
     if (rawAllowedGrpcServices == null || rawAllowedGrpcServices.isEmpty()) {
-      return AllowedGrpcServices.empty();
+      return Optional.of(AllowedGrpcServices.empty());
     }
 
     ImmutableMap.Builder<String, AllowedGrpcService> builder =
@@ -203,7 +203,7 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
       callCredentials.ifPresent(b::callCredentials);
       builder.put(targetUri, b.build());
     }
-    return AllowedGrpcServices.create(builder.build());
+    return Optional.of(AllowedGrpcServices.create(builder.build()));
   }
 
   @SuppressWarnings("unused")
