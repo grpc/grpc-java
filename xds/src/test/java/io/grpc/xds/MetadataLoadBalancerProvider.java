@@ -107,6 +107,7 @@ public class MetadataLoadBalancerProvider extends LoadBalancerProvider {
       return delegateLb;
     }
 
+    @Deprecated
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       MetadataLoadBalancerConfig config

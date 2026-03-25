@@ -6,19 +6,22 @@ android-annotations = "com.google.android:annotations:4.1.1.4"
 # 1.9.1+ uses Kotlin and requires Android Gradle Plugin 9+
 # checkForUpdates: androidx-annotation:1.9.0
 androidx-annotation = "androidx.annotation:annotation:1.9.0"
-# 1.15.0+ requires minSdkVersion 21 in android-interop-testing (1.14.x doesn't exist)
+# 1.14.x doesn't exist.
+# 1.15.0+ requires compileSdkVersion 35 which officially requires AGP 8.6.0+.
+# It might work before then, but AGP 7.4.1 fails with:
+#   RES_TABLE_TYPE_TYPE entry offsets overlap actual entry data.
+# 1.16.0+ requires AGP 8.6.0+
 # checkForUpdates: androidx-core:1.13.+
 androidx-core = "androidx.core:core:1.13.1"
-# 2.9+ requires minSdkVersion 21 in android-intetrop-testing
+# 2.9+ requires AGP 8.1.1+
 # checkForUpdates: androidx-lifecycle-common:2.8.+
 androidx-lifecycle-common = "androidx.lifecycle:lifecycle-common:2.8.7"
 # checkForUpdates: androidx-lifecycle-service:2.8.+
 androidx-lifecycle-service = "androidx.lifecycle:lifecycle-service:2.8.7"
 androidx-test-core = "androidx.test:core:1.7.0"
 androidx-test-ext-junit = "androidx.test.ext:junit:1.3.0"
-# 1.7.0+ requires minSdkVersion 21 in android-interop-testing
-# checkForUpdates: androidx-test-rules:1.6.+
-androidx-test-rules = "androidx.test:rules:1.6.1"
+androidx-test-rules = "androidx.test:rules:1.7.0"
+androidx-test-runner = "androidx.test:runner:1.7.0"
 animalsniffer = "org.codehaus.mojo:animal-sniffer:1.26"
 animalsniffer-annotations = "org.codehaus.mojo:animal-sniffer-annotations:1.26"
 assertj-core = "org.assertj:assertj-core:3.27.6"
@@ -37,7 +40,7 @@ checkstyle = "com.puppycrawl.tools:checkstyle:10.26.1"
 checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
-# 141.7340.3+ requires minSdkVersion 23
+# 141.7340.3+ requires Java 17+
 # checkForUpdates: cronet-api:119.6045.31
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 # checkForUpdates: cronet-embedded:119.6045.31
@@ -54,9 +57,7 @@ google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.41.
 google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.41.0"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.9"
-# 2.13.0 requires error_prone_annotations:2.37.0, but we are stuck with 2.36.0
-# checkForUpdates: gson:2.12.+
-gson = "com.google.code.gson:gson:2.12.1"
+gson = "com.google.code.gson:gson:2.13.2"
 guava = "com.google.guava:guava:33.5.0-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
 guava-testlib = "com.google.guava:guava-testlib:33.5.0-android"

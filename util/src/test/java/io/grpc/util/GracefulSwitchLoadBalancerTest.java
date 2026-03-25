@@ -102,6 +102,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
+  @Deprecated
   public void canHandleEmptyAddressListFromNameResolutionForwardedToLatestPolicy() {
     assertIsOk(gracefulSwitchLb.acceptResolvedAddresses(addressesBuilder()
         .setLoadBalancingPolicyConfig(createConfig(lbPolicies[0], new Object()))
@@ -136,6 +137,7 @@ public class GracefulSwitchLoadBalancerTest {
     assertThat(gracefulSwitchLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
   }
 
+  @Deprecated
   @Test
   public void handleResolvedAddressesAndNameResolutionErrorForwardedToLatestPolicy() {
     ResolvedAddresses addresses = newFakeAddresses();

@@ -18,7 +18,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.12.1",
+    "com.google.code.gson:gson:2.13.2",
     "com.google.errorprone:error_prone_annotations:2.45.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.5.0-android",
@@ -45,6 +45,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
     "junit:junit:4.13.2",
+    "org.mockito:mockito-core:4.4.0",
     "org.checkerframework:checker-qual:3.49.5",
     "org.codehaus.mojo:animal-sniffer-annotations:1.26",
 ]
