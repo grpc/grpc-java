@@ -50,7 +50,10 @@ public class HeaderMutator {
     // in case of conflicts. Copying the order from Envoy here, which does removals at the end.
     applyHeaderUpdates(mutations.headers(), headers);
     for (String headerToRemove : mutations.headersToRemove()) {
-      headers.discardAll(Metadata.Key.of(headerToRemove, Metadata.ASCII_STRING_MARSHALLER));
+      Metadata.Key<?> key = headerToRemove.endsWith(Metadata.BINARY_HEADER_SUFFIX)
+          ? Metadata.Key.of(headerToRemove, Metadata.BINARY_BYTE_MARSHALLER)
+          : Metadata.Key.of(headerToRemove, Metadata.ASCII_STRING_MARSHALLER);
+      headers.discardAll(key);
     }
   }
 
@@ -67,11 +70,19 @@ public class HeaderMutator {
     boolean keepEmptyValue = option.keepEmptyValue();
 
     if (header.key().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-      updateHeader(action, Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER),
-          header.rawValue().get().toByteArray(), mutableHeaders, keepEmptyValue);
+      if (header.rawValue().isPresent()) {
+        updateHeader(action, Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER),
+            header.rawValue().get().toByteArray(), mutableHeaders, keepEmptyValue);
+      } else {
+        logger.fine("Missing binary rawValue for header: " + header.key());
+      }
     } else {
-      updateHeader(action, Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER),
-          header.value().get(), mutableHeaders, keepEmptyValue);
+      if (header.value().isPresent()) {
+        updateHeader(action, Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER),
+            header.value().get(), mutableHeaders, keepEmptyValue);
+      } else {
+        logger.fine("Missing value for header: " + header.key());
+      }
     }
   }
 

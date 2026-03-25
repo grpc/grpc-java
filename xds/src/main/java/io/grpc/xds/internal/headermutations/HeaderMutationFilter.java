@@ -47,10 +47,10 @@ public class HeaderMutationFilter {
   public HeaderMutations filter(HeaderMutations mutations)
       throws HeaderMutationDisallowedException {
     ImmutableList<HeaderValueOption> allowedHeaders =
-        filterCollection(mutations.headers(), this::shouldIgnore, this::isHeaderMutationAllowed);
+        filterCollection(mutations.headers(), this::isDisallowed, this::isHeaderMutationAllowed);
     ImmutableList<String> allowedHeadersToRemove =
-        filterCollection(mutations.headersToRemove(), this::shouldIgnore,
-            this::isHeaderMutationAllowed);
+        filterCollection(mutations.headersToRemove(), this::isDisallowed,
+                this::isHeaderMutationAllowed);
     return HeaderMutations.create(allowedHeaders, allowedHeadersToRemove);
   }
 
@@ -68,19 +68,18 @@ public class HeaderMutationFilter {
       if (isAllowedPredicate.test(item)) {
         allowed.add(item);
       } else if (disallowIsError()) {
-        throw new HeaderMutationDisallowedException(
-            "Header mutation disallowed for header: " + item);
+        throw new HeaderMutationDisallowedException("Header mutation disallowed");
       }
     }
     return allowed.build();
   }
 
-  private boolean shouldIgnore(String key) {
-    return HeaderValueValidationUtils.shouldIgnore(key);
+  private boolean isDisallowed(String key) {
+    return HeaderValueValidationUtils.isDisallowed(key);
   }
 
-  private boolean shouldIgnore(HeaderValueOption option) {
-    return HeaderValueValidationUtils.shouldIgnore(option.header());
+  private boolean isDisallowed(HeaderValueOption option) {
+    return HeaderValueValidationUtils.isDisallowed(option.header());
   }
 
   private boolean isHeaderMutationAllowed(HeaderValueOption option) {
