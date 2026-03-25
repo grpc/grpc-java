@@ -30,58 +30,58 @@ import org.junit.runners.JUnit4;
 public class HeaderValueValidationUtilsTest {
 
   @Test
-  public void shouldIgnore_string_emptyKey() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore("")).isTrue();
+  public void isDisallowed_string_emptyKey() {
+    assertThat(HeaderValueValidationUtils.isDisallowed("")).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_tooLongKey() {
+  public void isDisallowed_string_tooLongKey() {
     String longKey = new String(new char[16385]).replace('\0', 'a');
-    assertThat(HeaderValueValidationUtils.shouldIgnore(longKey)).isTrue();
+    assertThat(HeaderValueValidationUtils.isDisallowed(longKey)).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_notLowercase() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore("Content-Type")).isTrue();
+  public void isDisallowed_string_notLowercase() {
+    assertThat(HeaderValueValidationUtils.isDisallowed("Content-Type")).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_grpcPrefix() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore("grpc-timeout")).isTrue();
+  public void isDisallowed_string_grpcPrefix() {
+    assertThat(HeaderValueValidationUtils.isDisallowed("grpc-timeout")).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_systemHeader_colon() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore(":authority")).isTrue();
+  public void isDisallowed_string_systemHeader_colon() {
+    assertThat(HeaderValueValidationUtils.isDisallowed(":authority")).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_systemHeader_host() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore("host")).isTrue();
+  public void isDisallowed_string_systemHeader_host() {
+    assertThat(HeaderValueValidationUtils.isDisallowed("host")).isTrue();
   }
 
   @Test
-  public void shouldIgnore_string_valid() {
-    assertThat(HeaderValueValidationUtils.shouldIgnore("content-type")).isFalse();
+  public void isDisallowed_string_valid() {
+    assertThat(HeaderValueValidationUtils.isDisallowed("content-type")).isFalse();
   }
 
   @Test
-  public void shouldIgnore_headerValue_tooLongValue() {
+  public void isDisallowed_headerValue_tooLongValue() {
     String longValue = new String(new char[16385]).replace('\0', 'v');
     HeaderValue header = HeaderValue.create("content-type", longValue);
-    assertThat(HeaderValueValidationUtils.shouldIgnore(header)).isTrue();
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
   }
 
   @Test
-  public void shouldIgnore_headerValue_tooLongRawValue() {
+  public void isDisallowed_headerValue_tooLongRawValue() {
     ByteString longRawValue = ByteString.copyFrom(new byte[16385]);
     HeaderValue header = HeaderValue.create("content-type", longRawValue);
-    assertThat(HeaderValueValidationUtils.shouldIgnore(header)).isTrue();
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
   }
 
   @Test
-  public void shouldIgnore_headerValue_valid() {
+  public void isDisallowed_headerValue_valid() {
     HeaderValue header = HeaderValue.create("content-type", "application/grpc");
-    assertThat(HeaderValueValidationUtils.shouldIgnore(header)).isFalse();
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isFalse();
   }
 }

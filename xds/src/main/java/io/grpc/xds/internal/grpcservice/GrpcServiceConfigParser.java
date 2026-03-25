@@ -21,6 +21,7 @@ import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.grpc_service.call_credentials.access_token.v3.AccessTokenCredentials;
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.xds.v3.XdsCredentials;
@@ -92,7 +93,7 @@ public final class GrpcServiceConfigParser {
       } else {
         headerValue = HeaderValue.create(key, header.getValue());
       }
-      if (HeaderValueValidationUtils.shouldIgnore(headerValue)) {
+      if (HeaderValueValidationUtils.isDisallowed(headerValue)) {
         throw new GrpcServiceParseException("Invalid initial metadata header: " + key);
       }
       initialMetadata.add(headerValue);
@@ -101,9 +102,8 @@ public final class GrpcServiceConfigParser {
 
     if (grpcServiceProto.hasTimeout()) {
       com.google.protobuf.Duration timeout = grpcServiceProto.getTimeout();
-      if (timeout.getSeconds() < 0 || timeout.getNanos() < 0
-          || (timeout.getSeconds() == 0 && timeout.getNanos() == 0)) {
-        throw new GrpcServiceParseException("Timeout must be strictly positive");
+      if (!Durations.isValid(timeout) || Durations.compare(timeout, Durations.ZERO) <= 0) {
+        throw new GrpcServiceParseException("Timeout must be strictly positive and valid");
       }
       builder.timeout(Duration.ofSeconds(timeout.getSeconds(), timeout.getNanos()));
     }

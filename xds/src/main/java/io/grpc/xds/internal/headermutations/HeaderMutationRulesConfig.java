@@ -55,7 +55,7 @@ public abstract class HeaderMutationRulesConfig {
   public abstract boolean disallowAll();
 
   /**
-   * If true, disallows any header mutation that would result in an invalid header value.
+   * If true, a disallowed header mutation will result in an error instead of being ignored.
    *
    * @see HeaderMutationRules#getDisallowIsError()
    */

@@ -27,11 +27,11 @@ public final class HeaderValueValidationUtils {
   private HeaderValueValidationUtils() {}
 
   /**
-   * Returns true if the header key should be ignored for mutations or validation.
+   * Returns true if the header key is disallowed for mutations or validation.
    *
    * @param key The header key (e.g., "content-type")
    */
-  public static boolean shouldIgnore(String key) {
+  public static boolean isDisallowed(String key) {
     if (key.isEmpty() || key.length() > MAX_HEADER_LENGTH) {
       return true;
     }
@@ -48,12 +48,12 @@ public final class HeaderValueValidationUtils {
   }
 
   /**
-   * Returns true if the header value should be ignored.
+   * Returns true if the header value is disallowed.
    *
    * @param header The HeaderValue containing key and values
    */
-  public static boolean shouldIgnore(HeaderValue header) {
-    if (shouldIgnore(header.key())) {
+  public static boolean isDisallowed(HeaderValue header) {
+    if (isDisallowed(header.key())) {
       return true;
     }
     if (header.value().isPresent() && header.value().get().length() > MAX_HEADER_LENGTH) {

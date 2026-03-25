@@ -24,6 +24,7 @@ import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
 
 
@@ -87,8 +88,12 @@ public final class ExtAuthzConfigParser {
     }
 
     if (extAuthzProto.hasDecoderHeaderMutationRules()) {
-      builder.decoderHeaderMutationRules(
-          HeaderMutationRulesParser.parse(extAuthzProto.getDecoderHeaderMutationRules()));
+      try {
+        builder.decoderHeaderMutationRules(
+            HeaderMutationRulesParser.parse(extAuthzProto.getDecoderHeaderMutationRules()));
+      } catch (HeaderMutationRulesParseException e) {
+        throw new ExtAuthzParseException(e.getMessage(), e);
+      }
     }
 
     return builder.build();

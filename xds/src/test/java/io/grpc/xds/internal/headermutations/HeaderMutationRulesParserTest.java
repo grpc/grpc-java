@@ -22,7 +22,7 @@ import static org.junit.Assert.assertThrows;
 import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules;
 import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
-import io.grpc.xds.internal.extauthz.ExtAuthzParseException;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesParseException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -64,25 +64,25 @@ public class HeaderMutationRulesParserTest {
   }
 
   @Test
-  public void parse_invalidRegexAllowExpression_throwsExtAuthzParseException() {
+  public void parse_invalidRegexAllowExpression_throwsHeaderMutationRulesParseException() {
     HeaderMutationRules proto = HeaderMutationRules.newBuilder()
         .setAllowExpression(RegexMatcher.newBuilder().setRegex("allow-["))
         .build();
 
-    ExtAuthzParseException exception = assertThrows(
-        ExtAuthzParseException.class, () -> HeaderMutationRulesParser.parse(proto));
+    HeaderMutationRulesParseException exception = assertThrows(
+        HeaderMutationRulesParseException.class, () -> HeaderMutationRulesParser.parse(proto));
 
     assertThat(exception).hasMessageThat().contains("Invalid regex pattern for allow_expression");
   }
 
   @Test
-  public void parse_invalidRegexDisallowExpression_throwsExtAuthzParseException() {
+  public void parse_invalidRegexDisallowExpression_throwsHeaderMutationRulesParseException() {
     HeaderMutationRules proto = HeaderMutationRules.newBuilder()
         .setDisallowExpression(RegexMatcher.newBuilder().setRegex("disallow-["))
         .build();
 
-    ExtAuthzParseException exception = assertThrows(
-        ExtAuthzParseException.class, () -> HeaderMutationRulesParser.parse(proto));
+    HeaderMutationRulesParseException exception = assertThrows(
+        HeaderMutationRulesParseException.class, () -> HeaderMutationRulesParser.parse(proto));
 
     assertThat(exception).hasMessageThat()
         .contains("Invalid regex pattern for disallow_expression");
