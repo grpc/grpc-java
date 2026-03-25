@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import io.grpc.CallbackMetricInstrument;
 import io.grpc.DoubleCounterMetricInstrument;
 import io.grpc.DoubleHistogramMetricInstrument;
@@ -49,7 +50,7 @@ final class MetricRecorderImpl implements MetricRecorder {
 
   @VisibleForTesting
   MetricRecorderImpl(List<MetricSink> metricSinks, MetricInstrumentRegistry registry) {
-    this.metricSinks = metricSinks;
+    this.metricSinks = ImmutableList.copyOf(metricSinks);
     this.registry = registry;
   }
 
