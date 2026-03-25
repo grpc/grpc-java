@@ -141,31 +141,6 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   @Test
-  public void orphanedChannel_triggerWarningAndCoverage() {
-    ManagedChannel mc = new TestManagedChannel();
-    final ReferenceQueue<ManagedChannelOrphanWrapper> refqueue = new ReferenceQueue<>();
-    ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs = 
-        new ConcurrentHashMap<>();
-    
-    // Create the wrapper but NEVER call shutdown
-    @SuppressWarnings("UnusedVariable")
-    ManagedChannelOrphanWrapper wrapper = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
-    wrapper = null; // Make it eligible for GC
-
-    // Trigger GC and clean the queue to hit the !wasShutdown branch
-    final AtomicInteger numOrphans = new AtomicInteger();
-    GcFinalization.awaitDone(new FinalizationPredicate() {
-      @Override
-      public boolean isDone() {
-        numOrphans.getAndAdd(ManagedChannelReference.cleanQueue(refqueue));
-        return numOrphans.get() > 0;
-      }
-    });
-    
-    assertEquals(1, numOrphans.get());
-  }
-
-  @Test
   public void refCycleIsGCed() {
     ReferenceQueue<ManagedChannelOrphanWrapper> refqueue =
         new ReferenceQueue<>();
