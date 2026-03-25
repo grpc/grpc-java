@@ -118,7 +118,7 @@ public class GrpcBootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    AllowedGrpcServices allowed = (AllowedGrpcServices) info.allowedGrpcServices();
+    AllowedGrpcServices allowed = (AllowedGrpcServices) info.allowedGrpcServices().get();
     assertThat(allowed).isNotNull();
     assertThat(allowed.services()).containsKey("dns:///foo.com:443");
     AllowedGrpcService service = allowed.services().get("dns:///foo.com:443");
