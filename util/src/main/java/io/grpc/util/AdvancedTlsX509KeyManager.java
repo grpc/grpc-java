@@ -44,14 +44,8 @@ import javax.net.ssl.X509ExtendedKeyManager;
  *
  * <p>The alias increments on every credential load (e.g. {@code "key-1"}, {@code "key-2"}, ...),
  * so the same alias always maps to the same key material. The previous alias is retained for one
- * rotation to allow in-progress handshakes to complete. This is required by Netty's
- * {@code OpenSslCachingX509KeyManagerFactory} to cache key material across cert reloads.
- *
- * <p>When using {@code SslProvider.OPENSSL}, wrap this key manager in Netty's
- * {@code OpenSslCachingX509KeyManagerFactory} to avoid per-handshake key material encoding
- * overhead, e.g. {@code new OpenSslCachingX509KeyManagerFactory(
- * new KeyManagerFactoryWrapper(advancedTlsKeyManager))}, and pass the factory to
- * {@code SslContextBuilder} instead of the key manager directly.
+ * rotation to allow in-progress handshakes to complete, ensuring alias-to-key-material consistency
+ * across credential reloads.
  */
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
@@ -251,6 +245,7 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   }
 
   private static class KeyInfo {
+    // The private key and the cert chain we will use to send to peers to prove our identity.
     final X509Certificate[] certs;
     final PrivateKey key;
     final String alias;
