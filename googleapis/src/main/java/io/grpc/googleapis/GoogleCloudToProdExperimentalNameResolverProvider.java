@@ -20,6 +20,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import java.net.URI;
 
 /**
@@ -32,6 +33,11 @@ public final class GoogleCloudToProdExperimentalNameResolverProvider extends Nam
 
   @Override
   public NameResolver newNameResolver(URI targetUri, Args args) {
+    return delegate.newNameResolver(targetUri, args);
+  }
+
+  @Override
+  public NameResolver newNameResolver(Uri targetUri, Args args) {
     return delegate.newNameResolver(targetUri, args);
   }
 

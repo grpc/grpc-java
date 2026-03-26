@@ -29,6 +29,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.alts.InternalCheckGcpEnvironment;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
@@ -49,6 +50,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
@@ -114,6 +116,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         NameResolverRegistry.getDefaultRegistry().asFactory());
   }
 
+  // TODO(jdcormie): Remove after io.grpc.Uri migration.
   @VisibleForTesting
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
       NameResolver.Factory nameResolverFactory) {
@@ -137,6 +140,45 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     metricRecorder = args.getMetricRecorder();
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
         targetUri, args);
+    executor = args.getOffloadExecutor();
+    usingExecutorResource = executor == null;
+  }
+
+  GoogleCloudToProdNameResolver(Uri targetUri, Args args, Resource<Executor> executorResource) {
+    this(targetUri, args, executorResource, NameResolverRegistry.getDefaultRegistry().asFactory());
+  }
+
+  @VisibleForTesting
+  GoogleCloudToProdNameResolver(
+      Uri targetUri,
+      Args args,
+      Resource<Executor> executorResource,
+      NameResolver.Factory nameResolverFactory) {
+    this.executorResource = checkNotNull(executorResource, "executorResource");
+    Preconditions.checkArgument(
+        targetUri.isPathAbsolute(),
+        "the path component of the target (%s) must start with '/'",
+        targetUri);
+    List<String> pathSegments = targetUri.getPathSegments();
+    Preconditions.checkArgument(
+        pathSegments.size() == 1,
+        "the path component of the target (%s) must have exactly one segment",
+        targetUri);
+    authority = GrpcUtil.checkAuthority(pathSegments.get(0));
+    syncContext = checkNotNull(args, "args").getSynchronizationContext();
+    Uri.Builder modifiedTargetBuilder = targetUri.toBuilder().setScheme(schemeOverride);
+    if (schemeOverride.equals("xds")) {
+      modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
+      args =
+          args.toBuilder()
+              .setArg(XdsNameResolverProvider.XDS_CLIENT_SUPPLIER, () -> xdsClient)
+              .build();
+    }
+    targetUri = modifiedTargetBuilder.build();
+    target = targetUri.toString();
+    metricRecorder = args.getMetricRecorder();
+    delegate =
+        checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(targetUri, args);
     executor = args.getOffloadExecutor();
     usingExecutorResource = executor == null;
   }

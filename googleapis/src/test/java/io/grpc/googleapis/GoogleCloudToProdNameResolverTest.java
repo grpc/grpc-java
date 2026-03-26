@@ -34,6 +34,7 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
 import io.grpc.googleapis.GoogleCloudToProdNameResolver.HttpConnectionProvider;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
@@ -43,6 +44,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,20 +55,22 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-@RunWith(JUnit4.class)
+@RunWith(Parameterized.class)
 public class GoogleCloudToProdNameResolverTest {
 
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
 
-  private static final URI TARGET_URI = URI.create("google-c2p:///googleapis.com");
+  private static final String TARGET_URI = "google-c2p:///googleapis.com";
   private static final String ZONE = "us-central1-a";
   private static final int DEFAULT_PORT = 887;
 
@@ -107,6 +111,13 @@ public class GoogleCloudToProdNameResolverTest {
   private boolean originalIsOnGcp;
   private GoogleCloudToProdNameResolver resolver;
   private String responseToIpV6 = "1:1:1";
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
 
   @Before
   public void setUp() {
@@ -149,8 +160,12 @@ public class GoogleCloudToProdNameResolverTest {
   }
 
   private void createResolver() {
-    resolver = new GoogleCloudToProdNameResolver(
-        TARGET_URI, args, fakeExecutorResource, nsRegistry.asFactory());
+    resolver =
+        enableRfc3986UrisParam
+            ? new GoogleCloudToProdNameResolver(
+                Uri.create(TARGET_URI), args, fakeExecutorResource, nsRegistry.asFactory())
+            : new GoogleCloudToProdNameResolver(
+                URI.create(TARGET_URI), args, fakeExecutorResource, nsRegistry.asFactory());
   }
 
   @Test

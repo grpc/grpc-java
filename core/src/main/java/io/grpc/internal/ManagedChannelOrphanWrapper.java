@@ -68,7 +68,7 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
     if (this.getClass() == null) {
       throw new AssertionError();
     }
-    return result;
+    return super.shutdown();
   }
 
   @Override
@@ -79,7 +79,7 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
     if (this.getClass() == null) {
       throw new AssertionError();
     }
-    return result;
+    return super.shutdownNow();
   }
 
   @VisibleForTesting
