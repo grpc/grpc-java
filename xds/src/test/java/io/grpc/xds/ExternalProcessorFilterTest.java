@@ -171,100 +171,106 @@ public class ExternalProcessorFilterTest {
     CachedChannelManager testChannelManager = new CachedChannelManager(config ->
         grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build())
     );
-    ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager);
-    
-    Channel interceptedChannel = ClientInterceptors.intercept(dataPlaneChannel, interceptor);
+    java.util.concurrent.ScheduledExecutorService scheduler = 
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+    try {
+      ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager, scheduler);
+      
+      Channel interceptedChannel = ClientInterceptors.intercept(dataPlaneChannel, interceptor);
 
-    // Data Plane Server
-    AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
-    
-    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
-        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-            (request, responseObserver) -> {
-              responseObserver.onNext("Hello " + request);
-              responseObserver.onCompleted();
-            }))
-        .build();
+      // Data Plane Server
+      AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
+      
+      ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+          .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+              (request, responseObserver) -> {
+                responseObserver.onNext("Hello " + request);
+                responseObserver.onCompleted();
+              }))
+          .build();
 
-    ServerServiceDefinition interceptedServiceDef = ServerInterceptors.intercept(
-        serviceDef,
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            receivedHeaders.set(headers);
-            return next.startCall(call, headers);
-          }
-        });
-        
-    dataPlaneServiceRegistry.addService(interceptedServiceDef);
-
-    // Ext-Proc Server
-    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
-      @Override
-      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
-        return new StreamObserver<ProcessingRequest>() {
-          @Override
-          public void onNext(ProcessingRequest request) {
-            if (request.hasRequestHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestHeaders(HeadersResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setHeaderMutation(HeaderMutation.newBuilder()
-                              .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
-                                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
-                                      .setKey("x-custom-header")
-                                      .setValue("custom-value")
-                                      .build())
-                                  .build())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
-            } else if (request.hasRequestBody()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestBody(BodyResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setBodyMutation(BodyMutation.newBuilder()
-                              .setBody(request.getRequestBody().getBody())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
-            } else if (request.hasResponseHeaders()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setResponseHeaders(HeadersResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder().build())
-                      .build())
-                  .build());
-            } else if (request.hasResponseBody()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setResponseBody(BodyResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setBodyMutation(BodyMutation.newBuilder()
-                              .setBody(request.getResponseBody().getBody())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
-            } else if (request.hasResponseTrailers()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setResponseTrailers(TrailersResponse.newBuilder().build())
-                  .build());
+      ServerServiceDefinition interceptedServiceDef = ServerInterceptors.intercept(
+          serviceDef,
+          new ServerInterceptor() {
+            @Override
+            public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+                ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+              receivedHeaders.set(headers);
+              return next.startCall(call, headers);
             }
-          }
+          });
+          
+      dataPlaneServiceRegistry.addService(interceptedServiceDef);
 
-          @Override public void onError(Throwable t) {}
-          @Override public void onCompleted() { responseObserver.onCompleted(); }
-        };
-      }
-    };
-    extProcServiceRegistry.addService(extProcImpl);
+      // Ext-Proc Server
+      ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+        @Override
+        public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+          return new StreamObserver<ProcessingRequest>() {
+            @Override
+            public void onNext(ProcessingRequest request) {
+              if (request.hasRequestHeaders()) {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestHeaders(HeadersResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setHeaderMutation(HeaderMutation.newBuilder()
+                                .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                                    .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                                        .setKey("x-custom-header")
+                                        .setValue("custom-value")
+                                        .build())
+                                    .build())
+                                .build())
+                            .build())
+                        .build())
+                    .build());
+              } else if (request.hasRequestBody()) {
+                 responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestBody(BodyResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setBodyMutation(BodyMutation.newBuilder()
+                                .setBody(request.getRequestBody().getBody())
+                                .build())
+                            .build())
+                        .build())
+                    .build());
+              } else if (request.hasResponseHeaders()) {
+                 responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setResponseHeaders(HeadersResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder().build())
+                        .build())
+                    .build());
+              } else if (request.hasResponseBody()) {
+                 responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setResponseBody(BodyResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setBodyMutation(BodyMutation.newBuilder()
+                                .setBody(request.getResponseBody().getBody())
+                                .build())
+                            .build())
+                        .build())
+                    .build());
+              } else if (request.hasResponseTrailers()) {
+                 responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setResponseTrailers(TrailersResponse.newBuilder().build())
+                    .build());
+              }
+            }
 
-    String reply = ClientCalls.blockingUnaryCall(interceptedChannel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+            @Override public void onError(Throwable t) {}
+            @Override public void onCompleted() { responseObserver.onCompleted(); }
+          };
+        }
+      };
+      extProcServiceRegistry.addService(extProcImpl);
 
-    assertThat(reply).isEqualTo("Hello World");
-    Metadata.Key<String> customHeaderKey = Metadata.Key.of("x-custom-header", Metadata.ASCII_STRING_MARSHALLER);
-    assertThat(receivedHeaders.get().get(customHeaderKey)).isEqualTo("custom-value");
+      String reply = ClientCalls.blockingUnaryCall(interceptedChannel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+
+      assertThat(reply).isEqualTo("Hello World");
+      Metadata.Key<String> customHeaderKey = Metadata.Key.of("x-custom-header", Metadata.ASCII_STRING_MARSHALLER);
+      assertThat(receivedHeaders.get().get(customHeaderKey)).isEqualTo("custom-value");
+    } finally {
+      scheduler.shutdownNow();
+    }
   }
 }
