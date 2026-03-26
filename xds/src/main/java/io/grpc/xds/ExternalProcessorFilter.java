@@ -104,8 +104,8 @@ public class ExternalProcessorFilter implements Filter {
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
-      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
-    return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig);
+      @Nullable FilterConfig overrideConfig, java.util.concurrent.ScheduledExecutorService scheduler) {
+    return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig, scheduler);
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -127,6 +127,7 @@ public class ExternalProcessorFilter implements Filter {
   static final class ExternalProcessorInterceptor implements ClientInterceptor {
     private final CachedChannelManager cachedChannelManager;
     private final ExternalProcessorFilterConfig filterConfig;
+    private final java.util.concurrent.ScheduledExecutorService scheduler;
 
     private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
         new MethodDescriptor.Marshaller<InputStream>() {
@@ -136,14 +137,17 @@ public class ExternalProcessorFilter implements Filter {
           public InputStream parse(InputStream stream) { return stream; }
         };
 
-    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig) {
-      this(filterConfig, new CachedChannelManager());
+    ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
+        java.util.concurrent.ScheduledExecutorService scheduler) {
+      this(filterConfig, new CachedChannelManager(), scheduler);
     }
 
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
-        CachedChannelManager cachedChannelManager) {
+        CachedChannelManager cachedChannelManager,
+        java.util.concurrent.ScheduledExecutorService scheduler) {
       this.filterConfig = filterConfig;
       this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
+      this.scheduler = checkNotNull(scheduler, "scheduler");
     }
 
     @Override
@@ -197,7 +201,12 @@ public class ExternalProcessorFilter implements Filter {
       MethodDescriptor<InputStream, InputStream> rawMethod = method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
       ClientCall<InputStream, InputStream> rawCall = next.newCall(rawMethod, callOptions);
 
-      ExtProcClientCall extProcCall = new ExtProcClientCall(rawCall, stub, config);
+      // Create a local subclass instance to buffer outbound actions
+      ExtProcDelayedCall<InputStream, InputStream> delayedCall =
+          new ExtProcDelayedCall<>(
+              callOptions.getExecutor(), scheduler, callOptions.getDeadline());
+
+      ExtProcClientCall extProcCall = new ExtProcClientCall(delayedCall, rawCall, stub, config);
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -335,47 +344,59 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     /**
+     * A local subclass to expose the protected constructor of DelayedClientCall.
+     */
+    private static class ExtProcDelayedCall<ReqT, RespT> extends io.grpc.internal.DelayedClientCall<ReqT, RespT> {
+      ExtProcDelayedCall(java.util.concurrent.Executor executor, java.util.concurrent.ScheduledExecutorService scheduler, @Nullable io.grpc.Deadline deadline) {
+        super(executor, scheduler, deadline);
+      }
+    }
+
+    /**
      * Handles the bidirectional stream with the External Processor.
      * Buffers the actual RPC start until the Ext Proc header response is received.
      */
     private static class ExtProcClientCall extends SimpleForwardingClientCall<InputStream, InputStream> {
       private final ExternalProcessorGrpc.ExternalProcessorStub stub;
       private final ExternalProcessor config;
-      private final Object requestLock = new Object();
+      private final ClientCall<InputStream, InputStream> rawCall;
+      private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
       private final Object responseLock = new Object();
       private final Object streamLock = new Object();
       private ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private ExtProcListener wrappedListener;
 
-      private volatile boolean headersSent = false;
       private Metadata requestHeaders;
-      private final java.util.Queue<Runnable> pendingActions = new java.util.concurrent.ConcurrentLinkedQueue<>();
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
       final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
 
-      protected ExtProcClientCall(ClientCall<InputStream, InputStream> delegate,
+      protected ExtProcClientCall(
+          ExtProcDelayedCall<InputStream, InputStream> delayedCall,
+          ClientCall<InputStream, InputStream> rawCall,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
           ExternalProcessor config) {
-        super(delegate);
+        super(delayedCall);
+        this.delayedCall = delayedCall;
+        this.rawCall = rawCall;
         this.stub = stub;
         this.config = config;
       }
 
-      private void sendToDataPlane(Runnable action) {
-        synchronized (requestLock) {
-          if (headersSent) {
-            action.run();
-          } else {
-            pendingActions.add(action);
-          }
+      private void activateCall() {
+        Runnable toRun = delayedCall.setCall(rawCall);
+        if (toRun != null) {
+          toRun.run();
         }
       }
 
       @Override
       public void start(Listener<InputStream> responseListener, Metadata headers) {
         this.requestHeaders = headers;
-        this.wrappedListener = new ExtProcListener(responseListener, delegate(), this);
+        this.wrappedListener = new ExtProcListener(responseListener, rawCall, this);
+
+        // DelayedClientCall.start will buffer the listener and headers until setCall is called.
+        super.start(wrappedListener, headers);
 
         extProcClientCallRequestObserver = (ClientCallStreamObserver<ProcessingRequest>) stub.process(new io.grpc.stub.StreamObserver<ProcessingResponse>() {
           @Override
@@ -404,11 +425,7 @@ public class ExternalProcessorFilter implements Filter {
               if (response.getRequestHeaders().hasResponse()) {
                 applyHeaderMutations(requestHeaders, response.getRequestHeaders().getResponse().getHeaderMutation());
               }
-              synchronized (requestLock) {
-                headersSent = true;
-                delegate().start(wrappedListener, requestHeaders);
-                drainQueue();
-              }
+              activateCall();
             }
             // 2. Client Message (Request Body)
             else if (response.hasRequestBody()) {
@@ -475,7 +492,7 @@ public class ExternalProcessorFilter implements Filter {
               handleFailOpen(wrappedListener);
             } else {
               if (extProcStreamFailed.compareAndSet(false, true)) {
-                delegate().cancel("External processor stream failed", t);
+                rawCall.cancel("External processor stream failed", t);
               }
             }
           }
@@ -502,10 +519,7 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         if (config.getObservabilityMode()) {
-          synchronized (requestLock) {
-            headersSent = true;
-            delegate().start(wrappedListener, headers);
-          }
+          activateCall();
         }
       }
 
@@ -561,10 +575,10 @@ public class ExternalProcessorFilter implements Filter {
           }
 
           if (config.getObservabilityMode()) {
-            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(bodyBytes)));
+            super.sendMessage(new ByteArrayInputStream(bodyBytes));
           }
         } catch (IOException e) {
-          delegate().cancel("Failed to serialize message for External Processor", e);
+          rawCall.cancel("Failed to serialize message for External Processor", e);
         }
       }
 
@@ -585,6 +599,7 @@ public class ExternalProcessorFilter implements Filter {
                 .build());
           }
         }
+
         super.halfClose();
       }
 
@@ -603,9 +618,9 @@ public class ExternalProcessorFilter implements Filter {
           io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasBody() && !mutation.getBody().isEmpty()) { // Mutation present
             byte[] mutatedBody = mutation.getBody().toByteArray();
-            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(mutatedBody)));
+            super.sendMessage(new ByteArrayInputStream(mutatedBody));
           } else if (mutation.getClearBody()) { // Explicitly clear body
-            sendToDataPlane(() -> super.sendMessage(new ByteArrayInputStream(new byte[0])));
+            super.sendMessage(new ByteArrayInputStream(new byte[0]));
           }
         }
       }
@@ -621,14 +636,9 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      private void drainQueue() {
-        Runnable action;
-        while ((action = pendingActions.poll()) != null) action.run();
-      }
-
       private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener) {
         io.grpc.Status status = io.grpc.Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
-        delegate().cancel("Rejected by ExtProc", null);
+        rawCall.cancel("Rejected by ExtProc", null);
         synchronized (responseLock) {
           listener.onClose(status, new Metadata());
         }
@@ -641,30 +651,24 @@ public class ExternalProcessorFilter implements Filter {
         if (extProcStreamCompleted.compareAndSet(false, true)) {
           // The ext_proc stream is gone. "Fail open" means we proceed with the RPC
           // without any more processing.
-          synchronized (requestLock) {
-            if (!headersSent) {
-              headersSent = true;
-              delegate().start(listener, requestHeaders);
-            }
-            drainQueue();
-          }
+          activateCall();
           listener.unblockAfterStreamComplete();
         }
       }
     }
 
     private static class ExtProcListener extends ForwardingClientCallListener.SimpleForwardingClientCallListener<InputStream> {
-      private final ClientCall<?, ?> callDelegate; // The actual RPC call
+      private final ClientCall<?, ?> rawCall; // The actual RPC call
       private final ExtProcClientCall extProcClientCall;
       private ClientCallStreamObserver<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest> stream;
       private Metadata savedHeaders;
       private Metadata savedTrailers;
       private io.grpc.Status savedStatus;
 
-      protected ExtProcListener(ClientCall.Listener<InputStream> delegate, ClientCall<?, ?> callDelegate,
+      protected ExtProcListener(ClientCall.Listener<InputStream> delegate, ClientCall<?, ?> rawCall,
                                 ExtProcClientCall extProcClientCall) {
         super(delegate);
-        this.callDelegate = callDelegate;
+        this.rawCall = rawCall;
         this.extProcClientCall = extProcClientCall;
       }
 
@@ -736,7 +740,7 @@ public class ExternalProcessorFilter implements Filter {
             }
           }
         } catch (IOException e) {
-           callDelegate.cancel("Failed to read server response", e);
+           rawCall.cancel("Failed to read server response", e);
         }
       }
 
