@@ -217,7 +217,11 @@ final class AsyncServletOutputStreamWriter {
    */
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
-    if (curState.readyAndDrained) { // write to the outputStream directly
+    
+    // Evaluate Tomcat's actual state alongside our cached state
+    boolean actualReady = curState.readyAndDrained && isReady.getAsBoolean();
+
+    if (actualReady) { // write to the outputStream directly
       actionItem.run();
       if (actionItem == completeAction) {
         return;
@@ -232,13 +236,21 @@ final class AsyncServletOutputStreamWriter {
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
       if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
+        // STATE CHANGED! Determine why the CAS failed based on our initial state.
+        if (curState.readyAndDrained) {
+          // We dropped here solely because isReady() was false.
+          // CAS failed because another concurrent thread already CAS'd it to false.
+          // This is completely safe. Tomcat will call onWritePossible(). Do nothing.
+        } else {
+          // Original logic: We started as false, CAS failed because onWritePossible set it to true.
+          checkState(
+              writeState.get().readyAndDrained,
+              "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+          ActionItem lastItem = writeChain.poll();
+          if (lastItem != null) {
+            checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+            runOrBuffer(lastItem);
+          }
         }
       } // state has not changed since
     }
