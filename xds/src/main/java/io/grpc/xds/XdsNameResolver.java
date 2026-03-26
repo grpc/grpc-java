@@ -138,6 +138,13 @@ final class XdsNameResolver extends NameResolver {
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
+  /**
+   * Constructs a new instance.
+   *
+   * @param target the target URI to resolve
+   * @param targetAuthority the authority component of `target`, possibly the empty string, or null
+   *     if 'target' has no such component
+   */
   XdsNameResolver(
       String target, @Nullable String targetAuthority, String name,
       @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
@@ -208,7 +215,9 @@ final class XdsNameResolver extends NameResolver {
     }
     BootstrapInfo bootstrapInfo = xdsClient.getBootstrapInfo();
     String listenerNameTemplate;
-    if (targetAuthority == null) {
+    if (targetAuthority == null || targetAuthority.isEmpty()) {
+      // Both https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md and
+      // A47-xds-federation.md seem to treat an empty authority the same as an undefined one.
       listenerNameTemplate = bootstrapInfo.clientDefaultListenerResourceNameTemplate();
     } else {
       AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(targetAuthority);
