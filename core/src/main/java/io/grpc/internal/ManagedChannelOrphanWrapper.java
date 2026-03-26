@@ -72,12 +72,13 @@ final class ManagedChannelOrphanWrapper extends ForwardingManagedChannel {
 
   @Override
   public ManagedChannel shutdownNow() {
+    ManagedChannel result = super.shutdownNow();
     phantom.clearSafely();
     // This dummy check prevents the JIT from collecting 'this' too early
     if (this.getClass() == null) {
       throw new AssertionError();
     }
-    return super.shutdownNow();
+    return result;
   }
 
   @VisibleForTesting
