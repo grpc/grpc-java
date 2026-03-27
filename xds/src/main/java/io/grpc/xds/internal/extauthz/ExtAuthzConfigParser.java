@@ -19,11 +19,12 @@ package io.grpc.xds.internal.extauthz;
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.filters.http.ext_authz.v3.ExtAuthz;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
 
@@ -44,7 +45,7 @@ public final class ExtAuthzConfigParser {
    * @throws ExtAuthzParseException if the proto is invalid or contains unsupported features.
    */
   public static ExtAuthzConfig parse(
-      ExtAuthz extAuthzProto, GrpcServiceXdsContextProvider contextProvider)
+      ExtAuthz extAuthzProto, BootstrapInfo bootstrapInfo, ServerInfo serverInfo)
       throws ExtAuthzParseException {
     if (!extAuthzProto.hasGrpcService()) {
       throw new ExtAuthzParseException(
@@ -53,7 +54,7 @@ public final class ExtAuthzConfigParser {
     GrpcServiceConfig grpcServiceConfig;
     try {
       grpcServiceConfig =
-          GrpcServiceConfigParser.parse(extAuthzProto.getGrpcService(), contextProvider);
+          GrpcServiceConfigParser.parse(extAuthzProto.getGrpcService(), bootstrapInfo, serverInfo);
     } catch (GrpcServiceParseException e) {
       throw new ExtAuthzParseException("Failed to parse GrpcService config: " + e.getMessage(), e);
     }
