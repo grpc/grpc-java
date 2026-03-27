@@ -54,6 +54,9 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AlwaysTrueMatcher;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine.AuthConfig;
@@ -120,7 +123,7 @@ public class RbacFilterTest {
   }
 
   @Test
-  @SuppressWarnings({"unchecked", "deprecation"})
+  @SuppressWarnings("unchecked")
   public void portRangeParser() {
     List<Permission> permissionList = Arrays.asList(
         Permission.newBuilder().setDestinationPortRange(
@@ -467,8 +470,15 @@ public class RbacFilterTest {
   }
 
   private Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder().grpcServiceContextProvider(mock(
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider.class))
-            .build();
+    return Filter.FilterContext.builder()
+        .bootstrapInfo(BootstrapInfo.builder()
+            .servers(Collections.singletonList(
+                ServerInfo.create(
+                    "test_target", Collections.emptyMap())))
+            .node(Node.newBuilder().build())
+            .build())
+        .serverInfo(ServerInfo.create(
+            "test_target", Collections.emptyMap(), false, true, false, false))
+        .build();
   }
 }

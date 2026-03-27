@@ -212,10 +212,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   static StructOrError<Map<String, FilterConfig>> parseOverrideFilterConfigs(
       Map<String, Any> rawFilterConfigMap, FilterRegistry filterRegistry,
       XdsResourceType.Args args) {
-    BootstrapInfoGrpcServiceContextProvider grpcServiceContextProvider =
-        new BootstrapInfoGrpcServiceContextProvider(args.getBootstrapInfo(), args.getServerInfo());
     Filter.FilterContext context = Filter.FilterContext.builder()
-        .grpcServiceContextProvider(grpcServiceContextProvider)
+        .bootstrapInfo(args.getBootstrapInfo())
+        .serverInfo(args.getServerInfo())
         .build();
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
