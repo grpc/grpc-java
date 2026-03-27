@@ -29,7 +29,12 @@ import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.insecure.
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.local.v3.LocalCredentials;
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.xds.v3.XdsCredentials;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Optional;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -40,6 +45,26 @@ public class GrpcServiceConfigParserTest {
   private static final String CALL_CREDENTIALS_CLASS_NAME =
       "io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser"
           + "$SecurityAwareAccessTokenCredentials";
+
+  private static BootstrapInfo dummyBootstrapInfo() {
+    return dummyBootstrapInfo(Optional.empty());
+  }
+
+  private static BootstrapInfo dummyBootstrapInfo(Optional<Object> allowedGrpcServices) {
+    return BootstrapInfo.builder()
+        .servers(Collections
+            .singletonList(ServerInfo.create("test_target", Collections.emptyMap())))
+        .node(Node.newBuilder().build()).allowedGrpcServices(allowedGrpcServices).build();
+  }
+
+  private static ServerInfo dummyServerInfo() {
+    return dummyServerInfo(true);
+  }
+
+  private static ServerInfo dummyServerInfo(boolean isTrusted) {
+    return ServerInfo.create("test_target", Collections.emptyMap(), false, isTrusted, false,
+        false);
+  }
 
   @Test
   public void parse_success() throws GrpcServiceParseException {
@@ -60,7 +85,8 @@ public class GrpcServiceConfigParserTest {
             .addInitialMetadata(binaryHeader).setTimeout(timeout).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     // Assert target URI
     assertThat(config.googleGrpc().target()).isEqualTo("test_uri");
@@ -102,7 +128,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     assertThat(config.googleGrpc().target()).isEqualTo("test_uri");
     assertThat(config.initialMetadata()).isEmpty();
@@ -114,8 +141,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().build();
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
         () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .startsWith("Unsupported: GrpcService must have GoogleGrpc, got: ");
   }
@@ -128,7 +155,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     assertThat(config.googleGrpc().callCredentials().isPresent()).isFalse();
   }
@@ -142,8 +170,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
         () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .isEqualTo("No valid supported channel_credentials found");
   }
@@ -159,7 +187,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     assertThat(config.googleGrpc().configuredChannelCredentials().channelCredentials())
         .isInstanceOf(io.grpc.CompositeChannelCredentials.class);
@@ -180,8 +209,8 @@ public class GrpcServiceConfigParserTest {
 
     UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class,
             () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .contains("LocalCredentials are not supported in grpc-java");
   }
@@ -200,7 +229,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     assertThat(config.googleGrpc().configuredChannelCredentials().channelCredentials())
         .isInstanceOf(io.grpc.ChannelCredentials.class);
@@ -223,8 +253,8 @@ public class GrpcServiceConfigParserTest {
 
     UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class,
             () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .contains("TlsCredentials input stream construction pending");
   }
@@ -242,8 +272,8 @@ public class GrpcServiceConfigParserTest {
 
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
         () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat().contains("No valid supported channel_credentials found");
   }
 
@@ -258,7 +288,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
     assertThat(config.googleGrpc().callCredentials().isPresent()).isFalse();
   }
 
@@ -273,8 +304,8 @@ public class GrpcServiceConfigParserTest {
 
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
         () -> GrpcServiceConfigParser.parse(grpcService,
-                    io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil
-                            .dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .contains("Missing or empty access token in call credentials");
   }
@@ -292,7 +323,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-            io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+            dummyBootstrapInfo(),
+            dummyServerInfo());
 
     assertThat(config.googleGrpc().callCredentials().isPresent()).isTrue();
     assertThat(config.googleGrpc().callCredentials().get())
@@ -306,11 +338,13 @@ public class GrpcServiceConfigParserTest {
         .addChannelCredentialsPlugin(insecureCreds).build();
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
-    GrpcServiceXdsContext untrustedContext =
-            GrpcServiceXdsContext.create(false, java.util.Optional.empty(), true);
+    BootstrapInfo untrustedBootstrapInfo = dummyBootstrapInfo(Optional.empty());
+    ServerInfo untrustedServerInfo =
+        dummyServerInfo(false);
 
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
-            () -> GrpcServiceConfigParser.parse(grpcService, targetUri -> untrustedContext));
+            () -> GrpcServiceConfigParser.parse(
+            grpcService, untrustedBootstrapInfo, untrustedServerInfo));
     assertThat(exception).hasMessageThat()
         .contains("Untrusted xDS server & URI not found in allowed_grpc_services");
   }
@@ -330,12 +364,16 @@ public class GrpcServiceConfigParserTest {
                 Any.pack(GoogleDefaultCredentials.getDefaultInstance())));
     AllowedGrpcService override = AllowedGrpcService.builder()
             .configuredChannelCredentials(overrideChannelCreds).build();
+    io.grpc.xds.internal.grpcservice.AllowedGrpcServices servicesMap =
+            io.grpc.xds.internal.grpcservice.AllowedGrpcServices.create(
+                com.google.common.collect.ImmutableMap.of("test_uri", override));
 
-    GrpcServiceXdsContext untrustedContext =
-            GrpcServiceXdsContext.create(false, java.util.Optional.of(override), true);
+    BootstrapInfo untrustedBootstrapInfo = dummyBootstrapInfo(Optional.of(servicesMap));
+    ServerInfo untrustedServerInfo =
+        dummyServerInfo(false);
 
     GrpcServiceConfig config =
-            GrpcServiceConfigParser.parse(grpcService, targetUri -> untrustedContext);
+            GrpcServiceConfigParser.parse(grpcService, untrustedBootstrapInfo, untrustedServerInfo);
 
     // Assert channel credentials are the override, not the proto's insecure creds
     assertThat(config.googleGrpc().configuredChannelCredentials().channelCredentials())
@@ -355,7 +393,8 @@ public class GrpcServiceConfigParserTest {
 
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
             () -> GrpcServiceConfigParser.parse(grpcService,
-                    GrpcServiceXdsContextTestUtil.dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .contains("Timeout must be strictly positive");
 
@@ -366,7 +405,8 @@ public class GrpcServiceConfigParserTest {
 
     exception = assertThrows(GrpcServiceParseException.class,
             () -> GrpcServiceConfigParser.parse(grpcServiceZero,
-                    GrpcServiceXdsContextTestUtil.dummyProvider()));
+                    dummyBootstrapInfo(),
+            dummyServerInfo()));
     assertThat(exception).hasMessageThat()
         .contains("Timeout must be strictly positive");
   }
@@ -378,11 +418,12 @@ public class GrpcServiceConfigParserTest {
         .setTargetUri("unknown://test")
         .addChannelCredentialsPlugin(insecureCreds).build();
 
-    GrpcServiceXdsContext context =
-            GrpcServiceXdsContext.create(true, java.util.Optional.empty(), false);
+    BootstrapInfo bootstrapInfo = dummyBootstrapInfo();
+    ServerInfo serverInfo = dummyServerInfo();
 
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
-            () -> GrpcServiceConfigParser.parseGoogleGrpcConfig(googleGrpc, targetUri -> context));
+        () -> GrpcServiceConfigParser.parseGoogleGrpcConfig(
+            googleGrpc, bootstrapInfo, serverInfo));
     assertThat(exception).hasMessageThat()
         .contains("Target URI scheme is not resolvable");
   }
@@ -465,7 +506,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-        io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+        dummyBootstrapInfo(),
+            dummyServerInfo());
 
     io.grpc.CallCredentials creds = config.googleGrpc().callCredentials().get();
     RecordingMetadataApplier applier = new RecordingMetadataApplier();
@@ -508,7 +550,8 @@ public class GrpcServiceConfigParserTest {
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
     GrpcServiceConfig config = GrpcServiceConfigParser.parse(grpcService,
-        io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+        dummyBootstrapInfo(),
+            dummyServerInfo());
 
     io.grpc.CallCredentials creds = config.googleGrpc().callCredentials().get();
     RecordingMetadataApplier applier = new RecordingMetadataApplier();

@@ -29,10 +29,14 @@ import io.grpc.CallCredentials;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
+import io.grpc.NameResolverRegistry;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.XdsChannelCredentials;
+import io.grpc.xds.client.Bootstrapper;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
@@ -71,15 +75,16 @@ public final class GrpcServiceConfigParser {
    * @return A {@link GrpcServiceConfig} instance.
    * @throws GrpcServiceParseException if the proto is invalid or uses unsupported features.
    */
-  public static GrpcServiceConfig parse(GrpcService grpcServiceProto,
-      GrpcServiceXdsContextProvider contextProvider)
+  public static GrpcServiceConfig parse(
+      GrpcService grpcServiceProto, Bootstrapper.BootstrapInfo bootstrapInfo,
+      Bootstrapper.ServerInfo serverInfo)
       throws GrpcServiceParseException {
     if (!grpcServiceProto.hasGoogleGrpc()) {
       throw new GrpcServiceParseException(
           "Unsupported: GrpcService must have GoogleGrpc, got: " + grpcServiceProto);
     }
     GrpcServiceConfig.GoogleGrpcConfig googleGrpcConfig =
-        parseGoogleGrpcConfig(grpcServiceProto.getGoogleGrpc(), contextProvider);
+        parseGoogleGrpcConfig(grpcServiceProto.getGoogleGrpc(), bootstrapInfo, serverInfo);
 
     GrpcServiceConfig.Builder builder = GrpcServiceConfig.builder().googleGrpc(googleGrpcConfig);
 
@@ -119,19 +124,41 @@ public final class GrpcServiceConfigParser {
    * @throws GrpcServiceParseException if the proto is invalid.
    */
   public static GrpcServiceConfig.GoogleGrpcConfig parseGoogleGrpcConfig(
-      GrpcService.GoogleGrpc googleGrpcProto, GrpcServiceXdsContextProvider contextProvider)
+      GrpcService.GoogleGrpc googleGrpcProto, Bootstrapper.BootstrapInfo bootstrapInfo,
+      Bootstrapper.ServerInfo serverInfo)
       throws GrpcServiceParseException {
 
     String targetUri = googleGrpcProto.getTargetUri();
-    GrpcServiceXdsContext context = contextProvider.getContextForTarget(targetUri);
 
-    if (!context.isTargetUriSchemeSupported()) {
+    AllowedGrpcServices allowedGrpcServices = bootstrapInfo.allowedGrpcServices()
+        .filter(AllowedGrpcServices.class::isInstance)
+        .map(AllowedGrpcServices.class::cast)
+        .orElse(AllowedGrpcServices.empty());
+
+    boolean isTrustedControlPlane = serverInfo.isTrustedXdsServer();
+    Optional<AllowedGrpcService> override =
+        Optional.ofNullable(allowedGrpcServices.services().get(targetUri));
+
+    boolean isTargetUriSchemeSupported = false;
+    try {
+      URI uri = new URI(targetUri);
+      String scheme = uri.getScheme();
+      if (scheme == null) {
+        scheme = NameResolverRegistry.getDefaultRegistry().getDefaultScheme();
+      }
+      if (scheme != null) {
+        isTargetUriSchemeSupported =
+            NameResolverRegistry.getDefaultRegistry().getProviderForScheme(scheme) != null;
+      }
+    } catch (URISyntaxException e) {
+      // Fallback or ignore if not a valid URI
+    }
+
+    if (!isTargetUriSchemeSupported) {
       throw new GrpcServiceParseException("Target URI scheme is not resolvable: " + targetUri);
     }
 
-    if (!context.isTrustedControlPlane()) {
-      Optional<AllowedGrpcService> override =
-          context.validAllowedGrpcService();
+    if (!isTrustedControlPlane) {
       if (!override.isPresent()) {
         throw new GrpcServiceParseException(
             "Untrusted xDS server & URI not found in allowed_grpc_services: " + targetUri);
