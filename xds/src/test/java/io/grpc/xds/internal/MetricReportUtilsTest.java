@@ -58,7 +58,6 @@ public class MetricReportUtilsTest {
     assertEquals(0.2, result.getAsDouble(), 0.0001);
   }
 
-
   @Test
   public void getMetric_utilizationMetric() {
     Map<String, Double> utilizationMetrics = new HashMap<>();
@@ -69,17 +68,14 @@ public class MetricReportUtilsTest {
     OptionalDouble result = MetricReportUtils.getMetric(report, "utilization.foo");
     assertTrue(result.isPresent());
     assertEquals(1.23, result.getAsDouble(), 0.0001);
-
     assertFalse(MetricReportUtils.getMetric(report, "utilization.bar").isPresent());
   }
-
 
   @Test
   public void getMetric_namedMetric() {
     Map<String, Double> namedMetrics = new HashMap<>();
     namedMetrics.put("foo", 7.89);
     MetricReport report = createMetricReport(0, 0, 0, 0, 0, namedMetrics);
-
     OptionalDouble result = MetricReportUtils.getMetric(report, "named_metrics.foo");
     assertTrue(result.isPresent());
     assertEquals(7.89, result.getAsDouble(), 0.0001);

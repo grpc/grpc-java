@@ -114,13 +114,17 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
   @Test
   public void parseLoadBalancingConfigCustomMetrics() throws IOException {
     System.setProperty("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS", "true");
-    String lbConfig = "{\"metricNamesForComputingUtilization\" : [\"foo\", \"bar\"]}";
-    ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
-        parseJsonObject(lbConfig));
-    assertThat(configOrError.getConfig()).isNotNull();
-    WeightedRoundRobinLoadBalancerConfig config =
-        (WeightedRoundRobinLoadBalancerConfig) configOrError.getConfig();
-    assertThat(config.metricNamesForComputingUtilization).containsExactly("foo", "bar");
+    try {
+      String lbConfig = "{\"metricNamesForComputingUtilization\" : [\"foo\", \"bar\"]}";
+      ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
+          parseJsonObject(lbConfig));
+      assertThat(configOrError.getConfig()).isNotNull();
+      WeightedRoundRobinLoadBalancerConfig config =
+          (WeightedRoundRobinLoadBalancerConfig) configOrError.getConfig();
+      assertThat(config.metricNamesForComputingUtilization).containsExactly("foo", "bar");
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS");
+    }
   }
 
 

@@ -1402,8 +1402,6 @@ public class WeightedRoundRobinLoadBalancerTest {
         any());
   }
 
-
-
   @Test
   public void customMetric_mapLookup_used() {
     weightedConfig = WeightedRoundRobinLoadBalancerConfig.newBuilder().setBlackoutPeriodNanos(0)
@@ -1578,7 +1576,6 @@ public class WeightedRoundRobinLoadBalancerTest {
         argThat(instr -> instr.getName().equals("grpc.lb.wrr.endpoint_weights")), eq(2.0), any(),
         any());
   }
-
 
   // Verifies that the MetricRecorder has been called to record a long counter value of 1 for the
   // given metric name, the given number of times
