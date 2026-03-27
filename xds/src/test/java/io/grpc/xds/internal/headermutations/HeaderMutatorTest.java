@@ -77,7 +77,7 @@ public class HeaderMutatorTest {
   }
 
   @Test
-  public void applyRequestMutations_asciiHeaders() {
+  public void applyMutations_asciiHeaders() {
     Metadata headers = new Metadata();
     headers.put(APPEND_KEY, "append-value-1");
     headers.put(ADD_KEY, "add-value-original");
@@ -125,7 +125,7 @@ public class HeaderMutatorTest {
   }
 
   @Test
-  public void applyRequestMutations_removalHasPriority() {
+  public void applyMutations_removalHasPriority() {
     Metadata headers = new Metadata();
     headers.put(REMOVE_KEY, "value");
     HeaderMutations mutations =
@@ -141,7 +141,7 @@ public class HeaderMutatorTest {
   }
 
   @Test
-  public void applyRequestMutations_binary() {
+  public void applyMutations_binary() {
     Metadata headers = new Metadata();
     byte[] value = new byte[] {1, 2, 3};
     HeaderValueOption option =
@@ -203,7 +203,7 @@ public class HeaderMutatorTest {
   }
 
   @Test
-  public void applyRequestMutations_keepEmptyValue() {
+  public void applyMutations_keepEmptyValue() {
     Metadata headers = new Metadata();
     headers.put(APPEND_KEY, "existing-value");
     headers.put(OVERWRITE_KEY, "existing-value");
@@ -242,5 +242,45 @@ public class HeaderMutatorTest {
     assertThat(headers.get(keepEmptyKey)).isEqualTo("");
     assertThat(headers.containsKey(keepEmptyOverwriteKey)).isTrue();
     assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
+  }
+
+  @Test
+  public void applyMutations_binaryRemoval() {
+    Metadata headers = new Metadata();
+    byte[] value = new byte[] {1, 2, 3};
+    headers.put(BINARY_KEY, value);
+    HeaderMutations mutations =
+        HeaderMutations.create(ImmutableList.of(), ImmutableList.of(BINARY_KEY.name()));
+
+    headerMutator.applyMutations(mutations, headers);
+
+    assertThat(headers.containsKey(BINARY_KEY)).isFalse();
+  }
+
+  @Test
+  public void applyMutations_stringValueWithBinaryKey_ignored() {
+    Metadata headers = new Metadata();
+    HeaderValueOption option = HeaderValueOption.create(HeaderValue.create("some-key-bin", "value"),
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+
+    headerMutator.applyMutations(
+        HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
+
+    Metadata.Key<byte[]> key = Metadata.Key.of("some-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    assertThat(headers.containsKey(key)).isFalse();
+  }
+
+  @Test
+  public void applyMutations_binaryValueWithAsciiKey_ignored() {
+    Metadata headers = new Metadata();
+    HeaderValueOption option = HeaderValueOption.create(
+        HeaderValue.create("some-key", ByteString.copyFrom(new byte[] {1})),
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+
+    headerMutator.applyMutations(
+        HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
+
+    Metadata.Key<String> key = Metadata.Key.of("some-key", Metadata.ASCII_STRING_MARSHALLER);
+    assertThat(headers.containsKey(key)).isFalse();
   }
 }
