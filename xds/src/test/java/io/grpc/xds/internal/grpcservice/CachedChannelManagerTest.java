@@ -135,4 +135,29 @@ public class CachedChannelManagerTest {
       assertThat(e).hasMessageThat().contains("CachedChannelManager is closed");
     }
   }
+
+  @Test
+  public void constructor_defaultCreatesChannel() {
+    CachedChannelManager defaultManager = new CachedChannelManager();
+    io.grpc.ChannelCredentials creds = io.grpc.InsecureChannelCredentials.create();
+    ChannelCredsConfig credsConfig = mock(ChannelCredsConfig.class);
+    when(credsConfig.type()).thenReturn("insecure");
+    ConfiguredChannelCredentials configuredCreds =
+        ConfiguredChannelCredentials.create(creds, credsConfig);
+    GoogleGrpcConfig googleGrpc = GoogleGrpcConfig.builder()
+        .target("localhost:8080")
+        .configuredChannelCredentials(configuredCreds)
+        .build();
+    GrpcServiceConfig config = GrpcServiceConfig.builder()
+        .googleGrpc(googleGrpc)
+        .initialMetadata(ImmutableList.of())
+        .build();
+
+    ManagedChannel channel = defaultManager.getChannel(config);
+    assertThat(channel).isNotNull();
+    
+    channel.shutdownNow();
+    defaultManager.close();
+  }
+
 }
