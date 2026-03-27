@@ -57,6 +57,13 @@ public final class Grpc {
       Attributes.Key.create("io.grpc.Grpc.TRANSPORT_ATTR_SSL_SESSION");
 
   /**
+   * The value for the custom label of per-RPC metrics. Defaults to empty string when unset. Must
+   * not be set to {@code null}.
+   */
+  public static final CallOptions.Key<String> CALL_OPTION_CUSTOM_LABEL =
+      CallOptions.Key.createWithDefault("io.grpc.Grpc.CALL_OPTION_CUSTOM_LABEL", "");
+
+  /**
    * Annotation for transport attributes. It follows the annotation semantics defined
    * by {@link Attributes}.
    */
