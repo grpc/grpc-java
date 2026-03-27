@@ -61,7 +61,7 @@ google-auth-credentials = "com.google.auth:google-auth-library-credentials:1.42.
 # checkForUpdates: google-auth-oauth2Http:1.42.+
 google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.42.1"
 # Release notes: https://cloud.google.com/logging/docs/release-notes
-# 3.23.10+ require protobuf 4.x
+# 3.23.11+ require protobuf 4.x
 # checkForUpdates: google-cloud-logging:3.23.10
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.10"
 gson = "com.google.code.gson:gson:2.13.2"
