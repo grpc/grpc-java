@@ -618,10 +618,9 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
               isForClient ? "client" : "server"));
     }
 
-    BootstrapInfoGrpcServiceContextProvider contextProvider =
-        new BootstrapInfoGrpcServiceContextProvider(args.getBootstrapInfo(), args.getServerInfo());
     Filter.FilterContext filterContext = Filter.FilterContext.builder()
-        .grpcServiceContextProvider(contextProvider)
+        .bootstrapInfo(args.getBootstrapInfo())
+        .serverInfo(args.getServerInfo())
         .build();
     ConfigOrError<? extends FilterConfig> filterConfig =
         provider.parseFilterConfig(rawConfig, filterContext);

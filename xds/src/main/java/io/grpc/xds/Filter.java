@@ -17,11 +17,13 @@
 package io.grpc.xds;
 
 
+import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
 import io.grpc.ServerInterceptor;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import java.io.Closeable;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
@@ -130,21 +132,23 @@ interface Filter extends Closeable {
   default void close() {}
 
   /** Context carrying dynamic metadata for a filter. */
-  @com.google.auto.value.AutoValue
-  abstract class FilterContext {
-    public abstract GrpcServiceXdsContextProvider grpcServiceContextProvider();
+  @AutoValue
+  abstract static class FilterContext {
+    abstract BootstrapInfo bootstrapInfo();
 
-    public static Builder builder() {
+    abstract ServerInfo serverInfo();
+
+    static Builder builder() {
       return new AutoValue_Filter_FilterContext.Builder();
     }
 
+    @AutoValue.Builder
+    abstract static class Builder {
+      abstract Builder bootstrapInfo(BootstrapInfo info);
 
-    @com.google.auto.value.AutoValue.Builder
-    public abstract static class Builder {
-      public abstract Builder grpcServiceContextProvider(
-          GrpcServiceXdsContextProvider provider);
+      abstract Builder serverInfo(ServerInfo info);
 
-      public abstract FilterContext build();
+      abstract FilterContext build();
     }
   }
 

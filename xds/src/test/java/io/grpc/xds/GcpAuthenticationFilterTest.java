@@ -65,10 +65,12 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -526,7 +528,14 @@ public class GcpAuthenticationFilterTest {
 
   private static Filter.FilterContext getFilterContext() {
     return Filter.FilterContext.builder()
-        .grpcServiceContextProvider(Mockito.mock(GrpcServiceXdsContextProvider.class))
+        .bootstrapInfo(BootstrapInfo.builder()
+            .servers(Collections.singletonList(
+                ServerInfo.create(
+                    "test_target", Collections.emptyMap())))
+            .node(Node.newBuilder().build())
+            .build())
+        .serverInfo(ServerInfo.create(
+            "test_target", Collections.emptyMap(), false, true, false, false))
         .build();
   }
 }
