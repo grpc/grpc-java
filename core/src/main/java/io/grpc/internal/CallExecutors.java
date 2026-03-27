@@ -31,6 +31,9 @@ final class CallExecutors {
    * Wraps an executor with safeguarding (serialization) if not already safeguarded.
    */
   static Executor safeguard(Executor executor) {
+    // If we know that the executor is a direct executor, we don't need to wrap it with a
+    // SerializingExecutor. This is purely for performance reasons.
+    // See https://github.com/grpc/grpc-java/issues/368
     if (executor instanceof SerializingExecutor
         || executor instanceof SerializeReentrantCallsDirectExecutor) {
       return executor;
