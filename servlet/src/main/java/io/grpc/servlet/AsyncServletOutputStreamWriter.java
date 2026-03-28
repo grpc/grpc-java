@@ -217,42 +217,54 @@ final class AsyncServletOutputStreamWriter {
    */
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
-    
-    // Evaluate Tomcat's actual state alongside our cached state
-    boolean actualReady = curState.readyAndDrained && isReady.getAsBoolean();
 
-    if (actualReady) { // write to the outputStream directly
-      actionItem.run();
-      if (actionItem == completeAction) {
+    if (curState.readyAndDrained) {
+      if (isReady.getAsBoolean()) {
+        // Path 1: Container is truly ready. Write directly.
+        actionItem.run();
+        if (actionItem == completeAction) {
+          return;
+        }
+        if (!isReady.getAsBoolean()) {
+          boolean successful =
+              writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+          LockSupport.unpark(parkingThread);
+          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+          log.finest("the servlet output stream becomes not ready");
+        }
         return;
       }
-      if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+    }
+
+    // Path 2: Container is secretly not ready (Tomcat bug) OR already known to be false.
+    // We must safely buffer the item and ensure the state reflects reality.
+    writeChain.offer(actionItem);
+    if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
+      // CAS failed. State changed mid-flight.
+      if (curState.readyAndDrained) {
+        // Started as true, but CAS failed because another thread 
+        // concurrently buffered and flipped it to false.
+        // Safe to do nothing. The winning thread handles the unpark.
+      } else {
+        // Started as false, CAS failed because onWritePossible flipped it to true.
+        // Original logic: retry the write since it's ready again.
+        checkState(
+            writeState.get().readyAndDrained,
+            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+        ActionItem lastItem = writeChain.poll();
+        if (lastItem != null) {
+          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+          runOrBuffer(lastItem);
+        }
+      }
+    } else {
+      // CAS succeeded! 
+      // CRITICAL FIX: If we just flipped the state from true to false,
+      //  we MUST wake up the container!
+      if (curState.readyAndDrained) {
         LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
         log.finest("the servlet output stream becomes not ready");
       }
-    } else { // buffer to the writeChain
-      writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        // STATE CHANGED! Determine why the CAS failed based on our initial state.
-        if (curState.readyAndDrained) {
-          // We dropped here solely because isReady() was false.
-          // CAS failed because another concurrent thread already CAS'd it to false.
-          // This is completely safe. Tomcat will call onWritePossible(). Do nothing.
-        } else {
-          // Original logic: We started as false, CAS failed because onWritePossible set it to true.
-          checkState(
-              writeState.get().readyAndDrained,
-              "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-          ActionItem lastItem = writeChain.poll();
-          if (lastItem != null) {
-            checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-            runOrBuffer(lastItem);
-          }
-        }
-      } // state has not changed since
     }
   }
 
