@@ -628,6 +628,53 @@ public final class UriTest {
   }
 
   @Test
+  public void builder_canClearAuthorityComponents() {
+    Uri uri = Uri.create("s://user@host:80/path").toBuilder().setRawAuthority(null).build();
+    assertThat(uri.toString()).isEqualTo("s:/path");
+  }
+
+  @Test
+  public void builder_canSetEmptyAuthority() {
+    Uri uri = Uri.create("s://user@host:80/path").toBuilder().setRawAuthority("").build();
+    assertThat(uri.toString()).isEqualTo("s:///path");
+  }
+
+  @Test
+  public void builder_canSetRawAuthority() {
+    Uri uri = Uri.newBuilder().setScheme("http").setRawAuthority("user@host:1234").build();
+    assertThat(uri.getUserInfo()).isEqualTo("user");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getPort()).isEqualTo(1234);
+  }
+
+  @Test
+  public void builder_setRawAuthorityPercentDecodes() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setRawAuthority("user:user%40user@host%40host%3Ahost")
+            .build();
+    assertThat(uri.getUserInfo()).isEqualTo("user:user@user");
+    assertThat(uri.getHost()).isEqualTo("host@host:host");
+    assertThat(uri.getPort()).isEqualTo(-1);
+  }
+
+  @Test
+  public void builder_setRawAuthorityReplacesAllComponents() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setUserInfo("user")
+            .setHost("host")
+            .setPort(1234)
+            .setRawAuthority("other")
+            .build();
+    assertThat(uri.getUserInfo()).isNull();
+    assertThat(uri.getHost()).isEqualTo("other");
+    assertThat(uri.getPort()).isEqualTo(-1);
+  }
+
+  @Test
   public void toString_percentEncodingMultiChar() throws URISyntaxException {
     Uri uri =
         Uri.newBuilder()

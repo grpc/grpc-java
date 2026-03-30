@@ -45,7 +45,9 @@ public class NoopClientStream implements ClientStream {
   public void request(int numMessages) {}
 
   @Override
-  public void writeMessage(InputStream message) {}
+  public void writeMessage(InputStream message) {
+    GrpcUtil.closeQuietly(message);
+  }
 
   @Override
   public void flush() {}
