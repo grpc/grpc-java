@@ -808,6 +808,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions) {
+    // If we have no interceptors, we don't need to populate the executor in CallOptions
+    // yet. This avoids mutating CallOptions unnecessarily and breaking tests that
+    // expect exact instance equality. The executor will still be safeguarded when
+    // creating the actual ClientCallImpl.
+    if (interceptorChannel == realChannel) {
+      return realChannel.newCall(method, callOptions);
+    }
     Executor executor = callOptions.getExecutor();
     if (executor == null) {
       executor = this.executor;
