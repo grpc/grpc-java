@@ -28,17 +28,20 @@ abstract class PredicateEvaluator {
   abstract boolean evaluate(MatchContext context);
   
   static PredicateEvaluator fromProto(Predicate proto) {
-    if (proto.hasSinglePredicate()) {
-      return new SinglePredicateEvaluator(proto.getSinglePredicate());
-    } else if (proto.hasOrMatcher()) {
-      return new OrMatcherEvaluator(proto.getOrMatcher());
-    } else if (proto.hasAndMatcher()) {
-      return new AndMatcherEvaluator(proto.getAndMatcher());
-    } else if (proto.hasNotMatcher()) {
-      return new NotMatcherEvaluator(proto.getNotMatcher());
+    switch (proto.getMatchTypeCase()) {
+      case SINGLE_PREDICATE:
+        return new SinglePredicateEvaluator(proto.getSinglePredicate());
+      case OR_MATCHER:
+        return new OrMatcherEvaluator(proto.getOrMatcher());
+      case AND_MATCHER:
+        return new AndMatcherEvaluator(proto.getAndMatcher());
+      case NOT_MATCHER:
+        return new NotMatcherEvaluator(proto.getNotMatcher());
+      case MATCHTYPE_NOT_SET:
+      default:
+        throw new IllegalArgumentException(
+            "Predicate must have one of: single_predicate, or_matcher, and_matcher, not_matcher");
     }
-    throw new IllegalArgumentException(
-        "Predicate must have one of: single_predicate, or_matcher, and_matcher, not_matcher");
   }
 
   private static final class SinglePredicateEvaluator extends PredicateEvaluator {
