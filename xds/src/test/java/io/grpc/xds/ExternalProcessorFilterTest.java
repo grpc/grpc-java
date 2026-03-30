@@ -49,6 +49,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Rule;
@@ -210,6 +212,10 @@ public class ExternalProcessorFilterTest {
             @Override
             public void onNext(ProcessingRequest request) {
               if (request.hasRequestHeaders()) {
+                // Delay response to simulate race condition where application half-closes 
+                // before headers mutation arrives.
+                try { Thread.sleep(50); } catch (InterruptedException e) {}
+                
                 responseObserver.onNext(ProcessingResponse.newBuilder()
                     .setRequestHeaders(HeadersResponse.newBuilder()
                         .setResponse(CommonResponse.newBuilder()
@@ -264,9 +270,23 @@ public class ExternalProcessorFilterTest {
       };
       extProcServiceRegistry.addService(extProcImpl);
 
-      String reply = ClientCalls.blockingUnaryCall(interceptedChannel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+      CountDownLatch latch = new CountDownLatch(1);
+      AtomicReference<String> replyRef = new AtomicReference<>();
+      AtomicReference<Throwable> errorRef = new AtomicReference<>();
+      
+      ClientCalls.asyncUnaryCall(interceptedChannel.newCall(METHOD_SAY_HELLO, CallOptions.DEFAULT), "World", 
+          new StreamObserver<String>() {
+            @Override public void onNext(String value) { replyRef.set(value); }
+            @Override public void onError(Throwable t) { errorRef.set(t); latch.countDown(); }
+            @Override public void onCompleted() { latch.countDown(); }
+          });
 
-      assertThat(reply).isEqualTo("Hello World");
+      assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+      if (errorRef.get() != null) {
+          throw new RuntimeException(errorRef.get());
+      }
+
+      assertThat(replyRef.get()).isEqualTo("Hello World");
       Metadata.Key<String> customHeaderKey = Metadata.Key.of("x-custom-header", Metadata.ASCII_STRING_MARSHALLER);
       assertThat(receivedHeaders.get().get(customHeaderKey)).isEqualTo("custom-value");
     } finally {
