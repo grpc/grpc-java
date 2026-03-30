@@ -17,9 +17,9 @@
 package io.grpc.xds.internal.matcher;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.io.BaseEncoding;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Metadata;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.AbstractMap;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -71,7 +71,7 @@ final class HeadersWrapper extends AbstractMap<String, String> {
           sb.append(",");
         }
         first = false;
-        sb.append(com.google.common.io.BaseEncoding.base64().encode(value));
+        sb.append(BaseEncoding.base64().encode(value));
       }
       return sb.toString();
     }

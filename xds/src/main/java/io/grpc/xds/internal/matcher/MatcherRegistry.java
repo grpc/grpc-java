@@ -17,29 +17,40 @@
 package io.grpc.xds.internal.matcher;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
  * Registry for {@link MatcherProvider}.
  */
 public final class MatcherRegistry {
-  private static final MatcherRegistry DEFAULT_INSTANCE = new MatcherRegistry();
+  private static MatcherRegistry instance;
 
-  private final Map<String, MatcherProvider> matcherProviders = new ConcurrentHashMap<>();
+  private final Map<String, MatcherProvider> matcherProviders = new HashMap<>();
 
-  public static MatcherRegistry getDefaultRegistry() {
-    return DEFAULT_INSTANCE;
+  private MatcherRegistry() {
+  }
+
+  public static synchronized MatcherRegistry getDefaultRegistry() {
+    if (instance == null) {
+      instance = newRegistry().register(
+          new CelStateMatcher.Provider());
+    }
+    return instance;
   }
 
   @VisibleForTesting
-  public MatcherRegistry() {
-    register(new CelStateMatcher.Provider());
+  public static MatcherRegistry newRegistry() {
+    return new MatcherRegistry();
   }
 
-  public void register(MatcherProvider provider) {
-    matcherProviders.put(provider.typeUrl(), provider);
+  @VisibleForTesting
+  public MatcherRegistry register(MatcherProvider... providers) {
+    for (MatcherProvider provider : providers) {
+      matcherProviders.put(provider.typeUrl(), provider);
+    }
+    return this;
   }
 
   @Nullable

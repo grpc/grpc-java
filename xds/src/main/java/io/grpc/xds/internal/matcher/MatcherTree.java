@@ -18,10 +18,8 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +33,7 @@ final class MatcherTree extends UnifiedMatcher {
   @Nullable 
   private final Map<String, OnMatch> exactMatchMap;
   @Nullable 
-  private final Map<String, OnMatch> prefixMatchMap;
+  private final PrefixTrie prefixTrie;
   @Nullable 
   private final OnMatch onNoMatch;
   
@@ -67,21 +65,23 @@ final class MatcherTree extends UnifiedMatcher {
         this.exactMatchMap.put(entry.getKey(),
             new OnMatch(entry.getValue(), actionValidator));
       }
-      this.prefixMatchMap = null;
+      this.prefixTrie = null;
     } else if (proto.hasPrefixMatchMap()) {
       Matcher.MatcherTree.MatchMap matchMap = proto.getPrefixMatchMap();
       if (matchMap.getMapCount() == 0) {
         throw new IllegalArgumentException(
             "MatcherTree prefix_match_map must contain at least one entry");
       }
-      this.prefixMatchMap = new HashMap<>();
+      this.prefixTrie = new PrefixTrie();
       for (Map.Entry<String, Matcher.OnMatch> entry : 
           matchMap.getMapMap().entrySet()) {
-        this.prefixMatchMap.put(entry.getKey(),
+        this.prefixTrie.insert(entry.getKey(),
             new OnMatch(entry.getValue(), actionValidator));
       }
       this.exactMatchMap = null;
     } else {
+      this.exactMatchMap = null;
+      this.prefixTrie = null;
       throw new IllegalArgumentException(
           "MatcherTree must have either exact_match_map or prefix_match_map");
     }
@@ -104,94 +104,134 @@ final class MatcherTree extends UnifiedMatcher {
     }
     String value = (String) valueObj;
     if (exactMatchMap != null) {
-      OnMatch match = exactMatchMap.get(value);
-      if (match != null) {
-        MatchResult result = match.evaluate(context, depth);
-        
-        List<TypedExtensionConfig> accumulated = 
-            new ArrayList<>(result.keepMatchingActions);
+      return matchExact(value, context, depth);
+    } else if (prefixTrie != null) {
+      return matchPrefix(value, context, depth);
+    }
 
-        if (result.matched && !match.keepMatching) {
-          return MatchResult.create(result.action, accumulated);
-        }
-        
-        if (result.matched) { // && keepMatching=true
-          if (result.action != null) {
-            accumulated.add(result.action);
-          }
-        } else {
-          if (!match.keepMatching) {
-            return MatchResult.noMatch(accumulated);
-          }
-        }
-        
-        // If keepMatching=true, OR (matched=true and keepMatching=true), then continue to onNoMatch
-        if (onNoMatch != null) {
-          MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
-          accumulated.addAll(noMatchResult.keepMatchingActions);
-          if (noMatchResult.matched) {
-            return MatchResult.create(noMatchResult.action, accumulated);
-          }
-        }
-        return MatchResult.noMatch(accumulated);
-      }
-      return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
-    } else if (prefixMatchMap != null) {
-      List<String> matchingPrefixes = new ArrayList<>();
-      for (String prefix : prefixMatchMap.keySet()) {
-        if (value.startsWith(prefix)) {
-          matchingPrefixes.add(prefix);
-        }
-      }
-      
-      if (matchingPrefixes.isEmpty()) {
-        return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+    return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+  }
+
+  private MatchResult matchExact(String value, MatchContext context, int depth) {
+    OnMatch match = exactMatchMap.get(value);
+    if (match != null) {
+      MatchResult result = match.evaluate(context, depth);
+
+      List<TypedExtensionConfig> accumulated = new ArrayList<>(result.keepMatchingActions);
+
+      if (result.matched && !match.keepMatching) {
+        return MatchResult.create(result.action, accumulated);
       }
 
-      // Sort by length descending (longest first)
-      Collections.sort(matchingPrefixes, new Comparator<String>() {
-        @Override
-        public int compare(String s1, String s2) {
-          return Integer.compare(s2.length(), s1.length());
+      if (result.matched) { // && keepMatching=true
+        if (result.action != null) {
+          accumulated.add(result.action);
         }
-      });
-      
-      List<TypedExtensionConfig> accumulatedActions = 
-          new ArrayList<>();
-      
-      for (String prefix : matchingPrefixes) {
-        OnMatch onMatch = prefixMatchMap.get(prefix);
-        MatchResult result = onMatch.evaluate(context, depth);
-        accumulatedActions.addAll(result.keepMatchingActions);
-        
-        if (result.matched && !onMatch.keepMatching) {
-          return MatchResult.create(result.action, accumulatedActions);
+      } else {
+        if (!match.keepMatching) {
+          return MatchResult.noMatch(accumulated);
         }
-        
-        if (result.matched) { // AND keepMatching=true
-          if (result.action != null) {
-            accumulatedActions.add(result.action);
-          }
-        } else {
-          if (!onMatch.keepMatching) {
-            return MatchResult.noMatch(accumulatedActions);
-          }
-        }
-        
-        // If keepMatching=true, we continue regardless of inner match result.
       }
-      
-      // If we fall through, we either found no matches or all matches had keepMatching=true.
+
+      // If keepMatching=true, OR (matched=true and keepMatching=true), then continue
+      // to onNoMatch
       if (onNoMatch != null) {
         MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
-        accumulatedActions.addAll(noMatchResult.keepMatchingActions);
+        accumulated.addAll(noMatchResult.keepMatchingActions);
         if (noMatchResult.matched) {
-          return MatchResult.create(noMatchResult.action, accumulatedActions);
+          return MatchResult.create(noMatchResult.action, accumulated);
         }
       }
-      return MatchResult.noMatch(accumulatedActions);
+      return MatchResult.noMatch(accumulated);
     }
-    
     return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+  }
+
+  private MatchResult matchPrefix(String value, MatchContext context, int depth) {
+    List<OnMatch> matchingPrefixes = prefixTrie.matchPrefixes(value);
+
+    if (matchingPrefixes.isEmpty()) {
+      return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+    }
+
+    List<TypedExtensionConfig> accumulatedActions = new ArrayList<>();
+
+    for (OnMatch onMatch : matchingPrefixes) {
+      MatchResult result = onMatch.evaluate(context, depth);
+      accumulatedActions.addAll(result.keepMatchingActions);
+
+      if (result.matched && !onMatch.keepMatching) {
+        return MatchResult.create(result.action, accumulatedActions);
+      }
+
+      if (result.matched) { // AND keepMatching=true
+        if (result.action != null) {
+          accumulatedActions.add(result.action);
+        }
+      } else {
+        if (!onMatch.keepMatching) {
+          return MatchResult.noMatch(accumulatedActions);
+        }
+      }
+
+      // If keepMatching=true, we continue regardless of inner match result.
+    }
+
+    // If we fall through, we either found no matches or all matches had
+    // keepMatching=true.
+    if (onNoMatch != null) {
+      MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+      accumulatedActions.addAll(noMatchResult.keepMatchingActions);
+      if (noMatchResult.matched) {
+        return MatchResult.create(noMatchResult.action, accumulatedActions);
+      }
+    }
+    return MatchResult.noMatch(accumulatedActions);
+  }
+
+  private static final class PrefixTrie {
+    private final TrieNode root = new TrieNode();
+
+    void insert(String prefix, OnMatch onMatch) {
+      TrieNode current = root;
+      for (int i = 0; i < prefix.length(); i++) {
+        char c = prefix.charAt(i);
+        TrieNode child = current.children.get(c);
+        if (child == null) {
+          child = new TrieNode();
+          current.children.put(c, child);
+        }
+        current = child;
+      }
+      current.onMatch = onMatch;
+    }
+
+    List<OnMatch> matchPrefixes(String value) {
+      List<OnMatch> matchingPrefixes = new ArrayList<>();
+      TrieNode current = root;
+      if (current.onMatch != null) {
+        matchingPrefixes.add(current.onMatch);
+      }
+      for (int i = 0; i < value.length(); i++) {
+        char c = value.charAt(i);
+        current = current.children.get(c);
+        if (current == null) {
+          break;
+        }
+        if (current.onMatch != null) {
+          matchingPrefixes.add(current.onMatch);
+        }
+      }
+
+      // Evaluate longest matching prefix first
+      Collections.reverse(matchingPrefixes);
+      return matchingPrefixes;
+    }
+
+    private static final class TrieNode {
+      final Map<Character, TrieNode> children = new HashMap<>();
+      @Nullable
+      OnMatch onMatch;
+    }
   }
 }

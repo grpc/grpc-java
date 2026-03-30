@@ -22,13 +22,15 @@ import com.github.xds.core.v3.TypedExtensionConfig;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.Locale;
 
 /**
  * MatchInput for extracting HTTP headers.
  */
 final class HeaderMatchInput implements MatchInput {
   private final String headerName;
+  static final String TYPE_URL =
+      "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
     
   HeaderMatchInput(String headerName) {
     this.headerName = checkNotNull(headerName, "headerName");
@@ -36,7 +38,7 @@ final class HeaderMatchInput implements MatchInput {
       throw new IllegalArgumentException(
           "Header name length must be in range [1, 16384): " + headerName.length());
     }
-    if (!headerName.equals(headerName.toLowerCase(java.util.Locale.ROOT))) {
+    if (!headerName.equals(headerName.toLowerCase(Locale.ROOT))) {
       throw new IllegalArgumentException("Header name must be lowercase: " + headerName);
     }
     try {
@@ -101,7 +103,7 @@ final class HeaderMatchInput implements MatchInput {
 
     @Override
     public String typeUrl() {
-      return "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
+      return TYPE_URL;
     }
   }
 }

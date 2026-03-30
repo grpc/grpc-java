@@ -21,6 +21,7 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelVariableResolver;
+import java.util.Map;
 
 /**
  * Executes compiled CEL expressions that extract a string.
@@ -34,10 +35,10 @@ public final class CelStringExtractor {
 
   /**
    * Compiles the AST into a CelStringExtractor.
-   * Throws an Exception if validation or evaluation fails during compilation setup.
+   * Throws an Exception if evaluation fails during compilation setup.
    */
   public static CelStringExtractor compile(CelAbstractSyntaxTree ast) 
-      throws Exception {
+      throws CelEvaluationException {
     if (ast.getResultType() != SimpleType.STRING && ast.getResultType() != SimpleType.DYN) {
       throw new IllegalArgumentException(
           "CEL expression must evaluate to string, got: " + ast.getResultType());
@@ -55,9 +56,9 @@ public final class CelStringExtractor {
     Object result;
     if (input instanceof CelVariableResolver) {
       result = program.eval((CelVariableResolver) input);
-    } else if (input instanceof java.util.Map) {
+    } else if (input instanceof Map) {
       @SuppressWarnings("unchecked")
-      java.util.Map<String, ?> mapInput = (java.util.Map<String, ?>) input;
+      Map<String, ?> mapInput = (Map<String, ?>) input;
       result = program.eval(mapInput);
     } else {
       throw new CelEvaluationException(

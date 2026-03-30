@@ -16,7 +16,6 @@
 
 package io.grpc.xds.internal.matcher;
 
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import javax.annotation.Nullable;
 
 /**

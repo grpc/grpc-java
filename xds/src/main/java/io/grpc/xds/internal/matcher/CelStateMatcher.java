@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
-import com.github.xds.type.matcher.v3.CelMatcher; // Proto
 import com.github.xds.type.v3.CelExpression;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelProtoAbstractSyntaxTree;
@@ -27,9 +26,10 @@ import dev.cel.runtime.CelEvaluationException;
  * Matcher for CEL expressions handling xDS CEL Matcher extension.
  */
 final class CelStateMatcher implements Matcher {
-  private final io.grpc.xds.internal.matcher.CelMatcher compiledEndpoint;
+  private final CelMatcher compiledEndpoint;
+  static final String TYPE_URL = "type.googleapis.com/xds.type.matcher.v3.CelMatcher";
 
-  CelStateMatcher(io.grpc.xds.internal.matcher.CelMatcher compiledEndpoint) {
+  CelStateMatcher(CelMatcher compiledEndpoint) {
     this.compiledEndpoint = compiledEndpoint;
   }
 
@@ -51,8 +51,8 @@ final class CelStateMatcher implements Matcher {
     @Override
     public CelStateMatcher getMatcher(TypedExtensionConfig config) {
       try {
-        CelMatcher celProto = config.getTypedConfig()
-            .unpack(CelMatcher.class);
+        com.github.xds.type.matcher.v3.CelMatcher celProto = config.getTypedConfig()
+            .unpack(com.github.xds.type.matcher.v3.CelMatcher.class);
         if (!celProto.hasExprMatch()) {
           throw new IllegalArgumentException("CelMatcher must have expr_match");
         }
@@ -63,8 +63,7 @@ final class CelStateMatcher implements Matcher {
         CelAbstractSyntaxTree ast = 
             CelProtoAbstractSyntaxTree.fromCheckedExpr(
                 expr.getCelExprChecked()).getAst();
-        io.grpc.xds.internal.matcher.CelMatcher compiled = 
-            io.grpc.xds.internal.matcher.CelMatcher.compile(ast);
+        CelMatcher compiled = CelMatcher.compile(ast);
         
         return new CelStateMatcher(compiled);
       } catch (Exception e) {
@@ -74,7 +73,7 @@ final class CelStateMatcher implements Matcher {
 
     @Override
     public String typeUrl() {
-      return "type.googleapis.com/xds.type.matcher.v3.CelMatcher";
+      return TYPE_URL;
     }
   }
 }

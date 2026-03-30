@@ -27,7 +27,6 @@ import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
 import dev.cel.runtime.CelEvaluationException;
 import io.grpc.Metadata;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;

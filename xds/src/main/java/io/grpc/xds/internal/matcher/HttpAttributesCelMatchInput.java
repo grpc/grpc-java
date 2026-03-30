@@ -17,13 +17,14 @@
 package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 
 /**
  * MatchInput for extracting CEL environment from HTTP attributes.
  */
 final class HttpAttributesCelMatchInput implements MatchInput {
   static final HttpAttributesCelMatchInput INSTANCE = new HttpAttributesCelMatchInput();
+  static final String TYPE_URL =
+      "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
 
   private HttpAttributesCelMatchInput() {}
 
@@ -45,7 +46,7 @@ final class HttpAttributesCelMatchInput implements MatchInput {
 
     @Override
     public String typeUrl() {
-      return "type.googleapis.com/xds.type.matcher.v3.HttpAttributesCelMatchInput";
+      return TYPE_URL;
     }
   }
 }

@@ -36,7 +36,6 @@ import dev.cel.compiler.CelCompilerFactory;
 import dev.cel.expr.ParsedExpr;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -455,6 +454,6 @@ public class CelStateMatcherTest {
     PredicateEvaluator evaluator = PredicateEvaluator.fromProto(
         Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
         
-    assertThat(evaluator.evaluate(MatcherRunner.MatchContext.newBuilder().build())).isFalse();
+    assertThat(evaluator.evaluate(MatchContext.newBuilder().build())).isFalse();
   }
 }

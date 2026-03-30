@@ -21,7 +21,6 @@ import com.github.xds.type.matcher.v3.Matcher.MatcherList.Predicate;
 import com.github.xds.type.matcher.v3.StringMatcher;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -54,25 +53,7 @@ abstract class PredicateEvaluator {
       
       if (proto.hasValueMatch()) {
         Matchers.StringMatcher stringMatcher = fromStringMatcherProto(proto.getValueMatch());
-        this.matcher = new Matcher() {
-          @Override
-          public boolean match(Object value) {
-            if (value == null) {
-              return false;
-            }
-            if (!(value instanceof String)) {
-              throw new IllegalArgumentException(
-                  "StringMatcher expected a String input, but received: " 
-                  + value.getClass().getName());
-            }
-            return stringMatcher.matches((String) value);
-          }
-
-          @Override
-          public Class<?> inputType() {
-            return String.class;
-          }
-        };
+        this.matcher = new StringMatcherAdapter(stringMatcher);
       } else if (proto.hasCustomMatch()) {
         TypedExtensionConfig customConfig = proto.getCustomMatch();
         MatcherProvider provider = MatcherRegistry.getDefaultRegistry()
@@ -101,6 +82,32 @@ abstract class PredicateEvaluator {
     private static Matchers.StringMatcher fromStringMatcherProto(
         StringMatcher proto) {
       return MatcherParser.parseStringMatcher(proto);
+    }
+
+    private static final class StringMatcherAdapter implements Matcher {
+      private final Matchers.StringMatcher stringMatcher;
+
+      StringMatcherAdapter(Matchers.StringMatcher stringMatcher) {
+        this.stringMatcher = stringMatcher;
+      }
+
+      @Override
+      public boolean match(Object value) {
+        if (value == null) {
+          return false;
+        }
+        if (!(value instanceof String)) {
+          throw new IllegalArgumentException(
+              "StringMatcher expected a String input, but received: " 
+              + value.getClass().getName());
+        }
+        return stringMatcher.matches((String) value);
+      }
+
+      @Override
+      public Class<?> inputType() {
+        return String.class;
+      }
     }
   }
   

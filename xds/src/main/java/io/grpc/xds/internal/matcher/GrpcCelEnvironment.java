@@ -17,10 +17,12 @@
 package io.grpc.xds.internal.matcher;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableSet;
 import dev.cel.runtime.CelVariableResolver;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.AbstractMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -86,12 +88,10 @@ final class GrpcCelEnvironment implements CelVariableResolver {
     return s == null ? def : s;
   }
 
-  private static final class LazyRequestMap extends java.util.AbstractMap<String, Object> {
-    private static final java.util.Set<String> KNOWN_KEYS = 
-        com.google.common.collect.ImmutableSet.of(
-            "headers", "host", "id", "method", "path", "url_path", "query", "scheme", "protocol", 
-            "referer", "useragent", "time"
-        );
+  private static final class LazyRequestMap extends AbstractMap<String, Object> {
+    private static final Set<String> KNOWN_KEYS = ImmutableSet.of(
+        "headers", "host", "id", "method", "path", "url_path", "query", "scheme", "protocol",
+        "referer", "useragent", "time");
     private final GrpcCelEnvironment resolver;
 
     LazyRequestMap(GrpcCelEnvironment resolver) {
@@ -117,7 +117,7 @@ final class GrpcCelEnvironment implements CelVariableResolver {
     }
 
     @Override
-    public java.util.Set<String> keySet() {
+    public Set<String> keySet() {
       return KNOWN_KEYS;
     }
 
@@ -132,7 +132,7 @@ final class GrpcCelEnvironment implements CelVariableResolver {
     }
 
     @Override
-    public java.util.Set<Entry<String, Object>> entrySet() {
+    public Set<Entry<String, Object>> entrySet() {
       throw new UnsupportedOperationException("LazyRequestMap does not support entrySet");
     }
   }
