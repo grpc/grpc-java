@@ -43,13 +43,4 @@ final class CallExecutors {
     }
     return new SerializingExecutor(executor);
   }
-
-  /**
-   * Returns true if the executor is safeguarded (e.g. a {@link SerializingExecutor} or
-   * {@link SerializeReentrantCallsDirectExecutor}).
-   */
-  static boolean isSafeguarded(Executor executor) {
-    return executor instanceof SerializingExecutor
-        || executor instanceof SerializeReentrantCallsDirectExecutor;
-  }
 }
