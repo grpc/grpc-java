@@ -17,30 +17,41 @@
 package io.grpc.xds.internal.matcher;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
  * Registry for {@link MatchInputProvider}s.
  */
 public final class MatchInputRegistry {
-  private static final MatchInputRegistry DEFAULT_INSTANCE = new MatchInputRegistry();
+  private static MatchInputRegistry instance;
 
-  private final Map<String, MatchInputProvider> providers = new ConcurrentHashMap<>();
+  private final Map<String, MatchInputProvider> providers = new HashMap<>();
 
-  public static MatchInputRegistry getDefaultRegistry() {
-    return DEFAULT_INSTANCE;
+  private MatchInputRegistry() {}
+
+  public static synchronized MatchInputRegistry getDefaultRegistry() {
+    if (instance == null) {
+      instance = newRegistry().register(
+          new HeaderMatchInput.Provider(),
+          new HttpAttributesCelMatchInput.Provider()
+      );
+    }
+    return instance;
   }
 
   @VisibleForTesting
-  public MatchInputRegistry() {
-    register(new HeaderMatchInput.Provider());
-    register(new HttpAttributesCelMatchInput.Provider());
+  public static MatchInputRegistry newRegistry() {
+    return new MatchInputRegistry();
   }
 
-  public void register(MatchInputProvider provider) {
-    providers.put(provider.typeUrl(), provider);
+  @VisibleForTesting
+  public MatchInputRegistry register(MatchInputProvider... inputProviders) {
+    for (MatchInputProvider provider : inputProviders) {
+      providers.put(provider.typeUrl(), provider);
+    }
+    return this;
   }
 
   @Nullable

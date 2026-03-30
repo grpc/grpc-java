@@ -26,7 +26,6 @@ import com.google.common.io.BaseEncoding;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -290,8 +289,9 @@ public class UnifiedMatcherTest {
         .setOnNoMatch(Matcher.OnMatch.newBuilder()
             .setAction(TypedExtensionConfig.newBuilder().setName("action")))
         .build();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     List<TypedExtensionConfig> actions = 
-        MatcherRunner.checkMatch(proto, MatchContext.newBuilder().build());
+        MatcherRunner.checkMatch(matcher, MatchContext.newBuilder().build());
     assertThat(actions).hasSize(1);
     assertThat(actions.get(0).getName()).isEqualTo("action");
   }
@@ -300,8 +300,9 @@ public class UnifiedMatcherTest {
   public void matcherRunner_checkMatch_returnsNullOnNoMatch() {
     Matcher proto = Matcher.newBuilder()
         .build();
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     List<TypedExtensionConfig> actions = 
-        MatcherRunner.checkMatch(proto, MatchContext.newBuilder().build());
+        MatcherRunner.checkMatch(matcher, MatchContext.newBuilder().build());
     assertThat(actions).isNull();
   }
 

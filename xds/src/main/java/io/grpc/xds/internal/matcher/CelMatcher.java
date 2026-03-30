@@ -20,6 +20,8 @@ import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
+import dev.cel.runtime.CelVariableResolver;
+import java.util.Map;
 
 /**
  * Executes compiled CEL expressions.
@@ -33,10 +35,10 @@ public final class CelMatcher {
 
   /**
    * Compiles the AST into a CelMatcher.
-   * Throws an Exception if validation or evaluation fails during compilation setup.
+   * Throws an Exception if evaluation fails during compilation setup.
    */
   public static CelMatcher compile(CelAbstractSyntaxTree ast)
-      throws Exception { 
+      throws CelEvaluationException {
     // CelEvaluationException -> inside cel-runtime -> Allowed in production signatures
     // CelValidationException -> inside cel-compiler -> Forbidden in production signatures
     if (ast.getResultType() != SimpleType.BOOL) {
@@ -53,11 +55,11 @@ public final class CelMatcher {
    */
   public boolean match(Object input) throws CelEvaluationException {
     Object result;
-    if (input instanceof dev.cel.runtime.CelVariableResolver) {
-      result = program.eval((dev.cel.runtime.CelVariableResolver) input);
-    } else if (input instanceof java.util.Map) {
+    if (input instanceof CelVariableResolver) {
+      result = program.eval((CelVariableResolver) input);
+    } else if (input instanceof Map) {
       @SuppressWarnings("unchecked")
-      java.util.Map<String, ?> mapInput = (java.util.Map<String, ?>) input;
+      Map<String, ?> mapInput = (Map<String, ?>) input;
       result = program.eval(mapInput);
     } else {
       throw new CelEvaluationException(

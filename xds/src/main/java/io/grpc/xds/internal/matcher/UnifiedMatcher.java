@@ -18,7 +18,6 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 

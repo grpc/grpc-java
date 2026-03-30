@@ -18,7 +18,7 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
-import io.grpc.xds.internal.matcher.MatcherRunner.MatchContext;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 /**
@@ -29,7 +29,7 @@ final class OnMatch {
   @Nullable private final TypedExtensionConfig action;
   final boolean keepMatching;
   
-  OnMatch(Matcher.OnMatch proto, java.util.function.Predicate<String> actionValidator) {
+  OnMatch(Matcher.OnMatch proto, Predicate<String> actionValidator) {
     this.keepMatching = proto.getKeepMatching();
     if (proto.hasMatcher()) {
       this.nestedMatcher = UnifiedMatcher.fromProto(proto.getMatcher(), actionValidator);
