@@ -61,12 +61,8 @@ import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.stub.ClientCalls;
-import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
-import io.grpc.testing.protobuf.SimpleRequest;
-import io.grpc.testing.protobuf.SimpleResponse;
-import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
@@ -2038,16 +2034,5 @@ public class OpenTelemetryMetricsModuleTest {
   private static List<MetricData> sortByName(List<MetricData> metrics) {
     metrics.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
     return metrics;
-  }
-
-  /**
-   * A simple service implementation for the E2E test.
-   */
-  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
-    @Override
-    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
-      responseObserver.onNext(SimpleResponse.getDefaultInstance());
-      responseObserver.onCompleted();
-    }
   }
 }
