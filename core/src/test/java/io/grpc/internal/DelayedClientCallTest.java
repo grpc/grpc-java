@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -36,8 +37,6 @@ import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.fail;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
@@ -170,8 +169,8 @@ public class DelayedClientCallTest {
   @Test
   @SuppressWarnings("unchecked")
   public void cancelThenSetCall() {
-    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
@@ -186,8 +185,8 @@ public class DelayedClientCallTest {
   @Test
   @SuppressWarnings("unchecked")
   public void setCallThenCancel() {
-    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     Runnable r = delayedClientCall.setCall(mockRealCall);

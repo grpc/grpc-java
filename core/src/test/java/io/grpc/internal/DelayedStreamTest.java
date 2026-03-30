@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -501,8 +500,10 @@ public class DelayedStreamTest {
     assertThat(statusCaptor.getValue().getCause()).isSameInstanceAs(error);
 
     verify(realStream).start(listenerCaptor.capture());
-    listenerCaptor.getValue().closed(statusCaptor.getValue(), RpcProgress.PROCESSED, new Metadata());
-    verify(listener).closed(same(statusCaptor.getValue()), any(RpcProgress.class), any(Metadata.class));
+    listenerCaptor.getValue().closed(
+        statusCaptor.getValue(), RpcProgress.PROCESSED, new Metadata());
+    verify(listener).closed(
+        same(statusCaptor.getValue()), any(RpcProgress.class), any(Metadata.class));
   }
 
   @Test
