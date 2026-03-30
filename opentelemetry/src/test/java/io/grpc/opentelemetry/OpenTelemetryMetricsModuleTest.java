@@ -61,8 +61,12 @@ import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.stub.ClientCalls;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
@@ -517,7 +521,7 @@ public class OpenTelemetryMetricsModuleTest {
         enabledMetricsMap, disableDefaultMetrics);
     OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
-        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(module, target, CALL_OPTIONS,
             method.getFullMethodName(), emptyList(), Context.root());
     ClientStreamTracer tracer =
         callAttemptsTracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -1536,7 +1540,7 @@ public class OpenTelemetryMetricsModuleTest {
         emptyList());
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
         new CallAttemptsTracerFactory(
-            module, target, callOptions, method.getFullMethodName(), emptyList());
+            module, target, callOptions, method.getFullMethodName(), emptyList(), Context.root());
 
     ClientStreamTracer.StreamInfo streamInfo =
         STREAM_INFO.toBuilder().setCallOptions(callOptions).build();
