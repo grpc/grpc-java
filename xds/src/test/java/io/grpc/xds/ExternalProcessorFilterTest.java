@@ -2,6 +2,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
@@ -41,6 +42,7 @@ import io.grpc.util.MutableHandlerRegistry;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
 import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -157,22 +159,23 @@ public class ExternalProcessorFilterTest {
 
     this.provider = new ExternalProcessorFilter.Provider();
     this.provider.newInstance("ext-proc");
-    
-    Bootstrapper.BootstrapInfo bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
-    
-    // Create an AllowedGrpcServices mock
-    AllowedGrpcServices allowedServices = 
+
+    AllowedGrpcServices allowedServices =
         AllowedGrpcServices.create(
-            ImmutableMap.of("in-process:" + extProcServerName, 
+            ImmutableMap.of("in-process:" + extProcServerName,
                 AllowedGrpcService.builder()
                     .configuredChannelCredentials(ConfiguredChannelCredentials.create(
                         InsecureChannelCredentials.create(), new InProcessChannelCredsConfig()))
                     .build()));
-                    
-    Mockito.when(bootstrapInfo.allowedGrpcServices()).thenReturn(Optional.of(allowedServices));
-    
-    Bootstrapper.ServerInfo serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
-    Mockito.when(serverInfo.isTrustedXdsServer()).thenReturn(false);
+
+    Bootstrapper.ServerInfo serverInfo = Bootstrapper.ServerInfo.create(
+        "xds-server", InsecureChannelCredentials.create());
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = Bootstrapper.BootstrapInfo.builder()
+        .servers(ImmutableList.of(serverInfo))
+        .node(Node.newBuilder().build())
+        .allowedGrpcServices(Optional.of(allowedServices))
+        .build();
 
     this.filterContext = Filter.FilterContext.builder()
         .bootstrapInfo(bootstrapInfo)
@@ -205,7 +208,7 @@ public class ExternalProcessorFilterTest {
 
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         this.provider.parseFilterConfig(Any.pack(externalProcessor), filterContext);
-        
+
     assertThat(configOrError.errorDetail).isNull();
     return configOrError.config;
   }
@@ -213,11 +216,11 @@ public class ExternalProcessorFilterTest {
   @Test
   public void requestHeadersMutated() throws Exception {
     ExternalProcessorFilterConfig filterConfig = createFilterConfig();
-    
+
     CachedChannelManager testChannelManager = new CachedChannelManager(config ->
         grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build())
     );
-    
+
     ClientInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, testChannelManager, scheduler);
 
     // Register as INTERNAL interceptor
@@ -229,7 +232,7 @@ public class ExternalProcessorFilterTest {
 
     // Data Plane Server
     AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
-    
+
     ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
             (request, responseObserver) -> {
@@ -249,7 +252,7 @@ public class ExternalProcessorFilterTest {
             return next.startCall(call, headers);
           }
         });
-        
+
     dataPlaneServiceRegistry.addService(interceptedServiceDef);
 
     // Ext-Proc Server
@@ -261,7 +264,7 @@ public class ExternalProcessorFilterTest {
           public void onNext(ProcessingRequest request) {
             if (request.hasRequestHeaders()) {
               try { Thread.sleep(50); } catch (InterruptedException e) {}
-              
+
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
@@ -277,7 +280,7 @@ public class ExternalProcessorFilterTest {
                       .build())
                   .build());
             } else if (request.hasRequestBody()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
+              responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestBody(BodyResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
                           .setBodyMutation(BodyMutation.newBuilder()
@@ -287,13 +290,13 @@ public class ExternalProcessorFilterTest {
                       .build())
                   .build());
             } else if (request.hasResponseHeaders()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
+              responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder().build())
                       .build())
                   .build());
             } else if (request.hasResponseBody()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
+              responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseBody(BodyResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
                           .setBodyMutation(BodyMutation.newBuilder()
@@ -303,7 +306,7 @@ public class ExternalProcessorFilterTest {
                       .build())
                   .build());
             } else if (request.hasResponseTrailers()) {
-               responseObserver.onNext(ProcessingResponse.newBuilder()
+              responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseTrailers(TrailersResponse.newBuilder().build())
                   .build());
             }
@@ -319,8 +322,8 @@ public class ExternalProcessorFilterTest {
     CountDownLatch latch = new CountDownLatch(1);
     AtomicReference<String> replyRef = new AtomicReference<>();
     AtomicReference<Throwable> errorRef = new AtomicReference<>();
-    
-    ClientCalls.asyncUnaryCall(interceptedChannel.newCall(METHOD_SAY_HELLO, CallOptions.DEFAULT), "World", 
+
+    ClientCalls.asyncUnaryCall(interceptedChannel.newCall(METHOD_SAY_HELLO, CallOptions.DEFAULT), "World",
         new StreamObserver<String>() {
           @Override public void onNext(String value) { replyRef.set(value); }
           @Override public void onError(Throwable t) { errorRef.set(t); latch.countDown(); }
@@ -329,7 +332,7 @@ public class ExternalProcessorFilterTest {
 
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
     if (errorRef.get() != null) {
-        throw new RuntimeException(errorRef.get());
+      throw new RuntimeException(errorRef.get());
     }
 
     assertThat(replyRef.get()).isEqualTo("Hello World");

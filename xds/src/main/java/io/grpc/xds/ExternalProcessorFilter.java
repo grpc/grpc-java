@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
@@ -20,6 +21,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -29,10 +31,12 @@ import io.grpc.xds.internal.grpcservice.CachedChannelManager;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
+import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -50,6 +54,7 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   static final class Provider implements Filter.Provider {
+    private GrpcServiceXdsContextProvider grpcServiceXdsContextProvider;
     @Override
     public String[] typeUrls() {
       return new String[]{TYPE_URL};
@@ -61,13 +66,13 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
-    public ExternalProcessorFilter newInstance(String name) {
+    public ExternalProcessorFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
+      this.grpcServiceXdsContextProvider = grpcServiceXdsContextProvider;
       return new ExternalProcessorFilter(name);
     }
 
     @Override
-    public ConfigOrError<ExternalProcessorFilterConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+    public ConfigOrError<ExternalProcessorFilterConfig> parseFilterConfig(Message rawProtoMessage) {
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }
@@ -87,8 +92,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       try {
-        GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
-            externalProcessor.getGrpcService(), context.bootstrapInfo(), context.serverInfo());
+        GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(externalProcessor.getGrpcService(), grpcServiceXdsContextProvider);
         return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(externalProcessor, grpcServiceConfig));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
@@ -96,9 +100,8 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
-      return parseFilterConfig(rawProtoMessage, context);
+    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      return parseFilterConfig(rawProtoMessage);
     }
   }
 
@@ -156,9 +159,11 @@ public class ExternalProcessorFilter implements Filter {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
+      Executor callExecutor = callOptions.getExecutor() != null ? callOptions.getExecutor() : MoreExecutors.directExecutor();
+
       ExternalProcessorGrpc.ExternalProcessorStub stub = ExternalProcessorGrpc.newStub(
               cachedChannelManager.getChannel(filterConfig.grpcServiceConfig))
-          .withExecutor(callOptions.getExecutor());
+          .withExecutor(callExecutor);
 
       if (filterConfig.grpcServiceConfig.timeout() != null && filterConfig.grpcServiceConfig.timeout().isPresent()) {
         long timeoutSeconds = filterConfig.grpcServiceConfig.timeout().get().getSeconds();
@@ -206,7 +211,7 @@ public class ExternalProcessorFilter implements Filter {
       // Create a local subclass instance to buffer outbound actions
       ExtProcDelayedCall<InputStream, InputStream> delayedCall =
           new ExtProcDelayedCall<>(
-              callOptions.getExecutor(), scheduler, callOptions.getDeadline());
+              callExecutor, scheduler, callOptions.getDeadline());
 
       ExtProcClientCall extProcCall = new ExtProcClientCall(delayedCall, rawCall, stub, config);
 
@@ -485,6 +490,9 @@ public class ExternalProcessorFilter implements Filter {
                   extProcClientCallRequestObserver.onCompleted();
                 }
               }
+            // For robustness. For any internal processing failure make sure the internal state
+            // machine is notified and the dataplane call is properly cancelled (or failed-open if
+            // configured)
             } catch (Throwable t) {
               onError(t);
             }
