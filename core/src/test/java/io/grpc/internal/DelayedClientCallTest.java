@@ -36,6 +36,7 @@ import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import static org.junit.Assert.fail;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
@@ -287,7 +288,7 @@ public class DelayedClientCallTest {
 
     try {
       runnable.run();
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }
@@ -298,7 +299,7 @@ public class DelayedClientCallTest {
     // Verify it transitioned to passThrough by showing it forwards.
     try {
       delayedListener.onReady();
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }

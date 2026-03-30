@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -527,7 +528,7 @@ public class DelayedStreamTest {
 
     try {
       runnable.run();
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }
@@ -539,7 +540,7 @@ public class DelayedStreamTest {
     // If it is passThrough, it will forward to the listener, which we know throws.
     try {
       delayedListener.onReady();
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }
