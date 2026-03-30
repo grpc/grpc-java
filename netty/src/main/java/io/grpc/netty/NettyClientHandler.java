@@ -315,6 +315,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.authority = authority;
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttributes).build();
+    this.tcpMetrics = new TcpMetrics(metricRecorder);
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
@@ -357,7 +358,6 @@ class NettyClientHandler extends AbstractNettyHandler {
         }
       }
     });
-    this.tcpMetrics = new TcpMetrics(metricRecorder);
   }
 
   /**
