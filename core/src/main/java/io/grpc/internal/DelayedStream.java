@@ -172,6 +172,7 @@ class DelayedStream implements ClientStream {
     assert !passThrough;
     List<Runnable> toRun = new ArrayList<>();
     DelayedStreamListener delayedListener = null;
+    drainOut:
     while (true) {
       synchronized (this) {
         if (pendingCalls.isEmpty()) {
@@ -189,8 +190,18 @@ class DelayedStream implements ClientStream {
       }
       for (Runnable runnable : toRun) {
         // Must not call transport while lock is held to prevent deadlocks.
-        // TODO(ejona): exception handling
-        runnable.run();
+        try {
+          runnable.run();
+        } catch (Throwable t) {
+          Status status = Status.fromThrowable(t).withDescription("Failed to drain pending calls");
+          realStream.cancel(status);
+          synchronized (this) {
+            pendingCalls = null;
+            passThrough = true;
+            delayedListener = this.delayedListener;
+          }
+          break drainOut;
+        }
       }
       toRun.clear();
     }
@@ -525,6 +536,7 @@ class DelayedStream implements ClientStream {
     public void drainPendingCallbacks() {
       assert !passThrough;
       List<Runnable> toRun = new ArrayList<>();
+      drainOut:
       while (true) {
         synchronized (this) {
           if (pendingCallbacks.isEmpty()) {
@@ -541,8 +553,15 @@ class DelayedStream implements ClientStream {
         }
         for (Runnable runnable : toRun) {
           // Avoid calling listener while lock is held to prevent deadlocks.
-          // TODO(ejona): exception handling
-          runnable.run();
+          try {
+            runnable.run();
+          } catch (Throwable t) {
+            synchronized (this) {
+              pendingCallbacks = null;
+              passThrough = true;
+            }
+            throw t;
+          }
         }
         toRun.clear();
       }

@@ -472,6 +472,36 @@ public class DelayedStreamTest {
         .matches("\\[test_op_delay=[0-9]+ns, remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
+  @Test
+  public void drainPendingCallFails() {
+    stream.start(listener);
+    stream.request(1);
+    final RuntimeException error = new RuntimeException("fail");
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(realStream).request(1);
+
+    Runnable runnable = stream.setStream(realStream);
+    assertNotNull(runnable);
+    try {
+      runnable.run();
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(realStream).cancel(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNKNOWN);
+    assertThat(statusCaptor.getValue().getCause()).isSameInstanceAs(error);
+
+    verify(realStream).start(listenerCaptor.capture());
+    listenerCaptor.getValue().closed(statusCaptor.getValue(), RpcProgress.PROCESSED, new Metadata());
+    verify(listener).closed(same(statusCaptor.getValue()), any(RpcProgress.class), any(Metadata.class));
+  }
+
   private void callMeMaybe(Runnable r) {
     if (r != null) {
       r.run();

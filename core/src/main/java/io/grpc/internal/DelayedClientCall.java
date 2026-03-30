@@ -294,6 +294,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     assert !passThrough;
     List<Runnable> toRun = new ArrayList<>();
     DelayedListener<RespT> delayedListener ;
+    drainOut:
     while (true) {
       synchronized (this) {
         if (pendingRunnables.isEmpty()) {
@@ -311,8 +312,18 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
       for (Runnable runnable : toRun) {
         // Must not call transport while lock is held to prevent deadlocks.
-        // TODO(ejona): exception handling
-        runnable.run();
+        try {
+          runnable.run();
+        } catch (Throwable t) {
+          Status status = Status.fromThrowable(t).withDescription("Failed to drain pending calls");
+          realCall.cancel(status.getDescription(), status.getCause());
+          synchronized (this) {
+            pendingRunnables = null;
+            passThrough = true;
+            delayedListener = this.delayedListener;
+          }
+          break drainOut;
+        }
       }
       toRun.clear();
     }
@@ -519,6 +530,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     void drainPendingCallbacks() {
       assert !passThrough;
       List<Runnable> toRun = new ArrayList<>();
+      drainOut:
       while (true) {
         synchronized (this) {
           if (pendingCallbacks.isEmpty()) {
@@ -535,8 +547,15 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
         for (Runnable runnable : toRun) {
           // Avoid calling listener while lock is held to prevent deadlocks.
-          // TODO(ejona): exception handling
-          runnable.run();
+          try {
+            runnable.run();
+          } catch (Throwable t) {
+            synchronized (this) {
+              pendingCallbacks = null;
+              passThrough = true;
+            }
+            throw t;
+          }
         }
         toRun.clear();
       }

@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -227,6 +228,32 @@ public class DelayedClientCallTest {
     r.run();
     assertThat(contextKey.get(startContext.get())).isEqualTo(goldenValue);
     assertThat(contextKey.get(readyContext.get())).isEqualTo(goldenValue);
+  }
+
+  @Test
+  public void drainPendingCallFails() {
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+
+    final RuntimeException error = new RuntimeException("fail");
+    org.mockito.Mockito.doAnswer(new org.mockito.stubbing.Answer<Void>() {
+      @Override
+      public Void answer(org.mockito.invocation.InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(mockRealCall).request(1);
+
+    Runnable runnable = delayedClientCall.setCall(mockRealCall);
+    assertThat(runnable).isNotNull();
+    try {
+      runnable.run();
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    verify(mockRealCall).cancel(eq("Failed to drain pending calls"), same(error));
   }
 
   private void callMeMaybe(Runnable r) {
