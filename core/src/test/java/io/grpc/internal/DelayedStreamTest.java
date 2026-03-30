@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -474,6 +475,7 @@ public class DelayedStreamTest {
   }
 
   @Test
+  @SuppressWarnings({"unchecked", "MissingFail"})
   public void drainPendingCallFails() {
     stream.start(listener);
     stream.request(1);
@@ -504,6 +506,7 @@ public class DelayedStreamTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void drainPendingCallbacksFails() {
     stream.start(listener);
     final RuntimeException error = new RuntimeException("fail");
@@ -544,6 +547,7 @@ public class DelayedStreamTest {
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }
+
     // Verify it was called twice (once during drain, once just now)
     verify(listener, times(2)).onReady();
   }

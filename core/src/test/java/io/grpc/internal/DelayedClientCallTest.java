@@ -36,6 +36,7 @@ import io.grpc.ForwardingTestUtil;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -233,6 +234,7 @@ public class DelayedClientCallTest {
   }
 
   @Test
+  @SuppressWarnings("MissingFail")
   public void drainPendingCallFails() {
     DelayedClientCall<String, Integer> delayedClientCall =
         new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
@@ -259,6 +261,7 @@ public class DelayedClientCallTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void drainPendingCallbacksFails() {
     DelayedClientCall<String, Integer> delayedClientCall =
         new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
@@ -303,6 +306,7 @@ public class DelayedClientCallTest {
     } catch (RuntimeException e) {
       assertThat(e).isSameInstanceAs(error);
     }
+
     // Verify it was called twice (once during drain, once just now)
     verify(listener, times(2)).onReady();
   }
