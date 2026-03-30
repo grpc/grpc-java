@@ -502,6 +502,51 @@ public class DelayedStreamTest {
     verify(listener).closed(same(statusCaptor.getValue()), any(RpcProgress.class), any(Metadata.class));
   }
 
+  @Test
+  public void drainPendingCallbacksFails() {
+    stream.start(listener);
+    final RuntimeException error = new RuntimeException("fail");
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(listener).onReady();
+
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        ClientStreamListener delayedListener = invocation.getArgument(0);
+        delayedListener.onReady();
+        return null;
+      }
+    }).when(realStream).start(any(ClientStreamListener.class));
+
+    Runnable runnable = stream.setStream(realStream);
+    assertNotNull(runnable);
+
+    try {
+      runnable.run();
+      org.junit.Assert.fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    verify(realStream).start(listenerCaptor.capture());
+    ClientStreamListener delayedListener = listenerCaptor.getValue();
+
+    // Verify it transitioned to passThrough. If it didn't, this might NPE or buffer.
+    // If it is passThrough, it will forward to the listener, which we know throws.
+    try {
+      delayedListener.onReady();
+      org.junit.Assert.fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+    // Verify it was called twice (once during drain, once just now)
+    verify(listener, times(2)).onReady();
+  }
+
   private void callMeMaybe(Runnable r) {
     if (r != null) {
       r.run();
