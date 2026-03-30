@@ -32,6 +32,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -165,7 +166,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     @Override
     public InternalServer buildClientTransportServers(
         List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-        io.grpc.MetricRecorder metricRecorder) {
+        MetricRecorder metricRecorder) {
       return buildTransportServers(streamTracerFactories, metricRecorder);
     }
   }
@@ -707,7 +708,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   @VisibleForTesting
   NettyServer buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
-      io.grpc.MetricRecorder metricRecorder) {
+      MetricRecorder metricRecorder) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(

@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -61,10 +62,14 @@ public class TcpMetricsTest {
 
   @Before
   public void setUp() throws Exception {
-    TcpMetrics.epollInfo = TcpMetrics.loadEpollInfo();
     FakeEpollTcpInfo dummyInfo = new FakeEpollTcpInfo();
     channel = new ConfigurableFakeWithTcpInfo(dummyInfo);
     metrics = new TcpMetrics(metricRecorder);
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    TcpMetrics.epollInfo = TcpMetrics.loadEpollInfo();
   }
 
   @Test
@@ -108,7 +113,7 @@ public class TcpMetricsTest {
   public void tracker_recordTcpInfo_reflectionSuccess() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -138,7 +143,7 @@ public class TcpMetricsTest {
   public void tracker_periodicRecord_doesNotRecordRecurringRetransmits() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -176,7 +181,7 @@ public class TcpMetricsTest {
   public void tracker_channelInactive_recordsRecurringRetransmits_raw_notDelta() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -220,7 +225,7 @@ public class TcpMetricsTest {
   public void tracker_periodicRecord_reportsDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -274,7 +279,7 @@ public class TcpMetricsTest {
   public void tracker_periodicRecord_doesNotReportZeroDeltaForTotalRetrans() throws Exception {
     MetricRecorder recorder = mock(MetricRecorder.class);
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -362,7 +367,7 @@ public class TcpMetricsTest {
     MetricRecorder recorder = mock(MetricRecorder.class);
 
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -548,7 +553,7 @@ public class TcpMetricsTest {
   @Test
   public void channelActive_schedulesReportTimer() throws Exception {
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),
@@ -587,7 +592,7 @@ public class TcpMetricsTest {
   @Test
   public void channelInactive_cancelsReportTimer() throws Exception {
     TcpMetrics.epollInfo = new TcpMetrics.EpollInfo(
-        ConfigurableFakeWithTcpInfo.class, FakeEpollTcpInfo.class,
+        ConfigurableFakeWithTcpInfo.class,
         FakeEpollTcpInfo.class.getConstructor(),
         ConfigurableFakeWithTcpInfo.class.getMethod("tcpInfo", FakeEpollTcpInfo.class),
         FakeEpollTcpInfo.class.getMethod("totalRetrans"),

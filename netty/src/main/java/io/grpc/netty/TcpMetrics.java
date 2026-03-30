@@ -42,7 +42,6 @@ final class TcpMetrics {
 
   static final class EpollInfo {
     final Class<?> channelClass;
-    final Class<?> infoClass;
     final java.lang.reflect.Constructor<?> infoConstructor;
     final Method tcpInfo;
     final Method totalRetrans;
@@ -51,14 +50,12 @@ final class TcpMetrics {
 
     EpollInfo(
         Class<?> channelClass,
-        Class<?> infoClass,
         java.lang.reflect.Constructor<?> infoConstructor,
         Method tcpInfo,
         Method totalRetrans,
         Method retransmits,
         Method rtt) {
       this.channelClass = channelClass;
-      this.infoClass = infoClass;
       this.infoConstructor = infoConstructor;
       this.tcpInfo = tcpInfo;
       this.totalRetrans = totalRetrans;
@@ -78,7 +75,6 @@ final class TcpMetrics {
         Class<?> infoClass = Class.forName("io.netty.channel.epoll.EpollTcpInfo");
         return new EpollInfo(
             channelClass,
-            infoClass,
             infoClass.getDeclaredConstructor(),
             channelClass.getMethod("tcpInfo", infoClass),
             infoClass.getMethod("totalRetrans"),
