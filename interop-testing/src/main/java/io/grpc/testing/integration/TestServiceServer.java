@@ -75,7 +75,7 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
-  private boolean setMcsLimit = false;
+  private int mcsLimit = -1;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -119,8 +119,8 @@ public class TestServiceServer {
           usage = true;
           break;
         }
-      } else if ("set_max_concurrent_streams_limit".equals(key)) {
-        setMcsLimit = Boolean.parseBoolean(value);
+      } else if ("max_concurrent_streams_limit".equals(key)) {
+        mcsLimit = Integer.parseInt(value);
         // TODO: Make Netty server builder usable for IPV6 as well (not limited to MCS handling)
         addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
       } else {
@@ -146,8 +146,8 @@ public class TestServiceServer {
               + "\n                        for testing. Only effective when --use_alts=true."
               + "\n  --address_type=IPV4|IPV6|IPV4_IPV6"
               + "\n                        What type of addresses to listen on. Default IPV4_IPV6"
-              + "\n  --set_max_concurrent_streams_limit"
-              + "\n                        Whether to set the maximum concurrent streams limit"
+              + "\n  --max_concurrent_streams_limit=LIMIT"
+              + "\n                        Set the maximum concurrent streams limit"
       );
       System.exit(1);
     }
@@ -195,10 +195,8 @@ public class TestServiceServer {
         if (v4Address != null && !v4Address.equals(localV4Address)) {
           ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
         }
-        if (setMcsLimit) {
-          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(2);
-          System.out.println("TestServiceServer.start set mcs limit to 2 in netty server builder.");
-          System.out.flush();
+        if (mcsLimit != -1) {
+          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(mcsLimit);
         }
         break;
       case IPV6:
