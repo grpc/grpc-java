@@ -68,15 +68,15 @@ public class CachedChannelManagerTest {
   private GrpcServiceConfig buildConfig(String target, String credsType) {
     ChannelCredsConfig credsConfig = mock(ChannelCredsConfig.class);
     when(credsConfig.type()).thenReturn(credsType);
-    
+
     ConfiguredChannelCredentials creds = ConfiguredChannelCredentials.create(
         mock(io.grpc.ChannelCredentials.class), credsConfig);
-        
+
     GoogleGrpcConfig googleGrpc = GoogleGrpcConfig.builder()
         .target(target)
         .configuredChannelCredentials(creds)
         .build();
-        
+
     return GrpcServiceConfig.builder()
         .googleGrpc(googleGrpc)
         .initialMetadata(ImmutableList.of())
@@ -120,4 +120,44 @@ public class CachedChannelManagerTest {
 
     verify(mockChannel1).shutdown();
   }
+
+  @Test
+  public void getChannel_afterClose_throwsException() {
+    when(mockCreator.apply(config1)).thenReturn(mockChannel1);
+
+    manager.getChannel(config1);
+    manager.close();
+
+    try {
+      manager.getChannel(config1);
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("CachedChannelManager is closed");
+    }
+  }
+
+  @Test
+  public void constructor_defaultCreatesChannel() {
+    CachedChannelManager defaultManager = new CachedChannelManager();
+    io.grpc.ChannelCredentials creds = io.grpc.InsecureChannelCredentials.create();
+    ChannelCredsConfig credsConfig = mock(ChannelCredsConfig.class);
+    when(credsConfig.type()).thenReturn("insecure");
+    ConfiguredChannelCredentials configuredCreds =
+        ConfiguredChannelCredentials.create(creds, credsConfig);
+    GoogleGrpcConfig googleGrpc = GoogleGrpcConfig.builder()
+        .target("localhost:8080")
+        .configuredChannelCredentials(configuredCreds)
+        .build();
+    GrpcServiceConfig config = GrpcServiceConfig.builder()
+        .googleGrpc(googleGrpc)
+        .initialMetadata(ImmutableList.of())
+        .build();
+
+    ManagedChannel channel = defaultManager.getChannel(config);
+    assertThat(channel).isNotNull();
+    
+    channel.shutdownNow();
+    defaultManager.close();
+  }
+
 }
