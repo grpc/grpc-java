@@ -245,7 +245,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
         if (whetherSendClientSocketAddressInResponse(request)) {
           responseObserver.onNext(
               StreamingOutputCallResponse.newBuilder()
-                  .setClientSocketAddress(PEER_ADDRESS_CONTEXT_KEY.get().toString())
+                  .setPeerSocketAddress(PEER_ADDRESS_CONTEXT_KEY.get().toString())
                   .build());
           return;
         }
@@ -256,7 +256,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
         Iterator<ResponseParameters> responseParametersIterator =
             request.getResponseParametersList().iterator();
         while (responseParametersIterator.hasNext()) {
-          if (responseParametersIterator.next().getSendClientSocketAddressInResponse().getValue()) {
+          if (responseParametersIterator.next().getFillPeerSocketAddress().getValue()) {
             return true;
           }
         }
