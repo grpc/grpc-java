@@ -1020,8 +1020,9 @@ public class TestServiceClient {
           .build();
 
       final int retryLimit = 5;
+      final Object lastItem = new Object();
       StreamingOutputCallResponseObserver streamingOutputCallResponseObserver =
-          new StreamingOutputCallResponseObserver();
+          new StreamingOutputCallResponseObserver(lastItem);
       StreamObserver<StreamingOutputCallRequest> streamObserver =
           asyncStub.fullDuplexCall(streamingOutputCallResponseObserver);
 
@@ -1054,7 +1055,7 @@ public class TestServiceClient {
       }
       assertThat(i).isLessThan(retryLimit);
       streamObserver.onCompleted();
-      assertThat(streamingOutputCallResponseObserver.verifiedCompleted()).isTrue();
+      assertThat(streamingOutputCallResponseObserver.take()).isSameInstanceAs(lastItem);
     }
 
     @Override
@@ -1084,8 +1085,12 @@ public class TestServiceClient {
 
     class StreamingOutputCallResponseObserver implements
         StreamObserver<StreamingOutputCallResponse> {
-      private final Object lastItem = new Object();
+      private final Object lastItem;
       private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+
+      public StreamingOutputCallResponseObserver(Object lastItem) {
+        this.lastItem = lastItem;
+      }
 
       @Override
       public void onNext(StreamingOutputCallResponse value) {
@@ -1105,59 +1110,56 @@ public class TestServiceClient {
       Object take() throws InterruptedException {
         return queue.take();
       }
-
-      boolean verifiedCompleted() throws InterruptedException {
-        return queue.take() == lastItem;
-      }
     }
 
     public void testMcs(TestServiceGrpc.TestServiceStub asyncStub) throws Exception {
+      final Object lastItem = new Object();
       StreamingOutputCallResponseObserver responseObserver1 =
-          new StreamingOutputCallResponseObserver();
+          new StreamingOutputCallResponseObserver(lastItem);
       StreamObserver<StreamingOutputCallRequest> streamObserver1 =
           asyncStub.fullDuplexCall(responseObserver1);
       StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
           .addResponseParameters(ResponseParameters.newBuilder()
-              .setSendClientSocketAddressInResponse(
+              .setFillPeerSocketAddress(
                   Messages.BoolValue.newBuilder().setValue(true).build())
               .build())
           .build();
       streamObserver1.onNext(request);
       Object responseObj = responseObserver1.take();
       StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
-      String clientSocketAddressInCall1 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall1 = callResponse.getPeerSocketAddress();
       assertThat(clientSocketAddressInCall1).isNotEmpty();
 
       StreamingOutputCallResponseObserver responseObserver2 =
-          new StreamingOutputCallResponseObserver();
+          new StreamingOutputCallResponseObserver(lastItem);
       StreamObserver<StreamingOutputCallRequest> streamObserver2 =
           asyncStub.fullDuplexCall(responseObserver2);
       streamObserver2.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver2.take();
-      String clientSocketAddressInCall2 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall2 = callResponse.getPeerSocketAddress();
 
       assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
 
       // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
       // connection to be created in the same subchannel and not get queued.
       StreamingOutputCallResponseObserver responseObserver3 =
-          new StreamingOutputCallResponseObserver();
+          new StreamingOutputCallResponseObserver(lastItem);
       StreamObserver<StreamingOutputCallRequest> streamObserver3 =
           asyncStub.fullDuplexCall(responseObserver3);
       streamObserver3.onNext(request);
       callResponse = (StreamingOutputCallResponse) responseObserver3.take();
-      String clientSocketAddressInCall3 = callResponse.getClientSocketAddress();
+      String clientSocketAddressInCall3 = callResponse.getPeerSocketAddress();
 
       // This assertion is currently failing because connection scaling when MCS limit has been
       // reached is not yet implemented in gRPC Java.
       assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
 
       streamObserver1.onCompleted();
-      assertThat(responseObserver1.verifiedCompleted()).isTrue();
       streamObserver2.onCompleted();
-      assertThat(responseObserver2.verifiedCompleted()).isTrue();
       streamObserver3.onCompleted();
-      assertThat(responseObserver3.verifiedCompleted()).isTrue();
+      assertThat(responseObserver1.take()).isSameInstanceAs(lastItem);
+      assertThat(responseObserver2.take()).isSameInstanceAs(lastItem);
+      assertThat(responseObserver3.take()).isSameInstanceAs(lastItem);
     }
   }
 
