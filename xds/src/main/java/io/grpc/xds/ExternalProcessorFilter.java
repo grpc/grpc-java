@@ -485,6 +485,9 @@ public class ExternalProcessorFilter implements Filter {
                   extProcClientCallRequestObserver.onCompleted();
                 }
               }
+            // For robustness. For any internal processing failure make sure the internal state
+            // machine is notified and the dataplane call is properly cancelled (or failed-open if
+            // configured)
             } catch (Throwable t) {
               onError(t);
             }

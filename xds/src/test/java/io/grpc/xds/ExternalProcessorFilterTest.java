@@ -2,6 +2,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
@@ -41,6 +42,7 @@ import io.grpc.util.MutableHandlerRegistry;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
 import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -158,21 +160,22 @@ public class ExternalProcessorFilterTest {
     this.provider = new ExternalProcessorFilter.Provider();
     this.provider.newInstance("ext-proc");
     
-    Bootstrapper.BootstrapInfo bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
-    
-    // Create an AllowedGrpcServices mock
-    AllowedGrpcServices allowedServices = 
+    AllowedGrpcServices allowedServices =
         AllowedGrpcServices.create(
-            ImmutableMap.of("in-process:" + extProcServerName, 
+            ImmutableMap.of("in-process:" + extProcServerName,
                 AllowedGrpcService.builder()
                     .configuredChannelCredentials(ConfiguredChannelCredentials.create(
                         InsecureChannelCredentials.create(), new InProcessChannelCredsConfig()))
                     .build()));
-                    
-    Mockito.when(bootstrapInfo.allowedGrpcServices()).thenReturn(Optional.of(allowedServices));
-    
-    Bootstrapper.ServerInfo serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
-    Mockito.when(serverInfo.isTrustedXdsServer()).thenReturn(false);
+
+    Bootstrapper.ServerInfo serverInfo = Bootstrapper.ServerInfo.create(
+        "xds-server", InsecureChannelCredentials.create());
+
+    Bootstrapper.BootstrapInfo bootstrapInfo = Bootstrapper.BootstrapInfo.builder()
+        .servers(ImmutableList.of(serverInfo))
+        .node(Node.newBuilder().build())
+        .allowedGrpcServices(Optional.of(allowedServices))
+        .build();
 
     this.filterContext = Filter.FilterContext.builder()
         .bootstrapInfo(bootstrapInfo)
