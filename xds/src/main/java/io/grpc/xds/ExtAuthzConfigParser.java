@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.extauthz;
+package io.grpc.xds;
 
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.extensions.filters.http.ext_authz.v3.ExtAuthz;
@@ -22,8 +22,9 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.internal.MatcherParser;
+import io.grpc.xds.internal.extauthz.ExtAuthzConfig;
+import io.grpc.xds.internal.extauthz.ExtAuthzParseException;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
-import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
@@ -32,7 +33,7 @@ import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
 /**
  * Parser for {@link io.envoyproxy.envoy.extensions.filters.http.ext_authz.v3.ExtAuthz}.
  */
-public final class ExtAuthzConfigParser {
+final class ExtAuthzConfigParser {
 
   private ExtAuthzConfigParser() {}
 

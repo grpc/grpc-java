@@ -14,15 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.grpcservice;
+package io.grpc.xds.client;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
+import io.grpc.Internal;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Wrapper for allowed gRPC services keyed by target URI.
  */
+@Internal
 @AutoValue
 public abstract class AllowedGrpcServices {
   public abstract ImmutableMap<String, AllowedGrpcService> services();
@@ -33,5 +37,30 @@ public abstract class AllowedGrpcServices {
 
   public static AllowedGrpcServices empty() {
     return create(ImmutableMap.of());
+  }
+
+  /**
+   * Represents an allowed gRPC service configuration with call credentials.
+   */
+  @Internal
+  @AutoValue
+  public abstract static class AllowedGrpcService {
+    public abstract ConfiguredChannelCredentials configuredChannelCredentials();
+
+    public abstract Optional<CallCredentials> callCredentials();
+
+    public static Builder builder() {
+      return new AutoValue_AllowedGrpcServices_AllowedGrpcService.Builder();
+    }
+
+    @AutoValue.Builder
+    public abstract static class Builder {
+      public abstract Builder configuredChannelCredentials(
+          ConfiguredChannelCredentials credentials);
+
+      public abstract Builder callCredentials(CallCredentials callCredentials);
+
+      public abstract AllowedGrpcService build();
+    }
   }
 }

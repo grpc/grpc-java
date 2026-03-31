@@ -19,14 +19,15 @@ package io.grpc.xds.internal.grpcservice;
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import io.grpc.CallCredentials;
+import io.grpc.xds.client.ConfiguredChannelCredentials;
 import java.time.Duration;
 import java.util.Optional;
 
 
 /**
- * A Java representation of the {@link io.envoyproxy.envoy.config.core.v3.GrpcService} proto. This
- * class encapsulates the configuration for a gRPC service, including target URI, credentials, and
- * other settings. This class is immutable and uses the AutoValue library for its implementation.
+ * This class encapsulates the configuration for a gRPC service, including target URI, credentials,
+ * and other settings. This class is immutable and uses the AutoValue library for its
+ * implementation.
  */
 @AutoValue
 public abstract class GrpcServiceConfig {
@@ -53,10 +54,8 @@ public abstract class GrpcServiceConfig {
   }
 
   /**
-   * Represents the configuration for a Google gRPC service, as defined in the
-   * {@link io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc} proto. This class
-   * encapsulates settings specific to Google's gRPC implementation, such as target URI and
-   * credentials.
+   * This class encapsulates settings specific to Google's gRPC implementation, such as target URI
+   * and credentials.
    */
   @AutoValue
   public abstract static class GoogleGrpcConfig {

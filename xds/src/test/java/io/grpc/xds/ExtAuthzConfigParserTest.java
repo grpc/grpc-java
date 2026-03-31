@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.extauthz;
+package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
@@ -39,6 +39,8 @@ import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.Matchers;
+import io.grpc.xds.internal.extauthz.ExtAuthzConfig;
+import io.grpc.xds.internal.extauthz.ExtAuthzParseException;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
 import java.util.Collections;
 import org.junit.Before;

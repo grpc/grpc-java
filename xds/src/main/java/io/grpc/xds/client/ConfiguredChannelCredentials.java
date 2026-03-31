@@ -14,14 +14,16 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.grpcservice;
+package io.grpc.xds.client;
 
 import com.google.auto.value.AutoValue;
 import io.grpc.ChannelCredentials;
+import io.grpc.Internal;
 
 /**
  * Composition of {@link ChannelCredentials} and {@link ChannelCredsConfig}.
  */
+@Internal
 @AutoValue
 public abstract class ConfiguredChannelCredentials {
   public abstract ChannelCredentials channelCredentials();
@@ -31,5 +33,16 @@ public abstract class ConfiguredChannelCredentials {
   public static ConfiguredChannelCredentials create(ChannelCredentials creds,
       ChannelCredsConfig config) {
     return new AutoValue_ConfiguredChannelCredentials(creds, config);
+  }
+
+  /**
+   * Configuration for channel credentials.
+   */
+  @Internal
+  public interface ChannelCredsConfig {
+    /**
+     * Returns the type of the credentials.
+     */
+    String type();
   }
 }

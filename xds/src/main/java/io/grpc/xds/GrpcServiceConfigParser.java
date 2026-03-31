@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.grpcservice;
+package io.grpc.xds;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.OAuth2Credentials;
@@ -33,8 +33,14 @@ import io.grpc.NameResolverRegistry;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
-import io.grpc.xds.XdsChannelCredentials;
+import io.grpc.xds.client.AllowedGrpcServices;
+import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
 import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.client.ConfiguredChannelCredentials;
+import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
+import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
+import io.grpc.xds.internal.grpcservice.HeaderValue;
+import io.grpc.xds.internal.grpcservice.HeaderValueValidationUtils;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
@@ -47,7 +53,7 @@ import java.util.concurrent.Executor;
 /**
  * Parser for {@link io.envoyproxy.envoy.config.core.v3.GrpcService} and related protos.
  */
-public final class GrpcServiceConfigParser {
+final class GrpcServiceConfigParser {
 
   static final String TLS_CREDENTIALS_TYPE_URL =
       "type.googleapis.com/envoy.extensions.grpc_service.channel_credentials."
@@ -65,7 +71,7 @@ public final class GrpcServiceConfigParser {
       "type.googleapis.com/envoy.extensions.grpc_service.channel_credentials."
           + "google_default.v3.GoogleDefaultCredentials";
 
-  private GrpcServiceConfigParser() {}
+
 
   /**
    * Parses the {@link io.envoyproxy.envoy.config.core.v3.GrpcService} proto to create a
@@ -75,9 +81,8 @@ public final class GrpcServiceConfigParser {
    * @return A {@link GrpcServiceConfig} instance.
    * @throws GrpcServiceParseException if the proto is invalid or uses unsupported features.
    */
-  public static GrpcServiceConfig parse(
-      GrpcService grpcServiceProto, Bootstrapper.BootstrapInfo bootstrapInfo,
-      Bootstrapper.ServerInfo serverInfo)
+  public static GrpcServiceConfig parse(GrpcService grpcServiceProto,
+      Bootstrapper.BootstrapInfo bootstrapInfo, Bootstrapper.ServerInfo serverInfo)
       throws GrpcServiceParseException {
     if (!grpcServiceProto.hasGoogleGrpc()) {
       throw new GrpcServiceParseException(
@@ -125,15 +130,16 @@ public final class GrpcServiceConfigParser {
    */
   public static GrpcServiceConfig.GoogleGrpcConfig parseGoogleGrpcConfig(
       GrpcService.GoogleGrpc googleGrpcProto, Bootstrapper.BootstrapInfo bootstrapInfo,
-      Bootstrapper.ServerInfo serverInfo)
-      throws GrpcServiceParseException {
+      Bootstrapper.ServerInfo serverInfo) throws GrpcServiceParseException {
 
     String targetUri = googleGrpcProto.getTargetUri();
 
-    AllowedGrpcServices allowedGrpcServices = bootstrapInfo.allowedGrpcServices()
-        .filter(AllowedGrpcServices.class::isInstance)
-        .map(AllowedGrpcServices.class::cast)
-        .orElse(AllowedGrpcServices.empty());
+    AllowedGrpcServices allowedGrpcServices =
+        bootstrapInfo.implSpecificObject()
+            .filter(GrpcBootstrapImplConfig.class::isInstance)
+            .map(GrpcBootstrapImplConfig.class::cast)
+            .map(GrpcBootstrapImplConfig::allowedGrpcServices)
+            .orElse(AllowedGrpcServices.empty());
 
     boolean isTrustedControlPlane = serverInfo.isTrustedXdsServer();
     Optional<AllowedGrpcService> override =
@@ -165,8 +171,7 @@ public final class GrpcServiceConfigParser {
       }
 
       GrpcServiceConfig.GoogleGrpcConfig.Builder builder =
-          GrpcServiceConfig.GoogleGrpcConfig.builder()
-              .target(targetUri)
+          GrpcServiceConfig.GoogleGrpcConfig.builder().target(targetUri)
               .configuredChannelCredentials(override.get().configuredChannelCredentials());
       if (override.get().callCredentials().isPresent()) {
         builder.callCredentials(override.get().callCredentials().get());
@@ -189,19 +194,18 @@ public final class GrpcServiceConfigParser {
     return builder.build();
   }
 
-  private static Optional<ConfiguredChannelCredentials> channelCredsFromProto(
-      Any cred) throws GrpcServiceParseException {
+  private static Optional<ConfiguredChannelCredentials> channelCredsFromProto(Any cred)
+      throws GrpcServiceParseException {
     String typeUrl = cred.getTypeUrl();
     try {
       switch (typeUrl) {
         case GOOGLE_DEFAULT_CREDENTIALS_TYPE_URL:
-          return Optional.of(ConfiguredChannelCredentials.create(
-              GoogleDefaultChannelCredentials.create(),
-              new ProtoChannelCredsConfig(typeUrl, cred)));
+          return Optional
+              .of(ConfiguredChannelCredentials.create(GoogleDefaultChannelCredentials.create(),
+                  new ProtoChannelCredsConfig(typeUrl, cred)));
         case INSECURE_CREDENTIALS_TYPE_URL:
           return Optional.of(ConfiguredChannelCredentials.create(
-              InsecureChannelCredentials.create(),
-              new ProtoChannelCredsConfig(typeUrl, cred)));
+              InsecureChannelCredentials.create(), new ProtoChannelCredsConfig(typeUrl, cred)));
         case XDS_CREDENTIALS_TYPE_URL:
           XdsCredentials xdsConfig = cred.unpack(XdsCredentials.class);
           Optional<ConfiguredChannelCredentials> fallbackCreds =
@@ -292,7 +296,8 @@ public final class GrpcServiceConfigParser {
     }
   }
 
-  static final class ProtoChannelCredsConfig implements ChannelCredsConfig {
+  static final class ProtoChannelCredsConfig
+      implements ConfiguredChannelCredentials.ChannelCredsConfig {
     private final String type;
     private final Any configProto;
 

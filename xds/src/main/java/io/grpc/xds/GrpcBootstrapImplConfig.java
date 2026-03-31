@@ -14,14 +14,21 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.grpcservice;
+package io.grpc.xds;
+
+import com.google.auto.value.AutoValue;
+import io.grpc.Internal;
+import io.grpc.xds.client.AllowedGrpcServices;
 
 /**
- * Configuration for channel credentials.
+ * Custom configuration for gRPC xDS bootstrap implementation.
  */
-public interface ChannelCredsConfig {
-  /**
-   * Returns the type of the credentials.
-   */
-  String type();
+@Internal
+@AutoValue
+public abstract class GrpcBootstrapImplConfig {
+  public abstract AllowedGrpcServices allowedGrpcServices();
+
+  public static GrpcBootstrapImplConfig create(AllowedGrpcServices services) {
+    return new AutoValue_GrpcBootstrapImplConfig(services);
+  }
 }
