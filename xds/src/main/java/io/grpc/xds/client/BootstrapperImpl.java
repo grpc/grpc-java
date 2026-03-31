@@ -34,6 +34,8 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nullable;
 
 /**
  * A {@link Bootstrapper} implementation that reads xDS configurations from local file system.
@@ -240,17 +242,15 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     }
 
     Map<String, ?> rawAllowedGrpcServices = JsonUtil.getObject(rawData, "allowed_grpc_services");
-    if (rawAllowedGrpcServices != null) {
-      builder.allowedGrpcServices(parseAllowedGrpcServices(rawAllowedGrpcServices));
-    }
+    builder.allowedGrpcServices(parseAllowedGrpcServices(rawAllowedGrpcServices));
 
     return builder;
   }
 
-  protected java.util.Optional<Object> parseAllowedGrpcServices(
-      Map<String, ?> rawAllowedGrpcServices)
+  protected Optional<Object> parseAllowedGrpcServices(
+      @Nullable Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
-    return java.util.Optional.empty();
+    return Optional.empty();
   }
 
   private List<ServerInfo> parseServerInfos(List<?> rawServerConfigs, XdsLogger logger)

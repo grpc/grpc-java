@@ -31,7 +31,7 @@ import java.util.Optional;
 @AutoValue
 public abstract class GrpcServiceConfig {
 
-  public static Builder newBuilder() {
+  public static Builder builder() {
     return new AutoValue_GrpcServiceConfig.Builder();
   }
 

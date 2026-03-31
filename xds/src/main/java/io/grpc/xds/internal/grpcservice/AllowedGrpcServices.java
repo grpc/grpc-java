@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,22 @@
 
 package io.grpc.xds.internal.grpcservice;
 
-import java.util.Optional;
+import com.google.auto.value.AutoValue;
+import com.google.common.collect.ImmutableMap;
+import java.util.Map;
 
 /**
- * Utility for creating dummy contexts/providers in tests.
+ * Wrapper for allowed gRPC services keyed by target URI.
  */
-public final class GrpcServiceXdsContextTestUtil {
-  private GrpcServiceXdsContextTestUtil() {}
+@AutoValue
+public abstract class AllowedGrpcServices {
+  public abstract ImmutableMap<String, AllowedGrpcService> services();
 
-  public static GrpcServiceXdsContextProvider dummyProvider() {
-    return targetUri -> GrpcServiceXdsContext.create(true, Optional.empty(), true);
+  public static AllowedGrpcServices create(Map<String, AllowedGrpcService> services) {
+    return new AutoValue_AllowedGrpcServices(ImmutableMap.copyOf(services));
+  }
+
+  public static AllowedGrpcServices empty() {
+    return create(ImmutableMap.of());
   }
 }

@@ -14,18 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.xds.internal.grpcservice;
-
-import io.grpc.Internal;
+package io.grpc.xds.internal.headermutations;
 
 /**
- * Provider interface to retrieve target-specific xDS context.
+ * Exception thrown when parsing header mutation rules fails.
  */
-@Internal
-public interface GrpcServiceXdsContextProvider {
+public final class HeaderMutationRulesParseException extends Exception {
+  private static final long serialVersionUID = 1L;
 
-  /**
-   * Returns the `GrpcServiceXdsContext` for the given internal target URI.
-   */
-  GrpcServiceXdsContext getContextForTarget(String targetUri);
+  public HeaderMutationRulesParseException(String message) {
+    super(message);
+  }
+
+  public HeaderMutationRulesParseException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

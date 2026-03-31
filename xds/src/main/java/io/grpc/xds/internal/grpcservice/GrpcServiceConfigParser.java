@@ -21,6 +21,7 @@ import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.grpc_service.call_credentials.access_token.v3.AccessTokenCredentials;
 import io.envoyproxy.envoy.extensions.grpc_service.channel_credentials.xds.v3.XdsCredentials;
@@ -28,11 +29,14 @@ import io.grpc.CallCredentials;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
+import io.grpc.NameResolverRegistry;
 import io.grpc.SecurityLevel;
-import io.grpc.Status;
 import io.grpc.alts.GoogleDefaultChannelCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.xds.XdsChannelCredentials;
+import io.grpc.xds.client.Bootstrapper;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
@@ -71,17 +75,18 @@ public final class GrpcServiceConfigParser {
    * @return A {@link GrpcServiceConfig} instance.
    * @throws GrpcServiceParseException if the proto is invalid or uses unsupported features.
    */
-  public static GrpcServiceConfig parse(GrpcService grpcServiceProto,
-      GrpcServiceXdsContextProvider contextProvider)
+  public static GrpcServiceConfig parse(
+      GrpcService grpcServiceProto, Bootstrapper.BootstrapInfo bootstrapInfo,
+      Bootstrapper.ServerInfo serverInfo)
       throws GrpcServiceParseException {
     if (!grpcServiceProto.hasGoogleGrpc()) {
       throw new GrpcServiceParseException(
           "Unsupported: GrpcService must have GoogleGrpc, got: " + grpcServiceProto);
     }
     GrpcServiceConfig.GoogleGrpcConfig googleGrpcConfig =
-        parseGoogleGrpcConfig(grpcServiceProto.getGoogleGrpc(), contextProvider);
+        parseGoogleGrpcConfig(grpcServiceProto.getGoogleGrpc(), bootstrapInfo, serverInfo);
 
-    GrpcServiceConfig.Builder builder = GrpcServiceConfig.newBuilder().googleGrpc(googleGrpcConfig);
+    GrpcServiceConfig.Builder builder = GrpcServiceConfig.builder().googleGrpc(googleGrpcConfig);
 
     ImmutableList.Builder<HeaderValue> initialMetadata = ImmutableList.builder();
     for (io.envoyproxy.envoy.config.core.v3.HeaderValue header : grpcServiceProto
@@ -93,7 +98,7 @@ public final class GrpcServiceConfigParser {
       } else {
         headerValue = HeaderValue.create(key, header.getValue());
       }
-      if (HeaderValueValidationUtils.shouldIgnore(headerValue)) {
+      if (HeaderValueValidationUtils.isDisallowed(headerValue)) {
         throw new GrpcServiceParseException("Invalid initial metadata header: " + key);
       }
       initialMetadata.add(headerValue);
@@ -102,9 +107,8 @@ public final class GrpcServiceConfigParser {
 
     if (grpcServiceProto.hasTimeout()) {
       com.google.protobuf.Duration timeout = grpcServiceProto.getTimeout();
-      if (timeout.getSeconds() < 0 || timeout.getNanos() < 0
-          || (timeout.getSeconds() == 0 && timeout.getNanos() == 0)) {
-        throw new GrpcServiceParseException("Timeout must be strictly positive");
+      if (!Durations.isValid(timeout) || Durations.compare(timeout, Durations.ZERO) <= 0) {
+        throw new GrpcServiceParseException("Timeout must be strictly positive and valid");
       }
       builder.timeout(Duration.ofSeconds(timeout.getSeconds(), timeout.getNanos()));
     }
@@ -120,19 +124,41 @@ public final class GrpcServiceConfigParser {
    * @throws GrpcServiceParseException if the proto is invalid.
    */
   public static GrpcServiceConfig.GoogleGrpcConfig parseGoogleGrpcConfig(
-      GrpcService.GoogleGrpc googleGrpcProto, GrpcServiceXdsContextProvider contextProvider)
+      GrpcService.GoogleGrpc googleGrpcProto, Bootstrapper.BootstrapInfo bootstrapInfo,
+      Bootstrapper.ServerInfo serverInfo)
       throws GrpcServiceParseException {
 
     String targetUri = googleGrpcProto.getTargetUri();
-    GrpcServiceXdsContext context = contextProvider.getContextForTarget(targetUri);
 
-    if (!context.isTargetUriSchemeSupported()) {
+    AllowedGrpcServices allowedGrpcServices = bootstrapInfo.allowedGrpcServices()
+        .filter(AllowedGrpcServices.class::isInstance)
+        .map(AllowedGrpcServices.class::cast)
+        .orElse(AllowedGrpcServices.empty());
+
+    boolean isTrustedControlPlane = serverInfo.isTrustedXdsServer();
+    Optional<AllowedGrpcService> override =
+        Optional.ofNullable(allowedGrpcServices.services().get(targetUri));
+
+    boolean isTargetUriSchemeSupported = false;
+    try {
+      URI uri = new URI(targetUri);
+      String scheme = uri.getScheme();
+      if (scheme == null) {
+        scheme = NameResolverRegistry.getDefaultRegistry().getDefaultScheme();
+      }
+      if (scheme != null) {
+        isTargetUriSchemeSupported =
+            NameResolverRegistry.getDefaultRegistry().getProviderForScheme(scheme) != null;
+      }
+    } catch (URISyntaxException e) {
+      // Fallback or ignore if not a valid URI
+    }
+
+    if (!isTargetUriSchemeSupported) {
       throw new GrpcServiceParseException("Target URI scheme is not resolvable: " + targetUri);
     }
 
-    if (!context.isTrustedControlPlane()) {
-      Optional<GrpcServiceXdsContext.AllowedGrpcService> override =
-          context.validAllowedGrpcService();
+    if (!isTrustedControlPlane) {
       if (!override.isPresent()) {
         throw new GrpcServiceParseException(
             "Untrusted xDS server & URI not found in allowed_grpc_services: " + targetUri);
@@ -148,18 +174,8 @@ public final class GrpcServiceConfigParser {
       return builder.build();
     }
 
-    ConfiguredChannelCredentials channelCreds = null;
-    if (googleGrpcProto.getChannelCredentialsPluginCount() > 0) {
-      try {
-        channelCreds = extractChannelCredentials(googleGrpcProto.getChannelCredentialsPluginList());
-      } catch (GrpcServiceParseException e) {
-        // Fall back to channel_credentials if plugins are not supported
-      }
-    }
-
-    if (channelCreds == null) {
-      throw new GrpcServiceParseException("No valid supported channel_credentials found");
-    }
+    ConfiguredChannelCredentials channelCreds =
+        extractChannelCredentials(googleGrpcProto.getChannelCredentialsPluginList());
 
     Optional<CallCredentials> callCreds =
         extractCallCredentials(googleGrpcProto.getCallCredentialsPluginList());
@@ -268,16 +284,13 @@ public final class GrpcServiceConfigParser {
     @Override
     public void applyRequestMetadata(RequestInfo requestInfo, Executor appExecutor,
         MetadataApplier applier) {
-      if (requestInfo.getSecurityLevel() != SecurityLevel.PRIVACY_AND_INTEGRITY) {
-        applier.fail(Status.UNAUTHENTICATED.withDescription(
-            "OAuth2 credentials require connection with PRIVACY_AND_INTEGRITY security level"));
-        return;
+      if (requestInfo.getSecurityLevel() == SecurityLevel.PRIVACY_AND_INTEGRITY) {
+        delegate.applyRequestMetadata(requestInfo, appExecutor, applier);
+      } else {
+        applier.apply(new Metadata());
       }
-      delegate.applyRequestMetadata(requestInfo, appExecutor, applier);
     }
   }
-
-
 
   static final class ProtoChannelCredsConfig implements ChannelCredsConfig {
     private final String type;

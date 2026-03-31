@@ -19,7 +19,6 @@ package io.grpc.xds.internal.headermutations;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 import io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules;
-import io.grpc.xds.internal.extauthz.ExtAuthzParseException;
 
 /**
  * Parser for {@link io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules}.
@@ -29,7 +28,7 @@ public final class HeaderMutationRulesParser {
   private HeaderMutationRulesParser() {}
 
   public static HeaderMutationRulesConfig parse(HeaderMutationRules proto)
-      throws ExtAuthzParseException {
+      throws HeaderMutationRulesParseException {
     HeaderMutationRulesConfig.Builder builder = HeaderMutationRulesConfig.builder();
     builder.disallowAll(proto.getDisallowAll().getValue());
     builder.disallowIsError(proto.getDisallowIsError().getValue());
@@ -44,11 +43,12 @@ public final class HeaderMutationRulesParser {
     return builder.build();
   }
 
-  private static Pattern parseRegex(String regex, String fieldName) throws ExtAuthzParseException {
+  private static Pattern parseRegex(String regex, String fieldName)
+      throws HeaderMutationRulesParseException {
     try {
       return Pattern.compile(regex);
     } catch (PatternSyntaxException e) {
-      throw new ExtAuthzParseException(
+      throw new HeaderMutationRulesParseException(
           "Invalid regex pattern for " + fieldName + ": " + e.getMessage(), e);
     }
   }

@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 import com.google.protobuf.Any;
 import com.google.protobuf.BoolValue;
 import io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules;
+import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.config.core.v3.HeaderValue;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFeatureFlag;
 import io.envoyproxy.envoy.config.core.v3.RuntimeFractionalPercent;
@@ -34,8 +35,12 @@ import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
 import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.envoyproxy.envoy.type.v3.FractionalPercent.DenominatorType;
 import io.grpc.Status;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -49,13 +54,23 @@ public class ExtAuthzConfigParserTest {
   private static final Any FAKE_ACCESS_TOKEN_CALL_CREDS =
       Any.pack(AccessTokenCredentials.newBuilder().setToken("fake-token").build());
 
+  private static BootstrapInfo dummyBootstrapInfo() {
+    return BootstrapInfo.builder()
+        .servers(
+            Collections.singletonList(ServerInfo.create("test_target", Collections.emptyMap())))
+        .node(Node.newBuilder().build()).build();
+  }
+
+  private static ServerInfo dummyServerInfo() {
+    return ServerInfo.create("test_target", Collections.emptyMap(), false, true, false, false);
+  }
+
   private ExtAuthz.Builder extAuthzBuilder;
 
   @Before
   public void setUp() {
     extAuthzBuilder = ExtAuthz.newBuilder()
-        .setGrpcService(io.envoyproxy.envoy.config.core.v3.GrpcService.newBuilder()
-            .setGoogleGrpc(io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc.newBuilder()
+        .setGrpcService(GrpcService.newBuilder().setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("test-cluster")
                 .addChannelCredentialsPlugin(GOOGLE_DEFAULT_CHANNEL_CREDS)
                 .addCallCredentialsPlugin(FAKE_ACCESS_TOKEN_CALL_CREDS).build())
@@ -67,7 +82,8 @@ public class ExtAuthzConfigParserTest {
     ExtAuthz extAuthz = ExtAuthz.newBuilder().build();
     try {
       ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat()
@@ -78,11 +94,12 @@ public class ExtAuthzConfigParserTest {
   @Test
   public void parse_invalidGrpcService_throws() {
     ExtAuthz extAuthz = ExtAuthz.newBuilder()
-        .setGrpcService(io.envoyproxy.envoy.config.core.v3.GrpcService.newBuilder().build())
+        .setGrpcService(GrpcService.newBuilder().build())
         .build();
     try {
       ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Failed to parse GrpcService config:");
@@ -97,7 +114,8 @@ public class ExtAuthzConfigParserTest {
         .build();
     try {
       ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Invalid regex pattern for allow_expression:");
@@ -112,7 +130,8 @@ public class ExtAuthzConfigParserTest {
         .build();
     try {
       ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().startsWith("Invalid regex pattern for disallow_expression:");
@@ -149,7 +168,8 @@ public class ExtAuthzConfigParserTest {
             .build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.grpcService().googleGrpc().target()).isEqualTo("test-cluster");
     assertThat(config.grpcService().timeout().get().getSeconds()).isEqualTo(5);
@@ -178,7 +198,8 @@ public class ExtAuthzConfigParserTest {
     ExtAuthz extAuthz = extAuthzBuilder.build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.failureModeAllow()).isFalse();
     assertThat(config.failureModeAllowHeaderAdd()).isFalse();
@@ -199,7 +220,8 @@ public class ExtAuthzConfigParserTest {
         .build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.decoderHeaderMutationRules().isPresent()).isTrue();
     HeaderMutationRulesConfig rules = config.decoderHeaderMutationRules().get();
@@ -215,7 +237,8 @@ public class ExtAuthzConfigParserTest {
             .build()).build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.decoderHeaderMutationRules().isPresent()).isTrue();
     HeaderMutationRulesConfig rules = config.decoderHeaderMutationRules().get();
@@ -231,7 +254,8 @@ public class ExtAuthzConfigParserTest {
         .build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.filterEnabled()).isEqualTo(Matchers.FractionMatcher.create(25, 100));
   }
@@ -245,7 +269,8 @@ public class ExtAuthzConfigParserTest {
         .build();
 
     ExtAuthzConfig config = ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
 
     assertThat(config.filterEnabled())
         .isEqualTo(Matchers.FractionMatcher.create(123456, 1_000_000));
@@ -260,7 +285,8 @@ public class ExtAuthzConfigParserTest {
 
     try {
       ExtAuthzConfigParser.parse(extAuthz, 
-          io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextTestUtil.dummyProvider());
+          dummyBootstrapInfo(),
+          dummyServerInfo());
       fail("Expected ExtAuthzParseException");
     } catch (ExtAuthzParseException e) {
       assertThat(e).hasMessageThat().isEqualTo("Unknown denominator type: UNRECOGNIZED");

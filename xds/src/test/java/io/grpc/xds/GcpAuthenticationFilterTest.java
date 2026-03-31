@@ -65,6 +65,9 @@ import io.grpc.xds.XdsConfig.XdsClusterConfig.EndpointConfig;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
+import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.client.Bootstrapper.ServerInfo;
+import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
@@ -112,8 +115,8 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
-
+    ConfigOrError<GcpAuthenticationConfig> result =
+            FILTER_PROVIDER.parseFilterConfig(anyMessage, getFilterContext());
     assertNotNull(result.config);
     assertNull(result.errorDetail);
     assertEquals(20L, result.config.getCacheSize());
@@ -126,8 +129,8 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
-
+    ConfigOrError<GcpAuthenticationConfig> result =
+            FILTER_PROVIDER.parseFilterConfig(anyMessage, getFilterContext());
     assertNull(result.config);
     assertNotNull(result.errorDetail);
     assertTrue(result.errorDetail.contains("cache_config.cache_size must be greater than zero"));
@@ -137,7 +140,7 @@ public class GcpAuthenticationFilterTest {
   public void testParseFilterConfig_withInvalidMessageType() {
     Message invalidMessage = Empty.getDefaultInstance();
     ConfigOrError<GcpAuthenticationConfig> result =
-        FILTER_PROVIDER.parseFilterConfig(invalidMessage);
+            FILTER_PROVIDER.parseFilterConfig(invalidMessage, getFilterContext());
 
     assertNull(result.config);
     assertThat(result.errorDetail).contains("Invalid config type");
@@ -468,8 +471,9 @@ public class GcpAuthenticationFilterTest {
   private static RdsUpdate getRdsUpdate() {
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration("my-server", RDS_NAME, CLUSTER_NAME);
-    XdsResourceType.Args args = new XdsResourceType.Args(
-        XdsTestUtils.EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
+    XdsResourceType.Args args =
+        new XdsResourceType.Args(XdsTestUtils.EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0",
+            XdsTestUtils.EMPTY_BOOTSTRAP, null, null);
     try {
       return XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
     } catch (ResourceInvalidException ex) {
@@ -520,5 +524,18 @@ public class GcpAuthenticationFilterTest {
             CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
         .lbPolicyConfig(getWrrLbConfigAsMap());
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
+  }
+
+  private static Filter.FilterContext getFilterContext() {
+    return Filter.FilterContext.builder()
+        .bootstrapInfo(BootstrapInfo.builder()
+            .servers(Collections.singletonList(
+                ServerInfo.create(
+                    "test_target", Collections.emptyMap())))
+            .node(Node.newBuilder().build())
+            .build())
+        .serverInfo(ServerInfo.create(
+            "test_target", Collections.emptyMap(), false, true, false, false))
+        .build();
   }
 }

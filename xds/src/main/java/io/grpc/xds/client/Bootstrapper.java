@@ -216,7 +216,8 @@ public abstract class Bootstrapper {
     public static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
           .clientDefaultListenerResourceNameTemplate("%s")
-          .authorities(ImmutableMap.<String, AuthorityInfo>of());
+          .authorities(ImmutableMap.<String, AuthorityInfo>of())
+          .allowedGrpcServices(Optional.empty());
     }
 
     @AutoValue.Builder
