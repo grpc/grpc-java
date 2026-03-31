@@ -2,6 +2,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
@@ -21,11 +22,15 @@ import io.grpc.ClientInterceptor;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.ClientCalls;
@@ -35,15 +40,20 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
+import io.grpc.xds.client.Bootstrapper;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
+import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
 import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContext;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URI;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -56,6 +66,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mockito;
 
 /**
  * Unit tests for {@link ExternalProcessorFilter}.
@@ -72,6 +83,7 @@ public class ExternalProcessorFilterTest {
   private String extProcServerName;
   private ScheduledExecutorService scheduler;
   private ExternalProcessorFilter.Provider provider;
+  private Filter.FilterContext filterContext;
 
   // Define a simple test service
   private static final MethodDescriptor<String, String> METHOD_SAY_HELLO =
@@ -105,15 +117,34 @@ public class ExternalProcessorFilterTest {
     }
   }
 
-  private static class InProcessChannelCredsConfig implements ChannelCredsConfig {
+  private static class InProcessNameResolverProvider extends NameResolverProvider {
     @Override
-    public String type() {
-      return "inprocess";
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+      if ("in-process".equals(targetUri.getScheme())) {
+        return new NameResolver() {
+          @Override public String getServiceAuthority() { return "localhost"; }
+          @Override public void start(Listener2 listener) {}
+          @Override public void shutdown() {}
+        };
+      }
+      return null;
     }
+    @Override protected boolean isAvailable() { return true; }
+    @Override protected int priority() { return 5; }
+    @Override public String getDefaultScheme() { return "in-process"; }
+    @Override public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+      return Collections.emptyList();
+    }
+  }
+
+  private static class InProcessChannelCredsConfig implements ChannelCredsConfig {
+    @Override public String type() { return "inprocess"; }
   }
 
   @Before
   public void setUp() throws Exception {
+    NameResolverRegistry.getDefaultRegistry().register(new InProcessNameResolverProvider());
+
     dataPlaneServerName = InProcessServerBuilder.generateName();
     grpcCleanup.register(InProcessServerBuilder.forName(dataPlaneServerName)
         .fallbackHandlerRegistry(dataPlaneServiceRegistry).directExecutor().build().start());
@@ -124,20 +155,29 @@ public class ExternalProcessorFilterTest {
 
     scheduler = Executors.newSingleThreadScheduledExecutor();
 
-    GrpcServiceXdsContextProvider contextProvider = targetUri -> {
-        ConfiguredChannelCredentials credentials = ConfiguredChannelCredentials.create(
-            InsecureChannelCredentials.create(),
-            new InProcessChannelCredsConfig());
-        
-        GrpcServiceXdsContext.AllowedGrpcService allowedGrpcService = 
-            GrpcServiceXdsContext.AllowedGrpcService.builder()
-                .configuredChannelCredentials(credentials)
-                .build();
-        return GrpcServiceXdsContext.create(false, Optional.of(allowedGrpcService), true);
-    };
-    
     this.provider = new ExternalProcessorFilter.Provider();
-    this.provider.newInstance("ext-proc", contextProvider);
+    this.provider.newInstance("ext-proc");
+    
+    Bootstrapper.BootstrapInfo bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
+    
+    // Create an AllowedGrpcServices mock
+    AllowedGrpcServices allowedServices = 
+        AllowedGrpcServices.create(
+            ImmutableMap.of("in-process:" + extProcServerName, 
+                AllowedGrpcService.builder()
+                    .configuredChannelCredentials(ConfiguredChannelCredentials.create(
+                        InsecureChannelCredentials.create(), new InProcessChannelCredsConfig()))
+                    .build()));
+                    
+    Mockito.when(bootstrapInfo.allowedGrpcServices()).thenReturn(Optional.of(allowedServices));
+    
+    Bootstrapper.ServerInfo serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
+    Mockito.when(serverInfo.isTrustedXdsServer()).thenReturn(false);
+
+    this.filterContext = Filter.FilterContext.builder()
+        .bootstrapInfo(bootstrapInfo)
+        .serverInfo(serverInfo)
+        .build();
   }
 
   @After
@@ -164,7 +204,7 @@ public class ExternalProcessorFilterTest {
         .build();
 
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
-        this.provider.parseFilterConfig(Any.pack(externalProcessor));
+        this.provider.parseFilterConfig(Any.pack(externalProcessor), filterContext);
         
     assertThat(configOrError.errorDetail).isNull();
     return configOrError.config;
@@ -193,6 +233,7 @@ public class ExternalProcessorFilterTest {
     ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
             (request, responseObserver) -> {
+              receivedHeaders.set(receivedHeaders.get()); // Trigger any lazy evaluation
               responseObserver.onNext("Hello " + request);
               responseObserver.onCompleted();
             }))

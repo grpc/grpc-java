@@ -46,7 +46,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
-import io.grpc.xds.internal.grpcservice.GrpcServiceXdsContextProvider;
 import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -100,7 +99,7 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public FaultFilter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider) {
+    public FaultFilter newInstance(String name) {
       return INSTANCE;
     }
 

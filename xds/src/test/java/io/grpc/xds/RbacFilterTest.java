@@ -264,7 +264,7 @@ public class RbacFilterTest {
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
     AuthConfig authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
-    FILTER_PROVIDER.newInstance(name, null).buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler, never()).startCall(eq(mockServerCall), any(Metadata.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
@@ -276,7 +276,7 @@ public class RbacFilterTest {
 
     authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.DENY);
-    FILTER_PROVIDER.newInstance(name, null).buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
   }
@@ -328,7 +328,7 @@ public class RbacFilterTest {
                     getFilterContext()).config;
     assertThat(override).isEqualTo(RbacConfig.create(null));
     ServerInterceptor interceptor =
-        FILTER_PROVIDER.newInstance(name, null).buildServerInterceptor(original, override);
+        FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override);
     assertThat(interceptor).isNull();
 
     policyMatcher = PolicyMatcher.create("policy-matcher-override",
@@ -338,7 +338,7 @@ public class RbacFilterTest {
             GrpcAuthorizationEngine.Action.ALLOW);
     override = RbacConfig.create(authconfig);
 
-    FILTER_PROVIDER.newInstance(name, null).buildServerInterceptor(original, override)
+    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
     verify(mockServerCall).getAttributes();
