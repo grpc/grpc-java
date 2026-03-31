@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The gRPC Authors
+ * Copyright 2023 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,36 +14,41 @@
  * limitations under the License.
  */
 
-package io.grpc.xds;
+package io.grpc.xds.internal;
 
+import java.util.concurrent.ThreadLocalRandom;
 import javax.annotation.concurrent.ThreadSafe;
 
-// TODO(sauravzg): Remove this class once all usages within xds are migrated to
-// the internal version.
-@ThreadSafe
-interface ThreadSafeRandom extends io.grpc.xds.internal.ThreadSafeRandom {
+/**
+ * A thread-safe random number generator. This is intended for internal use only.
+ */
+@ThreadSafe // Except for impls/mocks in tests
+public interface ThreadSafeRandom {
+  int nextInt(int bound);
+
+  long nextLong();
+
+  long nextLong(long bound);
 
   final class ThreadSafeRandomImpl implements ThreadSafeRandom {
 
-    static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();
-    private final io.grpc.xds.internal.ThreadSafeRandom delegate =
-        io.grpc.xds.internal.ThreadSafeRandom.ThreadSafeRandomImpl.INSTANCE;
+    public static final ThreadSafeRandom INSTANCE = new ThreadSafeRandomImpl();
 
     private ThreadSafeRandomImpl() {}
 
     @Override
     public int nextInt(int bound) {
-      return delegate.nextInt(bound);
+      return ThreadLocalRandom.current().nextInt(bound);
     }
 
     @Override
     public long nextLong() {
-      return delegate.nextLong();
+      return ThreadLocalRandom.current().nextLong();
     }
 
     @Override
     public long nextLong(long bound) {
-      return delegate.nextLong(bound);
+      return ThreadLocalRandom.current().nextLong(bound);
     }
   }
 }
