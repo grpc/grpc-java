@@ -856,6 +856,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               localSocketPicker,
               channelLogger,
               useGetForSafeMethods,
+              options.getMetricRecorder(),
               Ticker.systemTicker());
       return transport;
     }

@@ -80,6 +80,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final InternalChannelz channelz;
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
+  private final MetricRecorder metricRecorder;
   private final ChannelLogger channelLogger;
   private final boolean reconnectDisabled;
 
@@ -191,6 +192,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.scheduledExecutor = scheduledExecutor;
     this.connectingTimer = stopwatchSupplier.get();
     this.syncContext = syncContext;
+    this.metricRecorder = metricRecorder;
     this.callback = callback;
     this.channelz = channelz;
     this.callsTracer = callsTracer;
@@ -265,6 +267,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
           .setEagAttributes(currentEagAttributes)
           .setUserAgent(userAgent)
+          .setMetricRecorder(metricRecorder)
           .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId

@@ -436,6 +436,17 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public abstract Server build();
 
   /**
+   * Adds a metric sink to the server.
+   *
+   * @param metricSink the metric sink to add.
+   * @return this
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12693")
+  public T addMetricSink(MetricSink metricSink) {
+    return thisT();
+  }
+
+  /**
    * Returns the correctly typed version of the builder.
    */
   private T thisT() {
