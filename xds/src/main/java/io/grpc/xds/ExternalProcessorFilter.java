@@ -585,7 +585,9 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void request(int numMessages) {
-        if (config.getObservabilityMode() && !isReady()) {
+        // If the external processor is backed up with flow control, we need to stop requesting
+        // messages from the remote side.
+        if (!isReady()) {
           return;
         }
         super.request(numMessages);
