@@ -104,6 +104,8 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -199,7 +201,7 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private String targetUri = AUTHORITY;
+  private URI targetUri;
   private final NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
@@ -214,6 +216,12 @@ public class XdsNameResolverTest {
   public void setUp() {
     lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
 
+    try {
+      targetUri = new URI(AUTHORITY);
+    } catch (URISyntaxException e) {
+      targetUri = null;
+    }
+
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
 
@@ -223,7 +231,7 @@ public class XdsNameResolverTest {
     // Lenient: suppress [MockitoHint] Unused warning, only used in resolved_fault* tests.
     lenient()
         .doReturn(new FaultFilter(mockRandom, new AtomicLong()))
-        .when(faultFilterProvider).newInstance(any(String.class), null);
+        .when(faultFilterProvider).newInstance(any(String.class));
 
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         ROUTER_FILTER_PROVIDER,

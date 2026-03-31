@@ -67,6 +67,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -109,6 +110,7 @@ final class XdsNameResolver extends NameResolver {
   private final XdsLogger logger;
   @Nullable
   private final String targetAuthority;
+  private final String target;
   private final String serviceAuthority;
   // Encoded version of the service authority as per 
   // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
@@ -139,12 +141,12 @@ final class XdsNameResolver extends NameResolver {
   private ResolveState resolveState;
 
   XdsNameResolver(
-      String target, @Nullable String targetAuthority, String name,
-      @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
+      URI targetUri, String name, @Nullable String overrideAuthority,
+      ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       @Nullable Map<String, ?> bootstrapOverride,
       MetricRecorder metricRecorder, Args nameResolverArgs) {
-    this(target, targetAuthority, name, overrideAuthority, serviceConfigParser,
+    this(targetUri, targetUri.getAuthority(), name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler,
         bootstrapOverride == null
           ? SharedXdsClientPoolProvider.getDefaultProvider()
@@ -155,13 +157,14 @@ final class XdsNameResolver extends NameResolver {
 
   @VisibleForTesting
   XdsNameResolver(
-      String target, @Nullable String targetAuthority, String name,
+      URI targetUri, @Nullable String targetAuthority, String name,
       @Nullable String overrideAuthority, ServiceConfigParser serviceConfigParser,
       SynchronizationContext syncContext, ScheduledExecutorService scheduler,
       XdsClientPoolFactory xdsClientPoolFactory, ThreadSafeRandom random,
       FilterRegistry filterRegistry, @Nullable Map<String, ?> bootstrapOverride,
       MetricRecorder metricRecorder, Args nameResolverArgs) {
     this.targetAuthority = targetAuthority;
+    target = targetUri.toString();
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
@@ -733,7 +736,7 @@ final class XdsNameResolver extends NameResolver {
         Filter.Provider provider = filterRegistry.get(typeUrl);
         checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = activeFilters.computeIfAbsent(
-            filterKey, k -> provider.newInstance(namedFilter.name, null));
+            filterKey, k -> provider.newInstance(namedFilter.name));
         checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }
@@ -875,7 +878,6 @@ final class XdsNameResolver extends NameResolver {
       }
 
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
-      ClientInterceptor extProcInterceptor = null;
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String name = namedFilter.name;
         FilterConfig config = namedFilter.filterConfig;
@@ -888,16 +890,8 @@ final class XdsNameResolver extends NameResolver {
             filter.buildClientInterceptor(config, overrideConfig, scheduler);
 
         if (interceptor != null) {
-          if (config.typeUrl().equals(ExternalProcessorFilter.TYPE_URL)) {
-            extProcInterceptor = interceptor;
-          } else {
-            filterInterceptors.add(interceptor);
-          }
+          filterInterceptors.add(interceptor);
         }
-      }
-
-      if (extProcInterceptor != null) {
-        filterInterceptors.add(extProcInterceptor);
       }
 
       // Combine interceptors produced by different filters into a single one that executes

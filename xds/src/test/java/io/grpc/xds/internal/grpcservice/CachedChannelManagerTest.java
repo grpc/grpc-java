@@ -77,7 +77,7 @@ public class CachedChannelManagerTest {
         .configuredChannelCredentials(creds)
         .build();
         
-    return GrpcServiceConfig.newBuilder()
+    return GrpcServiceConfig.builder()
         .googleGrpc(googleGrpc)
         .initialMetadata(ImmutableList.of())
         .build();
