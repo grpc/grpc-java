@@ -23,8 +23,8 @@ import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction
 import java.util.logging.Logger;
 
 /**
- * The HeaderMutator class is an implementation of the HeaderMutator interface. It provides methods
- * to apply header mutations to a given set of headers based on a given set of rules.
+ * The HeaderMutator provides methods to apply header mutations to a given set of headers based on a
+ * given set of rules.
  */
 public class HeaderMutator {
 
