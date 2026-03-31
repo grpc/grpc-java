@@ -30,10 +30,19 @@ import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfigParser;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
+import io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException;
+import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesParseException;
+import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
+import io.grpc.xds.internal.headermutations.HeaderMutations;
+import io.grpc.xds.internal.headermutations.HeaderMutator;
+import io.grpc.xds.internal.headermutations.HeaderValueOption;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -86,10 +95,20 @@ public class ExternalProcessorFilter implements Filter {
         return ConfigOrError.fromError("Invalid response_body_mode: " + mode.getResponseBodyMode() + ". Only GRPC is supported.");
       }
 
+      HeaderMutationRulesConfig mutationRulesConfig = null;
+      if (externalProcessor.hasMutationRules()) {
+        try {
+          mutationRulesConfig = HeaderMutationRulesParser.parse(externalProcessor.getMutationRules());
+        } catch (HeaderMutationRulesParseException e) {
+          return ConfigOrError.fromError("Error parsing HeaderMutationRules: " + e.getMessage());
+        }
+      }
+
       try {
         GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
             externalProcessor.getGrpcService(), context.bootstrapInfo(), context.serverInfo());
-        return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(externalProcessor, grpcServiceConfig));
+        return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(
+            externalProcessor, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig)));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
       }
@@ -113,10 +132,13 @@ public class ExternalProcessorFilter implements Filter {
 
     private final ExternalProcessor externalProcessor;
     private final GrpcServiceConfig grpcServiceConfig;
+    private final Optional<HeaderMutationRulesConfig> mutationRulesConfig;
 
-    ExternalProcessorFilterConfig(ExternalProcessor externalProcessor, GrpcServiceConfig grpcServiceConfig) {
+    ExternalProcessorFilterConfig(ExternalProcessor externalProcessor,
+        GrpcServiceConfig grpcServiceConfig, Optional<HeaderMutationRulesConfig> mutationRulesConfig) {
       this.externalProcessor = externalProcessor;
       this.grpcServiceConfig = grpcServiceConfig;
+      this.mutationRulesConfig = mutationRulesConfig;
     }
 
     @Override
@@ -208,7 +230,8 @@ public class ExternalProcessorFilter implements Filter {
           new ExtProcDelayedCall<>(
               callOptions.getExecutor(), scheduler, callOptions.getDeadline());
 
-      ExtProcClientCall extProcCall = new ExtProcClientCall(delayedCall, rawCall, stub, config);
+      ExtProcClientCall extProcCall = new ExtProcClientCall(
+          delayedCall, rawCall, stub, config, filterConfig.mutationRulesConfig);
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -312,31 +335,6 @@ public class ExternalProcessorFilter implements Filter {
       return builder.build();
     }
 
-    private static void applyHeaderMutations(Metadata metadata, io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation mutation) {
-      for (io.envoyproxy.envoy.config.core.v3.HeaderValueOption setHeader : mutation.getSetHeadersList()) {
-        String key = setHeader.getHeader().getKey();
-        String value = setHeader.getHeader().getValue();
-        try {
-          Metadata.Key<String> metadataKey = Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
-          if (setHeader.getAppendAction() == io.envoyproxy.envoy.config.core.v3.HeaderValueOption.HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD
-              || setHeader.getAppendAction() == io.envoyproxy.envoy.config.core.v3.HeaderValueOption.HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD) {
-             metadata.removeAll(metadataKey);
-          }
-          metadata.put(metadataKey, value);
-        } catch (IllegalArgumentException e) {
-          // Skip
-        }
-      }
-      for (String removeHeader : mutation.getRemoveHeadersList()) {
-        try {
-          Metadata.Key<String> metadataKey = Metadata.Key.of(removeHeader, Metadata.ASCII_STRING_MARSHALLER);
-          metadata.removeAll(metadataKey);
-        } catch (IllegalArgumentException e) {
-          // Skip
-        }
-      }
-    }
-
     /**
      * A local subclass to expose the protected constructor of DelayedClientCall.
      */
@@ -358,6 +356,8 @@ public class ExternalProcessorFilter implements Filter {
       private final Object streamLock = new Object();
       private io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private ExtProcListener wrappedListener;
+      private final HeaderMutationFilter mutationFilter;
+      private final HeaderMutator mutator = HeaderMutator.create();
 
       private Metadata requestHeaders;
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
@@ -369,12 +369,14 @@ public class ExternalProcessorFilter implements Filter {
           ExtProcDelayedCall<InputStream, InputStream> delayedCall,
           ClientCall<InputStream, InputStream> rawCall,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
-          ExternalProcessor config) {
+          ExternalProcessor config,
+          Optional<HeaderMutationRulesConfig> mutationRulesConfig) {
         super(delayedCall);
         this.delayedCall = delayedCall;
         this.rawCall = rawCall;
         this.stub = stub;
         this.config = config;
+        this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
       }
 
       private void activateCall() {
@@ -382,6 +384,34 @@ public class ExternalProcessorFilter implements Filter {
         if (toRun != null) {
           toRun.run();
         }
+      }
+
+      private void applyHeaderMutations(Metadata metadata,
+          io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation mutation)
+          throws HeaderMutationDisallowedException {
+        ImmutableList.Builder<HeaderValueOption> headersToModify = ImmutableList.builder();
+        for (io.envoyproxy.envoy.config.core.v3.HeaderValueOption protoOption : mutation.getSetHeadersList()) {
+          io.envoyproxy.envoy.config.core.v3.HeaderValue protoHeader = protoOption.getHeader();
+          HeaderValue headerValue;
+          if (protoHeader.getKey().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+            headerValue = HeaderValue.create(protoHeader.getKey(),
+                com.google.protobuf.ByteString.copyFrom(
+                    com.google.common.io.BaseEncoding.base64().decode(protoHeader.getValue())));
+          } else {
+            headerValue = HeaderValue.create(protoHeader.getKey(), protoHeader.getValue());
+          }
+          headersToModify.add(HeaderValueOption.create(
+              headerValue,
+              HeaderValueOption.HeaderAppendAction.valueOf(protoOption.getAppendAction().name()),
+              protoOption.getKeepEmptyValue()));
+        }
+
+        HeaderMutations mutations = HeaderMutations.create(
+            headersToModify.build(),
+            ImmutableList.copyOf(mutation.getRemoveHeadersList()));
+
+        HeaderMutations filteredMutations = mutationFilter.filter(mutations);
+        mutator.applyMutations(filteredMutations, metadata);
       }
 
       @Override
@@ -485,9 +515,9 @@ public class ExternalProcessorFilter implements Filter {
                   extProcClientCallRequestObserver.onCompleted();
                 }
               }
-            // For robustness. For any internal processing failure make sure the internal state
-            // machine is notified and the dataplane call is properly cancelled (or failed-open if
-            // configured)
+            // For robustness. For any internal processing failure, including
+            // HeaderMutationDisallowedException, make sure the internal state machine is notified
+            // and the dataplane call is properly cancelled (or failed-open if configured)
             } catch (Throwable t) {
               onError(t);
             }
