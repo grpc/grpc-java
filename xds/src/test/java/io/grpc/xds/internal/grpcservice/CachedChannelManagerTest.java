@@ -23,6 +23,8 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.ManagedChannel;
+import io.grpc.xds.client.ConfiguredChannelCredentials;
+import io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig.GoogleGrpcConfig;
 import java.util.function.Function;
 import org.junit.Before;
