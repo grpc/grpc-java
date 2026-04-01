@@ -19,8 +19,10 @@ import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.TrailersResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.InsecureChannelCredentials;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
@@ -55,6 +57,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -65,6 +68,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 /**
@@ -165,6 +169,55 @@ public class ExternalProcessorFilterTest {
   @After
   public void tearDown() {
     scheduler.shutdownNow();
+  }
+
+  // --- Category 1: Configuration Parsing & Provider ---
+
+  @Test
+  public void givenValidConfig_whenParsed_thenReturnsFilterConfig() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///test")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).isNull();
+    assertThat(result.config).isNotNull();
+    assertThat(result.config.typeUrl()).isEqualTo(ExternalProcessorFilter.TYPE_URL);
+  }
+
+  @Test
+  public void givenUnsupportedBodyMode_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.BUFFERED) // Unsupported
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Invalid request_body_mode");
+  }
+
+  @Test
+  public void givenInvalidGrpcService_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder().build()) // Invalid: no GoogleGrpc
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("GrpcService must have GoogleGrpc");
   }
 
   @Test
