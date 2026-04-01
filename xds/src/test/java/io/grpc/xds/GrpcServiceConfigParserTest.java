@@ -241,7 +241,7 @@ public class GrpcServiceConfigParserTest {
         .addChannelCredentialsPlugin(localCreds).addCallCredentialsPlugin(accessTokenCreds).build();
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
-    UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class,
+    GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
             () -> parse(grpcService,
                     dummyBootstrapInfo(),
             dummyServerInfo()));
@@ -285,7 +285,7 @@ public class GrpcServiceConfigParserTest {
         .addChannelCredentialsPlugin(tlsCreds).addCallCredentialsPlugin(accessTokenCreds).build();
     GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc).build();
 
-    UnsupportedOperationException exception = assertThrows(UnsupportedOperationException.class,
+    GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
             () -> parse(grpcService,
                     dummyBootstrapInfo(),
             dummyServerInfo()));

@@ -218,14 +218,14 @@ final class GrpcServiceConfigParser {
               XdsChannelCredentials.create(fallbackCreds.get().channelCredentials()),
               new ProtoChannelCredsConfig(typeUrl, cred)));
         case LOCAL_CREDENTIALS_TYPE_URL:
-          throw new UnsupportedOperationException(
+          throw new GrpcServiceParseException(
               "LocalCredentials are not supported in grpc-java. "
                   + "See https://github.com/grpc/grpc-java/issues/8928");
         case TLS_CREDENTIALS_TYPE_URL:
           // For this PR, we establish this structural skeleton,
-          // but throw an UnsupportedOperationException until the exact stream conversions are
+          // but throw an GrpcServiceParseException until the exact stream conversions are
           // merged.
-          throw new UnsupportedOperationException(
+          throw new GrpcServiceParseException(
               "TlsCredentials input stream construction pending.");
         default:
           return Optional.empty();
