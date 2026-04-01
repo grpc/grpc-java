@@ -28,6 +28,7 @@ import com.github.xds.type.matcher.v3.StringMatcher;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.extensions.common.matching.v3.ExtensionWithMatcher;
+import io.envoyproxy.envoy.extensions.common.matching.v3.ExtensionWithMatcherPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.Composite;
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.ExecuteFilterAction;
 import io.grpc.CallOptions;
@@ -38,6 +39,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.internal.UnifiedMatcher;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Before;
@@ -629,6 +631,107 @@ public class CompositeFilterTest {
 
     verify(fakeClientInterceptor, org.mockito.Mockito.never()).interceptCall(any(), any(), any());
     verify(next).newCall(any(), any());
+  }
+
+  @Test
+  public void clientCallMethodsThrowBeforeStart() {
+    CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
+    UnifiedMatcher<CompositeFilter.FilterDelegate> mockMatcher = mock(UnifiedMatcher.class);
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        new CompositeFilter.CompositeFilterConfig(mockMatcher), null,
+        mock(ScheduledExecutorService.class));
+
+    Channel next = mock(Channel.class);
+    MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(marshaller)
+        .setResponseMarshaller(marshaller)
+        .build();
+
+    ClientCall<Void, Void> call = interceptor.interceptCall(method, CallOptions.DEFAULT, next);
+
+    // Call request before start should throw IllegalStateException
+    try {
+      call.request(1);
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).isEqualTo("Not started");
+    }
+
+    // Call halfClose before start should throw IllegalStateException
+    try {
+      call.halfClose();
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).isEqualTo("Not started");
+    }
+
+    // Call sendMessage before start should throw IllegalStateException
+    try {
+      call.sendMessage(null);
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).isEqualTo("Not started");
+    }
+
+    // Call setMessageCompression before start should throw IllegalStateException
+    try {
+      call.setMessageCompression(true);
+      org.junit.Assert.fail("Expected IllegalStateException");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).isEqualTo("Not started");
+    }
+
+    // Cancel is allowed before start and should not throw
+    call.cancel("message", null);
+  }
+
+  @Test
+  public void parseFilterConfigRejectsOverrideMessage() {
+    ExtensionWithMatcherPerRoute overrideProto = ExtensionWithMatcherPerRoute.newBuilder()
+        .setXdsMatcher(Matcher.newBuilder().build())
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(overrideProto));
+
+    assertThat(result.errorDetail).contains("Unsupported message type in parseFilterConfig");
+  }
+
+  @Test
+  public void parseFilterConfigOverrideRejectsConfigMessage() {
+    ExtensionWithMatcher configProto = ExtensionWithMatcher.newBuilder()
+        .setXdsMatcher(Matcher.newBuilder().build())
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfigOverride(Any.pack(configProto));
+
+    assertThat(result.errorDetail).contains("Unsupported message type in"
+        + " parseFilterConfigOverride");
+  }
+
+  @Test
+  public void parseFilterConfigFailsWhenDisabled() {
+    System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
+    try {
+      ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+          .parseFilterConfig(Any.pack(Composite.getDefaultInstance()));
+      assertThat(result.errorDetail).contains("Composite Filter is experimental");
+    } finally {
+      System.setProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", "true");
+    }
+  }
+
+  @Test
+  public void parseFilterConfigWithEmptyConfig() {
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(Composite.getDefaultInstance()));
+
+    assertThat(result.errorDetail).isNull();
+    assertThat(result.config.matcher).isNull();
   }
 
 }

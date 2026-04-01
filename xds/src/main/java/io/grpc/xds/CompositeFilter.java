@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 The gRPC Authors
+ * Copyright 2026 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.github.xds.type.matcher.v3.Matcher;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.Any;
@@ -112,111 +113,128 @@ public final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Composite Filter is experimental "
             + "and disabled by default.");
       }
-      return parseConfig(rawProtoMessage);
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid message type: "
+            + rawProtoMessage.getClass().getName());
+      }
+      try {
+        Any any = (Any) rawProtoMessage;
+        if (any.is(ExtensionWithMatcher.class)) {
+          ExtensionWithMatcher proto = any.unpack(ExtensionWithMatcher.class);
+          return parseMatcherConfig(proto.getXdsMatcher());
+        } else if (any.is(Composite.class)) {
+          return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
+        }
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      return ConfigOrError.fromError("Unsupported message type in parseFilterConfig");
     }
 
     @Override
     public ConfigOrError<CompositeFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
       if (!isSupported()) {
-        return ConfigOrError.fromError("Composite Filter is experimental and disabled by default.");
+        return ConfigOrError.fromError("Composite Filter is experimental and disabled"
+            + " by default.");
       }
-      return parseConfig(rawProtoMessage);
-    }
-
-    private boolean isSupported() {
-      return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER",
-          false);
-    }
-
-    private ConfigOrError<CompositeFilterConfig> parseConfig(Message rawProtoMessage) {
-      Matcher matcherProto = null;
-      if (rawProtoMessage instanceof Any) {
-        try {
-          Any any = (Any) rawProtoMessage;
-          if (any.is(ExtensionWithMatcher.class)) {
-            ExtensionWithMatcher proto = any.unpack(ExtensionWithMatcher.class);
-            matcherProto = proto.getXdsMatcher();
-          } else if (any.is(ExtensionWithMatcherPerRoute.class)) {
-            ExtensionWithMatcherPerRoute proto = any.unpack(ExtensionWithMatcherPerRoute.class);
-            matcherProto = proto.getXdsMatcher();
-          } else if (any.is(Composite.class)) {
-            return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
-          }
-        } catch (InvalidProtocolBufferException e) {
-          return ConfigOrError.fromError("Invalid proto: " + e);
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid message type: "
+            + rawProtoMessage.getClass().getName());
+      }
+      try {
+        Any any = (Any) rawProtoMessage;
+        if (any.is(ExtensionWithMatcherPerRoute.class)) {
+          ExtensionWithMatcherPerRoute proto = any.unpack(ExtensionWithMatcherPerRoute.class);
+          return parseMatcherConfig(proto.getXdsMatcher());
         }
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
       }
+      return ConfigOrError.fromError("Unsupported message type in "
+          + "parseFilterConfigOverride");
+    }
 
+    private ConfigOrError<CompositeFilterConfig> parseMatcherConfig(
+        @Nullable Matcher matcherProto) {
       if (matcherProto == null) {
         return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
       }
 
       try {
         UnifiedMatcher<FilterDelegate> matcher = UnifiedMatcher.create(matcherProto,
-            (com.github.xds.core.v3.TypedExtensionConfig config) -> {
-              try {
-                Any actionAny = config.getTypedConfig();
-                if (actionAny.is(ExecuteFilterAction.class)) {
-                  ExecuteFilterAction executeAction = actionAny.unpack(ExecuteFilterAction.class);
-                  FractionalPercent samplePercent = executeAction.hasSamplePercent()
-                      ? executeAction.getSamplePercent().getDefaultValue()
-                      : null;
-                  List<TypedExtensionConfig> childConfigs = new ArrayList<>();
-
-                  if (executeAction.hasFilterChain()) {
-                    childConfigs.addAll(executeAction.getFilterChain().getTypedConfigList());
-                  } else if (executeAction.hasTypedConfig()) {
-                    childConfigs.add(executeAction.getTypedConfig());
-                  }
-
-                  if (!childConfigs.isEmpty()) {
-                    List<DelegateEntry> delegates = new ArrayList<>();
-                    for (TypedExtensionConfig childFilterConfig : childConfigs) {
-                      String typeUrl = childFilterConfig.getTypedConfig().getTypeUrl();
-                      Message rawConfig = childFilterConfig.getTypedConfig();
-
-                      try {
-                        if (typeUrl.equals("type.googleapis.com/udpa.type.v1.TypedStruct")) {
-                          com.github.udpa.udpa.type.v1.TypedStruct typedStruct = childFilterConfig
-                              .getTypedConfig()
-                              .unpack(com.github.udpa.udpa.type.v1.TypedStruct.class);
-                          typeUrl = typedStruct.getTypeUrl();
-                          rawConfig = typedStruct.getValue();
-                        } else if (typeUrl.equals("type.googleapis.com/xds.type.v3.TypedStruct")) {
-                          com.github.xds.type.v3.TypedStruct typedStruct = childFilterConfig
-                              .getTypedConfig()
-                              .unpack(com.github.xds.type.v3.TypedStruct.class);
-                          typeUrl = typedStruct.getTypeUrl();
-                          rawConfig = typedStruct.getValue();
-                        }
-                      } catch (InvalidProtocolBufferException e) {
-                        throw new IllegalArgumentException("Failed to unpack TypedStruct", e);
-                      }
-
-                      Filter.Provider provider = FilterRegistry.getDefaultRegistry().get(typeUrl);
-                      if (provider == null) {
-                        throw new IllegalArgumentException("Action filter not found: " + typeUrl);
-                      }
-                      ConfigOrError<? extends FilterConfig> parsed = provider
-                          .parseFilterConfig(rawConfig);
-                      if (parsed.errorDetail != null) {
-                        throw new IllegalArgumentException(
-                            "Failed to parse child filter: " + parsed.errorDetail);
-                      }
-                      delegates.add(new DelegateEntry(provider, parsed.config));
-                    }
-                    return new FilterDelegate(delegates, samplePercent);
-                  }
-                }
-              } catch (InvalidProtocolBufferException e) {
-                throw new RuntimeException(e);
-              }
-              return null;
-            });
+            Provider::createFilterDelegate);
         return ConfigOrError.fromConfig(new CompositeFilterConfig(matcher));
       } catch (Exception e) {
         return ConfigOrError.fromError("Failed to create matcher: " + e.getMessage());
       }
+    }
+
+    private boolean isSupported() {
+      return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", false);
+    }
+
+    private static FilterDelegate createFilterDelegate(
+        com.github.xds.core.v3.TypedExtensionConfig config) {
+      try {
+        Any actionAny = config.getTypedConfig();
+        if (actionAny.is(ExecuteFilterAction.class)) {
+          ExecuteFilterAction executeAction = actionAny.unpack(ExecuteFilterAction.class);
+          FractionalPercent samplePercent = executeAction.hasSamplePercent()
+              ? executeAction.getSamplePercent().getDefaultValue()
+              : null;
+          List<TypedExtensionConfig> childConfigs = new ArrayList<>();
+
+          if (executeAction.hasFilterChain()) {
+            childConfigs.addAll(executeAction.getFilterChain().getTypedConfigList());
+          } else if (executeAction.hasTypedConfig()) {
+            childConfigs.add(executeAction.getTypedConfig());
+          }
+
+          if (childConfigs.isEmpty()) {
+            return null;
+          }
+
+          List<DelegateEntry> delegates = new ArrayList<>();
+          for (TypedExtensionConfig childFilterConfig : childConfigs) {
+            String typeUrl = childFilterConfig.getTypedConfig().getTypeUrl();
+            Message rawConfig = childFilterConfig.getTypedConfig();
+
+            try {
+              if (typeUrl.equals("type.googleapis.com/udpa.type.v1.TypedStruct")) {
+                TypedStruct typedStruct = childFilterConfig
+                    .getTypedConfig()
+                    .unpack(TypedStruct.class);
+                typeUrl = typedStruct.getTypeUrl();
+                rawConfig = typedStruct.getValue();
+              } else if (typeUrl.equals("type.googleapis.com/xds.type.v3.TypedStruct")) {
+                TypedStruct typedStruct = childFilterConfig
+                    .getTypedConfig()
+                    .unpack(TypedStruct.class);
+                typeUrl = typedStruct.getTypeUrl();
+                rawConfig = typedStruct.getValue();
+              }
+            } catch (InvalidProtocolBufferException e) {
+              throw new IllegalArgumentException("Failed to unpack TypedStruct", e);
+            }
+
+            Filter.Provider provider = FilterRegistry.getDefaultRegistry().get(typeUrl);
+            if (provider == null) {
+              throw new IllegalArgumentException("Action filter not found: " + typeUrl);
+            }
+            ConfigOrError<? extends FilterConfig> parsed = provider
+                .parseFilterConfig(rawConfig);
+            if (parsed.errorDetail != null) {
+              throw new IllegalArgumentException(
+                  "Failed to parse child filter: " + parsed.errorDetail);
+            }
+            delegates.add(new DelegateEntry(provider, parsed.config, childFilterConfig.getName()));
+          }
+          return new FilterDelegate(delegates, samplePercent);
+        }
+      } catch (InvalidProtocolBufferException e) {
+        throw new RuntimeException(e);
+      }
+      return null;
     }
   }
 
@@ -236,44 +254,55 @@ public final class CompositeFilter implements Filter {
 
   static final class FilterDelegate {
     final List<DelegateEntry> delegates;
-    @Nullable
-    final FractionalPercent samplePercent;
+    private final double threshold;
 
     FilterDelegate(List<DelegateEntry> delegates, @Nullable FractionalPercent samplePercent) {
       this.delegates = Collections.unmodifiableList(delegates);
-      this.samplePercent = samplePercent;
+      this.threshold = calculateThreshold(samplePercent);
+    }
+
+    private static double calculateThreshold(@Nullable FractionalPercent samplePercent) {
+      if (samplePercent == null) {
+        return 1.0;
+      }
+      double numerator = samplePercent.getNumerator();
+      double denominator;
+      switch (samplePercent.getDenominator()) {
+        case HUNDRED:
+          denominator = 100.0;
+          break;
+        case TEN_THOUSAND:
+          denominator = 10000.0;
+          break;
+        case MILLION:
+          denominator = 1000000.0;
+          break;
+        default:
+          denominator = 100.0;
+      }
+      return numerator / denominator;
     }
 
     boolean shouldExecute() {
-      if (samplePercent == null) {
+      if (threshold >= 1.0) {
         return true;
       }
-      int numerator = samplePercent.getNumerator();
-      int denominator;
-      switch (samplePercent.getDenominator()) {
-        case HUNDRED:
-          denominator = 100;
-          break;
-        case TEN_THOUSAND:
-          denominator = 10000;
-          break;
-        case MILLION:
-          denominator = 1000000;
-          break;
-        default:
-          denominator = 100;
+      if (threshold <= 0.0) {
+        return false;
       }
-      return ThreadLocalRandom.current().nextInt(denominator) < numerator;
+      return ThreadLocalRandom.current().nextDouble() < threshold;
     }
   }
 
   static final class DelegateEntry {
     final Filter.Provider provider;
     final FilterConfig config;
+    final String name;
 
-    DelegateEntry(Filter.Provider provider, FilterConfig config) {
+    DelegateEntry(Filter.Provider provider, FilterConfig config, String name) {
       this.provider = provider;
       this.config = config;
+      this.name = name;
     }
   }
 
@@ -323,7 +352,7 @@ public final class CompositeFilter implements Filter {
                 continue;
               }
               for (DelegateEntry entry : delegate.delegates) {
-                Filter filter = entry.provider.newInstance("composite_child");
+                Filter filter = entry.provider.newInstance(entry.name);
                 filters.add(filter);
                 ServerInterceptor interceptor = filter.buildServerInterceptor(entry.config, null);
                 if (interceptor != null) {
@@ -477,9 +506,7 @@ public final class CompositeFilter implements Filter {
     private final io.grpc.Channel next;
     private final UnifiedMatcher<FilterDelegate> matcher;
     private final ScheduledExecutorService scheduler;
-
     private io.grpc.ClientCall<ReqT, RespT> delegate;
-    private final java.util.List<Runnable> pendingEvents = new java.util.ArrayList<>();
     private boolean started;
     private boolean cancelled;
     private String cancelMessage;
@@ -515,7 +542,7 @@ public final class CompositeFilter implements Filter {
               continue;
             }
             for (DelegateEntry entry : filterDelegate.delegates) {
-              Filter filter = entry.provider.newInstance("composite_child");
+              Filter filter = entry.provider.newInstance(entry.name);
               filters.add(filter);
               ClientInterceptor interceptor = filter.buildClientInterceptor(entry.config, null,
                   scheduler);
@@ -559,11 +586,6 @@ public final class CompositeFilter implements Filter {
 
       delegate.start(responseListener, headers);
 
-      for (Runnable r : pendingEvents) {
-        r.run();
-      }
-      pendingEvents.clear();
-
       if (cancelled) {
         delegate.cancel(cancelMessage, cancelCause);
       }
@@ -571,11 +593,8 @@ public final class CompositeFilter implements Filter {
 
     @Override
     public void request(int numMessages) {
-      if (delegate != null) {
-        delegate.request(numMessages);
-      } else {
-        pendingEvents.add(() -> delegate.request(numMessages));
-      }
+      checkDelegate();
+      delegate.request(numMessages);
     }
 
     @Override
@@ -591,29 +610,25 @@ public final class CompositeFilter implements Filter {
 
     @Override
     public void halfClose() {
-      if (delegate != null) {
-        delegate.halfClose();
-      } else {
-        pendingEvents.add(() -> delegate.halfClose());
-      }
+      checkDelegate();
+      delegate.halfClose();
     }
 
     @Override
     public void sendMessage(ReqT message) {
-      if (delegate != null) {
-        delegate.sendMessage(message);
-      } else {
-        pendingEvents.add(() -> delegate.sendMessage(message));
-      }
+      checkDelegate();
+      delegate.sendMessage(message);
     }
 
     @Override
     public void setMessageCompression(boolean enabled) {
-      if (delegate != null) {
-        delegate.setMessageCompression(enabled);
-      } else {
-        pendingEvents.add(() -> delegate.setMessageCompression(enabled));
-      }
+      checkDelegate();
+      delegate.setMessageCompression(enabled);
+    }
+
+    private void checkDelegate() {
+      Preconditions.checkState(delegate != null,
+          "Not started");
     }
   }
 }
