@@ -1526,10 +1526,14 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
     // Sidecar stream fails
@@ -1537,6 +1541,15 @@ public class ExternalProcessorFilterTest {
 
     // Verify raw call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
+
+    // Simulate raw call closure due to cancellation
+    rawListenerCaptor.getValue().onClose(Status.CANCELLED.withDescription("Cancelled by sidecar failure"), new Metadata());
+
+    // Verify application receives UNAVAILABLE with correct description as per gRFC A93
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
   }
 
   @Test
@@ -1678,10 +1691,14 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
     // Simulate sidecar sending compressed body mutation (unsupported)
@@ -1704,6 +1721,15 @@ public class ExternalProcessorFilterTest {
     
     // Verify raw call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
+
+    // Simulate raw call closure due to cancellation
+    rawListenerCaptor.getValue().onClose(Status.CANCELLED.withDescription("Cancelled by sidecar failure"), new Metadata());
+
+    // Verify application receives UNAVAILABLE with correct description
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
   }
 
   // --- Category 9: Resource Management ---
