@@ -1715,6 +1715,7 @@ public class ExternalProcessorFilterTest {
             .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
                 .setStatus(Status.UNAUTHENTICATED.getCode().value())
                 .build())
+            .setDetails("Custom security rejection")
             .build())
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
@@ -1722,8 +1723,11 @@ public class ExternalProcessorFilterTest {
     // Verify data plane call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("Rejected by ExtProc"), Mockito.any());
     
-    // Verify app listener notified with the correct status
-    Mockito.verify(mockAppListener).onClose(Mockito.eq(Status.UNAUTHENTICATED), Mockito.any());
+    // Verify app listener notified with the correct status and details
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("Custom security rejection");
   }
 
   @Test
@@ -1799,6 +1803,90 @@ public class ExternalProcessorFilterTest {
     Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenImmediateResponseInTrailers_whenReceived_thenDataPlaneCallStatusIsOverridden() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///sidecar")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND).build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ManagedChannel mockSidecarChannel = Mockito.mock(ManagedChannel.class);
+    ClientCall<ProcessingRequest, ProcessingResponse> mockSidecarCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockSidecarChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockSidecarCall);
+
+    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
+    Mockito.when(mockChannelManager.getChannel(Mockito.any())).thenReturn(mockSidecarChannel);
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, mockChannelManager, scheduler);
+
+    Channel mockNextChannel = Mockito.mock(Channel.class);
+    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockRawCall);
+
+    ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
+    
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
+    Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
+
+    // 1. Activate call immediately (no request headers mode)
+    // 2. Data plane call receives trailers
+    Metadata originalTrailers = new Metadata();
+    rawListenerCaptor.getValue().onClose(Status.OK, originalTrailers);
+
+    // 3. Sidecar receives trailers event
+    ArgumentCaptor<ProcessingRequest> requestCaptor = ArgumentCaptor.forClass(ProcessingRequest.class);
+    Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().hasResponseTrailers()).isTrue();
+
+    // 4. Sidecar responds with ImmediateResponse overriding status to DATA_LOSS and adding a header
+    ProcessingResponse resp = ProcessingResponse.newBuilder()
+        .setImmediateResponse(ImmediateResponse.newBuilder()
+            .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
+                .setStatus(Status.DATA_LOSS.getCode().value())
+                .build())
+            .setDetails("Sidecar detected data loss")
+            .setHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation.newBuilder()
+                .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                    .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                        .setKey("x-sidecar-extra").setValue("true").build())
+                    .build())
+                .build())
+            .build())
+        .build();
+    sidecarListenerCaptor.getValue().onMessage(resp);
+
+    // Verify application receives the OVERRIDDEN status and merged trailers
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<Metadata> trailersCaptor = ArgumentCaptor.forClass(Metadata.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), trailersCaptor.capture());
+    
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DATA_LOSS);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("Sidecar detected data loss");
+    assertThat(trailersCaptor.getValue().get(Metadata.Key.of("x-sidecar-extra", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("true");
+    
+    // Verify sidecar stream closed
+    Mockito.verify(mockSidecarCall).halfClose();
   }
 
   // --- Category 9: Resource Management ---
