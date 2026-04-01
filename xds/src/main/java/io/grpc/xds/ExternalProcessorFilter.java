@@ -55,17 +55,14 @@ public class ExternalProcessorFilter implements Filter {
 
   final String filterInstanceName;
   private final CachedChannelManager cachedChannelManager;
-  private final java.util.concurrent.ScheduledExecutorService scheduler;
 
   public ExternalProcessorFilter(String name) {
-    this(name, new CachedChannelManager(), null);
+    this(name, new CachedChannelManager());
   }
 
-  ExternalProcessorFilter(String name, CachedChannelManager cachedChannelManager,
-      @Nullable java.util.concurrent.ScheduledExecutorService scheduler) {
+  ExternalProcessorFilter(String name, CachedChannelManager cachedChannelManager) {
     this.filterInstanceName = checkNotNull(name, "name");
     this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
-    this.scheduler = scheduler;
   }
 
   @Override

@@ -60,6 +60,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
@@ -106,7 +107,7 @@ public class ExternalProcessorFilterTest {
   private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
     @Override
     public InputStream stream(String value) {
-      return new ByteArrayInputStream(value.getBytes());
+      return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -119,7 +120,7 @@ public class ExternalProcessorFilterTest {
           buffer.write(data, 0, nRead);
         }
         buffer.flush();
-        return new String(buffer.toByteArray());
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -641,7 +642,7 @@ public class ExternalProcessorFilterTest {
 
     ArgumentCaptor<InputStream> bodyCaptor = ArgumentCaptor.forClass(InputStream.class);
     Mockito.verify(mockRawCall).sendMessage(bodyCaptor.capture());
-    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()))).isEqualTo("Mutated");
+    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()), StandardCharsets.UTF_8)).isEqualTo("Mutated");
   }
 
   @Test
@@ -855,7 +856,7 @@ public class ExternalProcessorFilterTest {
     
     Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
 
-    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Server Message".getBytes()));
+    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Server Message".getBytes(StandardCharsets.UTF_8)));
 
     ArgumentCaptor<ProcessingRequest> requestCaptor = ArgumentCaptor.forClass(ProcessingRequest.class);
     Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
@@ -909,7 +910,7 @@ public class ExternalProcessorFilterTest {
     Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
-    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Original".getBytes()));
+    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Original".getBytes(StandardCharsets.UTF_8)));
 
     ProcessingResponse resp = ProcessingResponse.newBuilder()
         .setResponseBody(BodyResponse.newBuilder()
@@ -1673,7 +1674,7 @@ public class ExternalProcessorFilterTest {
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
     CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
     
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test", mockChannelManager, scheduler);
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test", mockChannelManager);
     
     filter.close();
     
