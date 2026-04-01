@@ -750,7 +750,8 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener) {
+      private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener)
+          throws HeaderMutationDisallowedException {
         Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
         if (!immediate.getDetails().isEmpty()) {
           status = status.withDescription(immediate.getDetails());
@@ -758,11 +759,7 @@ public class ExternalProcessorFilter implements Filter {
 
         Metadata trailers = new Metadata();
         if (immediate.hasHeaders()) {
-          try {
-             applyHeaderMutations(trailers, immediate.getHeaders());
-          } catch (HeaderMutationDisallowedException e) {
-             // Best effort as per spec.
-          }
+          applyHeaderMutations(trailers, immediate.getHeaders());
         }
 
         if (isProcessingTrailers.get()) {
@@ -778,7 +775,7 @@ public class ExternalProcessorFilter implements Filter {
         } else {
           // If sent in response to any other event, it will cause the data plane RPC to immediately fail 
           // with the specified status as if it were an out-of-band cancellation.
-          rawCall.cancel("Rejected by ExtProc", null);
+          rawCall.cancel(status.getDescription(), null);
           listener.onClose(status, trailers);
         }
         closeExtProcStream();

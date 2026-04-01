@@ -1720,8 +1720,8 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
-    // Verify data plane call cancelled
-    Mockito.verify(mockRawCall).cancel(Mockito.contains("Rejected by ExtProc"), Mockito.any());
+    // Verify data plane call cancelled with the status details
+    Mockito.verify(mockRawCall).cancel(Mockito.eq("Custom security rejection"), Mockito.any());
     
     // Verify app listener notified with the correct status and details
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
