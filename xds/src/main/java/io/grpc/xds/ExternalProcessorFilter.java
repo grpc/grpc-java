@@ -54,10 +54,18 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
-  private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
+  private final CachedChannelManager cachedChannelManager;
+  private final java.util.concurrent.ScheduledExecutorService scheduler;
 
   public ExternalProcessorFilter(String name) {
-    filterInstanceName = checkNotNull(name, "name");
+    this(name, new CachedChannelManager(), null);
+  }
+
+  ExternalProcessorFilter(String name, CachedChannelManager cachedChannelManager,
+      @Nullable java.util.concurrent.ScheduledExecutorService scheduler) {
+    this.filterInstanceName = checkNotNull(name, "name");
+    this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
+    this.scheduler = scheduler;
   }
 
   @Override
