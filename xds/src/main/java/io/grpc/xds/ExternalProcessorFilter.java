@@ -475,11 +475,7 @@ public class ExternalProcessorFilter implements Filter {
                         .asRuntimeException();
                     synchronized (streamLock) {
                       if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
-                        try {
-                          extProcClientCallRequestObserver.onError(ex);
-                        } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-                          // Ignore
-                        }
+                        extProcClientCallRequestObserver.onError(ex);
                       }
                     }
                     onError(ex);
@@ -508,11 +504,7 @@ public class ExternalProcessorFilter implements Filter {
                         .asRuntimeException();
                     synchronized (streamLock) {
                       if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
-                        try {
-                          extProcClientCallRequestObserver.onError(ex);
-                        } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-                          // Ignore
-                        }
+                        extProcClientCallRequestObserver.onError(ex);
                       }
                     }
                     onError(ex);
@@ -577,11 +569,7 @@ public class ExternalProcessorFilter implements Filter {
       private void sendToExtProc(ProcessingRequest request) {
         synchronized (streamLock) {
           if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
-            try {
-              extProcClientCallRequestObserver.onNext(request);
-            } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-              // Ignore if stream is already closed
-            }
+            extProcClientCallRequestObserver.onNext(request);
           }
         }
       }
@@ -604,11 +592,7 @@ public class ExternalProcessorFilter implements Filter {
         synchronized (streamLock) {
           if (extProcStreamCompleted.compareAndSet(false, true)) {
             if (extProcClientCallRequestObserver != null) {
-              try {
-                extProcClientCallRequestObserver.onCompleted();
-              } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-                // Ignore if already closed
-              }
+              extProcClientCallRequestObserver.onCompleted();
             }
           }
         }
@@ -617,11 +601,7 @@ public class ExternalProcessorFilter implements Filter {
       private void halfCloseExtProcStream() {
         synchronized (streamLock) {
           if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
-            try {
-              extProcClientCallRequestObserver.onCompleted();
-            } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-              // Ignore
-            }
+            extProcClientCallRequestObserver.onCompleted();
           }
         }
       }
@@ -726,11 +706,7 @@ public class ExternalProcessorFilter implements Filter {
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
         synchronized (streamLock) {
           if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
-            try {
-              extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
-            } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
-              // Ignore
-            }
+            extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
           }
         }
         super.cancel(message, cause);
