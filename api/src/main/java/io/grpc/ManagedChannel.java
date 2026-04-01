@@ -16,8 +16,8 @@
 
 package io.grpc;
 
+import com.google.errorprone.annotations.ThreadSafe;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link Channel} that provides lifecycle management.

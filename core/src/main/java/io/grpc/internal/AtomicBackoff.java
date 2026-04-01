@@ -17,10 +17,10 @@
 package io.grpc.internal;
 
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.ThreadSafe;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@code long} atomically updated due to errors caused by the value being too small.

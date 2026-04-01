@@ -11,7 +11,6 @@ java_library(
         "//core",
         "//core:internal",
         "//netty",
-        artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
         artifact("org.checkerframework:checker-qual"),
@@ -37,7 +36,7 @@ java_library(
     ]),
     deps = [
         ":s2a_identity",
-        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
     ],
 )

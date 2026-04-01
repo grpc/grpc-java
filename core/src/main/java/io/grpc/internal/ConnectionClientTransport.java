@@ -16,8 +16,8 @@
 
 package io.grpc.internal;
 
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Attributes;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ManagedClientTransport} that is based on a connection.
