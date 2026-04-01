@@ -113,7 +113,7 @@ public class LoadBalancerConfigFactoryTest {
                   .build()))).build();
   private static final Policy CUSTOM_POLICY_UDPA = Policy.newBuilder().setTypedExtensionConfig(
       TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
-          com.github.udpa.udpa.type.v1.TypedStruct.newBuilder().setTypeUrl(
+          TypedStruct.newBuilder().setTypeUrl(
                   "type.googleapis.com/" + CUSTOM_POLICY_NAME).setValue(
                   Struct.newBuilder().putFields(CUSTOM_POLICY_FIELD_KEY,
                       Value.newBuilder().setNumberValue(CUSTOM_POLICY_FIELD_VALUE).build()))
