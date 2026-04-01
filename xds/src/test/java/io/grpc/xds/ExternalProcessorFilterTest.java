@@ -269,6 +269,7 @@ public class ExternalProcessorFilterTest {
     
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar call uses same executor as main call
     ArgumentCaptor<CallOptions> sidecarOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     Mockito.verify(mockSidecarChannel).newCall(
         Mockito.eq(ExternalProcessorGrpc.getProcessMethod()), 
@@ -315,6 +316,7 @@ public class ExternalProcessorFilterTest {
     
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar call has correct deadline
     ArgumentCaptor<CallOptions> sidecarOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     Mockito.verify(mockSidecarChannel).newCall(
         Mockito.eq(ExternalProcessorGrpc.getProcessMethod()), 
@@ -366,6 +368,7 @@ public class ExternalProcessorFilterTest {
     
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar stream started with initial metadata
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     Mockito.verify(mockSidecarCall).start(Mockito.any(), metadataCaptor.capture());
 
@@ -702,6 +705,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.sendMessage("Too late");
 
+    // Verify sidecar and raw call NOT messaged after EOS
     Mockito.verify(mockSidecarCall, Mockito.times(0)).sendMessage(Mockito.any());
     Mockito.verify(mockRawCall, Mockito.times(0)).sendMessage(Mockito.any());
   }
@@ -750,6 +754,7 @@ public class ExternalProcessorFilterTest {
     Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getRequestBody().getEndOfStreamWithoutMessage()).isTrue();
 
+    // Verify super.halfClose() was deferred
     Mockito.verify(mockRawCall, Mockito.never()).halfClose();
   }
 
@@ -808,6 +813,7 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // Verify super.halfClose() called after sidecar EOS
     Mockito.verify(mockRawCall).halfClose();
   }
 
@@ -976,6 +982,7 @@ public class ExternalProcessorFilterTest {
 
     rawListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
+    // Verify app listener NOT closed yet (waiting for sidecar EOS)
     Mockito.verify(mockAppListener, Mockito.never()).onClose(Mockito.any(), Mockito.any());
 
     ProcessingResponse resp = ProcessingResponse.newBuilder()
@@ -991,6 +998,7 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // Verify app listener notified with trailers
     Mockito.verify(mockAppListener).onClose(Mockito.eq(Status.OK), Mockito.any());
   }
 
@@ -1037,6 +1045,7 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
     
+    // Simulate sidecar is busy
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     assertThat(proxyCall.isReady()).isFalse();
@@ -1083,8 +1092,10 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar is busy
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
+    // Should still be ready because observability_mode is false
     assertThat(proxyCall.isReady()).isTrue();
   }
 
@@ -1128,9 +1139,11 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Send request_drain: true
     ProcessingResponse resp = ProcessingResponse.newBuilder().setRequestDrain(true).build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // isReady() must return false during drain
     assertThat(proxyCall.isReady()).isFalse();
   }
 
@@ -1177,8 +1190,10 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
     
+    // Trigger sidecar onReady
     sidecarListenerCaptor.getValue().onReady();
 
+    // Verify app listener notified
     Mockito.verify(mockAppListener).onReady();
   }
 
@@ -1224,11 +1239,14 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Enter drain
     sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
     assertThat(proxyCall.isReady()).isFalse();
 
+    // Sidecar stream completes
     sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
+    // Verify app listener notified to resume flow
     Mockito.verify(mockAppListener).onReady();
     assertThat(proxyCall.isReady()).isTrue();
   }
@@ -1268,6 +1286,7 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
     
+    // Sidecar is NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
@@ -1276,6 +1295,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.request(5);
 
+    // Verify raw call NOT requested yet
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
   }
 
@@ -1311,6 +1331,7 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
         .thenReturn(mockRawCall);
     
+    // Sidecar is NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
@@ -1319,6 +1340,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.request(5);
 
+    // Verify raw call requested immediately because obs_mode is false
     Mockito.verify(mockRawCall).request(5);
   }
 
@@ -1361,10 +1383,12 @@ public class ExternalProcessorFilterTest {
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Enter drain
     sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
 
     proxyCall.request(3);
 
+    // Verify raw call NOT requested during drain
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
   }
 
@@ -1401,6 +1425,7 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
     
+    // Start with sidecar NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
@@ -1412,9 +1437,11 @@ public class ExternalProcessorFilterTest {
     proxyCall.request(10);
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
 
+    // Sidecar becomes ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(true);
     sidecarListenerCaptor.getValue().onReady();
 
+    // Verify buffered request drained
     Mockito.verify(mockRawCall).request(10);
   }
 
@@ -1455,10 +1482,12 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar stream completes
     sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
     proxyCall.request(7);
 
+    // Verify requested immediately after sidecar is gone
     Mockito.verify(mockRawCall).request(7);
   }
 
@@ -1503,8 +1532,10 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar stream fails
     sidecarListenerCaptor.getValue().onClose(Status.INTERNAL.withDescription("Sidecar Error"), new Metadata());
 
+    // Verify raw call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
   }
 
@@ -1547,10 +1578,13 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar stream fails
     sidecarListenerCaptor.getValue().onClose(Status.INTERNAL.withDescription("Sidecar Error"), new Metadata());
 
+    // Verify raw call NOT cancelled
     Mockito.verify(mockRawCall, Mockito.never()).cancel(Mockito.any(), Mockito.any());
     
+    // Verify raw call started (failed open)
     Mockito.verify(mockRawCall).start(Mockito.any(), Mockito.any());
   }
 
@@ -1593,6 +1627,7 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(mockAppListener, new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Simulate sidecar sending ImmediateResponse (e.g., Unauthenticated)
     ProcessingResponse resp = ProcessingResponse.newBuilder()
         .setImmediateResponse(ImmediateResponse.newBuilder()
             .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
@@ -1602,8 +1637,10 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // Verify data plane call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("Rejected by ExtProc"), Mockito.any());
     
+    // Verify app listener notified with the correct status
     Mockito.verify(mockAppListener).onClose(Mockito.eq(Status.UNAUTHENTICATED), Mockito.any());
   }
 
@@ -1647,6 +1684,7 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Simulate sidecar sending compressed body mutation (unsupported)
     ProcessingResponse resp = ProcessingResponse.newBuilder()
         .setRequestBody(BodyResponse.newBuilder()
             .setResponse(CommonResponse.newBuilder()
@@ -1716,6 +1754,7 @@ public class ExternalProcessorFilterTest {
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Application cancels the RPC
     proxyCall.cancel("User cancelled", null);
 
     // Verify sidecar stream also cancelled
