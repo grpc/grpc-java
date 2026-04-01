@@ -189,10 +189,9 @@ public class ExternalProcessorFilter implements Filter {
           .withExecutor(callOptions.getExecutor());
       
       if (filterConfig.grpcServiceConfig.timeout() != null && filterConfig.grpcServiceConfig.timeout().isPresent()) {
-        long timeoutSeconds = filterConfig.grpcServiceConfig.timeout().get().getSeconds();
-        int timeoutNanos = filterConfig.grpcServiceConfig.timeout().get().getNano();
-        if (timeoutSeconds > 0 || timeoutNanos > 0) {
-          stub = stub.withDeadlineAfter(timeoutSeconds * 1_000_000_000L + timeoutNanos, TimeUnit.NANOSECONDS);
+        long timeoutNanos = filterConfig.grpcServiceConfig.timeout().get().toNanos();
+        if (timeoutNanos > 0) {
+          stub = stub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
         }
       }
 
@@ -452,7 +451,7 @@ public class ExternalProcessorFilter implements Filter {
 
               if (response.getRequestDrain()) {
                 drainingExtProcStream.set(true);
-                closeExtProcStream();
+                halfCloseExtProcStream();
                 return;
               }
 
@@ -589,9 +588,7 @@ public class ExternalProcessorFilter implements Filter {
 
       private void onExtProcStreamReady() {
         drainPendingRequests();
-        if (isReady()) {
-          wrappedListener.onReadyNotify();
-        }
+        onReadyNotify();
       }
 
       private void drainPendingRequests() {
@@ -617,6 +614,24 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
+      private void halfCloseExtProcStream() {
+        synchronized (streamLock) {
+          if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
+            try {
+              extProcClientCallRequestObserver.onCompleted();
+            } catch (IllegalStateException | io.grpc.StatusRuntimeException e) {
+              // Ignore
+            }
+          }
+        }
+      }
+
+      private void onReadyNotify() {
+        if (isReady()) {
+          wrappedListener.onReadyNotify();
+        }
+      }
+
       @Override
       public boolean isReady() {
         if (extProcStreamCompleted.get()) {
@@ -625,9 +640,7 @@ public class ExternalProcessorFilter implements Filter {
         if (drainingExtProcStream.get()) {
           return false;
         }
-        boolean sendingBody = config.getProcessingMode().getRequestBodyMode()
-            == ProcessingMode.BodySendMode.GRPC;
-        if (config.getObservabilityMode() || sendingBody) {
+        if (config.getObservabilityMode()) {
           synchronized (streamLock) {
             return super.isReady() && extProcClientCallRequestObserver != null
                 && extProcClientCallRequestObserver.isReady();
@@ -638,12 +651,24 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void request(int numMessages) {
+        if (extProcStreamCompleted.get()) {
+          super.request(numMessages);
+          return;
+        }
         // If the external processor is backed up with flow control, we need to stop requesting
         // messages from the remote side.
-        synchronized (streamLock) {
-          if (!isReady()) {
+        if (drainingExtProcStream.get()) {
+          synchronized (streamLock) {
             pendingRequests += numMessages;
             return;
+          }
+        }
+        if (config.getObservabilityMode()) {
+          synchronized (streamLock) {
+            if (!isReady()) {
+              pendingRequests += numMessages;
+              return;
+            }
           }
         }
         super.request(numMessages);
@@ -779,9 +804,6 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onReadyNotify() {
-        if (extProcClientCall.drainingExtProcStream.get()) {
-          return;
-        }
         if (extProcClientCall.isReady()) {
           super.onReady();
         }
@@ -901,6 +923,7 @@ public class ExternalProcessorFilter implements Filter {
 
       void unblockAfterStreamComplete() {
         proceedWithHeaders();
+        onReadyNotify();
         proceedWithClose();
       }
     }
