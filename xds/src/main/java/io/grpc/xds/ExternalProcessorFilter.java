@@ -842,24 +842,28 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (extProcClientCall.config.getProcessingMode().getResponseTrailerMode() != ProcessingMode.HeaderSendMode.SEND) {
-          super.onClose(status, trailers);
-          if (!extProcClientCall.config.getObservabilityMode()) {
-            extProcClientCall.closeExtProcStream();
-          }
-          return;
-        }
-
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
-        sendResponseBodyToExtProc(null, true);
+        if (extProcClientCall.config.getProcessingMode().getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC) {
+          sendResponseBodyToExtProc(null, true);
+        }
 
-        extProcClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-            .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
-                .setTrailers(toHeaderMap(savedTrailers))
-                .build())
-            .build());
+        if (extProcClientCall.config.getProcessingMode().getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND) {
+          extProcClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+              .setResponseTrailers(io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers.newBuilder()
+                  .setTrailers(toHeaderMap(savedTrailers))
+                  .build())
+              .build());
+        } else {
+          // If we are not sending trailers, and not waiting for body EOS, proceed with close.
+          if (extProcClientCall.config.getProcessingMode().getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+            proceedWithClose();
+            if (!extProcClientCall.config.getObservabilityMode()) {
+              extProcClientCall.closeExtProcStream();
+            }
+          }
+        }
 
         if (extProcClientCall.config.getObservabilityMode()) {
           super.onClose(status, trailers);
