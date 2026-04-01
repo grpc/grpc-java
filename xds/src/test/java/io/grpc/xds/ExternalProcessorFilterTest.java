@@ -60,6 +60,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
@@ -106,7 +107,7 @@ public class ExternalProcessorFilterTest {
   private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
     @Override
     public InputStream stream(String value) {
-      return new ByteArrayInputStream(value.getBytes());
+      return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }
 
     @Override
@@ -119,7 +120,7 @@ public class ExternalProcessorFilterTest {
           buffer.write(data, 0, nRead);
         }
         buffer.flush();
-        return new String(buffer.toByteArray());
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -255,7 +256,7 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, mockChannelManager, scheduler);
 
-    Executor callExecutor = command -> {}; 
+    Executor callExecutor = command -> {};
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(callExecutor);
 
     Channel mockNextChannel = Mockito.mock(Channel.class);
@@ -265,12 +266,13 @@ public class ExternalProcessorFilterTest {
 
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar call uses same executor as main call
     ArgumentCaptor<CallOptions> sidecarOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     Mockito.verify(mockSidecarChannel).newCall(
-        Mockito.eq(ExternalProcessorGrpc.getProcessMethod()), 
+        Mockito.eq(ExternalProcessorGrpc.getProcessMethod()),
         sidecarOptionsCaptor.capture());
 
     assertThat(sidecarOptionsCaptor.getValue().getExecutor()).isSameInstanceAs(callExecutor);
@@ -311,12 +313,13 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar call has correct deadline
     ArgumentCaptor<CallOptions> sidecarOptionsCaptor = ArgumentCaptor.forClass(CallOptions.class);
     Mockito.verify(mockSidecarChannel).newCall(
-        Mockito.eq(ExternalProcessorGrpc.getProcessMethod()), 
+        Mockito.eq(ExternalProcessorGrpc.getProcessMethod()),
         sidecarOptionsCaptor.capture());
 
     Deadline deadline = sidecarOptionsCaptor.getValue().getDeadline();
@@ -362,9 +365,10 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
+    // Verify sidecar stream started with initial metadata
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
     Mockito.verify(mockSidecarCall).start(Mockito.any(), metadataCaptor.capture());
 
@@ -411,7 +415,7 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
     // Verify headers sent to sidecar
@@ -457,16 +461,16 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     Metadata headers = new Metadata();
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), headers);
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
-    
+
     // Simulate sidecar response with header mutation
     ProcessingResponse resp = ProcessingResponse.newBuilder()
         .setRequestHeaders(HeadersResponse.newBuilder()
@@ -480,7 +484,7 @@ public class ExternalProcessorFilterTest {
                 .build())
             .build())
         .build();
-    
+
     sidecarListenerCaptor.getValue().onMessage(resp);
 
     // Verify mutations applied and call started
@@ -524,13 +528,13 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
         METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    
+
     Metadata headers = new Metadata();
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), headers);
 
     // Verify main call started immediately
     Mockito.verify(mockRawCall).start(Mockito.any(), Mockito.eq(headers));
-    
+
     // Verify sidecar NOT messaged about headers
     Mockito.verify(mockSidecarCall, Mockito.never()).sendMessage(Mockito.any());
   }
@@ -636,12 +640,12 @@ public class ExternalProcessorFilterTest {
                 .build())
             .build())
         .build();
-    
+
     sidecarListenerCaptor.getValue().onMessage(resp);
 
     ArgumentCaptor<InputStream> bodyCaptor = ArgumentCaptor.forClass(InputStream.class);
     Mockito.verify(mockRawCall).sendMessage(bodyCaptor.capture());
-    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()))).isEqualTo("Mutated");
+    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()), StandardCharsets.UTF_8)).isEqualTo("Mutated");
   }
 
   @Test
@@ -701,6 +705,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.sendMessage("Too late");
 
+    // Verify sidecar and raw call NOT messaged after EOS
     Mockito.verify(mockSidecarCall, Mockito.times(0)).sendMessage(Mockito.any());
     Mockito.verify(mockRawCall, Mockito.times(0)).sendMessage(Mockito.any());
   }
@@ -749,6 +754,7 @@ public class ExternalProcessorFilterTest {
     Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
     assertThat(requestCaptor.getValue().getRequestBody().getEndOfStreamWithoutMessage()).isTrue();
 
+    // Verify super.halfClose() was deferred
     Mockito.verify(mockRawCall, Mockito.never()).halfClose();
   }
 
@@ -807,6 +813,7 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // Verify super.halfClose() called after sidecar EOS
     Mockito.verify(mockRawCall).halfClose();
   }
 
@@ -848,14 +855,14 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
-    
+
     Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
 
-    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Server Message".getBytes()));
+    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Server Message".getBytes(StandardCharsets.UTF_8)));
 
     ArgumentCaptor<ProcessingRequest> requestCaptor = ArgumentCaptor.forClass(ProcessingRequest.class);
     Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
@@ -901,15 +908,15 @@ public class ExternalProcessorFilterTest {
     ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
-    
+
     Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
-    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Original".getBytes()));
+    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Original".getBytes(StandardCharsets.UTF_8)));
 
     ProcessingResponse resp = ProcessingResponse.newBuilder()
         .setResponseBody(BodyResponse.newBuilder()
@@ -965,16 +972,17 @@ public class ExternalProcessorFilterTest {
     ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
-    
+
     Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
     rawListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
+    // Verify app listener NOT closed yet (waiting for sidecar EOS)
     Mockito.verify(mockAppListener, Mockito.never()).onClose(Mockito.any(), Mockito.any());
 
     ProcessingResponse resp = ProcessingResponse.newBuilder()
@@ -990,6 +998,7 @@ public class ExternalProcessorFilterTest {
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // Verify app listener notified with trailers
     Mockito.verify(mockAppListener).onClose(Mockito.eq(Status.OK), Mockito.any());
   }
 
@@ -1029,13 +1038,14 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
-    
+
+    // Simulate sidecar is busy
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     assertThat(proxyCall.isReady()).isFalse();
@@ -1075,15 +1085,17 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar is busy
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
+    // Should still be ready because observability_mode is false
     assertThat(proxyCall.isReady()).isTrue();
   }
 
@@ -1120,16 +1132,18 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Send request_drain: true
     ProcessingResponse resp = ProcessingResponse.newBuilder().setRequestDrain(true).build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
+    // isReady() must return false during drain
     assertThat(proxyCall.isReady()).isFalse();
   }
 
@@ -1169,15 +1183,17 @@ public class ExternalProcessorFilterTest {
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
-    
+
+    // Trigger sidecar onReady
     sidecarListenerCaptor.getValue().onReady();
 
+    // Verify app listener notified
     Mockito.verify(mockAppListener).onReady();
   }
 
@@ -1216,20 +1232,92 @@ public class ExternalProcessorFilterTest {
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Enter drain
     sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
     assertThat(proxyCall.isReady()).isFalse();
 
+    // Sidecar stream completes
     sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
+    // Verify app listener notified to resume flow
     Mockito.verify(mockAppListener).onReady();
     assertThat(proxyCall.isReady()).isTrue();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenDrainingStream_whenExtProcStreamCompletes_thenMessagesProceedWithoutModification() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///sidecar")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ManagedChannel mockSidecarChannel = Mockito.mock(ManagedChannel.class);
+    ClientCall<ProcessingRequest, ProcessingResponse> mockSidecarCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockSidecarChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockSidecarCall);
+
+    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
+    Mockito.when(mockChannelManager.getChannel(Mockito.any())).thenReturn(mockSidecarChannel);
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, mockChannelManager, scheduler);
+
+    Channel mockNextChannel = Mockito.mock(Channel.class);
+    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockRawCall);
+
+    ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
+    Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
+
+    // 1. Sidecar initiates drain
+    sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
+
+    // 2. Sidecar closes stream with OK status
+    sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
+
+    // 3. Verify application message is forwarded to data plane WITHOUT sidecar call
+    proxyCall.sendMessage("Direct Message");
+    ArgumentCaptor<InputStream> bodyCaptor = ArgumentCaptor.forClass(InputStream.class);
+    Mockito.verify(mockRawCall).sendMessage(bodyCaptor.capture());
+    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()), StandardCharsets.UTF_8)).isEqualTo("Direct Message");
+
+    // Sidecar should NOT have received a requestBody message
+    Mockito.verify(mockSidecarCall, Mockito.never()).sendMessage(Mockito.argThat(req -> req.hasRequestBody()));
+
+    // 4. Verify server response is delivered to application WITHOUT sidecar call
+    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Direct Response".getBytes(StandardCharsets.UTF_8)));
+    Mockito.verify(mockAppListener).onMessage("Direct Response");
+
+    // Sidecar should NOT have received a responseBody message
+    Mockito.verify(mockSidecarCall, Mockito.never()).sendMessage(Mockito.argThat(req -> req.hasResponseBody()));
   }
 
   // --- Category 7: Inbound Backpressure (request(n) / pendingRequests) ---
@@ -1266,7 +1354,8 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
         .thenReturn(mockRawCall);
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
-    
+
+    // Sidecar is NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
@@ -1275,6 +1364,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.request(5);
 
+    // Verify raw call NOT requested yet
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
   }
 
@@ -1309,7 +1399,8 @@ public class ExternalProcessorFilterTest {
     ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
     Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
         .thenReturn(mockRawCall);
-    
+
+    // Sidecar is NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
@@ -1318,6 +1409,7 @@ public class ExternalProcessorFilterTest {
 
     proxyCall.request(5);
 
+    // Verify raw call requested immediately because obs_mode is false
     Mockito.verify(mockRawCall).request(5);
   }
 
@@ -1353,17 +1445,19 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Enter drain
     sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
 
     proxyCall.request(3);
 
+    // Verify raw call NOT requested during drain
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
   }
 
@@ -1399,7 +1493,8 @@ public class ExternalProcessorFilterTest {
     Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
         .thenReturn(mockRawCall);
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
-    
+
+    // Start with sidecar NOT ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(false);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
@@ -1411,9 +1506,11 @@ public class ExternalProcessorFilterTest {
     proxyCall.request(10);
     Mockito.verify(mockRawCall, Mockito.never()).request(Mockito.anyInt());
 
+    // Sidecar becomes ready
     Mockito.when(mockSidecarCall.isReady()).thenReturn(true);
     sidecarListenerCaptor.getValue().onReady();
 
+    // Verify buffered request drained
     Mockito.verify(mockRawCall).request(10);
   }
 
@@ -1454,10 +1551,12 @@ public class ExternalProcessorFilterTest {
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
+    // Sidecar stream completes
     sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
 
     proxyCall.request(7);
 
+    // Verify requested immediately after sidecar is gone
     Mockito.verify(mockRawCall).request(7);
   }
 
@@ -1496,10 +1595,14 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
     // Sidecar stream fails
@@ -1507,6 +1610,15 @@ public class ExternalProcessorFilterTest {
 
     // Verify raw call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
+
+    // Simulate raw call closure due to cancellation
+    rawListenerCaptor.getValue().onClose(Status.CANCELLED.withDescription("Cancelled by sidecar failure"), new Metadata());
+
+    // Verify application receives UNAVAILABLE with correct description as per gRFC A93
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
   }
 
   @Test
@@ -1542,7 +1654,7 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
@@ -1553,7 +1665,7 @@ public class ExternalProcessorFilterTest {
 
     // Verify raw call NOT cancelled
     Mockito.verify(mockRawCall, Mockito.never()).cancel(Mockito.any(), Mockito.any());
-    
+
     // Verify raw call started (failed open)
     Mockito.verify(mockRawCall).start(Mockito.any(), Mockito.any());
   }
@@ -1591,7 +1703,7 @@ public class ExternalProcessorFilterTest {
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
-    
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
@@ -1603,15 +1715,19 @@ public class ExternalProcessorFilterTest {
             .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
                 .setStatus(Status.UNAUTHENTICATED.getCode().value())
                 .build())
+            .setDetails("Custom security rejection")
             .build())
         .build();
     sidecarListenerCaptor.getValue().onMessage(resp);
 
-    // Verify data plane call cancelled
-    Mockito.verify(mockRawCall).cancel(Mockito.contains("Rejected by ExtProc"), Mockito.any());
-    
-    // Verify app listener notified with the correct status
-    Mockito.verify(mockAppListener).onClose(Mockito.eq(Status.UNAUTHENTICATED), Mockito.any());
+    // Verify data plane call cancelled with the status details
+    Mockito.verify(mockRawCall).cancel(Mockito.eq("Custom security rejection"), Mockito.any());
+
+    // Verify app listener notified with the correct status and details
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("Custom security rejection");
   }
 
   @Test
@@ -1648,10 +1764,14 @@ public class ExternalProcessorFilterTest {
         .thenReturn(mockRawCall);
 
     ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
+
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
     Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
 
     // Simulate sidecar sending compressed body mutation (unsupported)
@@ -1666,14 +1786,165 @@ public class ExternalProcessorFilterTest {
                 .build())
             .build())
         .build();
-    
+
     sidecarListenerCaptor.getValue().onMessage(resp);
 
     // Verify sidecar stream was errored explicitly (cancelled by client with onError)
-    Mockito.verify(mockSidecarCall).cancel(Mockito.contains("Cancelled by client"), Mockito.any());
-    
+    Mockito.verify(mockSidecarCall).cancel(Mockito.anyString(), Mockito.any());
+
     // Verify raw call cancelled
     Mockito.verify(mockRawCall).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
+
+    // Simulate raw call closure due to cancellation
+    rawListenerCaptor.getValue().onClose(Status.CANCELLED.withDescription("Cancelled by sidecar failure"), new Metadata());
+
+    // Verify application receives UNAVAILABLE with correct description
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), Mockito.any());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenImmediateResponseInTrailers_whenReceived_thenDataPlaneCallStatusIsOverridden() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///sidecar")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND).build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ManagedChannel mockSidecarChannel = Mockito.mock(ManagedChannel.class);
+    ClientCall<ProcessingRequest, ProcessingResponse> mockSidecarCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockSidecarChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockSidecarCall);
+
+    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
+    Mockito.when(mockChannelManager.getChannel(Mockito.any())).thenReturn(mockSidecarChannel);
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, mockChannelManager, scheduler);
+
+    Channel mockNextChannel = Mockito.mock(Channel.class);
+    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockRawCall);
+
+    ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    proxyCall.start(mockAppListener, new Metadata());
+
+    Mockito.verify(mockRawCall).start(rawListenerCaptor.capture(), Mockito.any());
+    Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
+
+    // 1. Activate call immediately (no request headers mode)
+    // 2. Data plane call receives trailers
+    Metadata originalTrailers = new Metadata();
+    rawListenerCaptor.getValue().onClose(Status.OK, originalTrailers);
+
+    // 3. Sidecar receives trailers event
+    ArgumentCaptor<ProcessingRequest> requestCaptor = ArgumentCaptor.forClass(ProcessingRequest.class);
+    Mockito.verify(mockSidecarCall).sendMessage(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().hasResponseTrailers()).isTrue();
+
+    // 4. Sidecar responds with ImmediateResponse overriding status to DATA_LOSS and adding a header
+    ProcessingResponse resp = ProcessingResponse.newBuilder()
+        .setImmediateResponse(ImmediateResponse.newBuilder()
+            .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
+                .setStatus(Status.DATA_LOSS.getCode().value())
+                .build())
+            .setDetails("Sidecar detected data loss")
+            .setHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation.newBuilder()
+                .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                    .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                        .setKey("x-sidecar-extra").setValue("true").build())
+                    .build())
+                .build())
+            .build())
+        .build();
+    sidecarListenerCaptor.getValue().onMessage(resp);
+
+    // Verify application receives the OVERRIDDEN status and merged trailers
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    ArgumentCaptor<Metadata> trailersCaptor = ArgumentCaptor.forClass(Metadata.class);
+    Mockito.verify(mockAppListener).onClose(statusCaptor.capture(), trailersCaptor.capture());
+
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DATA_LOSS);
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("Sidecar detected data loss");
+    assertThat(trailersCaptor.getValue().get(Metadata.Key.of("x-sidecar-extra", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("true");
+
+    // Verify sidecar stream closed
+    Mockito.verify(mockSidecarCall).halfClose();
+  }
+
+  // --- Category 9: Resource Management ---
+
+  @Test
+  public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
+    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test", mockChannelManager);
+
+    filter.close();
+
+    Mockito.verify(mockChannelManager).close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenActiveRpc_whenDataPlaneCallCancelled_thenExtProcStreamIsErrored() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///sidecar")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    ManagedChannel mockSidecarChannel = Mockito.mock(ManagedChannel.class);
+    ClientCall<ProcessingRequest, ProcessingResponse> mockSidecarCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockSidecarChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockSidecarCall);
+
+    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
+    Mockito.when(mockChannelManager.getChannel(Mockito.any())).thenReturn(mockSidecarChannel);
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, mockChannelManager, scheduler);
+
+    Channel mockNextChannel = Mockito.mock(Channel.class);
+    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
+    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
+        .thenReturn(mockRawCall);
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+
+    // Application cancels the RPC
+    proxyCall.cancel("User cancelled", null);
+
+    // Verify sidecar stream also cancelled
+    Mockito.verify(mockSidecarCall).cancel(Mockito.anyString(), Mockito.any());
+
+    // Verify data plane call cancelled
+    Mockito.verify(mockRawCall).cancel(Mockito.eq("User cancelled"), Mockito.any());
   }
 
   @Test
@@ -1713,7 +1984,6 @@ public class ExternalProcessorFilterTest {
             .intercept(interceptor)
             .build());
 
-    // Data Plane Server
     AtomicReference<Metadata> receivedHeaders = new AtomicReference<>();
 
     ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
@@ -1737,17 +2007,13 @@ public class ExternalProcessorFilterTest {
 
     dataPlaneServiceRegistry.addService(interceptedServiceDef);
 
-    // Ext-Proc Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
       public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
         return new StreamObserver<ProcessingRequest>() {
-          private boolean halfClosedByClient = false;
-
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasRequestHeaders()) {
-              try { Thread.sleep(50); } catch (InterruptedException e) {}
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
@@ -1764,7 +2030,6 @@ public class ExternalProcessorFilterTest {
                   .build());
             } else if (request.hasRequestBody()) {
               if (request.getRequestBody().getEndOfStreamWithoutMessage() || request.getRequestBody().getEndOfStream()) {
-                halfClosedByClient = true;
                 responseObserver.onNext(ProcessingResponse.newBuilder()
                     .setRequestBody(BodyResponse.newBuilder()
                         .setResponse(CommonResponse.newBuilder()

@@ -54,10 +54,15 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
   final String filterInstanceName;
-  private final CachedChannelManager cachedChannelManager = new CachedChannelManager();
+  private final CachedChannelManager cachedChannelManager;
 
   public ExternalProcessorFilter(String name) {
-    filterInstanceName = checkNotNull(name, "name");
+    this(name, new CachedChannelManager());
+  }
+
+  ExternalProcessorFilter(String name, CachedChannelManager cachedChannelManager) {
+    this.filterInstanceName = checkNotNull(name, "name");
+    this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
   }
 
   @Override
@@ -371,6 +376,7 @@ public class ExternalProcessorFilter implements Filter {
       final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
       final AtomicBoolean halfClosed = new AtomicBoolean(false);
       final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
+      final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
 
       protected ExtProcClientCall(
           ExtProcDelayedCall<InputStream, InputStream> delayedCall,
@@ -744,10 +750,34 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener) {
-        io.grpc.Status status = io.grpc.Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
-        rawCall.cancel("Rejected by ExtProc", null);
-        listener.onClose(status, new Metadata());
+      private void handleImmediateResponse(io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse immediate, Listener<InputStream> listener)
+          throws HeaderMutationDisallowedException {
+        Status status = Status.fromCodeValue(immediate.getGrpcStatus().getStatus());
+        if (!immediate.getDetails().isEmpty()) {
+          status = status.withDescription(immediate.getDetails());
+        }
+
+        Metadata trailers = new Metadata();
+        if (immediate.hasHeaders()) {
+          applyHeaderMutations(trailers, immediate.getHeaders());
+        }
+
+        if (isProcessingTrailers.get()) {
+          // If sent in response to a server trailers event, sets the status and optionally headers to be included in the trailers.
+          // Note: savedStatus is NOT null if isProcessingTrailers is true.
+          wrappedListener.savedStatus = status;
+          if (wrappedListener.savedTrailers != null) {
+            wrappedListener.savedTrailers.merge(trailers);
+          } else {
+            wrappedListener.savedTrailers = trailers;
+          }
+          wrappedListener.proceedWithClose();
+        } else {
+          // If sent in response to any other event, it will cause the data plane RPC to immediately fail 
+          // with the specified status as if it were an out-of-band cancellation.
+          rawCall.cancel(status.getDescription(), null);
+          listener.onClose(status, trailers);
+        }
         closeExtProcStream();
       }
 
@@ -844,6 +874,10 @@ public class ExternalProcessorFilter implements Filter {
 
         this.savedStatus = status;
         this.savedTrailers = trailers;
+
+        if (extProcClientCall.config.getProcessingMode().getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND) {
+          extProcClientCall.isProcessingTrailers.set(true);
+        }
 
         if (extProcClientCall.config.getProcessingMode().getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC) {
           sendResponseBodyToExtProc(null, true);
