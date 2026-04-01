@@ -80,7 +80,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       "type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext";
   private static final String TYPE_URL_UPSTREAM_TLS_CONTEXT_V2 =
       "type.googleapis.com/envoy.api.v2.auth.UpstreamTlsContext";
-  static final String TRANSPORT_SOCKET_NAME_HTTP11_PROXY =
+  private static final String TYPE_URL_HTTP11_PROXY_UPSTREAM_TRANSPORT =
       "type.googleapis.com/envoy.extensions.transport_sockets.http_11_proxy.v3"
           + ".Http11ProxyUpstreamTransport";
   private final LoadBalancerRegistry loadBalancerRegistry
@@ -261,14 +261,14 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     TransportSocket transportSocket = cluster.getTransportSocket();
 
     if (hasTransportSocket && !TRANSPORT_SOCKET_NAME_TLS.equals(transportSocket.getName())
-        && !(isEnabledXdsHttpConnect
-        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName()))) {
+        && !(isEnabledXdsHttpConnect && TYPE_URL_HTTP11_PROXY_UPSTREAM_TRANSPORT
+        .equals(transportSocket.getTypedConfig().getTypeUrl()))) {
       return StructOrError.fromError(
           "transport-socket with name " + transportSocket.getName() + " not supported.");
     }
 
-    if (hasTransportSocket && isEnabledXdsHttpConnect
-        && TRANSPORT_SOCKET_NAME_HTTP11_PROXY.equals(transportSocket.getName())) {
+    if (hasTransportSocket && isEnabledXdsHttpConnect && TYPE_URL_HTTP11_PROXY_UPSTREAM_TRANSPORT
+        .equals(transportSocket.getTypedConfig().getTypeUrl())) {
       isHttp11ProxyAvailable = true;
       try {
         Http11ProxyUpstreamTransport wrappedTransportSocket = transportSocket
