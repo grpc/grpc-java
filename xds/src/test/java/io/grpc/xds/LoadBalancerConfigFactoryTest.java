@@ -101,6 +101,22 @@ public class LoadBalancerConfigFactoryTest {
                           .build()))
                   .build())
               .build();
+
+  private static final Policy WRR_POLICY_WITH_METRICS = Policy.newBuilder()
+              .setTypedExtensionConfig(TypedExtensionConfig.newBuilder()
+                  .setName("backend")
+                  .setTypedConfig(
+                      Any.pack(ClientSideWeightedRoundRobin.newBuilder()
+                          .setBlackoutPeriod(Duration.newBuilder().setSeconds(287).build())
+                          .setEnableOobLoadReport(
+                              BoolValue.newBuilder().setValue(true).build())
+                          .setErrorUtilizationPenalty(
+                              FloatValue.newBuilder().setValue(1.75F).build())
+                          .addMetricNamesForComputingUtilization("foo")
+                          .addMetricNamesForComputingUtilization("bar")
+                          .build()))
+                  .build())
+              .build();
   private static final String CUSTOM_POLICY_NAME = "myorg.MyCustomLeastRequestPolicy";
   private static final String CUSTOM_POLICY_FIELD_KEY = "choiceCount";
   private static final double CUSTOM_POLICY_FIELD_VALUE = 2;
@@ -130,6 +146,15 @@ public class LoadBalancerConfigFactoryTest {
       ImmutableMap.of("weighted_round_robin",
       ImmutableMap.of("blackoutPeriod","287s", "enableOobLoadReport", true,
           "errorUtilizationPenalty", 1.75F )))));
+
+  private static final LbConfig VALID_WRR_CONFIG_WITH_METRICS =
+      new LbConfig("wrr_locality_experimental",
+          ImmutableMap.of("childPolicy",
+              ImmutableList.of(ImmutableMap.of("weighted_round_robin",
+                  ImmutableMap.of("blackoutPeriod", "287s", "enableOobLoadReport", true,
+                      "errorUtilizationPenalty", 1.75F,
+                      LoadBalancerConfigFactory.METRIC_NAMES_FOR_COMPUTING_UTILIZATION,
+                      ImmutableList.of("foo", "bar"))))));
   private static final LbConfig VALID_RING_HASH_CONFIG = new LbConfig("ring_hash_experimental",
       ImmutableMap.of("minRingSize", (double) RING_HASH_MIN_RING_SIZE, "maxRingSize",
           (double) RING_HASH_MAX_RING_SIZE));
@@ -163,6 +188,13 @@ public class LoadBalancerConfigFactoryTest {
     Cluster cluster = newCluster(buildWrrPolicy(WRR_POLICY));
 
     assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_WRR_CONFIG);
+  }
+
+  @Test
+  public void weightedRoundRobin_withMetrics() throws ResourceInvalidException {
+    Cluster cluster = newCluster(buildWrrPolicy(WRR_POLICY_WITH_METRICS));
+
+    assertThat(newLbConfig(cluster, true)).isEqualTo(VALID_WRR_CONFIG_WITH_METRICS);
   }
 
   @Test
