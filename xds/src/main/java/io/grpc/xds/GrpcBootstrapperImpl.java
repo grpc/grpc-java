@@ -22,13 +22,13 @@ import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.internal.JsonUtil;
+import io.grpc.xds.client.AllowedGrpcServices;
+import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
 import io.grpc.xds.client.BootstrapperImpl;
+import io.grpc.xds.client.ConfiguredChannelCredentials;
+import io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
-import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
-import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
-import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
-import io.grpc.xds.internal.grpcservice.ConfiguredChannelCredentials;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -173,11 +173,11 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
   }
 
   @Override
-  protected Optional<Object> parseAllowedGrpcServices(
+  protected Optional<Object> parseImplSpecificObject(
       @Nullable Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
     if (rawAllowedGrpcServices == null || rawAllowedGrpcServices.isEmpty()) {
-      return Optional.of(AllowedGrpcServices.empty());
+      return Optional.of(GrpcBootstrapImplConfig.create(AllowedGrpcServices.empty()));
     }
 
     ImmutableMap.Builder<String, AllowedGrpcService> builder =
@@ -203,7 +203,9 @@ class GrpcBootstrapperImpl extends BootstrapperImpl {
       callCredentials.ifPresent(b::callCredentials);
       builder.put(targetUri, b.build());
     }
-    return Optional.of(AllowedGrpcServices.create(builder.build()));
+    GrpcBootstrapImplConfig customConfig =
+        GrpcBootstrapImplConfig.create(AllowedGrpcServices.create(builder.build()));
+    return Optional.of(customConfig);
   }
 
   @SuppressWarnings("unused")

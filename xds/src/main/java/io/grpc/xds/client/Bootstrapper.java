@@ -207,17 +207,17 @@ public abstract class Bootstrapper {
     public abstract ImmutableMap<String, AuthorityInfo> authorities();
 
     /**
-     * Parsed allowed_grpc_services configuration.
+     * Parsed configuration for implementation-specific extensions.
      * Returns an opaque object containing the parsed configuration.
      */
-    public abstract Optional<Object> allowedGrpcServices();
+    public abstract Optional<Object> implSpecificObject();
 
     @VisibleForTesting
     public static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
           .clientDefaultListenerResourceNameTemplate("%s")
           .authorities(ImmutableMap.<String, AuthorityInfo>of())
-          .allowedGrpcServices(Optional.empty());
+          .implSpecificObject(Optional.empty());
     }
 
     @AutoValue.Builder
@@ -239,7 +239,7 @@ public abstract class Bootstrapper {
 
       public abstract Builder authorities(Map<String, AuthorityInfo> authorities);
 
-      public abstract Builder allowedGrpcServices(Optional<Object> allowedGrpcServices);
+      public abstract Builder implSpecificObject(Optional<Object> implSpecificObject);
 
       public abstract BootstrapInfo build();
     }
