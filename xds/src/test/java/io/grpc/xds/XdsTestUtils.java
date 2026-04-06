@@ -88,6 +88,11 @@ public class XdsTestUtils {
   static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
       Bootstrapper.ServerInfo.create(
       "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false);
+  static final Bootstrapper.BootstrapInfo EMPTY_BOOTSTRAP =
+      Bootstrapper.BootstrapInfo.builder()
+          .servers(com.google.common.collect.ImmutableList.of(EMPTY_BOOTSTRAPPER_SERVER_INFO))
+          .node(io.grpc.xds.client.EnvoyProtoData.Node.newBuilder().setId("node-id").build())
+          .build();
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -252,7 +257,7 @@ public class XdsTestUtils {
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
     XdsResourceType.Args args = new XdsResourceType.Args(
-        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
+        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", EMPTY_BOOTSTRAP, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
