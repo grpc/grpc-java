@@ -394,14 +394,14 @@ public class ExternalProcessorFilter implements Filter {
       private final ClientCall<InputStream, InputStream> rawCall;
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
       private final Object streamLock = new Object();
-      private io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
-      private ExtProcListener wrappedListener;
+      private volatile io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
+      private volatile ExtProcListener wrappedListener;
       private final HeaderMutationFilter mutationFilter;
       private final HeaderMutator mutator = HeaderMutator.create();
       private int pendingRequests;
-      private ProcessingMode currentProcessingMode;
+      private volatile ProcessingMode currentProcessingMode;
 
-      private Metadata requestHeaders;
+      private volatile Metadata requestHeaders;
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
       final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
@@ -471,7 +471,9 @@ public class ExternalProcessorFilter implements Filter {
         stub.process(new ClientResponseObserver<ProcessingRequest, ProcessingResponse>() {
           @Override
           public void beforeStart(ClientCallStreamObserver<ProcessingRequest> requestStream) {
-            extProcClientCallRequestObserver = requestStream;
+            synchronized (streamLock) {
+              extProcClientCallRequestObserver = requestStream;
+            }
             requestStream.setOnReadyHandler(ExtProcClientCall.this::onExtProcStreamReady);
           }
 
@@ -788,27 +790,29 @@ public class ExternalProcessorFilter implements Filter {
           }
         }
 
-        ProcessingMode oldMode = currentProcessingMode;
-        // The override is valid. Specification says request_header_mode cannot be overridden.
-        currentProcessingMode = modeOverride.toBuilder()
-            .setRequestHeaderMode(oldMode.getRequestHeaderMode())
-            .build();
+        synchronized (streamLock) {
+          ProcessingMode oldMode = currentProcessingMode;
+          // The override is valid. Specification says request_header_mode cannot be overridden.
+          currentProcessingMode = modeOverride.toBuilder()
+              .setRequestHeaderMode(oldMode.getRequestHeaderMode())
+              .build();
 
-        // Special handling for enabling/disabling body modes
-        if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
-            && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
-           activateCall(); // Ensure call is activated if it was waiting for body headers
-        }
+          // Special handling for enabling/disabling body modes
+          if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
+              && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
+             activateCall(); // Ensure call is activated if it was waiting for body headers
+          }
 
-        if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
-            && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-           activateCall(); // Ensure call is activated if it was waiting for body headers
-        }
-        
-        if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
-            && currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.NONE) {
-           wrappedListener.proceedWithHeaders();
-           wrappedListener.proceedWithClose();
+          if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
+              && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+             activateCall(); // Ensure call is activated if it was waiting for body headers
+          }
+          
+          if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
+              && currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.NONE) {
+             wrappedListener.proceedWithHeaders();
+             wrappedListener.proceedWithClose();
+          }
         }
       }
 
@@ -896,9 +900,9 @@ public class ExternalProcessorFilter implements Filter {
     private static class ExtProcListener extends ForwardingClientCallListener.SimpleForwardingClientCallListener<InputStream> {
       private final ClientCall<?, ?> rawCall;
       private final ExtProcClientCall extProcClientCall;
-      private Metadata savedHeaders;
-      private Metadata savedTrailers;
-      private io.grpc.Status savedStatus;
+      private volatile Metadata savedHeaders;
+      private volatile Metadata savedTrailers;
+      private volatile io.grpc.Status savedStatus;
 
       protected ExtProcListener(ClientCall.Listener<InputStream> delegate, ClientCall<?, ?> rawCall,
                                 ExtProcClientCall extProcClientCall) {
