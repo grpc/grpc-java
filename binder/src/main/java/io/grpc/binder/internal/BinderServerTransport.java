@@ -146,7 +146,7 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   @Override
   @Nullable
   @GuardedBy("this")
-  protected Inbound<?> createInbound(int callId) {
+  protected Inbound<?, ?> createInbound(int callId) {
     return new Inbound.ServerInbound(this, attributes, callId);
   }
 
