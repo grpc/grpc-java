@@ -395,6 +395,7 @@ public class ExternalProcessorFilter implements Filter {
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
       private final Object streamLock = new Object();
       private volatile io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
+      private final java.util.Queue<ProcessingRequest> pendingProcessingRequests = new java.util.ArrayDeque<>();
       private volatile ExtProcListener wrappedListener;
       private final HeaderMutationFilter mutationFilter;
       private final HeaderMutator mutator = HeaderMutator.create();
@@ -473,6 +474,9 @@ public class ExternalProcessorFilter implements Filter {
           public void beforeStart(ClientCallStreamObserver<ProcessingRequest> requestStream) {
             synchronized (streamLock) {
               extProcClientCallRequestObserver = requestStream;
+              while (!pendingProcessingRequests.isEmpty()) {
+                requestStream.onNext(pendingProcessingRequests.poll());
+              }
             }
             requestStream.setOnReadyHandler(ExtProcClientCall.this::onExtProcStreamReady);
           }
@@ -600,7 +604,7 @@ public class ExternalProcessorFilter implements Filter {
         });
 
         boolean sendRequestHeaders = currentProcessingMode.getRequestHeaderMode()
-            == ProcessingMode.HeaderSendMode.SEND;
+            != ProcessingMode.HeaderSendMode.SKIP;
 
         if (sendRequestHeaders) {
           sendToExtProc(ProcessingRequest.newBuilder()
@@ -618,8 +622,13 @@ public class ExternalProcessorFilter implements Filter {
 
       private void sendToExtProc(ProcessingRequest request) {
         synchronized (streamLock) {
-          if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
+          if (extProcStreamCompleted.get()) {
+            return;
+          }
+          if (extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onNext(request);
+          } else {
+            pendingProcessingRequests.add(request);
           }
         }
       }
