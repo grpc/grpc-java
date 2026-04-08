@@ -1659,7 +1659,7 @@ public class ExternalProcessorFilterTest {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///sidecar")
+                .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
                     .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
@@ -1667,48 +1667,67 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
-    assertThat(configOrError).isNotNull();
-    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
-    assertThat(filterConfig).isNotNull();
 
-    ManagedChannel mockSidecarChannel = Mockito.mock(ManagedChannel.class);
-    ClientCall<ProcessingRequest, ProcessingResponse> mockSidecarCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockSidecarChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockSidecarCall);
+    // External Processor Server
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestDrain(true)
+                  .build());
+              // Server closes stream after sending drain
+              responseObserver.onCompleted();
+            }
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() {}
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
 
-    CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
-    Mockito.when(mockChannelManager.getChannel(Mockito.any())).thenReturn(mockSidecarChannel);
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
+    });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, mockChannelManager, scheduler);
+        filterConfig, channelManager, scheduler);
 
     Channel mockNextChannel = Mockito.mock(Channel.class);
     ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
     Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
         .thenReturn(mockRawCall);
     Mockito.when(mockRawCall.isReady()).thenReturn(true);
-    Mockito.when(mockSidecarCall.isReady()).thenReturn(true);
 
-    ArgumentCaptor<ClientCall.Listener<ProcessingResponse>> sidecarListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
     proxyCall.start(mockAppListener, new Metadata());
 
-    Mockito.verify(mockSidecarCall).start(sidecarListenerCaptor.capture(), Mockito.any());
-
-    // Enter drain
-    sidecarListenerCaptor.getValue().onMessage(ProcessingResponse.newBuilder().setRequestDrain(true).build());
+    // Initially NOT ready because of drain (set by server above)
+    // Wait for drain to be processed
+    long startTime = System.currentTimeMillis();
+    while (proxyCall.isReady() && System.currentTimeMillis() - startTime < 5000) {
+      Thread.sleep(10);
+    }
+    // Should become NOT ready because of draining state
     assertThat(proxyCall.isReady()).isFalse();
 
-    // Sidecar stream completes
-    sidecarListenerCaptor.getValue().onClose(Status.OK, new Metadata());
-
-    // Verify app listener notified to resume flow
-    Mockito.verify(mockAppListener).onReady();
+    // After sidecar stream completes (which server does above), it should trigger onReady and become ready
+    Mockito.verify(mockAppListener, Mockito.timeout(5000)).onReady();
     assertThat(proxyCall.isReady()).isTrue();
+    
+    proxyCall.cancel("Cleanup", null);
   }
 
   @Test
