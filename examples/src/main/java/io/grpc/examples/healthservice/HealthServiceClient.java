@@ -82,15 +82,15 @@ public class HealthServiceClient {
   private static void runTest(String target, String[] users, boolean enableHealthChecking)
       throws InterruptedException {
     // Enable the round_robin load balancer, with or without health checking.
-    Map<String, Object> serviceConfig;
+    String healthServiceName;
     if (enableHealthChecking) {
-      serviceConfig = generateServiceConfig("");
+        healthServiceName = ""; // represents the "overall health status"
     } else {
-      serviceConfig = generateServiceConfig(null);
+        healthServiceName = null;  // disables health checking
     }
     ManagedChannel channel =
         Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
-        .defaultServiceConfig(serviceConfig)
+        .defaultServiceConfig(generateServiceConfig(healthServiceName))
         .build();
 
     // Round Robin, when a healthCheckConfig is present in the service configuration, runs a watch
