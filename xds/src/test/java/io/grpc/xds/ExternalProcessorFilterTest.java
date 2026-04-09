@@ -671,25 +671,42 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    final CountDownLatch serverCallLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+                (request, responseObserver) -> {
+                  responseObserver.onNext("Hello " + request);
+                  responseObserver.onCompleted();
+                }))
+            .build(),
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            serverCallLatch.countDown();
+            return next.startCall(call, headers);
+          }
+        }));
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
-        METHOD_SAY_HELLO, callOptions, mockNextChannel);
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     Metadata headers = new Metadata();
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), headers);
 
-    // Verify main call started immediately
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(Mockito.any(), Mockito.eq(headers));
+    // Verify main call reached server side immediately
+    assertThat(serverCallLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     // Verify sidecar NOT messaged about headers
     assertThat(sidecarMessages.get()).isEqualTo(0);
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   // --- Category 4: Body Mutation: Outbound/Request (GRPC Mode) ---
