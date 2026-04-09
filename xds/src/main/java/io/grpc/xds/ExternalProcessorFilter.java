@@ -752,12 +752,16 @@ public class ExternalProcessorFilter implements Filter {
       public void halfClose() {
         halfClosed.set(true);
         if (extProcStreamCompleted.get()) {
-          super.halfClose();
+          if (requestSideClosed.compareAndSet(false, true)) {
+            super.halfClose();
+          }
           return;
         }
 
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-          super.halfClose();
+          if (requestSideClosed.compareAndSet(false, true)) {
+            super.halfClose();
+          }
           return;
         }
 
