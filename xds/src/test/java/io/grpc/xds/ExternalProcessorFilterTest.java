@@ -925,27 +925,34 @@ public class ExternalProcessorFilterTest {
     final AtomicInteger sidecarMessages = new AtomicInteger(0);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
-      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
             sidecarMessages.incrementAndGet();
             if (request.hasRequestBody()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestBody(BodyResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setBodyMutation(BodyMutation.newBuilder()
-                              .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                  .setEndOfStream(true)
-                                  .build())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
+              if (request.getRequestBody().getEndOfStreamWithoutMessage()) {
+                responseObserver.onCompleted();
+              } else {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestBody(BodyResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setBodyMutation(BodyMutation.newBuilder()
+                                .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                    .setBody(ByteString.copyFromUtf8("Acknowledged"))
+                                    .setEndOfStream(true)
+                                    .build())
+                                .build())
+                            .build())
+                        .build())
+                    .build());
+              }
             }
           }
           @Override public void onError(Throwable t) {}
-          @Override public void onCompleted() {}
+          @Override public void onCompleted() {
+            responseObserver.onCompleted();
+          }
         };
       }
     };
@@ -962,26 +969,59 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueRegistry)
+        .directExecutor()
+        .build().start());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName).build());
+
+    final AtomicInteger dataPlaneMessages = new AtomicInteger(0);
+    uniqueRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              dataPlaneMessages.incrementAndGet();
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
+
+    java.util.concurrent.ExecutorService callExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(callExecutor);
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    
+    final CountDownLatch appMessageLatch = new CountDownLatch(1);
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onMessage(String message) {
+        appMessageLatch.countDown();
+      }
+      @Override public void onClose(Status status, Metadata trailers) {
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
 
     proxyCall.sendMessage("Trigger EOS");
+    proxyCall.request(1);
 
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).halfClose();
+    try {
+      assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(dataPlaneMessages.get()).isEqualTo(1);
 
-    proxyCall.sendMessage("Too late");
+      proxyCall.sendMessage("Too late");
 
-    // Verify sidecar and raw call NOT messaged after EOS
-    assertThat(sidecarMessages.get()).isEqualTo(1);
-    Mockito.verify(mockRawCall, Mockito.times(0)).sendMessage(Mockito.any());
+      // Verify sidecar and data plane NOT messaged after EOS
+      assertThat(sidecarMessages.get()).isEqualTo(1);
+      assertThat(dataPlaneMessages.get()).isEqualTo(1);
+    } finally {
+      callExecutor.shutdownNow();
+    }
     
-    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
