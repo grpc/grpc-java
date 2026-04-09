@@ -38,6 +38,7 @@ import io.grpc.xds.internal.headermutations.HeaderMutationRulesParser;
 import io.grpc.xds.internal.headermutations.HeaderMutations;
 import io.grpc.xds.internal.headermutations.HeaderMutator;
 import io.grpc.xds.internal.headermutations.HeaderValueOption;
+import io.grpc.internal.SerializingExecutor;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -189,9 +190,10 @@ public class ExternalProcessorFilter implements Filter {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
+      Executor executor = new SerializingExecutor(callOptions.getExecutor());
       ExternalProcessorGrpc.ExternalProcessorStub stub = ExternalProcessorGrpc.newStub(
           cachedChannelManager.getChannel(filterConfig.grpcServiceConfig))
-          .withExecutor(callOptions.getExecutor());
+          .withExecutor(executor);
       
       if (filterConfig.grpcServiceConfig.timeout() != null && filterConfig.grpcServiceConfig.timeout().isPresent()) {
         long timeoutNanos = filterConfig.grpcServiceConfig.timeout().get().toNanos();
