@@ -185,7 +185,7 @@ public abstract class AbstractTransportTest {
   protected final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       clientStreamTracer1, clientStreamTracer2
   };
-  private final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
+  protected final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
     new ClientStreamTracer() {}
   };
 
@@ -2195,7 +2195,7 @@ public abstract class AbstractTransportTest {
     }
   }
 
-  private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
+  protected static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
     public static final StringMarshaller INSTANCE = new StringMarshaller();
 
     @Override
