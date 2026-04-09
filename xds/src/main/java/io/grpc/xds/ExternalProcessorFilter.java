@@ -405,6 +405,7 @@ public class ExternalProcessorFilter implements Filter {
       private volatile Metadata requestHeaders;
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
+      final AtomicBoolean notifiedApp = new AtomicBoolean(false);
       final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
       final AtomicBoolean halfClosed = new AtomicBoolean(false);
       final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
@@ -491,11 +492,6 @@ public class ExternalProcessorFilter implements Filter {
 
               if (response.hasModeOverride()) {
                 handleModeOverride(response.getModeOverride());
-                // If we got a mode override before request headers response, we should still activate 
-                // if headers were not being intercepted or if the override indicates no further interception.
-                if (!config.getObservabilityMode()) {
-                   activateCall();
-                }
               }
 
               if (config.getObservabilityMode()) {
@@ -587,19 +583,23 @@ public class ExternalProcessorFilter implements Filter {
 
           @Override
           public void onError(Throwable t) {
-            if (config.getFailureModeAllow()) {
-              handleFailOpen(wrappedListener);
-            } else {
-              if (extProcStreamFailed.compareAndSet(false, true)) {
-                rawCall.cancel("External processor stream failed", t);
+            if (extProcStreamCompleted.compareAndSet(false, true)) {
+              if (config.getFailureModeAllow()) {
+                handleFailOpen(wrappedListener);
+              } else {
+                extProcStreamFailed.set(true);
+                String message = "External processor stream failed";
+                delayedCall.cancel(message, t);
               }
             }
           }
 
           @Override
           public void onCompleted() {
-            drainingExtProcStream.set(false);
-            handleFailOpen(wrappedListener);
+            if (extProcStreamCompleted.compareAndSet(false, true)) {
+              drainingExtProcStream.set(false);
+              handleFailOpen(wrappedListener);
+            }
           }
         });
 
@@ -807,16 +807,6 @@ public class ExternalProcessorFilter implements Filter {
               .build();
 
           // Special handling for enabling/disabling body modes
-          if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
-              && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
-             activateCall(); // Ensure call is activated if it was waiting for body headers
-          }
-
-          if (oldMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC
-              && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-             activateCall(); // Ensure call is activated if it was waiting for body headers
-          }
-          
           if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
               && currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.NONE) {
              wrappedListener.proceedWithHeaders();
@@ -860,9 +850,16 @@ public class ExternalProcessorFilter implements Filter {
             if (!streamed.getBody().isEmpty()) {
               listener.onExternalBody(streamed.getBody());
             }
+            /*
             if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-              listener.proceedWithClose();
+              // Body stream from ext-proc finished, but we wait for rawCall.onClose to deliver final status.
+              // The filter would have already sent halfClose on the dataplane rpc in response to a 
+              // ProcessingResponse for a request, with end of stream indicated in that response. 
+              // So it now has to await for onClose() rather than do anything when 
+              // (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) 
+              // occurs in handleResponseBodyResponse.
             }
+            */
           }
         }
       }
@@ -882,27 +879,31 @@ public class ExternalProcessorFilter implements Filter {
         if (isProcessingTrailers.get()) {
           // If sent in response to a server trailers event, sets the status and optionally headers to be included in the trailers.
           // Note: savedStatus is NOT null if isProcessingTrailers is true.
-          wrappedListener.savedStatus = status;
-          if (wrappedListener.savedTrailers != null) {
-            wrappedListener.savedTrailers.merge(trailers);
-          } else {
-            wrappedListener.savedTrailers = trailers;
+          if (extProcStreamCompleted.compareAndSet(false, true)) {
+            wrappedListener.savedStatus = status;
+            if (wrappedListener.savedTrailers != null) {
+              wrappedListener.savedTrailers.merge(trailers);
+            } else {
+              wrappedListener.savedTrailers = trailers;
+            }
+            wrappedListener.proceedWithClose();
           }
-          wrappedListener.proceedWithClose();
         } else {
           // If sent in response to any other event, it will cause the data plane RPC to immediately fail 
           // with the specified status as if it were an out-of-band cancellation.
-          rawCall.cancel(status.getDescription(), null);
-          listener.onClose(status, trailers);
+          if (extProcStreamCompleted.compareAndSet(false, true)) {
+            if (notifiedApp.compareAndSet(false, true)) {
+              rawCall.cancel(status.getDescription(), null);
+              listener.onClose(status, trailers);
+            }
+          }
         }
         closeExtProcStream();
       }
 
       private void handleFailOpen(ExtProcListener listener) {
-        if (extProcStreamCompleted.compareAndSet(false, true)) {
-          activateCall();
-          listener.unblockAfterStreamComplete();
-        }
+        activateCall();
+        listener.unblockAfterStreamComplete();
       }
     }
 
@@ -981,11 +982,15 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void onClose(io.grpc.Status status, Metadata trailers) {
         if (extProcClientCall.extProcStreamFailed.get()) {
-          super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
+          if (extProcClientCall.notifiedApp.compareAndSet(false, true)) {
+            super.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed").withCause(status.getCause()), new Metadata());
+          }
           return;
         }
         if (extProcClientCall.extProcStreamCompleted.get()) {
-          super.onClose(status, trailers);
+          if (extProcClientCall.notifiedApp.compareAndSet(false, true)) {
+            super.onClose(status, trailers);
+          }
           return;
         }
 
@@ -1042,7 +1047,9 @@ public class ExternalProcessorFilter implements Filter {
 
       void proceedWithClose() {
         if (savedStatus != null) {
-          super.onClose(savedStatus, savedTrailers);
+          if (extProcClientCall.notifiedApp.compareAndSet(false, true)) {
+            super.onClose(savedStatus, savedTrailers);
+          }
           savedStatus = null;
           savedTrailers = null;
         }
