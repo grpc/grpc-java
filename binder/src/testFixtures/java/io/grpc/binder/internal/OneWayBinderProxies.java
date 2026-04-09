@@ -119,6 +119,49 @@ public final class OneWayBinderProxies {
     }
   }
 
+  /** A {@link OneWayBinderProxy} that queues transactions for a test to deliver manually later. */
+  public static final class QueueingOneWayBinderProxy extends OneWayBinderProxy {
+    public static final class Transaction {
+      public final int code;
+      private final ParcelHolder parcel;
+
+      public Transaction(int code, ParcelHolder parcel) {
+        this.code = code;
+        this.parcel = parcel;
+      }
+    }
+
+    private final BlockingQueue<Transaction> queue = new LinkedBlockingQueue<>();
+    private final OneWayBinderProxy wrapped;
+
+    public QueueingOneWayBinderProxy(OneWayBinderProxy wrapped) {
+      super(wrapped.getDelegate());
+      this.wrapped = wrapped;
+    }
+
+    @Override
+    public void transact(int code, ParcelHolder data) throws RemoteException {
+      queue.add(new Transaction(code, new ParcelHolder(data.release())));
+    }
+
+    /**
+     * Returns the next transaction that was queued in order, waiting up to the specified timeout.
+     */
+    public Transaction pollNextTransaction(long timeout, TimeUnit unit)
+        throws InterruptedException {
+      return queue.poll(timeout, unit);
+    }
+
+    /**
+     * Delivers a previously queued transaction to its original destination.
+     *
+     * @throws IllegalStateException if transaction was already delivered once before
+     */
+    public void deliver(Transaction transaction) throws RemoteException {
+      wrapped.transact(transaction.code, transaction.parcel);
+    }
+  }
+
   // Cannot be instantiated.
   private OneWayBinderProxies() {}
   ;
