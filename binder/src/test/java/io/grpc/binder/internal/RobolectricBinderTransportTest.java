@@ -178,27 +178,34 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
     shadowOf(application).setUnbindServiceCallsOnServiceDisconnected(false);
   }
 
-  @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+  BinderServer.Builder newServerBuilder() {
     AndroidComponentAddress listenAddr =
         AndroidComponentAddress.forBindIntent(
             new Intent()
                 .setClassName(serviceInfo.packageName, serviceInfo.name)
                 .setAction("io.grpc.action.BIND." + nextServerAddress++));
 
-    BinderServer binderServer =
-        new BinderServer.Builder()
-            .setListenAddress(listenAddr)
-            .setExecutorPool(serverExecutorPool)
-            .setExecutorServicePool(executorServicePool)
-            .setStreamTracerFactories(streamTracerFactories)
-            .build();
+    return new BinderServer.Builder()
+        .setListenAddress(listenAddr)
+        .setExecutorPool(serverExecutorPool)
+        .setExecutorServicePool(executorServicePool)
+        .setStreamTracerFactories(List.of());
+  }
 
+  void registerServerWithRobolectric(BinderServer server) {
+    AndroidComponentAddress listenAddr = (AndroidComponentAddress) server.getListenSocketAddress();
     shadowOf(application.getPackageManager()).addServiceIfNotPresent(listenAddr.getComponent());
     shadowOf(application)
         .setComponentNameAndServiceForBindServiceForIntent(
-            listenAddr.asBindIntent(), listenAddr.getComponent(), binderServer.getHostBinder());
-    return binderServer;
+            listenAddr.asBindIntent(), listenAddr.getComponent(), server.getHostBinder());
+  }
+
+  @Override
+  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+    BinderServer server =
+        newServerBuilder().setStreamTracerFactories(streamTracerFactories).build();
+    registerServerWithRobolectric(server);
+    return server;
   }
 
   @Override
