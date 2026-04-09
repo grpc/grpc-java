@@ -2522,13 +2522,10 @@ public class ExternalProcessorFilterTest {
   @Test
   @SuppressWarnings("unchecked")
   public void givenFailureModeAllowFalse_whenExtProcStreamFails_thenDataPlaneCallIsCancelled() throws Exception {
-    final String uniqueExtProcServerName = InProcessServerBuilder.generateName();
-    final String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///" + uniqueExtProcServerName)
+                .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
                     .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
@@ -2550,49 +2547,42 @@ public class ExternalProcessorFilterTest {
         };
       }
     };
-    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
         .addService(extProcImpl)
+        .directExecutor()
         .build().start());
 
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
-          InProcessChannelBuilder.forName(uniqueExtProcServerName).build());
+          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
-    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
-        .fallbackHandlerRegistry(uniqueRegistry)
-        .build().start());
-
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
-        InProcessChannelBuilder.forName(uniqueDataPlaneServerName).build());
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
     final java.util.concurrent.CountDownLatch appCloseLatch = new java.util.concurrent.CountDownLatch(1);
     final java.util.concurrent.atomic.AtomicReference<Status> capturedStatus = new java.util.concurrent.atomic.AtomicReference<>();
     
-    java.util.concurrent.ExecutorService callExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
-    try {
-      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(callExecutor);
-      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-      proxyCall.start(new ClientCall.Listener<String>() {
-        @Override public void onClose(Status status, Metadata trailers) {
-          capturedStatus.set(status);
-          appCloseLatch.countDown();
-        }
-      }, new Metadata());
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(
+        com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        capturedStatus.set(status);
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
 
-      // Verify application receives UNAVAILABLE due to sidecar failure
-      assertThat(appCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-      assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-      assertThat(capturedStatus.get().getDescription()).contains("External processor stream failed");
-      
-      proxyCall.cancel("Cleanup", null);
-    } finally {
-      callExecutor.shutdownNow();
-    }
+    // Verify application receives UNAVAILABLE due to sidecar failure
+    assertThat(appCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(capturedStatus.get().getDescription()).contains("External processor stream failed");
+    
+    proxyCall.cancel("Cleanup", null);
     channelManager.close();
   }
 
@@ -2642,19 +2632,37 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    final java.util.concurrent.CountDownLatch dataPlaneLatch = new java.util.concurrent.CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              dataPlaneLatch.countDown();
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
-    // Verify raw call started (failed open)
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(Mockito.any(), Mockito.any());
+    final java.util.concurrent.CountDownLatch appCloseLatch = new java.util.concurrent.CountDownLatch(1);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
+    proxyCall.request(1);
+    proxyCall.sendMessage("Original");
+    proxyCall.halfClose();
+
+    // Verify data plane call reached server side and responded despite sidecar failure
+    assertThat(dataPlaneLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    assertThat(appCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
@@ -3320,10 +3328,12 @@ public class ExternalProcessorFilterTest {
                       .build())
                   .build());
             } else if (request.hasResponseBody()) {
-              capturedRespBodyReq.set(request);
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setResponseBody(BodyResponse.newBuilder().build())
-                  .build());
+              if (!request.getResponseBody().getBody().isEmpty()) {
+                capturedRespBodyReq.set(request);
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setResponseBody(BodyResponse.newBuilder().build())
+                    .build());
+              }
             }
           }
           @Override public void onError(Throwable t) {}
@@ -3342,24 +3352,29 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
-
-    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
-    ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              responseObserver.onNext("Original Response Body");
+              responseObserver.onCompleted();
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final java.util.concurrent.CountDownLatch appCloseLatch = new java.util.concurrent.CountDownLatch(1);
     // Use direct executor to simplify tests
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(mockAppListener, new Metadata());
-
-    // Wait for activation
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(rawListenerCaptor.capture(), Mockito.any());
-
-    // 5. Data plane receives message - should now be intercepted
-    rawListenerCaptor.getValue().onMessage(new ByteArrayInputStream("Original Response Body".getBytes(StandardCharsets.UTF_8)));
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
+    proxyCall.request(1);
+    proxyCall.halfClose();
 
     // Verify intercepted by sidecar
     long startTime = System.currentTimeMillis();
@@ -3369,7 +3384,10 @@ public class ExternalProcessorFilterTest {
     assertThat(capturedRespBodyReq.get()).isNotNull();
     assertThat(capturedRespBodyReq.get().getResponseBody().getBody().toStringUtf8()).isEqualTo("Original Response Body");
     
+    assertThat(appCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   // --- Category 9: Resource Management ---
