@@ -1043,24 +1043,47 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    final java.util.concurrent.atomic.AtomicBoolean dataPlaneHalfClosed = new java.util.concurrent.atomic.AtomicBoolean(false);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .intercept(new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                return new io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+                  @Override
+                  public void halfClose() {
+                    dataPlaneHalfClosed.set(true);
+                    super.halfClose();
+                  }
+                };
+              }
+            })
+            .directExecutor()
+            .build());
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     proxyCall.halfClose();
 
     // Verify sidecar received end_of_stream_without_message
-    assertThat(halfCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(halfCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
     
     // Verify super.halfClose() is NOT yet called
-    Mockito.verify(mockRawCall, Mockito.never()).halfClose();
+    assertThat(dataPlaneHalfClosed.get()).isFalse();
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
