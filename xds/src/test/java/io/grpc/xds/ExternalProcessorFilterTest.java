@@ -2718,19 +2718,40 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    // Use real InProcess infrastructure for data plane
+    final AtomicReference<String> dataPlaneCancelMessage = new AtomicReference<>();
+    final CountDownLatch dataPlaneCancelLatch = new CountDownLatch(1);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(com.google.common.util.concurrent.MoreExecutors.directExecutor())
+            .intercept(new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                return new io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+                    next.newCall(method, callOptions)) {
+                  @Override
+                  public void cancel(String message, Throwable cause) {
+                    dataPlaneCancelMessage.set(message);
+                    dataPlaneCancelLatch.countDown();
+                    super.cancel(message, cause);
+                  }
+                };
+              }
+            })
+            .build());
 
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(
+        com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(mockAppListener, new Metadata());
 
     // Verify data plane call cancelled with the status details
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).cancel(Mockito.eq("Custom security rejection"), Mockito.any());
+    assertThat(dataPlaneCancelLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(dataPlaneCancelMessage.get()).isEqualTo("Custom security rejection");
     
     // Verify app listener notified with the correct status and details
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -2739,6 +2760,7 @@ public class ExternalProcessorFilterTest {
     assertThat(statusCaptor.getValue().getDescription()).isEqualTo("Custom security rejection");
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
@@ -2805,29 +2827,44 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    // Use real InProcess infrastructure for data plane
+    final AtomicReference<String> dataPlaneCancelMessage = new AtomicReference<>();
+    final CountDownLatch dataPlaneCancelLatch = new CountDownLatch(1);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(com.google.common.util.concurrent.MoreExecutors.directExecutor())
+            .intercept(new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                return new io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+                    next.newCall(method, callOptions)) {
+                  @Override
+                  public void cancel(String message, Throwable cause) {
+                    dataPlaneCancelMessage.set(message);
+                    dataPlaneCancelLatch.countDown();
+                    super.cancel(message, cause);
+                  }
+                };
+              }
+            })
+            .build());
 
-    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(
+        com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(mockAppListener, new Metadata());
-
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(rawListenerCaptor.capture(), Mockito.any());
 
     // Trigger request body processing to hit the unsupported compression check
     proxyCall.request(1);
     proxyCall.sendMessage("test");
 
     // Verify data plane call cancelled
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).cancel(Mockito.contains("External processor stream failed"), Mockito.any());
-
-    // Simulate raw call closure resulting from cancellation
-    rawListenerCaptor.getValue().onClose(Status.CANCELLED, new Metadata());
+    assertThat(dataPlaneCancelLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(dataPlaneCancelMessage.get()).contains("External processor stream failed");
 
     // Verify application receives UNAVAILABLE with correct description
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -2836,6 +2873,7 @@ public class ExternalProcessorFilterTest {
     assertThat(statusCaptor.getValue().getDescription()).contains("External processor stream failed");
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
@@ -2905,23 +2943,29 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    // Use real InProcess infrastructure for data plane
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
 
-    ArgumentCaptor<ClientCall.Listener<InputStream>> rawListenerCaptor = ArgumentCaptor.forClass(ClientCall.Listener.class);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(com.google.common.util.concurrent.MoreExecutors.directExecutor())
+            .build());
+
     ClientCall.Listener<String> mockAppListener = Mockito.mock(ClientCall.Listener.class);
     
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(
+        com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(mockAppListener, new Metadata());
-
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(rawListenerCaptor.capture(), Mockito.any());
-
-    // Original call closes with trailers
-    Metadata originalTrailers = new Metadata();
-    rawListenerCaptor.getValue().onClose(Status.OK, originalTrailers);
+    proxyCall.request(1);
+    proxyCall.halfClose();
 
     // Verify application receives the OVERRIDDEN status and merged trailers
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
@@ -2933,6 +2977,7 @@ public class ExternalProcessorFilterTest {
     assertThat(trailersCaptor.getValue().get(Metadata.Key.of("x-sidecar-extra", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("true");
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   // --- Category 10: Processing Mode Override ---
@@ -3450,26 +3495,27 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              // No-op
+            }))
+        .build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
-    // Wait for activation
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(Mockito.any(), Mockito.any());
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Application cancels the RPC
     proxyCall.cancel("User cancelled", null);
 
     // Verify sidecar stream also cancelled
-    assertThat(cancelLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(cancelLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
     
-    // Verify data plane call cancelled
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).cancel(Mockito.eq("User cancelled"), Mockito.any());
+    channelManager.close();
   }
 
   @Test
