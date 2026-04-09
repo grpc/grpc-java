@@ -18,12 +18,14 @@ package io.grpc.binder.internal;
 
 import static android.os.IBinder.FLAG_ONEWAY;
 import static android.os.Process.myUid;
+import static com.google.common.truth.Truth.assertAbout;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.binder.internal.BinderTransport.REMOTE_UID;
 import static io.grpc.binder.internal.BinderTransport.SETUP_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.SHUTDOWN_TRANSPORT;
 import static io.grpc.binder.internal.BinderTransport.WIRE_FORMAT_VERSION;
+import static io.grpc.testing.StatusSubject.status;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,15 +49,20 @@ import androidx.test.core.content.pm.PackageInfoBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.truth.TruthJUnit;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.binder.AndroidComponentAddress;
 import io.grpc.binder.ApiConstants;
 import io.grpc.binder.AsyncSecurityPolicy;
 import io.grpc.binder.SecurityPolicies;
+import io.grpc.binder.internal.OneWayBinderProxies.*;
 import io.grpc.binder.internal.SettableAsyncSecurityPolicy.AuthRequest;
 import io.grpc.internal.AbstractTransportTest;
+import io.grpc.internal.ClientStream;
+import io.grpc.internal.ClientStreamListenerBase;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.ConnectionClientTransport;
@@ -66,7 +73,9 @@ import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.MockServerTransportListener;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
+import java.io.InputStream;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
@@ -124,6 +133,8 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   ServiceInfo serviceInfo;
 
   private int nextServerAddress;
+  private BlockingBinderDecorator<OneWayBinderProxy> blockingDecorator =
+      new BlockingBinderDecorator<>();
 
   @Parameter(value = 0)
   public boolean preAuthServersParam;
@@ -433,4 +444,148 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
   @Ignore("See BinderTransportTest#serverAlreadyListening")
   @Override
   public void serverAlreadyListening() {}
+
+  @Test
+  public void singleTxnMsgsDeliveredToServerOutOfOrder() throws Exception {
+    server.start(serverListener);
+    client =
+        newClientTransportBuilder()
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setBinderDecorator(blockingDecorator)
+                    .buildClientTransportFactory())
+            .build();
+    runIfNotNull(client.start(mockClientTransportListener));
+    blockingDecorator.putNextResult(takeNextBinder(blockingDecorator)); // Endpoint binder.
+    QueueingOneWayBinderProxy queueingServerProxy =
+        new QueueingOneWayBinderProxy(takeNextBinder(blockingDecorator)); // Server binder.
+    blockingDecorator.putNextResult(queueingServerProxy);
+
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
+
+    ClientStream stream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, noopTracers);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    stream.start(clientStreamListener);
+    stream.writeMessage(methodDescriptor.streamRequest("one"));
+    stream.writeMessage(methodDescriptor.streamRequest("two"));
+    stream.halfClose();
+
+    // Expect one transaction for headers, one for each message, and one for half-close.
+    QueueingOneWayBinderProxy.Transaction txHeaders = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction tx1 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction txHalfClose = takeNextTransaction(queueingServerProxy);
+
+    // Deliver messages out of order!
+    queueingServerProxy.deliver(txHeaders);
+    queueingServerProxy.deliver(tx2);
+    queueingServerProxy.deliver(tx1);
+    queueingServerProxy.deliver(txHalfClose);
+
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
+    MockServerTransportListener.StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
+    serverStreamCreation.stream.request(2);
+
+    // Expect the server to deliver the messages in the order they were originally sent.
+    InputStream msg1 = takeNextMessage(serverStreamCreation.listener.messageQueue);
+    assertThat(methodDescriptor.parseResponse(msg1)).isEqualTo("one");
+
+    InputStream msg2 = takeNextMessage(serverStreamCreation.listener.messageQueue);
+    assertThat(methodDescriptor.parseResponse(msg2)).isEqualTo("two");
+
+    assertThat(serverStreamCreation.listener.awaitHalfClosed(TIMEOUT_MS, MILLISECONDS)).isTrue();
+    serverStreamCreation.stream.close(Status.OK, new Metadata());
+
+    assertAbout(status()).that(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
+    assertAbout(status())
+        .that(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .isOk();
+  }
+
+  @Test
+  public void msgFragmentsDeliveredToServerOutOfOrder() throws Exception {
+    server.start(serverListener);
+    client =
+        newClientTransportBuilder()
+            .setFactory(
+                newClientTransportFactoryBuilder()
+                    .setBinderDecorator(blockingDecorator)
+                    .buildClientTransportFactory())
+            .build();
+    runIfNotNull(client.start(mockClientTransportListener));
+    blockingDecorator.putNextResult(takeNextBinder(blockingDecorator)); // Endpoint binder.
+    QueueingOneWayBinderProxy queueingServerProxy =
+        new QueueingOneWayBinderProxy(takeNextBinder(blockingDecorator)); // Server binder.
+    blockingDecorator.putNextResult(queueingServerProxy);
+
+    verify(mockClientTransportListener, timeout(TIMEOUT_MS)).transportReady();
+
+    ClientStream stream =
+        client.newStream(methodDescriptor, new Metadata(), CallOptions.DEFAULT, noopTracers);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    stream.start(clientStreamListener);
+
+    String largeMessage = newStringOfLength(BlockPool.BLOCK_SIZE + 1);
+    stream.writeMessage(methodDescriptor.streamRequest(largeMessage));
+    stream.halfClose();
+
+    // Expect the client to split largeMessage into two transactions, plus headers and half-close.
+    QueueingOneWayBinderProxy.Transaction txHeaders = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction tx1 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction tx2 = takeNextTransaction(queueingServerProxy);
+    QueueingOneWayBinderProxy.Transaction txHalfClose = takeNextTransaction(queueingServerProxy);
+
+    // Deliver fragments out of order!
+    queueingServerProxy.deliver(txHeaders);
+    queueingServerProxy.deliver(tx2);
+    queueingServerProxy.deliver(tx1);
+    queueingServerProxy.deliver(txHalfClose);
+
+    // Verify that the server reassembles the transactions correctly.
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, MILLISECONDS);
+    MockServerTransportListener.StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, MILLISECONDS);
+    serverStreamCreation.stream.request(1);
+    InputStream msg = takeNextMessage(serverStreamCreation.listener.messageQueue);
+    assertThat(methodDescriptor.parseResponse(msg)).isEqualTo(largeMessage);
+
+    assertThat(serverStreamCreation.listener.awaitHalfClosed(TIMEOUT_MS, MILLISECONDS)).isTrue();
+    serverStreamCreation.stream.close(Status.OK, new Metadata());
+
+    assertAbout(status()).that(clientStreamListener.awaitClose(TIMEOUT_MS, MILLISECONDS)).isOk();
+    assertAbout(status())
+        .that(serverStreamCreation.listener.awaitClose(TIMEOUT_MS, MILLISECONDS))
+        .isOk();
+  }
+
+  private static OneWayBinderProxy takeNextBinder(
+      BlockingBinderDecorator<OneWayBinderProxy> decorator) throws InterruptedException {
+    OneWayBinderProxy proxy = decorator.takeNextRequest(TIMEOUT_MS, MILLISECONDS);
+    assertThat(proxy).isNotNull();
+    return proxy;
+  }
+
+  private static QueueingOneWayBinderProxy.Transaction takeNextTransaction(
+      QueueingOneWayBinderProxy proxy) throws InterruptedException {
+    QueueingOneWayBinderProxy.Transaction tx = proxy.pollNextTransaction(TIMEOUT_MS, MILLISECONDS);
+    assertThat(tx).isNotNull();
+    return tx;
+  }
+
+  private static InputStream takeNextMessage(BlockingQueue<InputStream> messageQueue)
+      throws InterruptedException {
+    InputStream msg = messageQueue.poll(TIMEOUT_MS, MILLISECONDS);
+    assertThat(msg).isNotNull();
+    return msg;
+  }
+
+  private static String newStringOfLength(int numChars) {
+    char[] chars = new char[numChars];
+    java.util.Arrays.fill(chars, 'x');
+    return new String(chars);
+  }
 }
