@@ -902,10 +902,10 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
-    final AtomicInteger sidecarMessages = new AtomicInteger(0);
+    final java.util.concurrent.atomic.AtomicInteger sidecarMessages = new java.util.concurrent.atomic.AtomicInteger(0);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
-      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
@@ -916,16 +916,18 @@ public class ExternalProcessorFilterTest {
                       .setResponse(CommonResponse.newBuilder()
                           .setBodyMutation(BodyMutation.newBuilder()
                               .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                  .setBody(com.google.protobuf.ByteString.copyFromUtf8("Acknowledged"))
                                   .setEndOfStream(true)
                                   .build())
                               .build())
                           .build())
                       .build())
                   .build());
+              responseObserver.onCompleted();
             }
           }
           @Override public void onError(Throwable t) {}
-          @Override public void onCompleted() {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
         };
       }
     };
@@ -942,26 +944,54 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueRegistry)
+        .directExecutor()
+        .build().start());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    final java.util.concurrent.atomic.AtomicInteger dataPlaneMessages = new java.util.concurrent.atomic.AtomicInteger(0);
+    final java.util.concurrent.CountDownLatch dataPlaneLatch = new java.util.concurrent.CountDownLatch(1);
+    uniqueRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              dataPlaneMessages.incrementAndGet();
+              dataPlaneLatch.countDown();
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName).build());
+
+    final java.util.concurrent.CountDownLatch appCloseLatch = new java.util.concurrent.CountDownLatch(1);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onMessage(String message) {}
+      @Override public void onClose(Status status, Metadata trailers) {
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
+    proxyCall.request(1);
 
     proxyCall.sendMessage("Trigger EOS");
 
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).halfClose();
+    // Wait for sidecar EOS and data plane call closure
+    assertThat(dataPlaneLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    assertThat(appCloseLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    assertThat(dataPlaneMessages.get()).isEqualTo(1);
 
     proxyCall.sendMessage("Too late");
 
-    // Verify sidecar and raw call NOT messaged after EOS
+    // Verify sidecar and data plane NOT messaged after EOS
     assertThat(sidecarMessages.get()).isEqualTo(1);
-    Mockito.verify(mockRawCall, Mockito.times(0)).sendMessage(Mockito.any());
+    assertThat(dataPlaneMessages.get()).isEqualTo(1);
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
