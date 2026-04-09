@@ -495,14 +495,28 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    final AtomicBoolean rawCallStarted = new AtomicBoolean(false);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .directExecutor()
+            .intercept(new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                return new io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+                  @Override
+                  public void start(Listener<RespT> responseListener, Metadata headers) {
+                    rawCallStarted.set(true);
+                    super.start(responseListener, headers);
+                  }
+                };
+              }
+            })
+            .build());
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
-        METHOD_SAY_HELLO, callOptions, mockNextChannel);
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
 
@@ -510,7 +524,7 @@ public class ExternalProcessorFilterTest {
     assertThat(capturedRequest.get().hasRequestHeaders()).isTrue();
 
     // Verify main call NOT yet started
-    Mockito.verify(mockRawCall, Mockito.never()).start(Mockito.any(), Mockito.any());
+    assertThat(rawCallStarted.get()).isFalse();
     
     proxyCall.cancel("Cleanup", null);
   }
