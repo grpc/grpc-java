@@ -730,11 +730,14 @@ public class ExternalProcessorFilterTest {
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
+    final CountDownLatch sidecarCallLatch = new CountDownLatch(1);
     final CountDownLatch bodySentLatch = new CountDownLatch(1);
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
+    
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
       public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+        sidecarCallLatch.countDown();
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
@@ -761,22 +764,33 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
+    // Add a dummy service to data plane to avoid UNIMPLEMENTED
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
-        METHOD_SAY_HELLO, callOptions, mockNextChannel);
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
+    
     proxyCall.sendMessage("Hello World");
 
+    assertThat(sidecarCallLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(bodySentLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(capturedRequest.get().getRequestBody().getBody().toStringUtf8()).contains("Hello World");
     
     proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
