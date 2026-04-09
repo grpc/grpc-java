@@ -587,23 +587,39 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
+    final CountDownLatch serverCallLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+                (request, responseObserver) -> {
+                  responseObserver.onNext("Hello " + request);
+                  responseObserver.onCompleted();
+                }))
+            .build(),
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            capturedHeaders.set(headers);
+            serverCallLatch.countDown();
+            return next.startCall(call, headers);
+          }
+        }));
 
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(
-        METHOD_SAY_HELLO, callOptions, mockNextChannel);
+        METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     Metadata headers = new Metadata();
     proxyCall.start(Mockito.mock(ClientCall.Listener.class), headers);
 
-    // Verify main call started with mutated headers
-    ArgumentCaptor<Metadata> finalHeadersCaptor = ArgumentCaptor.forClass(Metadata.class);
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).start(Mockito.any(), finalHeadersCaptor.capture());
-
-    Metadata finalHeaders = finalHeadersCaptor.getValue();
+    // Verify main call started with mutated headers on server side
+    assertThat(serverCallLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    Metadata finalHeaders = capturedHeaders.get();
     assertThat(finalHeaders.get(Metadata.Key.of("x-mutated", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("true");
     
     proxyCall.cancel("Cleanup", null);
