@@ -697,8 +697,8 @@ public class ClusterResolverLoadBalancerTest {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + CLUSTER + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
@@ -720,8 +720,8 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).hasSize(0);  // no child LB policy created
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + CLUSTER + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
@@ -751,8 +751,8 @@ public class ClusterResolverLoadBalancerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Resource " + CLUSTER + " does not exist nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Resource " + CLUSTER + " does not exist";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancer.shutdown).isTrue();
@@ -767,8 +767,8 @@ public class ClusterResolverLoadBalancerTest {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     String expectedDescription = "Error retrieving EDS resource " + EDS_SERVICE_NAME
-        + ": NOT_FOUND. Details: Timed out waiting for resource " + EDS_SERVICE_NAME
-        + " from xDS server nodeID: node-id";
+        + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + EDS_SERVICE_NAME + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
