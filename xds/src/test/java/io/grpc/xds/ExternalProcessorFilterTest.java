@@ -820,21 +820,28 @@ public class ExternalProcessorFilterTest {
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasRequestBody()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestBody(BodyResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setBodyMutation(BodyMutation.newBuilder()
-                              .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                  .setBody(ByteString.copyFromUtf8("Mutated"))
-                                  .build())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
+              if (request.getRequestBody().getEndOfStreamWithoutMessage()) {
+                responseObserver.onCompleted();
+              } else {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestBody(BodyResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setBodyMutation(BodyMutation.newBuilder()
+                                .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                    .setBody(ByteString.copyFromUtf8("Mutated"))
+                                    .setEndOfStream(true)
+                                    .build())
+                                .build())
+                            .build())
+                        .build())
+                    .build());
+              }
             }
           }
           @Override public void onError(Throwable t) {}
-          @Override public void onCompleted() {}
+          @Override public void onCompleted() {
+            responseObserver.onCompleted();
+          }
         };
       }
     };
@@ -851,23 +858,48 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
         filterConfig, channelManager, scheduler);
 
-    Channel mockNextChannel = Mockito.mock(Channel.class);
-    ClientCall<InputStream, InputStream> mockRawCall = Mockito.mock(ClientCall.class);
-    Mockito.when(mockNextChannel.newCall(Mockito.any(MethodDescriptor.class), Mockito.any(CallOptions.class)))
-        .thenReturn(mockRawCall);
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueRegistry)
+        .directExecutor()
+        .build().start());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(Executors.newSingleThreadExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, mockNextChannel);
-    proxyCall.start(Mockito.mock(ClientCall.Listener.class), new Metadata());
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
+
+    final AtomicReference<String> capturedDataPlaneRequest = new AtomicReference<>();
+    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+    uniqueRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              capturedDataPlaneRequest.set(request);
+              dataPlaneLatch.countDown();
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+            }))
+        .build());
+
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        appCloseLatch.countDown();
+      }
+    };
+
+    proxyCall.start(appListener, new Metadata());
+    proxyCall.request(1);
 
     proxyCall.sendMessage("Original");
+    proxyCall.halfClose();
 
-    ArgumentCaptor<InputStream> bodyCaptor = ArgumentCaptor.forClass(InputStream.class);
-    Mockito.verify(mockRawCall, Mockito.timeout(5000)).sendMessage(bodyCaptor.capture());
-    assertThat(new String(com.google.common.io.ByteStreams.toByteArray(bodyCaptor.getValue()), StandardCharsets.UTF_8))
-        .isEqualTo("Mutated");
+    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedDataPlaneRequest.get()).isEqualTo("Mutated");
+    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
-    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
   }
 
   @Test
