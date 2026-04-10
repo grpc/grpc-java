@@ -69,6 +69,7 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -828,17 +829,22 @@ public class ExternalProcessorFilterTest {
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
-    proxyCall.request(1);
-    proxyCall.sendMessage("Hello World");
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
 
-    assertThat(bodySentLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(capturedRequest.get().getRequestBody().getBody().toStringUtf8()).contains("Hello World");
-    
-    proxyCall.cancel("Cleanup", null);
+      proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+      proxyCall.request(1);
+      proxyCall.sendMessage("Hello World");
+
+      assertThat(bodySentLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(capturedRequest.get().getRequestBody().getBody().toStringUtf8()).contains("Hello World");
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -933,18 +939,23 @@ public class ExternalProcessorFilterTest {
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    proxyCall.request(1);
-    proxyCall.sendMessage("Original");
-    proxyCall.halfClose();
+      proxyCall.request(1);
+      proxyCall.sendMessage("Original");
+      proxyCall.halfClose();
 
-    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(receivedBody.get()).isEqualTo("Mutated");
-    
-    proxyCall.cancel("Cleanup", null);
+      assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(receivedBody.get()).isEqualTo("Mutated");
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -1040,22 +1051,27 @@ public class ExternalProcessorFilterTest {
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    proxyCall.request(1);
-    proxyCall.sendMessage("Trigger EOS");
+      proxyCall.request(1);
+      proxyCall.sendMessage("Trigger EOS");
 
-    assertThat(dataPlaneHalfCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(dataPlaneHalfCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    proxyCall.sendMessage("Too late");
+      proxyCall.sendMessage("Too late");
 
-    // Verify sidecar and data plane NOT messaged after EOS
-    assertThat(sidecarMessages.get()).isEqualTo(1);
-    assertThat(dataPlaneMessages.get()).isEqualTo(1);
-    
-    proxyCall.cancel("Cleanup", null);
+      // Verify sidecar and data plane NOT messaged after EOS
+      assertThat(sidecarMessages.get()).isEqualTo(1);
+      assertThat(dataPlaneMessages.get()).isEqualTo(1);
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -1263,17 +1279,22 @@ public class ExternalProcessorFilterTest {
             .directExecutor()
             .build());
 
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    proxyCall.request(1);
-    proxyCall.halfClose();
+      proxyCall.request(1);
+      proxyCall.halfClose();
 
-    // Verify super.halfClose() was called after sidecar response
-    assertThat(dataPlaneHalfClosedLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-    
-    proxyCall.cancel("Cleanup", null);
+      // Verify super.halfClose() was called after sidecar response
+      assertThat(dataPlaneHalfClosedLatch.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -1382,29 +1403,34 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appMessageLatch = new CountDownLatch(1);
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {
-      @Override
-      public void onMessage(String message) {
-        appMessageLatch.countDown();
-      }
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        appCloseLatch.countDown();
-      }
-    }, new Metadata());
-    
-    proxyCall.request(1);
-    proxyCall.sendMessage("Hello");
-    proxyCall.halfClose();
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(new ClientCall.Listener<String>() {
+        @Override
+        public void onMessage(String message) {
+          appMessageLatch.countDown();
+        }
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          appCloseLatch.countDown();
+        }
+      }, new Metadata());
 
-    assertThat(sidecarBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(capturedRequest.get().getResponseBody().getBody().toStringUtf8()).isEqualTo("Server Message");
-    assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    
-    proxyCall.cancel("Cleanup", null);
+      proxyCall.request(1);
+      proxyCall.sendMessage("Hello");
+      proxyCall.halfClose();
+
+      assertThat(sidecarBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(capturedRequest.get().getResponseBody().getBody().toStringUtf8()).isEqualTo("Server Message");
+      assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -1512,29 +1538,35 @@ public class ExternalProcessorFilterTest {
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     final AtomicReference<String> capturedMessage = new AtomicReference<>();
 
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {
-      @Override
-      public void onMessage(String message) {
-        capturedMessage.set(message);
-        appMessageLatch.countDown();
-      }
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        appCloseLatch.countDown();
-      }
-    }, new Metadata());
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(new ClientCall.Listener<String>() {
+        @Override
+        public void onMessage(String message) {
+          capturedMessage.set(message);
+          appMessageLatch.countDown();
+        }
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          appCloseLatch.countDown();
+        }
+      }, new Metadata());
 
-    proxyCall.request(1);
-    proxyCall.sendMessage("Hello");
-    proxyCall.halfClose();
+      proxyCall.request(1);
+      proxyCall.sendMessage("Hello");
+      proxyCall.halfClose();
 
-    assertThat(sidecarBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(capturedMessage.get()).isEqualTo("Mutated Server");
-    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(sidecarBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(capturedMessage.get()).isEqualTo("Mutated Server");
+      assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    proxyCall.cancel("Cleanup", null);
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     channelManager.close();
   }
 
@@ -3745,32 +3777,36 @@ public class ExternalProcessorFilterTest {
       }
     };
     
-    // Use direct executor
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(appListener, new Metadata());
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(appListener, new Metadata());
 
-    // Wait for activation
-    long startTime = System.currentTimeMillis();
-    while (!proxyCall.isReady() && System.currentTimeMillis() - startTime < 5000) {
+      // Wait for activation
+      long startTime = System.currentTimeMillis();
+      while (!proxyCall.isReady() && System.currentTimeMillis() - startTime < 5000) {
         Thread.sleep(10);
-    }
-    assertThat(proxyCall.isReady()).isTrue();
+      }
+      assertThat(proxyCall.isReady()).isTrue();
 
-    // 5. App requests message
-    proxyCall.request(1);
-    proxyCall.sendMessage("test");
-    proxyCall.halfClose();
+      // 5. App requests message
+      proxyCall.request(1);
+      proxyCall.sendMessage("test");
+      proxyCall.halfClose();
 
-    // Verify intercepted by sidecar
-    startTime = System.currentTimeMillis();
-    while (capturedRespBodyReq.get() == null && System.currentTimeMillis() - startTime < 5000) {
-      Thread.sleep(10);
+      // Verify intercepted by sidecar
+      startTime = System.currentTimeMillis();
+      while (capturedRespBodyReq.get() == null && System.currentTimeMillis() - startTime < 5000) {
+        Thread.sleep(10);
+      }
+      assertThat(capturedRespBodyReq.get()).isNotNull();
+      assertThat(capturedRespBodyReq.get().getResponseBody().getBody().toStringUtf8()).isEqualTo("Original Response Body");
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
     }
-    assertThat(capturedRespBodyReq.get()).isNotNull();
-    assertThat(capturedRespBodyReq.get().getResponseBody().getBody().toStringUtf8()).isEqualTo("Original Response Body");
-    
-    proxyCall.cancel("Cleanup", null);
     channelManager.close();
   }
 
@@ -4005,23 +4041,28 @@ public class ExternalProcessorFilterTest {
 
     AtomicReference<String> result = new AtomicReference<>();
     CountDownLatch latch = new CountDownLatch(1);
-    
-    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(com.google.common.util.concurrent.MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall = dataPlaneChannel.newCall(METHOD_SAY_HELLO, callOptions);
-    proxyCall.start(new ClientCall.Listener<String>() {
-      @Override public void onMessage(String value) { result.set(value); }
-      @Override public void onClose(Status status, Metadata trailers) { latch.countDown(); }
-    }, new Metadata());
-    proxyCall.request(1);
-    proxyCall.sendMessage("World");
-    proxyCall.halfClose();
 
-    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(result.get()).isEqualTo("Hello World");
-    assertThat(receivedHeaders.get().get(Metadata.Key.of("x-custom-header", Metadata.ASCII_STRING_MARSHALLER)))
-        .isEqualTo("custom-value");
-    
-    proxyCall.cancel("Cleanup", null);
+    ExecutorService realExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(realExecutor);
+      ClientCall<String, String> proxyCall = dataPlaneChannel.newCall(METHOD_SAY_HELLO, callOptions);
+      proxyCall.start(new ClientCall.Listener<String>() {
+        @Override public void onMessage(String value) { result.set(value); }
+        @Override public void onClose(Status status, Metadata trailers) { latch.countDown(); }
+      }, new Metadata());
+      proxyCall.request(1);
+      proxyCall.sendMessage("World");
+      proxyCall.halfClose();
+
+      assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(result.get()).isEqualTo("Hello World");
+      assertThat(receivedHeaders.get().get(Metadata.Key.of("x-custom-header", Metadata.ASCII_STRING_MARSHALLER)))
+          .isEqualTo("custom-value");
+
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      realExecutor.shutdownNow();
+    }
     testChannelManager.close();
   }
 }
