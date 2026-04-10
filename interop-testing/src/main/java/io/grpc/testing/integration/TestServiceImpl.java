@@ -511,27 +511,30 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
   }
 
   /**
-   * Echo the request headers from a client into response headers and trailers. Useful for
+   * Echo a request header from a client into response headers and trailers. Useful for
    * testing end-to-end metadata propagation.
    */
-  private static ServerInterceptor echoRequestHeadersInterceptor(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestHeadersInterceptor(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
-          final Metadata requestHeaders,
+          Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
               @Override
               public void sendHeaders(Metadata responseHeaders) {
-                responseHeaders.merge(requestHeaders, keySet);
+                responseHeaders.put(key, value);
                 super.sendHeaders(responseHeaders);
               }
 
               @Override
               public void close(Status status, Metadata trailers) {
-                trailers.merge(requestHeaders, keySet);
+                trailers.put(key, value);
                 super.close(status, trailers);
               }
             }, requestHeaders);
@@ -540,26 +543,24 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
   }
 
   /**
-   * Echoes request headers with the specified key(s) from a client into response headers only.
+   * Echoes request headers with the specified key from a client into response headers only.
    */
-  private static ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestMetadataInHeaders(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
           final Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void sendHeaders(Metadata responseHeaders) {
-            responseHeaders.merge(requestHeaders, keySet);
+            responseHeaders.put(key, value);
             super.sendHeaders(responseHeaders);
-          }
-
-          @Override
-          public void close(Status status, Metadata trailers) {
-            super.close(status, trailers);
           }
         }, requestHeaders);
       }
@@ -567,25 +568,23 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
   }
 
   /**
-   * Echoes request headers with the specified key(s) from a client into response trailers only.
+   * Echoes request headers with the specified key from a client into response trailers only.
    */
-  private static ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<?>... keys) {
-    final Set<Metadata.Key<?>> keySet = new HashSet<>(Arrays.asList(keys));
+  private static <T> ServerInterceptor echoRequestMetadataInTrailers(final Metadata.Key<T> key) {
     return new ServerInterceptor() {
       @Override
       public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
           ServerCall<ReqT, RespT> call,
           final Metadata requestHeaders,
           ServerCallHandler<ReqT, RespT> next) {
+        if (!requestHeaders.containsKey(key)) {
+          return next.startCall(call, requestHeaders);
+        }
+        T value = requestHeaders.get(key);
         return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
-          public void sendHeaders(Metadata responseHeaders) {
-            super.sendHeaders(responseHeaders);
-          }
-
-          @Override
           public void close(Status status, Metadata trailers) {
-            trailers.merge(requestHeaders, keySet);
+            trailers.put(key, value);
             super.close(status, trailers);
           }
         }, requestHeaders);
