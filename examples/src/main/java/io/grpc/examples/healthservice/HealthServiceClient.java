@@ -32,6 +32,7 @@ import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -45,25 +46,17 @@ public class HealthServiceClient {
   private static final Logger logger = Logger.getLogger(HealthServiceClient.class.getName());
 
   private final GreeterGrpc.GreeterBlockingStub greeterBlockingStub;
-  private final HealthGrpc.HealthStub healthStub;
   private final HealthGrpc.HealthBlockingStub healthBlockingStub;
-
-  private final HealthCheckRequest healthRequest;
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
   public HealthServiceClient(Channel channel) {
     greeterBlockingStub = GreeterGrpc.newBlockingStub(channel);
-    healthStub = HealthGrpc.newStub(channel);
     healthBlockingStub = HealthGrpc.newBlockingStub(channel);
-    healthRequest = HealthCheckRequest.getDefaultInstance();
-    LoadBalancerProvider roundRobin = LoadBalancerRegistry.getDefaultRegistry()
-        .getProvider("round_robin");
-
   }
 
   private ServingStatus checkHealth(String prefix) {
     HealthCheckResponse response =
-        healthBlockingStub.check(healthRequest);
+        healthBlockingStub.check(HealthCheckRequest.getDefaultInstance());
     logger.info(prefix + ", current health is: " + response.getStatus());
     return response.getStatus();
   }
@@ -86,34 +79,35 @@ public class HealthServiceClient {
   }
 
 
-  private static void runTest(String target, String[] users, boolean useRoundRobin)
+  private static void runTest(String target, String[] users, boolean enableHealthChecking)
       throws InterruptedException {
-    ManagedChannelBuilder<?> builder =
-        Grpc.newChannelBuilder(target, InsecureChannelCredentials.create());
-
-    // Round Robin, when a healthCheckConfig is present in the default service configuration, runs
-    // a watch on the health service and when picking an endpoint will
-    // consider a transport to a server whose service is not in SERVING state to be unavailable.
-    // Since we only have a single server we are connecting to, then the load balancer will
-    // return an error without sending the RPC.
-    if (useRoundRobin) {
-      builder = builder
-        .defaultLoadBalancingPolicy("round_robin")
-        .defaultServiceConfig(generateHealthConfig(""));
+    String healthServiceName;
+    if (enableHealthChecking) {
+        healthServiceName = ""; // requests the backend's "overall health status"
+    } else {
+        healthServiceName = null; // disables health checking in generateServiceConfig()
     }
+    ManagedChannel channel =
+        Grpc.newChannelBuilder(target, InsecureChannelCredentials.create())
+        // Enable the round_robin load balancer, with or without health checking
+        .defaultServiceConfig(generateServiceConfig(healthServiceName))
+        .build();
 
-    ManagedChannel channel = builder.build();
+    // Round Robin, when a healthCheckConfig is present in the service configuration, runs a watch
+    // on the health service and when picking an endpoint will consider a transport to a server
+    // whose service is not in SERVING state to be unavailable. Since we only have a single server
+    // we are connecting to, then the load balancer will return an error without sending the RPC.
 
-    System.out.println("\nDoing test with" + (useRoundRobin ? "" : "out")
-      + " the Round Robin load balancer\n");
+    System.out.println("\nDoing test with" + (enableHealthChecking ? "" : "out")
+      + " health checking\n");
 
     try {
       HealthServiceClient client = new HealthServiceClient(channel);
-      if (!useRoundRobin) {
+      if (!enableHealthChecking) {
         client.checkHealth("Before call");
       }
       client.greet(users[0]);
-      if (!useRoundRobin) {
+      if (!enableHealthChecking) {
         client.checkHealth("After user " + users[0]);
       }
 
@@ -122,7 +116,7 @@ public class HealthServiceClient {
         Thread.sleep(100); // Since the health update is asynchronous give it time to propagate
       }
 
-      if (!useRoundRobin) {
+      if (!enableHealthChecking) {
         client.checkHealth("After all users");
         Thread.sleep(10000);
         client.checkHealth("After 10 second wait");
@@ -137,12 +131,17 @@ public class HealthServiceClient {
       channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
     }
   }
-  private static Map<String, Object> generateHealthConfig(String serviceName) {
+  private static Map<String, Object> generateServiceConfig(String healthServiceName) {
     Map<String, Object> config = new HashMap<>();
-    Map<String, Object> serviceMap = new HashMap<>();
-
-    config.put("healthCheckConfig", serviceMap);
-    serviceMap.put("serviceName", serviceName);
+    if (healthServiceName != null) {
+      config.put("healthCheckConfig", Collections.singletonMap("serviceName", healthServiceName));
+    }
+    // There is more than one round_robin implementation. If the client doesn't depend on
+    // io.grpc:grpc-services, then the round_robin implementation does not support health watching
+    // (to avoid a Protobuf dependency). When the client depends on grpc-services the
+    // health-supporting round_robin implementation is used instead.
+    config.put("loadBalancingConfig", Arrays.asList(
+        Collections.singletonMap("round_robin", Collections.emptyMap())));
     return config;
   }
 

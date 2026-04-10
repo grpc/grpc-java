@@ -27,6 +27,8 @@ def protocVersion = protobufVersion
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    // Even though client-side won't call grpc-services directly, it needs the
+    // dependency to enable the health-aware round_robin implementation
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
 
