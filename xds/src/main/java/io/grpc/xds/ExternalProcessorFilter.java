@@ -436,14 +436,17 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void activateCall() {
-        if (extProcStreamFailed.get()) {
-          return;
-        }
-        Runnable toRun = delayedCall.setCall(rawCall);
-        if (toRun != null) {
-          toRun.run();
-        }
-        drainPendingRequests();
+        serializingExecutor.execute(() -> {
+          if (extProcStreamFailed.get()) {
+            return;
+          }
+          Runnable toRun = delayedCall.setCall(rawCall);
+          if (toRun != null) {
+            toRun.run();
+          }
+          drainPendingRequests();
+          onReadyNotify();
+        });
       }
 
       private void applyHeaderMutations(Metadata metadata,
@@ -574,6 +577,12 @@ public class ExternalProcessorFilter implements Filter {
                     }
                   }
                   handleResponseBodyResponse(response.getResponseBody(), wrappedListener);
+                  if (response.getResponseBody().hasResponse() && response.getResponseBody().getResponse().hasBodyMutation()) {
+                    io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation mutation = response.getResponseBody().getResponse().getBodyMutation();
+                    if (mutation.hasStreamedResponse() && (mutation.getStreamedResponse().getEndOfStream() || mutation.getStreamedResponse().getEndOfStreamWithoutMessage())) {
+                       closeExtProcStream();
+                    }
+                  }
                 }
                 // 6. Response Trailers
                 if (response.hasResponseTrailers()) {
@@ -687,14 +696,16 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void onReadyNotify() {
-        if (isReady()) {
+        boolean ready = isReady();
+        if (ready) {
           wrappedListener.onReadyNotify();
         }
       }
 
       @Override
       public boolean isReady() {
-        if (extProcStreamCompleted.get()) {
+        boolean completed = extProcStreamCompleted.get();
+        if (completed) {
           return super.isReady();
         }
         if (drainingExtProcStream.get()) {
@@ -771,17 +782,18 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void halfClose() {
-        if (!requestSideClosed.compareAndSet(false, true)) {
-          return;
-        }
         halfClosed.set(true);
         if (extProcStreamCompleted.get()) {
-          super.halfClose();
+          if (requestSideClosed.compareAndSet(false, true)) {
+            super.halfClose();
+          }
           return;
         }
 
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-          super.halfClose();
+          if (requestSideClosed.compareAndSet(false, true)) {
+            super.halfClose();
+          }
           return;
         }
 
