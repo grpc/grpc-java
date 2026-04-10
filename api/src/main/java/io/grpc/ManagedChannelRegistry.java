@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.errorprone.annotations.ThreadSafe;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -32,7 +33,6 @@ import java.util.List;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link ManagedChannelProvider}s. The {@link #getDefaultRegistry default instance}

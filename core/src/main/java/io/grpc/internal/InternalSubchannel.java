@@ -30,6 +30,7 @@ import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.ForOverride;
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -62,7 +63,6 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Transports for a single {@link SocketAddress}.

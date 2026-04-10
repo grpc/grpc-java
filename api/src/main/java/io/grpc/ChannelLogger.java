@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
+import com.google.errorprone.annotations.ThreadSafe;
 
 /**
  * A Channel-specific logger provided by GRPC library to {@link LoadBalancer} implementations.

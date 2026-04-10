@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
+import com.google.errorprone.annotations.ThreadSafe;
 
 /**
  * Interface to initiate processing of incoming remote calls. Advanced applications and generated

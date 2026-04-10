@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
@@ -26,7 +27,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The global map for holding circuit breaker atomic counters.
