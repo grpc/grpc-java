@@ -18,13 +18,13 @@ package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.InlineMe;
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Utility to record call metrics for load-balancing. One instance per call.

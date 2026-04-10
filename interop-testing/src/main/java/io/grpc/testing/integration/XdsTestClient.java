@@ -27,6 +27,7 @@ import com.google.common.util.concurrent.ListenableScheduledFuture;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.errorprone.annotations.ThreadSafe;
 import com.google.protobuf.ByteString;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
@@ -77,7 +78,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Client for xDS interop tests. */

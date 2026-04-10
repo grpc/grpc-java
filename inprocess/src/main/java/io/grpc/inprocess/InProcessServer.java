@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
@@ -33,7 +34,6 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
 final class InProcessServer implements InternalServer {

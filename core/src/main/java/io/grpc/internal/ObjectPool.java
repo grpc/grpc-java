@@ -16,7 +16,7 @@
 
 package io.grpc.internal;
 
-import javax.annotation.concurrent.ThreadSafe;
+import com.google.errorprone.annotations.ThreadSafe;
 
 /**
  * An object pool.

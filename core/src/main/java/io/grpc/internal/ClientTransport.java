@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.InternalChannelz.SocketStats;
@@ -24,7 +25,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import java.util.concurrent.Executor;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The client-side transport typically encapsulating a single connection to a remote
