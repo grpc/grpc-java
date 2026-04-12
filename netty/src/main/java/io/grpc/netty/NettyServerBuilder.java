@@ -22,7 +22,9 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.grpc.internal.GrpcUtil.SERVER_PERMIT_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
@@ -113,7 +115,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
-  private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private long permitKeepAliveTimeInNanos = DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
   private int maxRstCount;
   private long maxRstPeriodNanos;
   private Attributes eagAttributes = Attributes.EMPTY;
@@ -656,6 +658,9 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
         keepAliveTime);
     permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
+    if (permitKeepAliveTimeInNanos >= AS_LARGE_AS_INFINITE) {
+      permitKeepAliveTimeInNanos = SERVER_PERMIT_KEEPALIVE_TIME_NANOS_DISABLED;
+    }
     return this;
   }
 

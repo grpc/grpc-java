@@ -46,7 +46,8 @@ public final class KeepAliveEnforcer {
     Preconditions.checkArgument(minTime >= 0, "minTime must be non-negative: %s", minTime);
 
     this.permitWithoutCalls = permitWithoutCalls;
-    this.minTimeNanos = Math.min(unit.toNanos(minTime), IMPLICIT_PERMIT_TIME_NANOS);
+    this.minTimeNanos = minTime == Long.MAX_VALUE ? Long.MAX_VALUE
+            : Math.min(unit.toNanos(minTime),IMPLICIT_PERMIT_TIME_NANOS);
     this.ticker = ticker;
     this.epoch = ticker.nanoTime();
     lastValidPingTime = epoch;
@@ -55,6 +56,9 @@ public final class KeepAliveEnforcer {
   /** Returns {@code false} when client is misbehaving and should be disconnected. */
   @CheckReturnValue
   public boolean pingAcceptable() {
+    if (minTimeNanos == Long.MAX_VALUE) {
+      return true;
+    }
     long now = ticker.nanoTime();
     boolean valid;
     if (!hasOutstandingCalls && !permitWithoutCalls) {

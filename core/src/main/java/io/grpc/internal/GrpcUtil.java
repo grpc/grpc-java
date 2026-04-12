@@ -242,6 +242,16 @@ public final class GrpcUtil {
   public static final long DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(20L);
 
   /**
+   * The default minimum time between client keepalive pings permitted by server.
+   */
+  public static final long DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS = TimeUnit.MINUTES.toNanos(5);
+
+  /**
+   * The magic permit keepalive time value that disables server keepalive enforcement.
+   */
+  public static final long SERVER_PERMIT_KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;
+
+  /**
    * The magic keepalive time value that disables keepalive.
    */
   public static final long SERVER_KEEPALIVE_TIME_NANOS_DISABLED = Long.MAX_VALUE;

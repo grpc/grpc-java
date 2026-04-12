@@ -166,6 +166,20 @@ public class KeepAliveEnforcerTest {
   }
 
   @Test
+  public void permitAllWhenDisabled() {
+    KeepAliveEnforcer enforcer = new KeepAliveEnforcer(
+        false, Long.MAX_VALUE, TimeUnit.NANOSECONDS, ticker);
+    enforcer.onTransportIdle();
+    for (int i = 0; i < LARGE_NUMBER; i++) {
+      assertThat(enforcer.pingAcceptable()).isTrue();
+    }
+    enforcer.onTransportActive();
+    for (int i = 0; i < LARGE_NUMBER; i++) {
+      assertThat(enforcer.pingAcceptable()).isTrue();
+    }
+  }
+
+  @Test
   public void resetCounters_resetsStrikes() {
     KeepAliveEnforcer enforcer = new KeepAliveEnforcer(false, 1, TimeUnit.NANOSECONDS, ticker);
     enforcer.onTransportActive();
