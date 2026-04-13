@@ -517,7 +517,7 @@ public class ExternalProcessorFilter implements Filter {
                 if (response.getRequestDrain()) {
                   drainingExtProcStream.set(true);
                   halfCloseExtProcStream();
-                  return;
+                  activateCall();
                 }
 
                 // 1. Client Headers
@@ -665,11 +665,13 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void drainPendingRequests() {
+        int toRequest;
         synchronized (streamLock) {
-          if (pendingRequests > 0 && isReady()) {
-            super.request(pendingRequests);
-            pendingRequests = 0;
-          }
+          toRequest = pendingRequests;
+          pendingRequests = 0;
+        }
+        if (toRequest > 0) {
+          super.request(toRequest);
         }
       }
 
@@ -696,28 +698,32 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void onReadyNotify() {
-        boolean ready = isReady();
-        if (ready) {
-          wrappedListener.onReadyNotify();
+        wrappedListener.onReadyNotify();
+      }
+
+      private boolean isSidecarReady() {
+        if (extProcStreamCompleted.get()) {
+          return true;
+        }
+        if (drainingExtProcStream.get()) {
+          return false;
+        }
+        synchronized (streamLock) {
+          return extProcClientCallRequestObserver != null
+              && extProcClientCallRequestObserver.isReady();
         }
       }
 
       @Override
       public boolean isReady() {
-        boolean completed = extProcStreamCompleted.get();
-        if (completed) {
+        if (extProcStreamCompleted.get()) {
           return super.isReady();
         }
-        if (drainingExtProcStream.get()) {
-          return false;
-        }
+        boolean sidecarReady = isSidecarReady();
         if (config.getObservabilityMode()) {
-          synchronized (streamLock) {
-            return super.isReady() && extProcClientCallRequestObserver != null
-                && extProcClientCallRequestObserver.isReady();
-          }
+          return super.isReady() && sidecarReady;
         }
-        return super.isReady();
+        return sidecarReady;
       }
 
       @Override
@@ -726,20 +732,10 @@ public class ExternalProcessorFilter implements Filter {
           super.request(numMessages);
           return;
         }
-        // If the external processor is backed up with flow control, we need to stop requesting
-        // messages from the remote side.
-        if (drainingExtProcStream.get()) {
-          synchronized (streamLock) {
+        synchronized (streamLock) {
+          if (!isSidecarReady()) {
             pendingRequests += numMessages;
             return;
-          }
-        }
-        if (config.getObservabilityMode()) {
-          synchronized (streamLock) {
-            if (!isReady()) {
-              pendingRequests += numMessages;
-              return;
-            }
           }
         }
         super.request(numMessages);
@@ -964,9 +960,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onReadyNotify() {
-        if (extProcClientCall.isReady()) {
-          super.onReady();
-        }
+        super.onReady();
       }
 
       @Override
