@@ -98,7 +98,7 @@ public abstract class ManagedChannelProvider {
    *     search the registry
    * @return a {@link NewChannelBuilderResult} containing either the builder or an
    *     error description
-   * @since 1.79.0
+   * @since 1.81.0
    */
   protected NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
                                                       NameResolverRegistry nameResolverRegistry,

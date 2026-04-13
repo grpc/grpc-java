@@ -762,7 +762,7 @@ public final class ManagedChannelImplBuilder
         clientTransportFactoryBuilder.buildClientTransportFactory();
     ResolvedNameResolver resolvedResolver =
         InternalFeatureFlags.getRfc3986UrisEnabled()
-            ? getNameResolverProviderRfc3986(target, nameResolverRegistry)
+            ? getNameResolverProviderRfc3986(target, nameResolverRegistry, nameResolverProvider)
             : getNameResolverProvider(target, nameResolverRegistry, nameResolverProvider);
     resolvedResolver.checkAddressTypes(clientTransportFactory.getSupportedSocketAddressTypes());
     return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
@@ -902,7 +902,7 @@ public final class ManagedChannelImplBuilder
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
       // Use the explicit provider if its scheme matches the target URI.
       if (nameResolverProvider != null
-          && targetUri.getScheme().equals(nameResolverProvider.getDefaultScheme())) {
+          && targetUri.getScheme().equals(nameResolverProvider.getScheme())) {
         provider = nameResolverProvider;
       } else {
         provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
@@ -914,7 +914,7 @@ public final class ManagedChannelImplBuilder
       // the default scheme from the registry (if provider is not specified) or
       // the provider's default scheme (if provider is specified).
       String scheme = nameResolverProvider != null
-          ? nameResolverProvider.getDefaultScheme()
+          ? nameResolverProvider.getScheme()
           : nameResolverRegistry.getDefaultScheme();
       try {
         targetUri = new URI(scheme, "", "/" + target, null);
@@ -940,7 +940,8 @@ public final class ManagedChannelImplBuilder
 
   @VisibleForTesting
   static ResolvedNameResolver getNameResolverProviderRfc3986(
-      String target, NameResolverRegistry nameResolverRegistry) {
+      String target, NameResolverRegistry nameResolverRegistry,
+      NameResolverProvider nameResolverProvider) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     NameResolverProvider provider = null;
@@ -955,15 +956,25 @@ public final class ManagedChannelImplBuilder
     if (targetUri != null) {
       // For "localhost:8080" this would likely cause provider to be null, because "localhost" is
       // parsed as the scheme. Will hit the next case and try "dns:///localhost:8080".
-      provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      // Use the explicit provider if its scheme matches the target URI.
+      if (nameResolverProvider != null
+          && targetUri.getScheme().equals(nameResolverProvider.getScheme())) {
+        provider = nameResolverProvider;
+      } else {
+        provider = nameResolverRegistry.getProviderForScheme(targetUri.getScheme());
+      }
     }
 
     if (provider == null && !URI_PATTERN.matcher(target).matches()) {
-      // It doesn't look like a URI target. Maybe it's an authority string. Try with the default
-      // scheme from the registry.
+      // It doesn't look like a URI target. Maybe it's an authority string. Try with
+      // the default scheme from the registry (if provider is not specified) or
+      // the provider's default scheme (if provider is specified).
+      String scheme = nameResolverProvider != null
+          ? nameResolverProvider.getScheme()
+          : nameResolverRegistry.getDefaultScheme();
       targetUri =
           Uri.newBuilder()
-              .setScheme(nameResolverRegistry.getDefaultScheme())
+              .setScheme(scheme)
               .setHost("")
               .setPath("/" + target)
               .build();

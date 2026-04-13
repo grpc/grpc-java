@@ -808,6 +808,7 @@ public class ManagedChannelImplBuilderTest {
     String target = "127.0.0.1:8080";
     NameResolverRegistry registry = new NameResolverRegistry();
     NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getScheme()).thenReturn("dns");
     when(explicitProvider.getDefaultScheme()).thenReturn("dns");
 
     ManagedChannelImplBuilder.ResolvedNameResolver resolved;
@@ -823,6 +824,7 @@ public class ManagedChannelImplBuilderTest {
     String target = "::1";
     NameResolverRegistry registry = new NameResolverRegistry();
     NameResolverProvider explicitProvider = mock(NameResolverProvider.class);
+    when(explicitProvider.getScheme()).thenReturn("dns");
     when(explicitProvider.getDefaultScheme()).thenReturn("dns");
 
     ManagedChannelImplBuilder.ResolvedNameResolver resolved;
@@ -906,5 +908,44 @@ public class ManagedChannelImplBuilderTest {
         target, registry, null);
 
     assertThat(resolved.provider).isSameInstanceAs(registryProvider);
+  }
+
+  @Test
+  public void getNameResolverProviderRfc3986_explicitProviderWithAuthorityTarget() {
+    String target = "authority-target";
+    NameResolverRegistry registry = new NameResolverRegistry();
+    NameResolverProvider explicitProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return null;
+      }
+
+      @Override
+      public String getScheme() {
+        return "customscheme";
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "customscheme";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+    };
+    registry.register(explicitProvider);
+
+    ManagedChannelImplBuilder.ResolvedNameResolver resolved = ManagedChannelImplBuilder
+        .getNameResolverProviderRfc3986(target, registry, explicitProvider);
+
+    assertThat(resolved.provider).isSameInstanceAs(explicitProvider);
+    assertThat(resolved.targetUri.toString()).isEqualTo("customscheme:///authority-target");
   }
 }
