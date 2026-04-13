@@ -16,7 +16,6 @@
 
 package io.grpc.services;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.ServerServiceDefinition;
@@ -28,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Admin Interface provides a class of services for exposing the overall state of gRPC

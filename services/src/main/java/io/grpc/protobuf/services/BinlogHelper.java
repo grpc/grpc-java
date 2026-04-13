@@ -24,7 +24,6 @@ import static io.grpc.protobuf.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
-import com.google.errorprone.annotations.ThreadSafe;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Durations;
@@ -70,6 +69,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A binary log class that is configured for a specific {@link MethodDescriptor}.

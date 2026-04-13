@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.TimeUtils.convertToNanos;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.time.Duration;
 import java.util.Queue;
@@ -30,6 +29,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A synchronization context is a queue of tasks that run in sequence.  It offers following

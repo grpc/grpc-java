@@ -16,8 +16,8 @@
 
 package io.grpc;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Listens to events on a stream to collect metrics.

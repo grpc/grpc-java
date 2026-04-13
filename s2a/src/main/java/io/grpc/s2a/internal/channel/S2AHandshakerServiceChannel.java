@@ -19,12 +19,12 @@ package io.grpc.s2a.internal.channel;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Channel;
 import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Provides APIs for managing gRPC channels to an S2A server. Each channel is local and plaintext.

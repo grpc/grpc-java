@@ -18,7 +18,6 @@ package io.grpc.grpclb;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ClientStreamTracer;
@@ -31,6 +30,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Record and aggregate client-side load data for GRPCLB.  This records load occurred during the

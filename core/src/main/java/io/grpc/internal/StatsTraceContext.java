@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
@@ -32,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The stats and tracing information for a stream.

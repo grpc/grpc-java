@@ -16,9 +16,9 @@
 
 package io.grpc.s2a.internal.handshaker.tokenmanager;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.util.Optional;
+import javax.annotation.concurrent.ThreadSafe;
 
 /** Manages access tokens for authenticating to the S2A. */
 @ThreadSafe

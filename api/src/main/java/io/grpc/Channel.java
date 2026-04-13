@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import com.google.errorprone.annotations.ThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A virtual connection to a conceptual endpoint, to perform RPCs. A channel is free to have zero or

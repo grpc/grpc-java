@@ -29,7 +29,7 @@ java_library(
     deps = [
         ":channelz",
         "//api",
-        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.code.findbugs:jsr305"),
     ],
 )
 
@@ -44,6 +44,7 @@ java_library(
     deps = [
         "//api",
         "//context",
+        artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
     ],
@@ -81,7 +82,6 @@ java_library(
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:binarylog_java_proto",
         artifact("com.google.code.findbugs:jsr305"),
-        artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
     ],
 )
@@ -100,6 +100,7 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@io_grpc_grpc_proto//:channelz_java_proto",
+        artifact("com.google.code.findbugs:jsr305"),
         artifact("com.google.guava:guava"),
     ],
 )

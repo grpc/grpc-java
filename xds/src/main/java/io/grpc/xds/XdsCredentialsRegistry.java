@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
-import com.google.errorprone.annotations.ThreadSafe;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.InternalServiceProviders;
 import java.util.ArrayList;
@@ -34,6 +33,7 @@ import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link XdsCredentialsProvider}s. The {@link #getDefaultRegistry default
@@ -133,7 +133,7 @@ final class XdsCredentialsRegistry {
 
   /**
    * Returns effective providers map from scheme to the highest priority
-   * XdsCredsProvider of that scheme.
+   * XdsCredsProvider of that scheme. 
    */
   @VisibleForTesting
   synchronized Map<String, XdsCredentialsProvider> providers() {
@@ -142,7 +142,7 @@ final class XdsCredentialsRegistry {
 
   /**
    * Returns the effective provider for the given xds credential name, or {@code null} if no
-   * suitable provider can be found.
+   * suitable provider can be found. 
    * Each provider declares its name via {@link XdsCredentialsProvider#getName}.
    */
   @Nullable
@@ -157,7 +157,7 @@ final class XdsCredentialsRegistry {
     // https://sourceforge.net/p/proguard/bugs/418/
     ArrayList<Class<?>> list = new ArrayList<>();
     try {
-      list.add(Class.forName("io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider"));
+      list.add(Class.forName("io.grpc.xds.internal.GoogleDefaultXdsCredentialsProvider")); 
     } catch (ClassNotFoundException e) {
       logger.log(Level.WARNING, "Unable to find GoogleDefaultXdsCredentialsProvider", e);
     }
@@ -173,7 +173,7 @@ final class XdsCredentialsRegistry {
     } catch (ClassNotFoundException e) {
       logger.log(Level.WARNING, "Unable to find TlsXdsCredentialsProvider", e);
     }
-
+      
     return Collections.unmodifiableList(list);
   }
 

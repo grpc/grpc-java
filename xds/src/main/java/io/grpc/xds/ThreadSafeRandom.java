@@ -16,8 +16,8 @@
 
 package io.grpc.xds;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import java.util.concurrent.ThreadLocalRandom;
+import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe // Except for impls/mocks in tests
 interface ThreadSafeRandom {
