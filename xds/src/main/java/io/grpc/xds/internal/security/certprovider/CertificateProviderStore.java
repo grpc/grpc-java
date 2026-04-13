@@ -17,13 +17,13 @@
 package io.grpc.xds.internal.security.certprovider;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.xds.internal.security.ReferenceCountingMap;
 import io.grpc.xds.internal.security.certprovider.CertificateProvider.Watcher;
 import java.io.Closeable;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Global map of all ref-counted {@link CertificateProvider}s that have been instantiated in

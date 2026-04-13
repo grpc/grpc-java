@@ -16,7 +16,7 @@
 
 package io.grpc;
 
-import com.google.errorprone.annotations.ThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface for intercepting incoming calls before they are dispatched by

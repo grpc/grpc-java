@@ -16,8 +16,8 @@
 
 package io.grpc.internal;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Provides transports for sending RPCs.

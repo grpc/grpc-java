@@ -16,7 +16,6 @@
 
 package io.grpc.util;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.BindableService;
 import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
@@ -29,6 +28,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Default implementation of {@link HandlerRegistry}.

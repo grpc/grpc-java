@@ -16,7 +16,7 @@
 
 package io.grpc.rls;
 
-import com.google.errorprone.annotations.ThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A strategy for deciding when to throttle requests at the client.

@@ -17,10 +17,10 @@
 package io.grpc.stub;
 
 import com.google.errorprone.annotations.CheckReturnValue;
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.stub.ClientCalls.StubType;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Stub implementations for async stubs.

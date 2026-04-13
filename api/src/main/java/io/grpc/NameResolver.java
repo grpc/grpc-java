@@ -23,7 +23,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import com.google.errorprone.annotations.InlineMe;
-import com.google.errorprone.annotations.ThreadSafe;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -36,6 +35,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that resolves a target {@link URI} and return addresses to the caller.
@@ -78,7 +78,7 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener#onError}.
-   *
+   * 
    * <p>An instance may not be started more than once, by any overload of this method, even after
    * an intervening call to {@link #shutdown}.
    *
@@ -114,7 +114,7 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener2#onError}.
-   *
+   * 
    * <p>An instance may not be started more than once, by any overload of this method, even after
    * an intervening call to {@link #shutdown}.
    *
