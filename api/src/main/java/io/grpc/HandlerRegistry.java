@@ -16,10 +16,10 @@
 
 package io.grpc;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of services and their methods used by servers to dispatching incoming calls.

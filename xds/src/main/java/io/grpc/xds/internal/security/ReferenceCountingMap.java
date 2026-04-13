@@ -21,9 +21,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.errorprone.annotations.CheckReturnValue;
-import com.google.errorprone.annotations.ThreadSafe;
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A map for managing reference-counted shared resources - typically providers.

@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.Sets;
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Internal;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
@@ -43,6 +42,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages client side traffic stats. Drop stats are maintained in cluster (with edsServiceName)

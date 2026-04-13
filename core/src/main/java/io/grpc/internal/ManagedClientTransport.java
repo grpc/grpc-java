@@ -17,10 +17,10 @@
 package io.grpc.internal;
 
 import com.google.errorprone.annotations.CheckReturnValue;
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Attributes;
 import io.grpc.Status;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ClientTransport} that has life-cycle management.

@@ -16,12 +16,12 @@
 
 package io.grpc.gcp.observability;
 
-import com.google.errorprone.annotations.ThreadSafe;
 import io.grpc.Internal;
 import io.opencensus.trace.Sampler;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.concurrent.ThreadSafe;
 
 @Internal
 public interface ObservabilityConfig {

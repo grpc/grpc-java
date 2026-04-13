@@ -19,9 +19,9 @@ package io.grpc.xds.internal.security.certprovider;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.errorprone.annotations.ThreadSafe;
 import java.util.LinkedHashMap;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /** Maintains {@link CertificateProvider}s for all registered plugins. */
 @ThreadSafe
