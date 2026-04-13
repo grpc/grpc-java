@@ -207,9 +207,9 @@ public final class CompositeFilter implements Filter {
                 typeUrl = typedStruct.getTypeUrl();
                 rawConfig = typedStruct.getValue();
               } else if (typeUrl.equals("type.googleapis.com/xds.type.v3.TypedStruct")) {
-                TypedStruct typedStruct = childFilterConfig
+                com.github.xds.type.v3.TypedStruct typedStruct = childFilterConfig
                     .getTypedConfig()
-                    .unpack(TypedStruct.class);
+                    .unpack(com.github.xds.type.v3.TypedStruct.class);
                 typeUrl = typedStruct.getTypeUrl();
                 rawConfig = typedStruct.getValue();
               }
