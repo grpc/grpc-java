@@ -176,6 +176,18 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     return new OkHttpChannelBuilder(target, creds, result.callCredentials, result.factory);
   }
 
+  private static ConnectionSpec connectionSpecFromChannelCredentials(ChannelCredentials channelCredentials) {
+    if (channelCredentials instanceof SslSocketFactoryChannelCredentials.ChannelCredentials) {
+      return ((SslSocketFactoryChannelCredentials.ChannelCredentials) channelCredentials).getConnectionSpec();
+    } else if (channelCredentials instanceof CompositeChannelCredentials) {
+      return connectionSpecFromChannelCredentials(
+          ((CompositeChannelCredentials) channelCredentials).getChannelCredentials()
+      );
+    } else {
+      return null;
+    }
+  }
+
   private ObjectPool<Executor> transportExecutorPool = DEFAULT_TRANSPORT_EXECUTOR_POOL;
   private ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool =
       SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE);
@@ -222,6 +234,10 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
     this.channelCredentials = channelCreds;
+    ConnectionSpec connectionSpec = connectionSpecFromChannelCredentials(channelCreds);
+    if (connectionSpec != null) {
+      this.connectionSpec = connectionSpec;
+    }
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
