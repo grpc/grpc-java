@@ -60,6 +60,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -317,14 +318,20 @@ public class ClusterResolverLoadBalancerTest {
     // LOCALITY1 are equally weighted.
     assertThat(addr1.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
+    assertThat(addr1.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr2.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
+    assertThat(addr2.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr3.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
+    assertThat(addr3.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
         .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x6AAAAAAA /* 5/6 */ : 50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
@@ -920,6 +927,8 @@ public class ClusterResolverLoadBalancerTest {
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
+    assertThat(childBalancer.addresses.get(0).getAttributes()
+        .get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
     assertThat(childBalancer.addresses.get(0).getAttributes()
         .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }
