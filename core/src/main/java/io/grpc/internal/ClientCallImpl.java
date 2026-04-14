@@ -104,8 +104,16 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
     this.tag = PerfMark.createTag(method.getFullMethodName(), System.identityHashCode(this));
-    this.callExecutor = CallExecutors.safeguard(executor);
-    callExecutorIsDirect = (this.callExecutor instanceof SerializeReentrantCallsDirectExecutor);
+    // If we know that the executor is a direct executor, we don't need to wrap it with a
+    // SerializingExecutor. This is purely for performance reasons.
+    // See https://github.com/grpc/grpc-java/issues/368
+    if (executor == directExecutor()) {
+      this.callExecutor = new SerializeReentrantCallsDirectExecutor();
+      callExecutorIsDirect = true;
+    } else {
+      this.callExecutor = new SerializingExecutor(executor);
+      callExecutorIsDirect = false;
+    }
     this.channelCallsTracer = channelCallsTracer;
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();

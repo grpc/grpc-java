@@ -808,20 +808,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions) {
-    // If we have no interceptors, we don't need to populate the executor in CallOptions
-    // yet. This avoids mutating CallOptions unnecessarily and breaking tests that
-    // expect exact instance equality. The executor will still be safeguarded when
-    // creating the actual ClientCallImpl.
-    if (interceptorChannel == realChannel) {
-      return realChannel.newCall(method, callOptions);
-    }
-    Executor executor = callOptions.getExecutor();
-    if (executor == null) {
-      executor = this.executor;
-    }
-    // All calls on the channel should have a safeguarded executor in CallOptions before
-    // calling interceptors.
-    callOptions = callOptions.withExecutor(CallExecutors.safeguard(executor));
     return interceptorChannel.newCall(method, callOptions);
   }
 
@@ -835,7 +821,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (executor == null) {
       executor = this.executor;
     }
-    return CallExecutors.safeguard(executor);
+    return executor;
   }
 
   private class RealChannel extends Channel {
@@ -1098,12 +1084,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.configSelector = configSelector;
       this.channel = channel;
       this.method = method;
-      Executor executor = callOptions.getExecutor();
-      if (executor == null) {
-        executor = channelExecutor;
-      }
-      this.callExecutor = CallExecutors.safeguard(executor);
-      this.callOptions = callOptions.withExecutor(this.callExecutor);
+      this.callExecutor =
+          callOptions.getExecutor() == null ? channelExecutor : callOptions.getExecutor();
+      this.callOptions = callOptions.withExecutor(callExecutor);
       this.context = Context.current();
     }
 

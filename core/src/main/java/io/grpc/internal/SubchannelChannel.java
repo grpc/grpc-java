@@ -85,11 +85,8 @@ final class SubchannelChannel extends Channel {
   @Override
   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
       MethodDescriptor<RequestT, ResponseT> methodDescriptor, CallOptions callOptions) {
-    Executor callExecutor = callOptions.getExecutor();
-    if (callExecutor == null) {
-      callExecutor = this.executor;
-    }
-    final Executor effectiveExecutor = CallExecutors.safeguard(callExecutor);
+    final Executor effectiveExecutor =
+        callOptions.getExecutor() == null ? executor : callOptions.getExecutor();
     if (callOptions.isWaitForReady()) {
       return new ClientCall<RequestT, ResponseT>() {
         @Override
