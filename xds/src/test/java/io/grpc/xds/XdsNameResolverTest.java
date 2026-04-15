@@ -104,8 +104,6 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -201,7 +199,7 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private URI targetUri;
+  private String targetUri = AUTHORITY;
   private final NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
@@ -215,12 +213,6 @@ public class XdsNameResolverTest {
   @Before
   public void setUp() {
     lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
-
-    try {
-      targetUri = new URI(AUTHORITY);
-    } catch (URISyntaxException e) {
-      targetUri = null;
-    }
 
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
@@ -1272,7 +1264,7 @@ public class XdsNameResolverTest {
     for (String clusterName : clusterNames) {
       CdsUpdate.Builder forEds = CdsUpdate
           .forEds(clusterName, clusterName, null, null, null, null, false, null)
-              .roundRobinLbPolicy();
+          .roundRobinLbPolicy();
       xdsClient.deliverCdsUpdate(clusterName, forEds.build());
       EdsUpdate edsUpdate = new EdsUpdate(clusterName,
           XdsTestUtils.createMinimalLbEndpointsMap("127.0.0.3"), Collections.emptyList());
@@ -1997,7 +1989,7 @@ public class XdsNameResolverTest {
 
     // timeout and retry with empty retriable status codes
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            timeoutNano, retryPolicyWithEmptyStatusCodes))
+        timeoutNano, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
 
     // retry only
@@ -2050,7 +2042,7 @@ public class XdsNameResolverTest {
 
     // retry with emtry retriable status codes only
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            null, retryPolicyWithEmptyStatusCodes))
+        null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
   }
 
@@ -2554,9 +2546,9 @@ public class XdsNameResolverTest {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-            String resourceName,
-            ResourceWatcher<T> watcher,
-            Executor syncContext) {
+        String resourceName,
+        ResourceWatcher<T> watcher,
+        Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -2585,8 +2577,8 @@ public class XdsNameResolverTest {
     @SuppressWarnings("unchecked")
     @Override
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                                  String resourceName,
-                                                                  ResourceWatcher<T> watcher) {
+        String resourceName,
+        ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsResource).isNotNull();
