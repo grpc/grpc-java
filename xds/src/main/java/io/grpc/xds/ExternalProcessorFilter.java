@@ -222,11 +222,7 @@ public class ExternalProcessorFilter implements Filter {
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
         Channel next) {
-      Executor callExecutor = callOptions.getExecutor();
-      if (callExecutor == null) {
-        callExecutor = com.google.common.util.concurrent.MoreExecutors.directExecutor();
-      }
-      SerializingExecutor serializingExecutor = new SerializingExecutor(callExecutor);
+      SerializingExecutor serializingExecutor = new SerializingExecutor(callOptions.getExecutor());
       ExternalProcessorGrpc.ExternalProcessorStub stub = ExternalProcessorGrpc.newStub(
           cachedChannelManager.getChannel(filterConfig.grpcServiceConfig))
           .withExecutor(serializingExecutor);
@@ -274,7 +270,7 @@ public class ExternalProcessorFilter implements Filter {
       // Create a local subclass instance to buffer outbound actions
       ExtProcDelayedCall<InputStream, InputStream> delayedCall =
           new ExtProcDelayedCall<>(
-              callExecutor, scheduler, callOptions.getDeadline());
+              callOptions.getExecutor(), scheduler, callOptions.getDeadline());
 
       ExtProcClientCall extProcCall = new ExtProcClientCall(
           delayedCall, rawCall, stub, filterConfig, filterConfig.mutationRulesConfig, serializingExecutor);
