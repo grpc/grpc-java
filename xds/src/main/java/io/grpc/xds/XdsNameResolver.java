@@ -140,6 +140,13 @@ final class XdsNameResolver extends NameResolver {
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
 
+  /**
+   * Constructs a new instance.
+   *
+   * @param target the target URI to resolve
+   * @param targetAuthority the authority component of `target`, possibly the empty string, or null
+   *     if 'target' has no such component
+   */
   XdsNameResolver(
       URI targetUri, String name, @Nullable String overrideAuthority,
       ServiceConfigParser serviceConfigParser,
@@ -211,7 +218,9 @@ final class XdsNameResolver extends NameResolver {
     }
     BootstrapInfo bootstrapInfo = xdsClient.getBootstrapInfo();
     String listenerNameTemplate;
-    if (targetAuthority == null) {
+    if (targetAuthority == null || targetAuthority.isEmpty()) {
+      // Both https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md and
+      // A47-xds-federation.md seem to treat an empty authority the same as an undefined one.
       listenerNameTemplate = bootstrapInfo.clientDefaultListenerResourceNameTemplate();
     } else {
       AuthorityInfo authorityInfo = bootstrapInfo.authorities().get(targetAuthority);
@@ -1052,18 +1061,18 @@ final class XdsNameResolver extends NameResolver {
     private final XdsClientPoolFactory xdsClientPoolFactory;
     private final String target;
     private final @Nullable Map<String, ?> bootstrapOverride;
-    private final @Nullable MetricRecorder metricRecorder;
+    private final MetricRecorder metricRecorder;
     private ObjectPool<XdsClient> xdsClientPool;
 
     BootstrappingXdsClientPool(
         XdsClientPoolFactory xdsClientPoolFactory,
         String target,
         @Nullable Map<String, ?> bootstrapOverride,
-        @Nullable MetricRecorder metricRecorder) {
+        MetricRecorder metricRecorder) {
       this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.target = checkNotNull(target, "target");
       this.bootstrapOverride = bootstrapOverride;
-      this.metricRecorder = metricRecorder;
+      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
     }
 
     @Override

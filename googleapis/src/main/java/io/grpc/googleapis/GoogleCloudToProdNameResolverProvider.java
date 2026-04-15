@@ -21,6 +21,7 @@ import io.grpc.Internal;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
+import io.grpc.Uri;
 import io.grpc.internal.GrpcUtil;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -46,8 +47,18 @@ public final class GoogleCloudToProdNameResolverProvider extends NameResolverPro
     this.scheme = Preconditions.checkNotNull(scheme, "scheme");
   }
 
+  // TODO(jdcormie): Remove after io.grpc.Uri migration is complete.
   @Override
   public NameResolver newNameResolver(URI targetUri, Args args) {
+    if (scheme.equals(targetUri.getScheme())) {
+      return new GoogleCloudToProdNameResolver(
+          targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+    }
+    return null;
+  }
+
+  @Override
+  public NameResolver newNameResolver(Uri targetUri, Args args) {
     if (scheme.equals(targetUri.getScheme())) {
       return new GoogleCloudToProdNameResolver(
           targetUri, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);

@@ -242,12 +242,12 @@ public abstract class BootstrapperImpl extends Bootstrapper {
     }
 
     Map<String, ?> rawAllowedGrpcServices = JsonUtil.getObject(rawData, "allowed_grpc_services");
-    builder.allowedGrpcServices(parseAllowedGrpcServices(rawAllowedGrpcServices));
+    builder.implSpecificObject(parseImplSpecificObject(rawAllowedGrpcServices));
 
     return builder;
   }
 
-  protected Optional<Object> parseAllowedGrpcServices(
+  protected Optional<Object> parseImplSpecificObject(
       @Nullable Map<String, ?> rawAllowedGrpcServices)
       throws XdsInitializationException {
     return Optional.empty();

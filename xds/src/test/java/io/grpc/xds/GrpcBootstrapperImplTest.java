@@ -28,6 +28,8 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.xds.client.AllowedGrpcServices;
+import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -37,8 +39,6 @@ import io.grpc.xds.client.CommonBootstrapperTestUtils;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsInitializationException;
-import io.grpc.xds.internal.grpcservice.AllowedGrpcService;
-import io.grpc.xds.internal.grpcservice.AllowedGrpcServices;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -118,7 +118,9 @@ public class GrpcBootstrapperImplTest {
 
     bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
     BootstrapInfo info = bootstrapper.bootstrap();
-    AllowedGrpcServices allowed = (AllowedGrpcServices) info.allowedGrpcServices().get();
+    GrpcBootstrapImplConfig customConfig =
+        (GrpcBootstrapImplConfig) info.implSpecificObject().get();
+    AllowedGrpcServices allowed = customConfig.allowedGrpcServices();
     assertThat(allowed).isNotNull();
     assertThat(allowed.services()).containsKey("dns:///foo.com:443");
     AllowedGrpcService service = allowed.services().get("dns:///foo.com:443");

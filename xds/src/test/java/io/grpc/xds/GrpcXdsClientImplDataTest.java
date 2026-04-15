@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
-import static io.grpc.xds.XdsClusterResource.TRANSPORT_SOCKET_NAME_HTTP11_PROXY;
 import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
@@ -2633,7 +2632,7 @@ public class GrpcXdsClientImplDataTest {
             .build();
 
     TransportSocket transportSocket = TransportSocket.newBuilder()
-        .setName(TRANSPORT_SOCKET_NAME_HTTP11_PROXY)
+        .setName("envoy.transport_sockets.http_11_proxy")
         .setTypedConfig(Any.pack(http11ProxyUpstreamTransport))
         .build();
 
