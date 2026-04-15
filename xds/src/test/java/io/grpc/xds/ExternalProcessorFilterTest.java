@@ -1721,7 +1721,8 @@ public class ExternalProcessorFilterTest {
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
-    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT, dataPlaneChannel);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {
       @Override public void onClose(Status status, Metadata trailers) {
         appCloseLatch.countDown();
