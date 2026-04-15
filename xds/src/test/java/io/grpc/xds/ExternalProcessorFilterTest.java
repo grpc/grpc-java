@@ -183,10 +183,7 @@ public class ExternalProcessorFilterTest {
         .build().start());
   }
 
-  @After
-  public void tearDown() {
-    // FakeClock scheduler doesn't support shutdownNow
-  }
+
 
   // --- Category 1: Configuration Parsing & Provider ---
 
