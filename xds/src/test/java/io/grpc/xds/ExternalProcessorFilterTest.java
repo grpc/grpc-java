@@ -167,7 +167,7 @@ public class ExternalProcessorFilterTest {
 
     Bootstrapper.BootstrapInfo bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
     Mockito.when(bootstrapInfo.node()).thenReturn(Node.newBuilder().build());
-    Mockito.when(bootstrapInfo.allowedGrpcServices()).thenReturn(Optional.empty());
+    Mockito.when(bootstrapInfo.implSpecificObject()).thenReturn(Optional.empty());
 
     Bootstrapper.ServerInfo serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
     Mockito.when(serverInfo.isTrustedXdsServer()).thenReturn(true);

@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ManagedChannel;
+import io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig.GoogleGrpcConfig;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
