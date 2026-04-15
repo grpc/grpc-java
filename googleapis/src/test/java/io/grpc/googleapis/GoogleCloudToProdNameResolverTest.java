@@ -239,6 +239,20 @@ public class GoogleCloudToProdNameResolverTest {
   }
 
   @Test
+  public void notOnGcpButForceXds_KeyValueFalse_DelegateToDns() {
+    GoogleCloudToProdNameResolver.isOnGcp = false;
+    String target = TARGET_URI + "?force-xds=false";
+    resolver = enableRfc3986UrisParam
+        ? new GoogleCloudToProdNameResolver(
+            Uri.create(target), args, fakeExecutorResource, nsRegistry.asFactory())
+        : new GoogleCloudToProdNameResolver(
+            URI.create(target), args, fakeExecutorResource, nsRegistry.asFactory());
+    resolver.start(mockListener);
+    fakeExecutor.runDueTasks();
+    assertThat(delegatedResolver.keySet()).containsExactly("dns");
+  }
+
+  @Test
   public void notOnGcpButForceXds_KeyValueOne_DelegateToXds() {
     GoogleCloudToProdNameResolver.isOnGcp = false;
     String target = TARGET_URI + "?force-xds=1";

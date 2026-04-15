@@ -48,7 +48,6 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -96,6 +95,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         }
         BootstrapInfo newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
             generateBootstrap("", true, true));
+        // Avoid setting global when testing
         if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
           forceXdsBootstrapInfo = newInfo;
         }
@@ -108,6 +108,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
         }
         BootstrapInfo newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
             generateBootstrap());
+        // Avoid setting global when testing
         if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
           bootstrapInfo = newInfo;
         }
@@ -143,12 +144,13 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   GoogleCloudToProdNameResolver(URI targetUri, Args args, Resource<Executor> executorResource,
       NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
-    String query = targetUri.getRawQuery();
+    String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
+    Uri grpcUri = Uri.create(targetUri.toString());
+    String query = grpcUri.getRawQuery();
     this.forceXds = checkForceXds(query);
     this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
     String newQuery = stripForceXds(query);
 
-    String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
     Preconditions.checkArgument(
         targetPath.startsWith("/"),
         "the path component (%s) of the target (%s) must start with '/'",
@@ -157,28 +159,16 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     authority = GrpcUtil.checkAuthority(targetPath.substring(1));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
 
-    String rawAuthority = schemeOverride.equals("xds")
-        ? C2P_AUTHORITY
-        : targetUri.getRawAuthority();
-    String rawPath = targetUri.getRawPath();
-    String rawFragment = targetUri.getRawFragment();
-    try {
-      StringBuilder uriStr = new StringBuilder();
-      uriStr.append(schemeOverride).append(":");
-      if (rawAuthority != null) {
-        uriStr.append("//").append(rawAuthority);
-      }
-      uriStr.append(rawPath);
-      if (newQuery != null) {
-        uriStr.append("?").append(newQuery);
-      }
-      if (rawFragment != null) {
-        uriStr.append("#").append(rawFragment);
-      }
-      targetUri = new URI(uriStr.toString());
-    } catch (URISyntaxException e) {
-      throw new IllegalArgumentException("Invalid URI", e);
+    Uri.Builder modifiedTargetBuilder = grpcUri.toBuilder().setScheme(schemeOverride);
+    if (newQuery != null) {
+      modifiedTargetBuilder.setRawQuery(newQuery);
+    } else {
+      modifiedTargetBuilder.setQuery(null);
     }
+    if (schemeOverride.equals("xds")) {
+      modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
+    }
+    targetUri = URI.create(modifiedTargetBuilder.build().toString());
 
     if (schemeOverride.equals("xds")) {
       args = args.toBuilder()
@@ -440,8 +430,12 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       return false;
     }
     for (String part : Splitter.on('&').split(query)) {
-      if (part.equals("force-xds") || part.startsWith("force-xds=")) {
+      if (part.equals("force-xds")) {
         return true;
+      }
+      if (part.startsWith("force-xds=")) {
+        String value = part.substring("force-xds=".length());
+        return !value.equalsIgnoreCase("false") && !value.equals("0");
       }
     }
     return false;
