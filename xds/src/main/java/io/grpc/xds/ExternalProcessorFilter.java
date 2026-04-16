@@ -2,6 +2,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
@@ -42,6 +43,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -141,7 +143,38 @@ public class ExternalProcessorFilter implements Filter {
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
       @Nullable FilterConfig overrideConfig, java.util.concurrent.ScheduledExecutorService scheduler) {
-    return new ExternalProcessorInterceptor((ExternalProcessorFilterConfig) filterConfig, cachedChannelManager, scheduler);
+    ExternalProcessorFilterConfig config = (ExternalProcessorFilterConfig) filterConfig;
+    if (overrideConfig != null) {
+      config = mergeConfigs(config, (ExternalProcessorFilterConfig) overrideConfig);
+    }
+    checkNotNull(config, "config");
+    return new ExternalProcessorInterceptor(config, cachedChannelManager, scheduler);
+  }
+
+  private static ExternalProcessorFilterConfig mergeConfigs(
+      ExternalProcessorFilterConfig parent, ExternalProcessorFilterConfig override) {
+    ExternalProcessor parentProto = parent.getExternalProcessor();
+    ExternalProcessor overrideProto = override.getExternalProcessor();
+    ExternalProcessor.Builder mergedProtoBuilder = parentProto.toBuilder();
+
+    GrpcServiceConfig mergedGrpcServiceConfig = parent.getGrpcServiceConfig();
+    Optional<HeaderMutationRulesConfig> mergedMutationRulesConfig = parent.getMutationRulesConfig();
+
+    for (Map.Entry<com.google.protobuf.Descriptors.FieldDescriptor, Object> entry
+        : overrideProto.getAllFields().entrySet()) {
+      mergedProtoBuilder.setField(entry.getKey(), entry.getValue());
+      String fieldName = entry.getKey().getName();
+      if (fieldName.equals("grpc_service")) {
+        mergedGrpcServiceConfig = override.getGrpcServiceConfig();
+      } else if (fieldName.equals("mutation_rules")) {
+        mergedMutationRulesConfig = override.getMutationRulesConfig();
+      }
+    }
+
+    ExternalProcessor mergedProto = mergedProtoBuilder.build();
+    checkNotNull(mergedProto, "mergedProto");
+    return new ExternalProcessorFilterConfig(
+        mergedProto, mergedGrpcServiceConfig, mergedMutationRulesConfig);
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -214,6 +247,11 @@ public class ExternalProcessorFilter implements Filter {
       this.filterConfig = filterConfig;
       this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
       this.scheduler = checkNotNull(scheduler, "scheduler");
+    }
+
+    @VisibleForTesting
+    ExternalProcessorFilterConfig getFilterConfig() {
+      return filterConfig;
     }
 
     @Override

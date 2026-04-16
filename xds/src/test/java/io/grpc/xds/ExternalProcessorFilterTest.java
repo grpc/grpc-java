@@ -193,11 +193,8 @@ public class ExternalProcessorFilterTest {
 
 
 
-  // --- Category 1: Configuration Parsing & Provider ---
-
-  @Test
-  public void givenValidConfig_whenParsed_thenReturnsFilterConfig() throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
+  private ExternalProcessor.Builder createBaseProto() {
+    return ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///test")
@@ -205,8 +202,14 @@ public class ExternalProcessorFilterTest {
                     .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
-            .build())
-        .build();
+            .build());
+  }
+
+  // --- Category 1: Configuration Parsing & Provider ---
+
+  @Test
+  public void givenValidConfig_whenParsed_thenReturnsFilterConfig() throws Exception {
+    ExternalProcessor proto = createBaseProto().build();
 
     ConfigOrError<ExternalProcessorFilterConfig> result =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -218,7 +221,7 @@ public class ExternalProcessorFilterTest {
 
   @Test
   public void givenUnsupportedBodyMode_whenParsed_thenReturnsError() throws Exception {
-    ExternalProcessor proto = ExternalProcessor.newBuilder()
+    ExternalProcessor proto = createBaseProto()
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.BUFFERED) // Unsupported
             .build())
@@ -242,7 +245,189 @@ public class ExternalProcessorFilterTest {
     assertThat(result.errorDetail).contains("GrpcService must have GoogleGrpc");
   }
 
-  // --- Category 2: Client Interceptor & Lifecycle ---
+
+  // --- Category 2: Configuration Override ---
+
+  @Test
+  public void givenOverrideConfig_whenGrpcServiceOverridden_thenUsesNewService() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///parent")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///override")
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getExternalProcessor().getGrpcService().getGoogleGrpc().getTargetUri())
+        .isEqualTo("in-process:///override");
+  }
+
+  @Test
+  public void givenOverrideConfig_whenFailureModeAllowOverridden_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setFailureModeAllow(false)
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setFailureModeAllow(true)
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
+  }
+
+  @Test
+  public void givenOverrideConfig_whenProcessingModeOverridden_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getExternalProcessor().getProcessingMode().getRequestBodyMode())
+        .isEqualTo(ProcessingMode.BodySendMode.GRPC);
+  }
+
+  @Test
+  public void givenOverrideConfig_whenAllFieldsOverridden_thenAllTakeEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setFailureModeAllow(false)
+        .setObservabilityMode(false)
+        .setAllowModeOverride(false)
+        .setStatPrefix("parent")
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setFailureModeAllow(true)
+        .setObservabilityMode(true)
+        .setAllowModeOverride(true)
+        .setStatPrefix("override")
+        .setMessageTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
+    assertThat(mergedConfig.getFailureModeAllow()).isTrue();
+    assertThat(mergedConfig.getObservabilityMode()).isTrue();
+    assertThat(mergedConfig.getAllowModeOverride()).isTrue();
+    assertThat(mergedConfig.getExternalProcessor().getStatPrefix()).isEqualTo("override");
+    assertThat(mergedConfig.getExternalProcessor().getMessageTimeout().getSeconds()).isEqualTo(10);
+  }
+
+  @Test
+  public void givenOverrideConfig_whenSomeFieldsOverridden_thenMergedCorrectly() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setFailureModeAllow(false)
+        .setStatPrefix("parent")
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setFailureModeAllow(true)
+        // statPrefix NOT set
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
+    assertThat(mergedConfig.getFailureModeAllow()).isTrue();
+    assertThat(mergedConfig.getExternalProcessor().getStatPrefix()).isEqualTo("parent");
+  }
+
+  @Test
+  public void givenOverrideConfig_whenAllowedOverrideModesOverridden_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .addAllowedOverrideModes(ProcessingMode.newBuilder().setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .addAllowedOverrideModes(ProcessingMode.newBuilder().setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getAllowedOverrideModes()).hasSize(1);
+    assertThat(interceptor.getFilterConfig().getAllowedOverrideModes().get(0).getRequestBodyMode())
+        .isEqualTo(ProcessingMode.BodySendMode.GRPC);
+  }
+
+  @Test
+  public void givenOverrideConfig_whenMutationRulesOverridden_thenTakesEffect() throws Exception {
+    io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules parentRules = 
+        io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
+            .setDisallowAll(com.google.protobuf.BoolValue.newBuilder().setValue(false).build())
+            .build();
+    io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules overrideRules = 
+        io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
+            .setDisallowAll(com.google.protobuf.BoolValue.newBuilder().setValue(true).build())
+            .build();
+
+    ExternalProcessor parentProto = createBaseProto()
+        .setMutationRules(parentRules)
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setMutationRules(overrideRules)
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getMutationRulesConfig().get().disallowAll())
+        .isTrue();
+  }
+
+  // --- Category 3: Client Interceptor & Lifecycle ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -483,7 +668,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 3: Request Header Processing ---
+  // --- Category 4: Request Header Processing ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -771,7 +956,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 4: Body Mutation: Outbound/Request (GRPC Mode) ---
+  // --- Category 5: Body Mutation: Outbound/Request (GRPC Mode) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -1351,7 +1536,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 5: Body Mutation: Inbound/Response (GRPC Mode) ---
+  // --- Category 6: Body Mutation: Inbound/Response (GRPC Mode) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -1755,7 +1940,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 6: Outbound Backpressure (isReady / onReady) ---
+  // --- Category 7: Outbound Backpressure (isReady / onReady) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -2314,7 +2499,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 7: Inbound Backpressure (request(n) / pendingRequests) ---
+  // --- Category 8: Inbound Backpressure (request(n) / pendingRequests) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -2703,7 +2888,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 8: Error Handling & Security ---
+  // --- Category 9: Error Handling & Security ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -4078,7 +4263,7 @@ public class ExternalProcessorFilterTest {
     }
   }
 
-  // --- Category 9: Resource Management ---
+  // --- Category 11: Resource Management ---
 
   @Test
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
