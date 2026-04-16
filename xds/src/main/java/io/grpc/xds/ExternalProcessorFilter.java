@@ -396,8 +396,9 @@ public class ExternalProcessorFilter implements Filter {
       private final ClientCall<InputStream, InputStream> rawCall;
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
       private final Executor serializingExecutor;
+      private final Object streamLock = new Object();
       private volatile io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
-      private final java.util.Queue<ProcessingRequest> pendingProcessingRequests = new java.util.ArrayDeque<>();
+      private final java.util.Queue<ProcessingRequest> pendingProcessingRequests = new java.util.concurrent.ConcurrentLinkedQueue<>();
       private volatile ExtProcListener wrappedListener;
       private final HeaderMutationFilter mutationFilter;
       private final HeaderMutator mutator = HeaderMutator.create();
@@ -431,17 +432,15 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void activateCall() {
-        serializingExecutor.execute(() -> {
-          if (extProcStreamFailed.get()) {
-            return;
-          }
-          Runnable toRun = delayedCall.setCall(rawCall);
-          if (toRun != null) {
-            toRun.run();
-          }
-          drainPendingRequests();
-          onReadyNotify();
-        });
+        if (extProcStreamFailed.get()) {
+          return;
+        }
+        Runnable toRun = delayedCall.setCall(rawCall);
+        if (toRun != null) {
+          toRun.run();
+        }
+        drainPendingRequests();
+        onReadyNotify();
       }
 
       private void applyHeaderMutations(Metadata metadata,
@@ -483,9 +482,11 @@ public class ExternalProcessorFilter implements Filter {
         stub.process(new ClientResponseObserver<ProcessingRequest, ProcessingResponse>() {
           @Override
           public void beforeStart(ClientCallStreamObserver<ProcessingRequest> requestStream) {
-            extProcClientCallRequestObserver = requestStream;
-            while (!pendingProcessingRequests.isEmpty()) {
-              requestStream.onNext(pendingProcessingRequests.poll());
+            synchronized (streamLock) {
+              extProcClientCallRequestObserver = requestStream;
+              while (!pendingProcessingRequests.isEmpty()) {
+                requestStream.onNext(pendingProcessingRequests.poll());
+              }
             }
             requestStream.setOnReadyHandler(ExtProcClientCall.this::onExtProcStreamReady);
           }
@@ -626,7 +627,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendToExtProc(ProcessingRequest request) {
-        serializingExecutor.execute(() -> {
+        synchronized (streamLock) {
           if (extProcStreamCompleted.get()) {
             return;
           }
@@ -635,7 +636,7 @@ public class ExternalProcessorFilter implements Filter {
           } else {
             pendingProcessingRequests.add(request);
           }
-        });
+        }
       }
 
       private void onExtProcStreamReady() {
@@ -651,21 +652,21 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void closeExtProcStream() {
-        serializingExecutor.execute(() -> {
+        synchronized (streamLock) {
           if (extProcStreamCompleted.compareAndSet(false, true)) {
             if (extProcClientCallRequestObserver != null) {
               extProcClientCallRequestObserver.onCompleted();
             }
           }
-        });
+        }
       }
 
       private void halfCloseExtProcStream() {
-        serializingExecutor.execute(() -> {
+        synchronized (streamLock) {
           if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onCompleted();
           }
-        });
+        }
       }
 
       private void onReadyNotify() {
@@ -679,8 +680,10 @@ public class ExternalProcessorFilter implements Filter {
         if (drainingExtProcStream.get()) {
           return false;
         }
-        io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
-        return observer != null && observer.isReady();
+        synchronized (streamLock) {
+          io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
+          return observer != null && observer.isReady();
+        }
       }
 
       @Override
@@ -728,14 +731,12 @@ public class ExternalProcessorFilter implements Filter {
         // Mode is GRPC
         try {
           byte[] bodyBytes = ByteStreams.toByteArray(message);
-          serializingExecutor.execute(() -> {
-            sendToExtProc(ProcessingRequest.newBuilder()
-                .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
-                    .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
-                    .setEndOfStream(false)
-                    .build())
-                .build());
-          });
+          sendToExtProc(ProcessingRequest.newBuilder()
+              .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
+                  .setBody(com.google.protobuf.ByteString.copyFrom(bodyBytes))
+                  .setEndOfStream(false)
+                  .build())
+              .build());
 
           if (config.getObservabilityMode()) {
             super.sendMessage(new ByteArrayInputStream(bodyBytes));
@@ -763,24 +764,22 @@ public class ExternalProcessorFilter implements Filter {
         }
 
         // Mode is GRPC
-        serializingExecutor.execute(() -> {
-          sendToExtProc(ProcessingRequest.newBuilder()
-              .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
-                  .setEndOfStreamWithoutMessage(true)
-                  .build())
-              .build());
-        });
+        sendToExtProc(ProcessingRequest.newBuilder()
+            .setRequestBody(io.envoyproxy.envoy.service.ext_proc.v3.HttpBody.newBuilder()
+                .setEndOfStreamWithoutMessage(true)
+                .build())
+            .build());
         
         // Defer super.halfClose() until ext-proc response signals end_of_stream.
       }
 
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
-        serializingExecutor.execute(() -> {
+        synchronized (streamLock) {
           if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onError(Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
           }
-        });
+        }
         super.cancel(message, cause);
       }
 
