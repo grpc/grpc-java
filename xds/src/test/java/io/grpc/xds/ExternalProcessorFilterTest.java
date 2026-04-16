@@ -399,6 +399,25 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
+  public void givenOverrideConfig_whenDisableImmediateResponseOverridden_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setDisableImmediateResponse(false)
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setDisableImmediateResponse(true)
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getDisableImmediateResponse()).isTrue();
+  }
+
+  @Test
   public void givenOverrideConfig_whenMutationRulesOverridden_thenTakesEffect() throws Exception {
     io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules parentRules = 
         io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
@@ -3141,6 +3160,101 @@ public class ExternalProcessorFilterTest {
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenImmediateResponseDisabled_whenReceived_thenSidecarStreamErrored() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setDisableImmediateResponse(true)
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server sends immediate response despite being disabled
+    final io.grpc.Server extProcServer = grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setImmediateResponse(ImmediateResponse.newBuilder()
+                          .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
+                              .setStatus(Status.UNAUTHENTICATED.getCode().value())
+                              .build())
+                          .build())
+                      .build());
+                }
+              }
+              @Override public void onError(Throwable t) {}
+              @Override public void onCompleted() {}
+            };
+          }
+        })
+        .executor(fakeClock.getScheduledExecutorService())
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName)
+              .executor(fakeClock.getScheduledExecutorService())
+              .build());
+    });
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler);
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(fakeClock.getScheduledExecutorService())
+            .build());
+
+    try {
+      final AtomicReference<Status> closedStatus = new AtomicReference<>();
+      final CountDownLatch closedLatch = new CountDownLatch(1);
+      ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+        @Override public void onClose(Status status, Metadata trailers) {
+          closedStatus.set(status);
+          closedLatch.countDown();
+        }
+      };
+      
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(fakeClock.getScheduledExecutorService());
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(appListener, new Metadata());
+
+      for (int i = 0; i < 1000 && closedLatch.getCount() > 0; i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      // Verify app listener notified with an error (not the sidecar's UNAUTHENTICATED)
+      assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      // It might be INTERNAL (from our onError) or UNAVAILABLE (if stream cancels)
+      assertThat(closedStatus.get().getCode()).isAnyOf(Status.Code.INTERNAL, Status.Code.UNAVAILABLE);
+      
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      dataPlaneChannel.shutdownNow();
+      extProcServer.shutdownNow();
+      for (int i = 0; i < 100 && (!dataPlaneChannel.isTerminated() || !extProcServer.isTerminated()); i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      channelManager.close();
+    }
   }
 
   @Test

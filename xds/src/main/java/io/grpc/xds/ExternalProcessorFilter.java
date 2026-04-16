@@ -183,6 +183,7 @@ public class ExternalProcessorFilter implements Filter {
     private final GrpcServiceConfig grpcServiceConfig;
     private final Optional<HeaderMutationRulesConfig> mutationRulesConfig;
     private final boolean allowModeOverride;
+    private final boolean disableImmediateResponse;
     private final ImmutableList<ProcessingMode> allowedOverrideModes;
 
     ExternalProcessorFilterConfig(ExternalProcessor externalProcessor,
@@ -191,6 +192,7 @@ public class ExternalProcessorFilter implements Filter {
       this.grpcServiceConfig = grpcServiceConfig;
       this.mutationRulesConfig = mutationRulesConfig;
       this.allowModeOverride = externalProcessor.getAllowModeOverride();
+      this.disableImmediateResponse = externalProcessor.getDisableImmediateResponse();
       this.allowedOverrideModes = ImmutableList.copyOf(externalProcessor.getAllowedOverrideModesList());
     }
 
@@ -213,6 +215,10 @@ public class ExternalProcessorFilter implements Filter {
 
     boolean getAllowModeOverride() {
       return allowModeOverride;
+    }
+
+    boolean getDisableImmediateResponse() {
+      return disableImmediateResponse;
     }
 
     ImmutableList<ProcessingMode> getAllowedOverrideModes() {
@@ -530,6 +536,12 @@ public class ExternalProcessorFilter implements Filter {
           public void onNext(ProcessingResponse response) {
             try {
               if (response.hasImmediateResponse()) {
+                if (config.getDisableImmediateResponse()) {
+                  onError(Status.INTERNAL
+                      .withDescription("Immediate response is disabled but received from external processor")
+                      .asRuntimeException());
+                  return;
+                }
                 handleImmediateResponse(response.getImmediateResponse(), responseListener);
                 return;
               }
@@ -911,11 +923,7 @@ public class ExternalProcessorFilter implements Filter {
           // Note: savedStatus is NOT null if isProcessingTrailers is true.
           if (extProcStreamCompleted.compareAndSet(false, true)) {
             wrappedListener.savedStatus = status;
-            if (wrappedListener.savedTrailers != null) {
-              wrappedListener.savedTrailers.merge(trailers);
-            } else {
-              wrappedListener.savedTrailers = trailers;
-            }
+            wrappedListener.savedTrailers = trailers;
             wrappedListener.proceedWithClose();
           }
         } else {
