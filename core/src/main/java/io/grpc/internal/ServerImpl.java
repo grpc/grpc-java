@@ -699,7 +699,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   /**
    * Propagates context cancellation to the ServerStream.
    *
-   * This is outside of HandleServerCall because that class holds Metadata and other state needed
+   * <p>This is outside of HandleServerCall because that class holds Metadata and other state needed
    * only when starting the RPC. The cancellation listener will live for the life of the call, so we
    * avoid that useless state being retained.
    */
