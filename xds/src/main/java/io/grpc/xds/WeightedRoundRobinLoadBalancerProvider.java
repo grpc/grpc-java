@@ -81,7 +81,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
     Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
     List<String> metricNamesForComputingUtilization = JsonUtil.getListOfStrings(rawConfig,
-        LoadBalancerConfigFactory.METRIC_NAMES_FOR_COMPUTING_UTILIZATION);
+        "metricNamesForComputingUtilization");
 
     WeightedRoundRobinLoadBalancerConfig.Builder configBuilder =
         WeightedRoundRobinLoadBalancerConfig.newBuilder();
