@@ -273,7 +273,7 @@ public class ExternalProcessorFilter implements Filter {
               serializingExecutor, scheduler, callOptions.getDeadline());
 
       ExtProcClientCall extProcCall = new ExtProcClientCall(
-          delayedCall, rawCall, stub, filterConfig, filterConfig.mutationRulesConfig, serializingExecutor);
+          delayedCall, rawCall, stub, filterConfig, filterConfig.mutationRulesConfig);
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -395,7 +395,6 @@ public class ExternalProcessorFilter implements Filter {
       private final ExternalProcessorFilterConfig config;
       private final ClientCall<InputStream, InputStream> rawCall;
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
-      private final Executor serializingExecutor;
       private final Object streamLock = new Object();
       private volatile io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private final java.util.Queue<ProcessingRequest> pendingProcessingRequests = new java.util.concurrent.ConcurrentLinkedQueue<>();
@@ -419,14 +418,12 @@ public class ExternalProcessorFilter implements Filter {
           ClientCall<InputStream, InputStream> rawCall,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
           ExternalProcessorFilterConfig config,
-          Optional<HeaderMutationRulesConfig> mutationRulesConfig,
-          Executor serializingExecutor) {
+          Optional<HeaderMutationRulesConfig> mutationRulesConfig) {
         super(delayedCall);
         this.delayedCall = delayedCall;
         this.rawCall = rawCall;
         this.stub = stub;
         this.config = config;
-        this.serializingExecutor = serializingExecutor;
         this.currentProcessingMode = config.getExternalProcessor().getProcessingMode();
         this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
       }
