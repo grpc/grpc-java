@@ -1718,10 +1718,12 @@ public class ExternalProcessorFilterTest {
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    final AtomicReference<Status> capturedStatus = new AtomicReference<>();
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {
       @Override public void onClose(Status status, Metadata trailers) {
+        capturedStatus.set(status);
         appCloseLatch.countDown();
       }
     }, new Metadata());
@@ -1740,8 +1742,8 @@ public class ExternalProcessorFilterTest {
 
     // Verify app listener notified
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedStatus.get().isOk()).isTrue();
     
-    proxyCall.cancel("Cleanup", null);
     channelManager.close();
   }
 

@@ -849,16 +849,12 @@ public class ExternalProcessorFilter implements Filter {
             if (!streamed.getBody().isEmpty()) {
               listener.onExternalBody(streamed.getBody());
             }
-            /*
             if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-              // Body stream from ext-proc finished, but we wait for rawCall.onClose to deliver final status.
-              // The filter would have already sent halfClose on the dataplane rpc in response to a 
-              // ProcessingResponse for a request, with end of stream indicated in that response. 
-              // So it now has to await for onClose() rather than do anything when 
-              // (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) 
-              // occurs in handleResponseBodyResponse.
+              if (requestSideClosed.compareAndSet(false, true)) {
+                super.halfClose();
+              }
+              listener.proceedWithClose();
             }
-            */
           }
         }
       }
