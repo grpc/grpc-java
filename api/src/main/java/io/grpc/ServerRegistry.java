@@ -27,14 +27,15 @@ import java.util.List;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link ServerProvider}s. The {@link #getDefaultRegistry default instance} loads
  * providers at runtime through the Java service provider mechanism.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @Internal
-@ThreadSafe
 public final class ServerRegistry {
   private static final Logger logger = Logger.getLogger(ServerRegistry.class.getName());
   private static ServerRegistry instance;

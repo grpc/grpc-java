@@ -16,13 +16,14 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface to initiate processing of incoming remote calls. Advanced applications and generated
  * code will implement this interface to allows {@link Server}s to invoke service methods.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public interface ServerCallHandler<RequestT, ResponseT> {
   /**
    * Starts asynchronous processing of an incoming call.

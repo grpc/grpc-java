@@ -35,7 +35,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that resolves a target {@link URI} and return addresses to the caller.
@@ -214,11 +213,13 @@ public abstract class NameResolver {
    * Receives address updates.
    *
    * <p>All methods are expected to return quickly.
-   *
+   * 
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   * 
    * @since 1.0.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  @ThreadSafe
   public interface Listener {
     /**
      * Handles updates on resolved addresses and attributes.

@@ -21,7 +21,6 @@ import io.opencensus.trace.Sampler;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.concurrent.ThreadSafe;
 
 @Internal
 public interface ObservabilityConfig {
@@ -51,8 +50,10 @@ public interface ObservabilityConfig {
 
   /**
    * POJO for representing a filter used in configuration.
+   * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
    */
-  @ThreadSafe
   class LogFilter {
     /** Set of services. */
     public final Set<String> services;

@@ -40,13 +40,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The global factory for creating a singleton {@link XdsClient} instance to be used by all gRPC
  * clients in the process.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   private static final boolean LOG_XDS_NODE_ID = Boolean.parseBoolean(
       System.getenv("GRPC_LOG_XDS_NODE_ID"));
@@ -126,7 +127,10 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private static final SharedXdsClientPoolProvider instance = new SharedXdsClientPoolProvider();
   }
 
-  @ThreadSafe
+  /**
+   * This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   */
   @VisibleForTesting
   class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
 

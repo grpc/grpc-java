@@ -41,7 +41,6 @@ import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages an Android binding that's restricted to at most one connection to the remote Service.
@@ -53,8 +52,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>For this reason, while internal consistency is handled with synchronization (the state field),
  * consistency on our observer callbacks is ensured by doing everything on the application's main
  * thread.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class ServiceBinding implements Bindable, ServiceConnection {
 
   private static final Logger logger = Logger.getLogger(ServiceBinding.class.getName());

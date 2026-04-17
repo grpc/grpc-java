@@ -24,7 +24,6 @@ import io.grpc.ChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Provides APIs for managing gRPC channels to an S2A server. Each channel is local and plaintext.
@@ -44,8 +43,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * // Send an RPC over the channel to the S2A server running at localhost:1234.
  * resource.close(channel);
  * }</pre>
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class S2AHandshakerServiceChannel {
 
   /**

@@ -21,10 +21,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import java.util.LinkedHashMap;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
-/** Maintains {@link CertificateProvider}s for all registered plugins. */
-@ThreadSafe
+/**
+ * Maintains {@link CertificateProvider}s for all registered plugins.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 public final class CertificateProviderRegistry {
   private static CertificateProviderRegistry instance;
   private final LinkedHashMap<String, CertificateProviderProvider> providers =

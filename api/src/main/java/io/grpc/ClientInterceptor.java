@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface for intercepting outgoing calls before they are dispatched by a {@link Channel}.
@@ -37,8 +36,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * without completing the previous ones first. Refer to the
  * {@link io.grpc.ClientCall.Listener ClientCall.Listener} docs for more details regarding thread
  * safety of the returned listener.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public interface ClientInterceptor {
   /**
    * Intercept {@link ClientCall} creation by the {@code next} {@link Channel}.

@@ -23,15 +23,16 @@ import java.io.Closeable;
 import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Global map of all ref-counted {@link CertificateProvider}s that have been instantiated in
  * the application. Also  propagates updates received from a {@link CertificateProvider} to all
  * the {@link Watcher}s registered for that CertificateProvider. The Store is meant to be
  * used internally by gRPC and *not* a public API.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class CertificateProviderStore {
   private static final Logger logger = Logger.getLogger(CertificateProviderStore.class.getName());
 

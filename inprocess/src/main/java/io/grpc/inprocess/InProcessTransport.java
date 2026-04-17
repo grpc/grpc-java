@@ -77,9 +77,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
-@ThreadSafe
+/**
+ * This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
   static boolean isEnabledSupportTracingMessageSizes =

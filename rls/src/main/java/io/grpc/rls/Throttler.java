@@ -16,12 +16,13 @@
 
 package io.grpc.rls;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A strategy for deciding when to throttle requests at the client.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 interface Throttler {
 
   /**
