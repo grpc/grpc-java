@@ -245,6 +245,30 @@ public class ExternalProcessorFilterTest {
     assertThat(result.errorDetail).contains("GrpcService must have GoogleGrpc");
   }
 
+  @Test
+  public void givenInvalidDeferredCloseTimeout_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = createBaseProto()
+        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(315576000001L).build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Invalid deferred_close_timeout");
+  }
+
+  @Test
+  public void givenNegativeDeferredCloseTimeout_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = createBaseProto()
+        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(0).setNanos(0).build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("deferred_close_timeout must be positive");
+  }
+
 
   // --- Category 2: Configuration Override ---
 
@@ -444,6 +468,26 @@ public class ExternalProcessorFilterTest {
 
     assertThat(interceptor.getFilterConfig().getMutationRulesConfig().get().disallowAll())
         .isTrue();
+  }
+
+  @Test
+  public void givenOverrideConfig_whenDeferredCloseTimeoutOverridden_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
+        .build();
+    ExternalProcessor overrideProto = createBaseProto()
+        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
+        .build();
+
+    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
+    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+
+    assertThat(interceptor.getFilterConfig().getDeferredCloseTimeoutNanos())
+        .isEqualTo(TimeUnit.SECONDS.toNanos(10));
   }
 
   // --- Category 3: Client Interceptor & Lifecycle ---
@@ -2907,7 +2951,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 9: Error Handling & Security ---
+    // --- Category 9: Error Handling & Security ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -3244,6 +3288,114 @@ public class ExternalProcessorFilterTest {
       assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       // It might be INTERNAL (from our onError) or UNAVAILABLE (if stream cancels)
       assertThat(closedStatus.get().getCode()).isAnyOf(Status.Code.INTERNAL, Status.Code.UNAVAILABLE);
+      
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      dataPlaneChannel.shutdownNow();
+      extProcServer.shutdownNow();
+      for (int i = 0; i < 100 && (!dataPlaneChannel.isTerminated() || !extProcServer.isTerminated()); i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      channelManager.close();
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenObservabilityMode_whenDataPlaneClosed_thenSidecarCloseIsDeferred() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setObservabilityMode(true)
+        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server
+    final CountDownLatch sidecarCompletedLatch = new CountDownLatch(1);
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override public void onNext(ProcessingRequest request) {}
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() {
+            sidecarCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+    final io.grpc.Server extProcServer = grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .executor(fakeClock.getScheduledExecutorService())
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName)
+              .executor(fakeClock.getScheduledExecutorService())
+              .build());
+    });
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler);
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(fakeClock.getScheduledExecutorService())
+            .build());
+
+    try {
+      final CountDownLatch appCloseLatch = new CountDownLatch(1);
+      ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+        @Override public void onClose(Status status, Metadata trailers) {
+          appCloseLatch.countDown();
+        }
+      };
+      
+      CallOptions callOptions = CallOptions.DEFAULT.withExecutor(fakeClock.getScheduledExecutorService());
+      ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(appListener, new Metadata());
+
+      // Data plane closes immediately
+      proxyCall.halfClose();
+      dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+          .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+              (request, responseObserver) -> {
+                responseObserver.onNext("test");
+                responseObserver.onCompleted();
+              }))
+          .build());
+      proxyCall.request(1);
+
+      // Wait for app onClose
+      for (int i = 0; i < 1000 && appCloseLatch.getCount() > 0; i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+      // At this point, app received onClose, but sidecar should NOT be completed yet
+      assertThat(sidecarCompletedLatch.getCount()).isEqualTo(1);
+
+      // Fast forward time to trigger deferred close
+      fakeClock.forwardTime(10, TimeUnit.SECONDS);
+      
+      for (int i = 0; i < 100 && sidecarCompletedLatch.getCount() > 0; i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      assertThat(sidecarCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       
       proxyCall.cancel("Cleanup", null);
     } finally {
