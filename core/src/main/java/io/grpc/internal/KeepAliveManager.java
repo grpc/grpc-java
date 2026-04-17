@@ -27,7 +27,6 @@ import io.grpc.Status;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages keepalive pings.
@@ -268,8 +267,9 @@ public class KeepAliveManager {
     /**
      * A {@link ClientTransport} that has life-cycle management.
      *
+     * <p>This is thread-safe and should be considered
+     * for the errorprone ThreadSafe annotation in the future.
      */
-    @ThreadSafe
     public interface TransportWithDisconnectReason extends ClientTransport {
 
       /**

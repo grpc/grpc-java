@@ -27,15 +27,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Admin Interface provides a class of services for exposing the overall state of gRPC
  * activity in a given binary. It aims to be a convenient API that provides available admin
  * services.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/7929")
-@ThreadSafe
 public final class AdminInterface {
   private static final int DEFAULT_CHANNELZ_MAX_PAGE_SIZE = 100;
   private static final Logger logger = Logger.getLogger(AdminInterface.class.getName());

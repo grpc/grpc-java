@@ -23,7 +23,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.errorprone.annotations.CheckReturnValue;
 import java.util.HashMap;
 import java.util.Map;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A map for managing reference-counted shared resources - typically providers.
@@ -32,10 +31,12 @@ import javax.annotation.concurrent.ThreadSafe;
  * factory {@link ValueFactory} to create a new instance of V as needed. Values are ref-counted and
  * closed by calling {@link Closeable#close()} when ref-count reaches zero.
  *
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ *
  * @param <K> Key type for the map
  * @param <V> Value type for the map - it should be a {@link Closeable}
  */
-@ThreadSafe
 public final class ReferenceCountingMap<K, V extends Closeable> {
 
   private final Map<K, Instance<V>> instances = new HashMap<>();

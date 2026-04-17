@@ -77,7 +77,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Client for xDS interop tests. */
@@ -557,8 +556,12 @@ public final class XdsTestClient {
     }
   }
 
-  /** Stats recorder for test RPCs. */
-  @ThreadSafe
+  /**
+   * Stats recorder for test RPCs.
+   * 
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   */
   private static final class StatsAccumulator {
     private final Map<String, Integer> rpcsStartedByMethod = new HashMap<>();
     // TODO(chengyuanzhang): delete the following two after corresponding fields deleted in proto.

@@ -31,12 +31,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The stats and tracing information for a stream.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class StatsTraceContext {
   public static final StatsTraceContext NOOP = new StatsTraceContext(new StreamTracer[0]);
 

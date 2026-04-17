@@ -32,16 +32,17 @@ import java.util.List;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link ManagedChannelProvider}s. The {@link #getDefaultRegistry default instance}
  * loads providers at runtime through the Java service provider mechanism.
- *
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ * 
  * @since 1.32.0
  */
 @Internal
-@ThreadSafe
 public final class ManagedChannelRegistry {
   private static final Logger logger = Logger.getLogger(ManagedChannelRegistry.class.getName());
   private static ManagedChannelRegistry instance;

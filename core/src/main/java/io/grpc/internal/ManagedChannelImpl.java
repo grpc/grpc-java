@@ -118,10 +118,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
-/** A communication channel for making outgoing RPCs. */
-@ThreadSafe
+/**
+ * A communication channel for making outgoing RPCs.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 final class ManagedChannelImpl extends ManagedChannel implements
     InternalInstrumented<ChannelStats> {
   @VisibleForTesting

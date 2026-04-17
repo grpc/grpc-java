@@ -20,7 +20,6 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Status;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@link ClientTransport} that has life-cycle management.
@@ -32,8 +31,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * implementations may transfer the streams to somewhere else. Either way they must conform to the
  * contract defined by {@link #shutdown}, {@link Listener#transportShutdown} and
  * {@link Listener#transportTerminated}.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public interface ManagedClientTransport extends ClientTransport {
 
   /**

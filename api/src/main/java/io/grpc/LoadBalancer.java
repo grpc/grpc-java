@@ -32,7 +32,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that receives resolved addresses from {@link NameResolver} and provides the
@@ -447,10 +446,12 @@ public abstract class LoadBalancer {
   /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
    * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
+   * 
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
    *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class SubchannelPicker {
     /**
@@ -1030,9 +1031,11 @@ public abstract class LoadBalancer {
   /**
    * Provides essentials for LoadBalancer implementations.
    *
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
     /**
@@ -1551,9 +1554,11 @@ public abstract class LoadBalancer {
   /**
    * Factory to create {@link LoadBalancer} instance.
    *
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
     /**
