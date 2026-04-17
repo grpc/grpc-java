@@ -20,7 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
 class FeatureFlags {
-  private static boolean enableRfc3986Uris = getFlag("GRPC_ENABLE_RFC3986_URIS", false);
+  private static boolean enableRfc3986Uris = getFlag("GRPC_ENABLE_RFC3986_URIS", true);
 
   /** Whether to parse targets as RFC 3986 URIs (true), or use {@link java.net.URI} (false). */
   @VisibleForTesting

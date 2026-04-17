@@ -73,11 +73,10 @@ public final class Grpc {
   public @interface TransportAttr {}
 
   /**
-   * Creates a channel builder with a target string and credentials. The target can be either a
-   * valid {@link NameResolver}-compliant URI, or an authority string.
+   * Creates a channel builder with a target string and credentials. The target can be either an RFC
+   * 3986 URI, or an authority string.
    *
-   * <p>A {@code NameResolver}-compliant URI is an absolute hierarchical URI as defined by {@link
-   * java.net.URI}. Example URIs:
+   * <p>Example URIs:
    * <ul>
    *   <li>{@code "dns:///foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns:///foo.googleapis.com"}</li>
@@ -85,13 +84,13 @@ public final class Grpc {
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com:8080"}</li>
    *   <li>{@code "dns://8.8.8.8/foo.googleapis.com"}</li>
    *   <li>{@code "zookeeper://zk.example.com:9900/example_service"}</li>
+   *   <li>{@code "intent:#Intent;package=com.some.app;action=a;category=c;end;"}</li>
    * </ul>
    *
-   * <p>An authority string will be converted to a {@code NameResolver}-compliant URI, which has
-   * the scheme from the name resolver with the highest priority (e.g. {@code "dns"}),
-   * no authority, and the original authority string as its path after properly escaped.
-   * We recommend libraries to specify the schema explicitly if it is known, since libraries cannot
-   * know which NameResolver will be default during runtime.
+   * <p>An authority string will be converted to a URI having the scheme of the name resolver with
+   * the highest priority (e.g. {@code "dns"}), the empty string as the authority, and 'target' as
+   * its path. We recommend libraries specify the scheme explicitly if it is known, since libraries
+   * cannot know which NameResolver will be default at runtime.
    * Example authority strings:
    * <ul>
    *   <li>{@code "localhost"}</li>
@@ -102,6 +101,14 @@ public final class Grpc {
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]"}</li>
    *   <li>{@code "[2001:db8:85a3:8d3:1319:8a2e:370:7348]:443"}</li>
    * </ul>
+   *
+   * <p>We strongly recommend the URI form of `target` because the alternative is ambiguous. For
+   * example, the target string `foo:8080` is a valid authority string with host `foo` and port
+   * `8080` but it is also a valid RFC 3986 URI with scheme `foo` and path `8080`. {@code
+   * NameResolver}s are discovered dynamically from your classpath using SPI, so it's hard to be
+   * sure in advance how such a target will be resolved. A {@code NameResolver} for scheme `foo`
+   * might someday make a host named `foo` unreachable! On the other hand, the 'dns:///foo:8080'
+   * target will always behave the same.
    */
   public static ManagedChannelBuilder<?> newChannelBuilder(
       String target, ChannelCredentials creds) {
