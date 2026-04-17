@@ -206,7 +206,7 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       savedError = error;
       savedPassThrough = passThrough;
       if (!savedPassThrough) {
-        listener = delayedListener = new DelayedListener<>(listener);
+        listener = delayedListener = new DelayedListener<>(this, listener);
         startHeaders = headers;
       }
     }
@@ -445,13 +445,31 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private static final class DelayedListener<RespT> extends Listener<RespT> {
+    private final DelayedClientCall<?, RespT> call;
     private final Listener<RespT> realListener;
     private volatile boolean passThrough;
+    private volatile Status exceptionStatus;
     @GuardedBy("this")
     private List<Runnable> pendingCallbacks = new ArrayList<>();
 
-    public DelayedListener(Listener<RespT> listener) {
+    public DelayedListener(DelayedClientCall<?, RespT> call, Listener<RespT> listener) {
+      this.call = call;
       this.realListener = listener;
+    }
+
+    /**
+     * Cancels call and schedules onClose() notification. May only be called from within a
+     * DelayedListener callback dispatch (either queued drain or passThrough). Both phases
+     * deliver callbacks serially on the transport's callExecutor, so the write to
+     * {@code exceptionStatus} is serialized with, and thus visible to, subsequent listener
+     * callbacks on that executor.
+     */
+    private void exceptionThrown(Throwable t, String description) {
+      // onClose() must be delivered exactly once and last. Other callbacks may already be queued
+      // ahead of realCall's eventual onClose, so we can't call onClose() here. We set the status
+      // and overwrite the onClose() details when it arrives.
+      exceptionStatus = Status.CANCELLED.withCause(t).withDescription(description);
+      call.cancel(description, t);
     }
 
     private void delayOrExecute(Runnable runnable) {
@@ -467,28 +485,50 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void onHeaders(final Metadata headers) {
       if (passThrough) {
-        realListener.onHeaders(headers);
+        deliverHeaders(headers);
       } else {
         delayOrExecute(new Runnable() {
           @Override
           public void run() {
-            realListener.onHeaders(headers);
+            deliverHeaders(headers);
           }
         });
+      }
+    }
+
+    private void deliverHeaders(Metadata headers) {
+      if (exceptionStatus != null) {
+        return;
+      }
+      try {
+        realListener.onHeaders(headers);
+      } catch (Throwable t) {
+        exceptionThrown(t, "Failed to read headers");
       }
     }
 
     @Override
     public void onMessage(final RespT message) {
       if (passThrough) {
-        realListener.onMessage(message);
+        deliverMessage(message);
       } else {
         delayOrExecute(new Runnable() {
           @Override
           public void run() {
-            realListener.onMessage(message);
+            deliverMessage(message);
           }
         });
+      }
+    }
+
+    private void deliverMessage(RespT message) {
+      if (exceptionStatus != null) {
+        return;
+      }
+      try {
+        realListener.onMessage(message);
+      } catch (Throwable t) {
+        exceptionThrown(t, "Failed to read message.");
       }
     }
 
@@ -497,7 +537,23 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       delayOrExecute(new Runnable() {
         @Override
         public void run() {
-          realListener.onClose(status, trailers);
+          Status effectiveStatus = status;
+          Metadata effectiveTrailers = trailers;
+          if (exceptionStatus != null) {
+            // Ideally exceptionStatus == status, as exceptionStatus was passed to cancel().
+            // However the cancel is racy and this onClose may have already been queued when the
+            // cancellation occurred. Since other callbacks throw away data if exceptionStatus !=
+            // null, it is semantically essential that we _not_ use a status provided by the
+            // server.
+            effectiveStatus = exceptionStatus;
+            // Replace trailers to prevent mixing sources of status and trailers.
+            effectiveTrailers = new Metadata();
+          }
+          try {
+            realListener.onClose(effectiveStatus, effectiveTrailers);
+          } catch (RuntimeException ex) {
+            logger.log(Level.WARNING, "Exception thrown by onClose() in ClientCall", ex);
+          }
         }
       });
     }
@@ -505,14 +561,25 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void onReady() {
       if (passThrough) {
-        realListener.onReady();
+        deliverOnReady();
       } else {
         delayOrExecute(new Runnable() {
           @Override
           public void run() {
-            realListener.onReady();
+            deliverOnReady();
           }
         });
+      }
+    }
+
+    private void deliverOnReady() {
+      if (exceptionStatus != null) {
+        return;
+      }
+      try {
+        realListener.onReady();
+      } catch (Throwable t) {
+        exceptionThrown(t, "Failed to call onReady.");
       }
     }
 
@@ -535,7 +602,6 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
         for (Runnable runnable : toRun) {
           // Avoid calling listener while lock is held to prevent deadlocks.
-          // TODO(ejona): exception handling
           runnable.run();
         }
         toRun.clear();
