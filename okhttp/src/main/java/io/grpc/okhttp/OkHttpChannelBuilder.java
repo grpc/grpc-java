@@ -116,17 +116,26 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
               CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
               CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
-              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+              CipherSuite.TLS_AES_128_GCM_SHA256,
+              CipherSuite.TLS_AES_256_GCM_SHA384,
+              CipherSuite.TLS_CHACHA20_POLY1305_SHA256)
+          .tlsVersions(TlsVersion.TLS_1_3, TlsVersion.TLS_1_2)
+          .supportsTlsExtensions(true)
+          .build();
 
-              // TLS 1.3 does not work so far. See issues:
-              // https://github.com/grpc/grpc-java/issues/7765
-              //
-              // TLS 1.3
-              //CipherSuite.TLS_AES_128_GCM_SHA256,
-              //CipherSuite.TLS_AES_256_GCM_SHA384,
-              //CipherSuite.TLS_CHACHA20_POLY1305_SHA256
-              )
-          .tlsVersions(/*TlsVersion.TLS_1_3,*/ TlsVersion.TLS_1_2)
+  // @VisibleForTesting
+  static final ConnectionSpec INTERNAL_LEGACY_CONNECTION_SPEC =
+      new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+          .cipherSuites(
+              // The following items should be sync with Netty's Http2SecurityUtil.CIPHERS.
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+              CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+              CipherSuite.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+              CipherSuite.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256)
+          .tlsVersions(TlsVersion.TLS_1_2)
           .supportsTlsExtensions(true)
           .build();
 
@@ -184,7 +193,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   private SSLSocketFactory sslSocketFactory;
   private final boolean freezeSecurityConfiguration;
   private HostnameVerifier hostnameVerifier;
-  private ConnectionSpec connectionSpec = INTERNAL_DEFAULT_CONNECTION_SPEC;
+  private ConnectionSpec connectionSpec;
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
@@ -199,6 +208,12 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
    */
   private final boolean useGetForSafeMethods = false;
 
+  private static ConnectionSpec initialConnectionSpec() {
+    return (OkHttpProtocolNegotiator.get() instanceof OkHttpProtocolNegotiator.AndroidNegotiator)
+        ? INTERNAL_DEFAULT_CONNECTION_SPEC
+        : INTERNAL_LEGACY_CONNECTION_SPEC;
+  }
+
   private OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
@@ -209,6 +224,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         new OkHttpChannelDefaultPortProvider());
     this.freezeSecurityConfiguration = false;
     this.channelCredentials = null;
+    this.connectionSpec = initialConnectionSpec();
   }
 
   OkHttpChannelBuilder(
@@ -222,6 +238,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
     this.channelCredentials = channelCreds;
+    this.connectionSpec = initialConnectionSpec();
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
