@@ -18,10 +18,13 @@ package io.grpc.s2a.internal.handshaker.tokenmanager;
 
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.util.Optional;
-import javax.annotation.concurrent.ThreadSafe;
 
-/** Manages access tokens for authenticating to the S2A. */
-@ThreadSafe
+/**
+ * Manages access tokens for authenticating to the S2A.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 public final class AccessTokenManager {
   private final TokenFetcher tokenFetcher;
 

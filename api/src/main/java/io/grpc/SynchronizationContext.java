@@ -29,7 +29,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A synchronization context is a queue of tasks that run in sequence.  It offers following
@@ -54,11 +53,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * are held when calling the context. So it is encouraged to avoid mixing locks and synchronization
  * context except via {@link #executeLater}.
  *
- * <p>This class is thread-safe.
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  *
  * @since 1.17.0
  */
-@ThreadSafe
 public final class SynchronizationContext implements Executor {
   private final UncaughtExceptionHandler uncaughtExceptionHandler;
 

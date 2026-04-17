@@ -28,15 +28,16 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Default implementation of {@link HandlerRegistry}.
  *
  * <p>Uses {@link ConcurrentHashMap} to avoid service registration excessively
  * blocking method lookup.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class MutableHandlerRegistry extends HandlerRegistry {
   private final ConcurrentMap<String, ServerServiceDefinition> services
       = new ConcurrentHashMap<>();

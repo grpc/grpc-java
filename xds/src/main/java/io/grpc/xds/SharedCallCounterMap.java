@@ -26,12 +26,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The global map for holding circuit breaker atomic counters.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class SharedCallCounterMap implements CallCounterProvider {
 
   private final ReferenceQueue<AtomicLong> refQueue = new ReferenceQueue<>();

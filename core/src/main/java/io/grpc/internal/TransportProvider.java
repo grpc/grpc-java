@@ -17,12 +17,13 @@
 package io.grpc.internal;
 
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Provides transports for sending RPCs.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 interface TransportProvider {
   /**
    * Returns a READY transport that will be used to create new streams.

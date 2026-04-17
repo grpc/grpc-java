@@ -33,16 +33,17 @@ import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link NameResolverProvider}s.  The {@link #getDefaultRegistry default instance}
  * loads providers at runtime through the Java service provider mechanism.
- *
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ * 
  * @since 1.21.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4159")
-@ThreadSafe
 public final class NameResolverRegistry {
   private static final Logger logger = Logger.getLogger(NameResolverRegistry.class.getName());
   private static NameResolverRegistry instance;

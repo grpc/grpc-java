@@ -62,10 +62,13 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
-/** Concrete client-side transport implementation. */
-@ThreadSafe
+/**
+ * Concrete client-side transport implementation.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 @Internal
 public final class BinderClientTransport extends BinderTransport
     implements ConnectionClientTransport, Bindable.Observer {

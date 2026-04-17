@@ -22,7 +22,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A holder for shared resource singletons.
@@ -37,8 +36,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * to an object cached in the holder.
  *
  * <p>Resources are ref-counted and shut down after a delay when the ref-count reaches zero.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class SharedResourceHolder {
   static final long DESTROY_DELAY_SECONDS = 1;
 

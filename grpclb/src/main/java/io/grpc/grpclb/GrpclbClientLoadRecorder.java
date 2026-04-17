@@ -30,13 +30,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Record and aggregate client-side load data for GRPCLB.  This records load occurred during the
  * span of an LB stream with the remote load-balancer.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
 
   private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =

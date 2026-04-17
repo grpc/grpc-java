@@ -33,13 +33,14 @@ import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link XdsCredentialsProvider}s. The {@link #getDefaultRegistry default
  * instance} loads providers at runtime through the Java service provider mechanism.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class XdsCredentialsRegistry {
   private static final Logger logger = Logger.getLogger(XdsCredentialsRegistry.class.getName());
   private static XdsCredentialsRegistry instance;

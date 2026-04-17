@@ -19,12 +19,13 @@ package io.grpc;
 import java.util.Collections;
 import java.util.List;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of services and their methods used by servers to dispatching incoming calls.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public abstract class HandlerRegistry {
 
   /**

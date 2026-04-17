@@ -77,14 +77,15 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A CachingRlsLbClient is a core implementation of RLS loadbalancer supports dynamic request
  * routing by fetching the decision from route lookup server. Every single request is routed by
  * the server's decision. To reduce the performance penalty, {@link LruCache} is used.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class CachingRlsLbClient {
 
   private static final Converter<RouteLookupRequest, io.grpc.lookup.v1.RouteLookupRequest>

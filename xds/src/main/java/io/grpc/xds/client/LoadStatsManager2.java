@@ -42,13 +42,14 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Manages client side traffic stats. Drop stats are maintained in cluster (with edsServiceName)
  * granularity and load stats (request counts) are maintained in locality granularity.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 @Internal
 public final class LoadStatsManager2 {
   // Recorders for drops of each cluster:edsServiceName.
@@ -252,8 +253,10 @@ public final class LoadStatsManager2 {
 
   /**
    * Recorder for dropped requests. One instance per cluster with edsServiceName.
+   * 
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
    */
-  @ThreadSafe
   public final class ClusterDropStats {
     private final String clusterName;
     @Nullable
@@ -327,8 +330,10 @@ public final class LoadStatsManager2 {
 
   /**
    * Recorder for client loads. One instance per locality (in cluster with edsService).
+   * 
+   * <p>This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
    */
-  @ThreadSafe
   public final class ClusterLocalityStats {
     private final String clusterName;
     @Nullable
