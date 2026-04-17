@@ -8,6 +8,7 @@ import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
@@ -125,8 +126,23 @@ public class ExternalProcessorFilter implements Filter {
       try {
         GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
             externalProcessor.getGrpcService(), context.bootstrapInfo(), context.serverInfo());
+        
+        long deferredCloseTimeoutNanos = TimeUnit.SECONDS.toNanos(5);
+        if (externalProcessor.hasDeferredCloseTimeout()) {
+          com.google.protobuf.Duration deferredCloseTimeout = externalProcessor.getDeferredCloseTimeout();
+          try {
+            Durations.checkValid(deferredCloseTimeout);
+          } catch (IllegalArgumentException e) {
+            return ConfigOrError.fromError("Invalid deferred_close_timeout: " + e.getMessage());
+          }
+          deferredCloseTimeoutNanos = Durations.toNanos(deferredCloseTimeout);
+          if (deferredCloseTimeoutNanos <= 0) {
+            return ConfigOrError.fromError("deferred_close_timeout must be positive");
+          }
+        }
+
         return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(
-            externalProcessor, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig)));
+            externalProcessor, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig), deferredCloseTimeoutNanos));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
       }
@@ -159,6 +175,7 @@ public class ExternalProcessorFilter implements Filter {
 
     GrpcServiceConfig mergedGrpcServiceConfig = parent.getGrpcServiceConfig();
     Optional<HeaderMutationRulesConfig> mergedMutationRulesConfig = parent.getMutationRulesConfig();
+    long mergedDeferredCloseTimeoutNanos = parent.getDeferredCloseTimeoutNanos();
 
     for (Map.Entry<com.google.protobuf.Descriptors.FieldDescriptor, Object> entry
         : overrideProto.getAllFields().entrySet()) {
@@ -168,13 +185,15 @@ public class ExternalProcessorFilter implements Filter {
         mergedGrpcServiceConfig = override.getGrpcServiceConfig();
       } else if (fieldName.equals("mutation_rules")) {
         mergedMutationRulesConfig = override.getMutationRulesConfig();
+      } else if (fieldName.equals("deferred_close_timeout")) {
+        mergedDeferredCloseTimeoutNanos = override.getDeferredCloseTimeoutNanos();
       }
     }
 
     ExternalProcessor mergedProto = mergedProtoBuilder.build();
     checkNotNull(mergedProto, "mergedProto");
     return new ExternalProcessorFilterConfig(
-        mergedProto, mergedGrpcServiceConfig, mergedMutationRulesConfig);
+        mergedProto, mergedGrpcServiceConfig, mergedMutationRulesConfig, mergedDeferredCloseTimeoutNanos);
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -185,15 +204,18 @@ public class ExternalProcessorFilter implements Filter {
     private final boolean allowModeOverride;
     private final boolean disableImmediateResponse;
     private final ImmutableList<ProcessingMode> allowedOverrideModes;
+    private final long deferredCloseTimeoutNanos;
 
     ExternalProcessorFilterConfig(ExternalProcessor externalProcessor,
-        GrpcServiceConfig grpcServiceConfig, Optional<HeaderMutationRulesConfig> mutationRulesConfig) {
+        GrpcServiceConfig grpcServiceConfig, Optional<HeaderMutationRulesConfig> mutationRulesConfig,
+        long deferredCloseTimeoutNanos) {
       this.externalProcessor = externalProcessor;
       this.grpcServiceConfig = grpcServiceConfig;
       this.mutationRulesConfig = mutationRulesConfig;
       this.allowModeOverride = externalProcessor.getAllowModeOverride();
       this.disableImmediateResponse = externalProcessor.getDisableImmediateResponse();
       this.allowedOverrideModes = ImmutableList.copyOf(externalProcessor.getAllowedOverrideModesList());
+      this.deferredCloseTimeoutNanos = deferredCloseTimeoutNanos;
     }
 
     @Override
@@ -223,6 +245,10 @@ public class ExternalProcessorFilter implements Filter {
 
     ImmutableList<ProcessingMode> getAllowedOverrideModes() {
       return allowedOverrideModes;
+    }
+
+    long getDeferredCloseTimeoutNanos() {
+      return deferredCloseTimeoutNanos;
     }
 
     boolean getObservabilityMode() {
@@ -317,7 +343,7 @@ public class ExternalProcessorFilter implements Filter {
               serializingExecutor, scheduler, callOptions.getDeadline());
 
       ExtProcClientCall extProcCall = new ExtProcClientCall(
-          delayedCall, rawCall, stub, filterConfig, filterConfig.mutationRulesConfig);
+          delayedCall, rawCall, stub, filterConfig, filterConfig.getMutationRulesConfig(), scheduler);
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -439,6 +465,7 @@ public class ExternalProcessorFilter implements Filter {
       private final ExternalProcessorFilterConfig config;
       private final ClientCall<InputStream, InputStream> rawCall;
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
+      private final java.util.concurrent.ScheduledExecutorService scheduler;
       private final Object streamLock = new Object();
       private volatile io.grpc.stub.ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private final java.util.Queue<ProcessingRequest> pendingProcessingRequests = new java.util.concurrent.ConcurrentLinkedQueue<>();
@@ -462,7 +489,8 @@ public class ExternalProcessorFilter implements Filter {
           ClientCall<InputStream, InputStream> rawCall,
           ExternalProcessorGrpc.ExternalProcessorStub stub,
           ExternalProcessorFilterConfig config,
-          Optional<HeaderMutationRulesConfig> mutationRulesConfig) {
+          Optional<HeaderMutationRulesConfig> mutationRulesConfig,
+          java.util.concurrent.ScheduledExecutorService scheduler) {
         super(delayedCall);
         this.delayedCall = delayedCall;
         this.rawCall = rawCall;
@@ -470,6 +498,7 @@ public class ExternalProcessorFilter implements Filter {
         this.config = config;
         this.currentProcessingMode = config.getExternalProcessor().getProcessingMode();
         this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
+        this.scheduler = scheduler;
       }
 
       private void activateCall() {
@@ -1059,7 +1088,11 @@ public class ExternalProcessorFilter implements Filter {
 
         if (extProcClientCall.config.getObservabilityMode()) {
           super.onClose(status, trailers);
-          extProcClientCall.closeExtProcStream();
+          @SuppressWarnings("unused")
+          java.util.concurrent.ScheduledFuture<?> unused = extProcClientCall.scheduler.schedule(
+              extProcClientCall::closeExtProcStream,
+              extProcClientCall.config.getDeferredCloseTimeoutNanos(),
+              TimeUnit.NANOSECONDS);
         }
       }
 
