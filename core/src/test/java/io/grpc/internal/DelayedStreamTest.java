@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -470,6 +471,86 @@ public class DelayedStreamTest {
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
         .matches("\\[test_op_delay=[0-9]+ns, remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  @Test
+  @SuppressWarnings({"unchecked", "MissingFail"})
+  public void drainPendingCallFails() {
+    stream.start(listener);
+    stream.request(1);
+    final RuntimeException error = new RuntimeException("fail");
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(realStream).request(1);
+
+    Runnable runnable = stream.setStream(realStream);
+    assertNotNull(runnable);
+    try {
+      runnable.run();
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(realStream).cancel(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNKNOWN);
+    assertThat(statusCaptor.getValue().getCause()).isSameInstanceAs(error);
+
+    verify(realStream).start(listenerCaptor.capture());
+    listenerCaptor.getValue().closed(
+        statusCaptor.getValue(), RpcProgress.PROCESSED, new Metadata());
+    verify(listener).closed(
+        same(statusCaptor.getValue()), any(RpcProgress.class), any(Metadata.class));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainPendingCallbacksFails() {
+    stream.start(listener);
+    final RuntimeException error = new RuntimeException("fail");
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(listener).onReady();
+
+    doAnswer(new Answer<Void>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) {
+        ClientStreamListener delayedListener = invocation.getArgument(0);
+        delayedListener.onReady();
+        return null;
+      }
+    }).when(realStream).start(any(ClientStreamListener.class));
+
+    Runnable runnable = stream.setStream(realStream);
+    assertNotNull(runnable);
+
+    try {
+      runnable.run();
+      fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    verify(realStream).start(listenerCaptor.capture());
+    ClientStreamListener delayedListener = listenerCaptor.getValue();
+
+    // Verify it transitioned to passThrough. If it didn't, this might NPE or buffer.
+    // If it is passThrough, it will forward to the listener, which we know throws.
+    try {
+      delayedListener.onReady();
+      fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    // Verify it was called twice (once during drain, once just now)
+    verify(listener, times(2)).onReady();
   }
 
   private void callMeMaybe(Runnable r) {

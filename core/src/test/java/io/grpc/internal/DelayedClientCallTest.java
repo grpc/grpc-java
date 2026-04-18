@@ -18,10 +18,13 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -166,8 +169,8 @@ public class DelayedClientCallTest {
   @Test
   @SuppressWarnings("unchecked")
   public void cancelThenSetCall() {
-    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
@@ -182,8 +185,8 @@ public class DelayedClientCallTest {
   @Test
   @SuppressWarnings("unchecked")
   public void setCallThenCancel() {
-    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     Runnable r = delayedClientCall.setCall(mockRealCall);
@@ -227,6 +230,84 @@ public class DelayedClientCallTest {
     r.run();
     assertThat(contextKey.get(startContext.get())).isEqualTo(goldenValue);
     assertThat(contextKey.get(readyContext.get())).isEqualTo(goldenValue);
+  }
+
+  @Test
+  @SuppressWarnings("MissingFail")
+  public void drainPendingCallFails() {
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+    delayedClientCall.request(1);
+
+    final RuntimeException error = new RuntimeException("fail");
+    org.mockito.Mockito.doAnswer(new org.mockito.stubbing.Answer<Void>() {
+      @Override
+      public Void answer(org.mockito.invocation.InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(mockRealCall).request(1);
+
+    Runnable runnable = delayedClientCall.setCall(mockRealCall);
+    assertThat(runnable).isNotNull();
+    try {
+      runnable.run();
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    verify(mockRealCall).cancel(eq("Failed to drain pending calls"), same(error));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainPendingCallbacksFails() {
+    DelayedClientCall<String, Integer> delayedClientCall =
+        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
+    delayedClientCall.start(listener, new Metadata());
+
+    final RuntimeException error = new RuntimeException("fail");
+    org.mockito.Mockito.doAnswer(new org.mockito.stubbing.Answer<Void>() {
+      @Override
+      public Void answer(org.mockito.invocation.InvocationOnMock invocation) {
+        throw error;
+      }
+    }).when(listener).onReady();
+
+    final AtomicReference<ClientCall.Listener<Integer>> listenerCaptor = new AtomicReference<>();
+    org.mockito.Mockito.doAnswer(new org.mockito.stubbing.Answer<Void>() {
+      @Override
+      public Void answer(org.mockito.invocation.InvocationOnMock invocation) {
+        ClientCall.Listener<Integer> delayedListener = invocation.getArgument(0);
+        listenerCaptor.set(delayedListener);
+        delayedListener.onReady();
+        return null;
+      }
+    }).when(mockRealCall).start(any(ClientCall.Listener.class), any(Metadata.class));
+
+    Runnable runnable = delayedClientCall.setCall(mockRealCall);
+    assertThat(runnable).isNotNull();
+
+    try {
+      runnable.run();
+      fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    ClientCall.Listener<Integer> delayedListener = listenerCaptor.get();
+    assertThat(delayedListener).isNotNull();
+
+    // Verify it transitioned to passThrough by showing it forwards.
+    try {
+      delayedListener.onReady();
+      fail("Should have thrown");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(error);
+    }
+
+    // Verify it was called twice (once during drain, once just now)
+    verify(listener, times(2)).onReady();
   }
 
   private void callMeMaybe(Runnable r) {
