@@ -163,7 +163,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @GuardedBy("this")
   private final LeakSafeOneWayBinder incomingBinder;
 
-  protected final ConcurrentHashMap<Integer, Inbound<?>> ongoingCalls;
+  protected final ConcurrentHashMap<Integer, Inbound<?, ?>> ongoingCalls;
   protected final OneWayBinderProxy.Decorator binderDecorator;
 
   @GuardedBy("this")
@@ -318,13 +318,13 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       incomingBinder.detach();
       setState(TransportState.SHUTDOWN_TERMINATED);
       sendShutdownTransaction();
-      ArrayList<Inbound<?>> calls = new ArrayList<>(ongoingCalls.values());
+      ArrayList<Inbound<?, ?>> calls = new ArrayList<>(ongoingCalls.values());
       ongoingCalls.clear();
       ArrayList<Future<?>> futuresToCancel = new ArrayList<>(ownedFutures);
       ownedFutures.clear();
       scheduledExecutorService.execute(
           () -> {
-            for (Inbound<?> inbound : calls) {
+            for (Inbound<?, ?> inbound : calls) {
               synchronized (inbound) {
                 inbound.closeAbnormal(shutdownStatus);
               }
@@ -392,7 +392,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
     }
   }
 
-  protected void unregisterInbound(Inbound<?> inbound) {
+  protected void unregisterInbound(Inbound<?, ?> inbound) {
     unregisterCall(inbound.callId);
   }
 
@@ -481,13 +481,13 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
       }
     } else {
       int size = parcel.dataSize();
-      Inbound<?> inbound = ongoingCalls.get(code);
+      Inbound<?, ?> inbound = ongoingCalls.get(code);
       if (inbound == null) {
         synchronized (this) {
           if (!isShutdown()) {
             inbound = createInbound(code);
             if (inbound != null) {
-              Inbound<?> existing = ongoingCalls.put(code, inbound);
+              Inbound<?, ?> existing = ongoingCalls.put(code, inbound);
               // Can't happen as only one invocation of handleTransaction() is running at a time.
               Verify.verify(existing == null, "impossible appearance of %s", existing);
             }
@@ -519,7 +519,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   @Nullable
   @GuardedBy("this")
-  protected Inbound<?> createInbound(int callId) {
+  protected Inbound<?, ?> createInbound(int callId) {
     return null;
   }
 
@@ -566,7 +566,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
 
       Iterator<Integer> i = callIdsToNotifyWhenReady.iterator();
       while (isReady() && i.hasNext()) {
-        Inbound<?> inbound = ongoingCalls.get(i.next());
+        Inbound<?, ?> inbound = ongoingCalls.get(i.next());
         i.remove();
         if (inbound != null) { // Calls can be removed out from under us.
           inbound.onTransportReady();
@@ -598,7 +598,7 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   }
 
   @VisibleForTesting
-  Map<Integer, Inbound<?>> getOngoingCalls() {
+  Map<Integer, Inbound<?, ?>> getOngoingCalls() {
     return ongoingCalls;
   }
 

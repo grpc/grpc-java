@@ -42,9 +42,10 @@ import javax.annotation.Nullable;
  *
  * <p>Out-of-order messages are reassembled into their correct order.
  */
-abstract class Inbound<L extends StreamListener> implements StreamListener.MessageProducer {
+abstract class Inbound<L extends StreamListener, T extends BinderTransport>
+    implements StreamListener.MessageProducer {
 
-  protected final BinderTransport transport;
+  protected final T transport;
   protected final Attributes attributes;
   final int callId;
 
@@ -145,7 +146,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
   @GuardedBy("this")
   private boolean producingMessages;
 
-  private Inbound(BinderTransport transport, Attributes attributes, int callId) {
+  private Inbound(T transport, Attributes attributes, int callId) {
     this.transport = transport;
     this.attributes = attributes;
     this.callId = callId;
@@ -551,7 +552,7 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
 
   // ======================================
   // Client-side inbound transactions.
-  static final class ClientInbound extends Inbound<ClientStreamListener> {
+  static final class ClientInbound extends Inbound<ClientStreamListener, BinderClientTransport> {
 
     private final boolean countsForInUse;
 
@@ -564,7 +565,10 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
     private Metadata trailers;
 
     ClientInbound(
-        BinderTransport transport, Attributes attributes, int callId, boolean countsForInUse) {
+        BinderClientTransport transport,
+        Attributes attributes,
+        int callId,
+        boolean countsForInUse) {
       super(transport, attributes, callId);
       this.countsForInUse = countsForInUse;
     }
@@ -608,13 +612,9 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
 
   // ======================================
   // Server-side inbound transactions.
-  static final class ServerInbound extends Inbound<ServerStreamListener> {
-
-    private final BinderServerTransport serverTransport;
-
+  static final class ServerInbound extends Inbound<ServerStreamListener, BinderServerTransport> {
     ServerInbound(BinderServerTransport transport, Attributes attributes, int callId) {
       super(transport, attributes, callId);
-      this.serverTransport = transport;
     }
 
     @GuardedBy("this")
@@ -623,17 +623,16 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
       String methodName = parcel.readString();
       Metadata headers = MetadataHelper.readMetadata(parcel, attributes);
 
-      StatsTraceContext statsTraceContext =
-          serverTransport.createStatsTraceContext(methodName, headers);
+      StatsTraceContext statsTraceContext = transport.createStatsTraceContext(methodName, headers);
       Outbound.ServerOutbound outbound =
-          new Outbound.ServerOutbound(serverTransport, callId, statsTraceContext);
+          new Outbound.ServerOutbound(transport, callId, statsTraceContext);
       ServerStream stream;
       if ((flags & TransactionUtils.FLAG_EXPECT_SINGLE_MESSAGE) != 0) {
         stream = new SingleMessageServerStream(this, outbound, attributes);
       } else {
         stream = new MultiMessageServerStream(this, outbound, attributes);
       }
-      Status status = serverTransport.startStream(stream, methodName, headers);
+      Status status = transport.startStream(stream, methodName, headers);
       if (status.isOk()) {
         checkNotNull(listener); // Is it ok to assume this will happen synchronously?
         if (transport.isReady()) {
