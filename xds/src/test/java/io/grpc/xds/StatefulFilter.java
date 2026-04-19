@@ -128,12 +128,13 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<Config> parseFilterConfig(Message rawProtoMessage) {
+    public ConfigOrError<Config> parseFilterConfig(Message rawProtoMessage, FilterContext context) {
       return ConfigOrError.fromConfig(Config.fromProto(rawProtoMessage, typeUrl));
     }
 
     @Override
-    public ConfigOrError<Config> parseFilterConfigOverride(Message rawProtoMessage) {
+    public ConfigOrError<Config> parseFilterConfigOverride(
+        Message rawProtoMessage, FilterContext context) {
       return ConfigOrError.fromConfig(Config.fromProto(rawProtoMessage, typeUrl));
     }
   }
