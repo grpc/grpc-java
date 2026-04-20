@@ -21,53 +21,69 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelVariableResolver;
-import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * Executes compiled CEL expressions that extract a string.
  */
 public final class CelStringExtractor {
   private final CelRuntime.Program program;
+  @Nullable
+  private final String defaultValue;
 
-  private CelStringExtractor(CelRuntime.Program program) {
+  private CelStringExtractor(CelRuntime.Program program, @Nullable String defaultValue) {
     this.program = program;
+    this.defaultValue = defaultValue;
   }
 
   /**
-   * Compiles the AST into a CelStringExtractor.
+   * Compiles the AST into a CelStringExtractor with an optional default value.
    * Throws an Exception if evaluation fails during compilation setup.
    */
-  public static CelStringExtractor compile(CelAbstractSyntaxTree ast) 
+  public static CelStringExtractor compile(CelAbstractSyntaxTree ast, @Nullable String defaultValue)
       throws CelEvaluationException {
     if (ast.getResultType() != SimpleType.STRING && ast.getResultType() != SimpleType.DYN) {
       throw new IllegalArgumentException(
           "CEL expression must evaluate to string, got: " + ast.getResultType());
     }
-    CelCommon.checkAllowedVariables(ast);
+    CelCommon.checkAllowedReferences(ast);
     CelRuntime.Program program = CelCommon.RUNTIME.createProgram(ast);
-    return new CelStringExtractor(program);
+    return new CelStringExtractor(program, defaultValue);
   }
 
   /**
-   * Evaluates the CEL expression against the input activation and returns the string result.
-   * Returns null if the result is not a string.
+   * Compiles the AST into a CelStringExtractor with no default value.
+   * Throws an Exception if evaluation fails during compilation setup.
+   */
+  public static CelStringExtractor compile(CelAbstractSyntaxTree ast)
+      throws CelEvaluationException {
+    return compile(ast, null);
+  }
+
+  /**
+   * Evaluates the CEL expression and returns the string result.
+   * Returns the default value if the result is not a string or if evaluation
+   * fails.
    */
   public String extract(Object input) throws CelEvaluationException {
     Object result;
-    if (input instanceof CelVariableResolver) {
-      result = program.eval((CelVariableResolver) input);
-    } else if (input instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, ?> mapInput = (Map<String, ?>) input;
-      result = program.eval(mapInput);
-    } else {
-      throw new CelEvaluationException(
-          "Unsupported input type for CEL evaluation: " + input.getClass().getName());
+    try {
+      if (input instanceof CelVariableResolver) {
+        result = program.eval((CelVariableResolver) input);
+      } else {
+        throw new CelEvaluationException(
+            "Unsupported input type for CEL evaluation: " + input.getClass().getName());
+      }
+    } catch (CelEvaluationException e) {
+      if (defaultValue != null) {
+        return defaultValue;
+      }
+      throw e;
     }
-    
+
     if (result instanceof String) {
       return (String) result;
     }
-    return null; 
+    return defaultValue;
   }
 }

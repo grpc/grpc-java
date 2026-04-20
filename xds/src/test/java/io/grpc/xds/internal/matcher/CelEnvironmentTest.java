@@ -301,7 +301,9 @@ public final class CelEnvironmentTest {
     CelMatcher matcher = CelMatcherTestHelper.compile("request == 'bar'");
     Map<String, String> input = Collections.singletonMap("request", "bar");
     
-    assertThat(matcher.match(input)).isTrue();
+    dev.cel.runtime.CelVariableResolver resolver =
+        name -> java.util.Optional.ofNullable(input.get(name));
+    assertThat(matcher.match(resolver)).isTrue();
   }
 
   @Test
@@ -342,8 +344,10 @@ public final class CelEnvironmentTest {
     Map<String, Object> input = 
         Collections.singletonMap("request", "i-am-a-string");
     
+    dev.cel.runtime.CelVariableResolver resolver =
+        name -> java.util.Optional.ofNullable(input.get(name));
     try {
-      matcher.match(input);
+      matcher.match(resolver);
       Assert.fail("Should have thrown CelEvaluationException");
     } catch (CelEvaluationException e) {
       assertThat(e).hasMessageThat()
@@ -470,7 +474,7 @@ public final class CelEnvironmentTest {
   }
 
   @Test
-  public void checkAllowedVariables_unknownVariable_throws() throws Exception {
+  public void checkAllowedReferences_unknownVariable_throws() throws Exception {
     // 1. Create a different compiler that allows a variable other than "request"
     CelCompiler otherCompiler = 
         CelCompilerFactory.standardCelCompilerBuilder()
@@ -483,13 +487,33 @@ public final class CelEnvironmentTest {
         otherCompiler.compile("unknown_var == 'foo'").getAst();
 
     // 3. Pass the AST to the gRPC CelMatcher. This bypasses the gRPC compiler 
-    // but triggers the checkAllowedVariables validation.
+    // but triggers the checkAllowedReferences validation.
     try {
       CelMatcher.compile(ast);
       fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat()
           .contains("CEL expression references unknown variable: unknown_var");
+    }
+  }
+
+  @Test
+  public void checkAllowedReferences_unknownFunction_throws() throws Exception {
+    // 1. Create a compiler that allows standard functions (including 'string')
+    CelCompiler otherCompiler = CelCompilerFactory.standardCelCompilerBuilder()
+        .addVar("request", SimpleType.DYN)
+        .build();
+
+    // 2. Compile an expression containing 'string' function
+    CelAbstractSyntaxTree ast = otherCompiler.compile("string(1) == '1'").getAst();
+
+    // 3. Pass the AST to the gRPC CelMatcher.
+    try {
+      CelMatcher.compile(ast);
+      fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat()
+          .contains("references unknown function with overload IDs: [int64_to_string]");
     }
   }
 }

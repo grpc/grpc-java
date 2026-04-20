@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import java.util.Collections;
-import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -31,43 +30,117 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_simpleString() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("'foo'");
-    String result = extractor.extract(Collections.emptyMap());
+    dev.cel.runtime.CelVariableResolver resolver = name -> java.util.Optional.empty();
+    String result = extractor.extract(resolver);
     assertThat(result).isEqualTo("foo");
   }
 
   @Test
-  public void extract_fromMap() throws Exception {
+  public void extract_resolvesVariable() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request['key']");
-    Map<String, String> input = Collections.singletonMap("key", "value");
-    Map<String, Object> activation = Collections.singletonMap("request", input);
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of(Collections.singletonMap("key", "value"));
+      }
+      return java.util.Optional.empty();
+    };
     
-    String result = extractor.extract(activation);
+    String result = extractor.extract(resolver);
     assertThat(result).isEqualTo("value");
   }
 
   @Test
   public void extract_nonStringResult_returnsNull() throws Exception {
-    // Expression returns DYN (compile time), but Integer at runtime
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request");
-    // "request" is an integer
-    Map<String, Object> activation = Collections.singletonMap("request", 123);
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of(123);
+      }
+      return java.util.Optional.empty();
+    };
     
-    String result = extractor.extract(activation);
-    // Since 123 is not a String, it returns null
+    String result = extractor.extract(resolver);
     assertThat(result).isNull();
   }
 
   @Test
   public void extract_evaluationError_throws() throws Exception {
-    // "request.bad" on a string -> Runtime error (no such field/property)
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request.bad");
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of("foo");
+      }
+      return java.util.Optional.empty();
+    };
     
     try {
-      extractor.extract(Collections.singletonMap("request", "foo"));
+      extractor.extract(resolver);
       fail("Should throw CelEvaluationException");
     } catch (dev.cel.runtime.CelEvaluationException e) {
       // Expected
     }
+  }
+
+  @Test
+  public void extract_nonStringResult_returnsDefaultValue() throws Exception {
+    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request");
+    CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of(123);
+      }
+      return java.util.Optional.empty();
+    };
+    
+    String result = extractor.extract(resolver);
+    assertThat(result).isEqualTo("default_val");
+  }
+
+  @Test
+  public void extract_evaluationError_returnsDefaultValue() throws Exception {
+    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
+    CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of("foo");
+      }
+      return java.util.Optional.empty();
+    };
+    
+    String result = extractor.extract(resolver);
+    assertThat(result).isEqualTo("default_val");
+  }
+
+  @Test
+  public void extract_withCelVariableResolver_resolvesVariable() throws Exception {
+    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request['key']");
+    CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
+    
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of(Collections.singletonMap("key", "value"));
+      }
+      return java.util.Optional.empty();
+    };
+
+    String result = extractor.extract(resolver);
+    assertThat(result).isEqualTo("value");
+  }
+
+  @Test
+  public void extract_withCelVariableResolver_evalError_returnsDefaultValue() throws Exception {
+    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
+    CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
+    
+    dev.cel.runtime.CelVariableResolver resolver = name -> {
+      if ("request".equals(name)) {
+        return java.util.Optional.of("foo");
+      }
+      return java.util.Optional.empty();
+    };
+
+    String result = extractor.extract(resolver);
+    assertThat(result).isEqualTo("default_val");
   }
 
   @Test
@@ -98,4 +171,6 @@ public final class CelStringExtractorTest {
       assertThat(e).hasMessageThat().contains("Unsupported input type");
     }
   }
+
+
 }

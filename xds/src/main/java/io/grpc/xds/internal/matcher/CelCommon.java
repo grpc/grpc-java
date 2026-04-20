@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.matcher;
 
+import com.google.common.collect.ImmutableSet;
 import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelOptions;
 import dev.cel.common.ast.CelReference;
@@ -34,8 +35,7 @@ final class CelCommon {
       .enableComprehension(false)
       .maxRegexProgramSize(100)
       .build();
-
-
+  private static final String REQUEST_VARIABLE = "request";
   private static final CelStandardFunctions FUNCTIONS = 
       CelStandardFunctions.newBuilder()
           .filterFunctions((func, over) -> {
@@ -50,6 +50,16 @@ final class CelCommon {
           })
           .build();
 
+  /**
+   * Set of allowed function names based on gRFC A106.
+   */
+  private static final ImmutableSet<String> ALLOWED_FUNCTIONS = ImmutableSet.of(
+      "size", "matches", "contains", "startsWith", "endsWith", "timestamp", "duration",
+      "int", "uint", "double", "bytes", "bool", "==", "!=", ">", "<", ">=", "<=",
+      "&&", "||", "!", "+", "-", "*", "/", "%", "in", "has", "or", "equals",
+      "index_map", "divide_int64", "int64_to_int64", "uint64_to_int64",
+      "double_to_int64", "string_to_int64", "timestamp_to_int64");
+
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
       .setStandardEnvironmentEnabled(false)
       .setStandardFunctions(FUNCTIONS)
@@ -58,16 +68,38 @@ final class CelCommon {
 
   private CelCommon() {}
 
-  static void checkAllowedVariables(CelAbstractSyntaxTree ast) {
-    for (Map.Entry<Long, CelReference> entry : 
-        ast.getReferenceMap().entrySet()) {
+  /**
+   * Validates that the AST only references the allowed variable ("request")
+   * and supported functions as defined in gRFC A106.
+   */
+  static void checkAllowedReferences(CelAbstractSyntaxTree ast) {
+    for (Map.Entry<Long, CelReference> entry : ast.getReferenceMap().entrySet()) {
       CelReference ref = entry.getValue();
-      // If overload_id is empty, it's a variable reference or type name.
-      // We only support "request".
+
+      // Check for variables (where overloadIds is empty)
       if (!ref.value().isPresent() && ref.overloadIds().isEmpty()) {
-        if (!"request".equals(ref.name())) {
+        if (!REQUEST_VARIABLE.equals(ref.name())) {
           throw new IllegalArgumentException(
               "CEL expression references unknown variable: " + ref.name());
+        }
+      } else if (!ref.overloadIds().isEmpty()) {
+        String name = ref.name();
+        if (name.isEmpty()) {
+          boolean allowed = false;
+          for (String id : ref.overloadIds()) {
+            if (ALLOWED_FUNCTIONS.contains(id)) {
+              allowed = true;
+              break;
+            }
+          }
+          if (!allowed) {
+            throw new IllegalArgumentException(
+                "CEL expression references unknown function with overload IDs: "
+                    + ref.overloadIds());
+          }
+        } else if (!ALLOWED_FUNCTIONS.contains(name)) {
+          throw new IllegalArgumentException(
+              "CEL expression references unknown function: " + name);
         }
       }
     }
