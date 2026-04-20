@@ -21,7 +21,6 @@ import dev.cel.common.types.SimpleType;
 import dev.cel.runtime.CelEvaluationException;
 import dev.cel.runtime.CelRuntime;
 import dev.cel.runtime.CelVariableResolver;
-import java.util.Map;
 
 /**
  * Executes compiled CEL expressions.
@@ -45,7 +44,7 @@ public final class CelMatcher {
       throw new IllegalArgumentException(
           "CEL expression must evaluate to boolean, got: " + ast.getResultType());
     }
-    CelCommon.checkAllowedVariables(ast);
+    CelCommon.checkAllowedReferences(ast);
     CelRuntime.Program program = CelCommon.RUNTIME.createProgram(ast);
     return new CelMatcher(program);
   }
@@ -57,10 +56,6 @@ public final class CelMatcher {
     Object result;
     if (input instanceof CelVariableResolver) {
       result = program.eval((CelVariableResolver) input);
-    } else if (input instanceof Map) {
-      @SuppressWarnings("unchecked")
-      Map<String, ?> mapInput = (Map<String, ?>) input;
-      result = program.eval(mapInput);
     } else {
       throw new CelEvaluationException(
           "Unsupported input type for CEL evaluation: " + input.getClass().getName());
