@@ -26,7 +26,7 @@ import org.mockito.ArgumentMatcher;
  */
 public final class StatusMatcher implements ArgumentMatcher<Status> {
   public static StatusMatcher statusHasCode(ArgumentMatcher<Status.Code> codeMatcher) {
-    return new StatusMatcher(codeMatcher, null);
+    return new StatusMatcher(codeMatcher, null, null);
   }
 
   public static StatusMatcher statusHasCode(Status.Code code) {
@@ -35,17 +35,20 @@ public final class StatusMatcher implements ArgumentMatcher<Status> {
 
   private final ArgumentMatcher<Status.Code> codeMatcher;
   private final ArgumentMatcher<String> descriptionMatcher;
+  private final ArgumentMatcher<Throwable> causeMatcher;
 
   private StatusMatcher(
       ArgumentMatcher<Status.Code> codeMatcher,
-      ArgumentMatcher<String> descriptionMatcher) {
+      ArgumentMatcher<String> descriptionMatcher,
+      ArgumentMatcher<Throwable> causeMatcher) {
     this.codeMatcher = checkNotNull(codeMatcher, "codeMatcher");
     this.descriptionMatcher = descriptionMatcher;
+    this.causeMatcher = causeMatcher;
   }
 
   public StatusMatcher andDescription(ArgumentMatcher<String> descriptionMatcher) {
     checkState(this.descriptionMatcher == null, "Already has a description matcher");
-    return new StatusMatcher(codeMatcher, descriptionMatcher);
+    return new StatusMatcher(codeMatcher, descriptionMatcher, causeMatcher);
   }
 
   public StatusMatcher andDescription(String description) {
@@ -56,11 +59,21 @@ public final class StatusMatcher implements ArgumentMatcher<Status> {
     return andDescription(new StringContainsMatcher(substring));
   }
 
+  public StatusMatcher andCause(ArgumentMatcher<Throwable> causeMatcher) {
+    checkState(this.causeMatcher == null, "Already has a cause matcher");
+    return new StatusMatcher(codeMatcher, descriptionMatcher, causeMatcher);
+  }
+
+  public StatusMatcher andCause(Throwable cause) {
+    return andCause(new EqualsMatcher<>(cause));
+  }
+
   @Override
   public boolean matches(Status status) {
     return status != null
         && codeMatcher.matches(status.getCode())
-        && (descriptionMatcher == null || descriptionMatcher.matches(status.getDescription()));
+        && (descriptionMatcher == null || descriptionMatcher.matches(status.getDescription()))
+        && (causeMatcher == null || causeMatcher.matches(status.getCause()));
   }
 
   @Override
@@ -71,6 +84,10 @@ public final class StatusMatcher implements ArgumentMatcher<Status> {
     if (descriptionMatcher != null) {
       sb.append(", description=");
       sb.append(descriptionMatcher);
+    }
+    if (causeMatcher != null) {
+      sb.append(", cause=");
+      sb.append(causeMatcher);
     }
     sb.append("}");
     return sb.toString();

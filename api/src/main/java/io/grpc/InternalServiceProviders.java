@@ -17,7 +17,9 @@
 package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ServiceLoader;
 
 @Internal
 public final class InternalServiceProviders {
@@ -27,12 +29,28 @@ public final class InternalServiceProviders {
   /**
    * Accessor for method.
    */
+  @Deprecated
   public static <T> List<T> loadAll(
       Class<T> klass,
       Iterable<Class<?>> hardCodedClasses,
       ClassLoader classLoader,
       PriorityAccessor<T> priorityAccessor) {
-    return ServiceProviders.loadAll(klass, hardCodedClasses, classLoader, priorityAccessor);
+    return loadAll(
+        klass,
+        ServiceLoader.load(klass, classLoader).iterator(),
+        () -> hardCodedClasses,
+        priorityAccessor);
+  }
+
+  /**
+   * Accessor for method.
+   */
+  public static <T> List<T> loadAll(
+      Class<T> klass,
+      Iterator<T> serviceLoader,
+      Supplier<Iterable<Class<?>>> hardCodedClasses,
+      PriorityAccessor<T> priorityAccessor) {
+    return ServiceProviders.loadAll(klass, serviceLoader, hardCodedClasses::get, priorityAccessor);
   }
 
   /**
@@ -60,4 +78,8 @@ public final class InternalServiceProviders {
   }
 
   public interface PriorityAccessor<T> extends ServiceProviders.PriorityAccessor<T> {}
+
+  public interface Supplier<T> {
+    T get();
+  }
 }

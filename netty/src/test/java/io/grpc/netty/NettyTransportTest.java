@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.AbstractTransportTest;
@@ -71,7 +72,7 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", 0))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories, new MetricRecorder() {});
   }
 
   @Override
@@ -81,7 +82,7 @@ public class NettyTransportTest extends AbstractTransportTest {
         .forAddress(new InetSocketAddress("localhost", port))
         .flowControlWindow(AbstractTransportTest.TEST_FLOW_CONTROL_WINDOW)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServers(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories, new MetricRecorder() {});
   }
 
   @Override

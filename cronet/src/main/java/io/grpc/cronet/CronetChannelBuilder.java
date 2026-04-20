@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
 import android.net.Network;
-import android.os.Build;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -340,9 +339,7 @@ public final class CronetChannelBuilder extends ForwardingChannelBuilder2<Cronet
         builder.setTrafficStatsUid(trafficStatsUid);
       }
       if (network != null) {
-        if (Build.VERSION.SDK_INT >= 23) {
-          builder.bindToNetwork(network.getNetworkHandle());
-        }
+        builder.bindToNetwork(network.getNetworkHandle());
       }
       return builder;
     }

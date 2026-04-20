@@ -255,9 +255,9 @@ public class CdsLoadBalancer2Test {
     startXdsDepManager();
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + CLUSTER
-        + " from xDS server nodeID: " + NODE_ID;
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER
+        + " nodeID: " + NODE_ID
+        + ": NOT_FOUND: Timed out waiting for resource " + CLUSTER + " from xDS server";
     Status unavailable = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPickerStatus(pickerCaptor.getValue(), unavailable);
     assertThat(childBalancers).isEmpty();
@@ -311,8 +311,9 @@ public class CdsLoadBalancer2Test {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
 
     assertThat(childBalancer.shutdown).isTrue();
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Resource " + CLUSTER + " does not exist nodeID: " + NODE_ID;
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER
+        + " nodeID: " + NODE_ID
+        + ": NOT_FOUND: Resource " + CLUSTER + " does not exist";
     Status unavailable = Status.UNAVAILABLE.withDescription(expectedDescription);
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
@@ -515,9 +516,9 @@ public class CdsLoadBalancer2Test {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + cluster1 + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + cluster1 + " from xDS server nodeID: "
-        + NODE_ID;
+    String expectedDescription = "Error retrieving CDS resource " + cluster1
+        + " nodeID: " + NODE_ID
+        + ": NOT_FOUND: Timed out waiting for resource " + cluster1 + " from xDS server";
     Status status = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPickerStatus(pickerCaptor.getValue(), status);
     assertThat(childBalancers).isEmpty();

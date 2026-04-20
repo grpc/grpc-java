@@ -33,6 +33,7 @@ import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
+import io.grpc.Grpc;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -141,20 +142,22 @@ final class CachingRlsLbClient {
         "grpc.lb.rls.default_target_picks",
         "EXPERIMENTAL. Number of LB picks sent to the default target", "{pick}",
         Arrays.asList("grpc.target", "grpc.lb.rls.server_target",
-            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"), Collections.emptyList(),
+            "grpc.lb.rls.data_plane_target", "grpc.lb.pick_result"),
+        Arrays.asList("grpc.client.call.custom"),
         false);
     TARGET_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.target_picks",
         "EXPERIMENTAL. Number of LB picks sent to each RLS target. Note that if the default "
             + "target is also returned by the RLS server, RPCs sent to that target from the cache "
             + "will be counted in this metric, not in grpc.rls.default_target_picks.", "{pick}",
         Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.data_plane_target",
-            "grpc.lb.pick_result"), Collections.emptyList(),
+            "grpc.lb.pick_result"),
+        Arrays.asList("grpc.client.call.custom"),
         false);
     FAILED_PICKS_COUNTER = metricInstrumentRegistry.registerLongCounter("grpc.lb.rls.failed_picks",
         "EXPERIMENTAL. Number of LB picks failed due to either a failed RLS request or the "
             + "RLS channel being throttled", "{pick}",
         Arrays.asList("grpc.target", "grpc.lb.rls.server_target"),
-        Collections.emptyList(), false);
+        Arrays.asList("grpc.client.call.custom"), false);
     CACHE_ENTRIES_GAUGE = metricInstrumentRegistry.registerLongGauge("grpc.lb.rls.cache_entries",
         "EXPERIMENTAL. Number of entries in the RLS cache", "{entry}",
         Arrays.asList("grpc.target", "grpc.lb.rls.server_target", "grpc.lb.rls.instance_uuid"),
@@ -1033,7 +1036,7 @@ final class CachingRlsLbClient {
           helper.getMetricRecorder().addLongCounter(TARGET_PICKS_COUNTER, 1,
               Arrays.asList(helper.getChannelTarget(), lookupService,
                   childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
-              Collections.emptyList());
+              Arrays.asList(determineCustomLabel(args)));
         }
         return pickResult;
       } else if (response.hasError()) {
@@ -1041,7 +1044,8 @@ final class CachingRlsLbClient {
           return useFallback(args);
         }
         helper.getMetricRecorder().addLongCounter(FAILED_PICKS_COUNTER, 1,
-            Arrays.asList(helper.getChannelTarget(), lookupService), Collections.emptyList());
+            Arrays.asList(helper.getChannelTarget(), lookupService),
+            Arrays.asList(determineCustomLabel(args)));
         return PickResult.withError(
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
@@ -1061,7 +1065,7 @@ final class CachingRlsLbClient {
         helper.getMetricRecorder().addLongCounter(DEFAULT_TARGET_PICKS_COUNTER, 1,
             Arrays.asList(helper.getChannelTarget(), lookupService,
                 fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
-            Collections.emptyList());
+            Arrays.asList(determineCustomLabel(args)));
       }
       return pickResult;
     }
@@ -1074,6 +1078,10 @@ final class CachingRlsLbClient {
       } else {
         return "fail";
       }
+    }
+
+    private String determineCustomLabel(PickSubchannelArgs args) {
+      return args.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL);
     }
 
     // GuardedBy CachingRlsLbClient.lock

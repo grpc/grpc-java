@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -42,7 +43,6 @@ import javax.annotation.concurrent.ThreadSafe;
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
   private static LoadBalancerRegistry instance;
-  private static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
 
   private final LinkedHashSet<LoadBalancerProvider> allProviders =
       new LinkedHashSet<>();
@@ -101,8 +101,10 @@ public final class LoadBalancerRegistry {
     if (instance == null) {
       List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(
           LoadBalancerProvider.class,
-          HARDCODED_CLASSES,
-          LoadBalancerProvider.class.getClassLoader(),
+          ServiceLoader
+            .load(LoadBalancerProvider.class, LoadBalancerProvider.class.getClassLoader())
+            .iterator(),
+          LoadBalancerRegistry::getHardCodedClasses,
           new LoadBalancerPriorityAccessor());
       instance = new LoadBalancerRegistry();
       for (LoadBalancerProvider provider : providerList) {

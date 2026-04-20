@@ -148,6 +148,15 @@ import javax.annotation.Nullable;
  * itself. RFC 9844 claims to obsolete RFC 6874 because web browsers would not support it. This
  * class implements RFC 6874 anyway, mostly to avoid creating a barrier to migration away from
  * {@link java.net.URI}.
+ *
+ * <p>Some URI components, e.g. scheme, are required while others may or may not be present, e.g.
+ * authority. {@link Uri} is careful to preserve the distinction between an absent string component
+ * (getter returns null) and one with an empty value (getter returns ""). {@link java.net.URI} makes
+ * this distinction too, *except* when it comes to the authority and host components: {@link
+ * java.net.URI#getAuthority()} and {@link java.net.URI#getHost()} return null when an authority is
+ * absent, e.g. <code>file:/path</code> as expected. But these methods surprisingly also return null
+ * when the authority is the empty string, e.g.<code>file:///path</code>. {@link Uri}'s getters
+ * correctly return null and "" in these cases, respectively, as one would expect.
  */
 @Internal
 public final class Uri {
@@ -236,23 +245,7 @@ public final class Uri {
           break;
         }
       }
-      String authority = s.substring(authorityStart, i);
-
-      // 3.2.1. UserInfo. Easy, because '@' cannot appear unencoded inside userinfo or host.
-      int userInfoEnd = authority.indexOf('@');
-      if (userInfoEnd >= 0) {
-        builder.setRawUserInfo(authority.substring(0, userInfoEnd));
-      }
-
-      // 3.2.2/3. Host/Port.
-      int hostStart = userInfoEnd >= 0 ? userInfoEnd + 1 : 0;
-      int portStartColon = findPortStartColon(authority, hostStart);
-      if (portStartColon < 0) {
-        builder.setRawHost(authority.substring(hostStart, authority.length()));
-      } else {
-        builder.setRawHost(authority.substring(hostStart, portStartColon));
-        builder.setRawPort(authority.substring(portStartColon + 1));
-      }
+      builder.setRawAuthority(s.substring(authorityStart, i));
     }
 
     // 3.3. Path: Whatever is left before '?' or '#'.
@@ -347,6 +340,15 @@ public final class Uri {
   /**
    * Returns the percent-decoded "Authority" component of this URI, or null if not present.
    *
+   * <p>NB: This method's decoding is lossy -- It only exists for compatibility with {@link
+   * java.net.URI}. Prefer {@link #getRawAuthority()} or work instead with authority in terms of its
+   * individual components ({@link #getUserInfo()}, {@link #getHost()} and {@link #getPort()}). The
+   * problem with getAuthority() is that it returns the delimited concatenation of the percent-
+   * decoded userinfo, host and port components. But both userinfo and host can contain the '@'
+   * character, which becomes indistinguishable from the userinfo/host delimiter after decoding. For
+   * example, URIs <code>scheme://x@y%40z</code> and <code>scheme://x%40y@z</code> have different
+   * userinfo and host components but getAuthority() returns "x@y@z" for both of them.
+   *
    * <p>NB: This method assumes the "host" component was encoded as UTF-8, as mandated by RFC 3986.
    * This method also assumes the "user information" part of authority was encoded as UTF-8,
    * although RFC 3986 doesn't specify an encoding.
@@ -437,9 +439,9 @@ public final class Uri {
     return host;
   }
 
-  /** Returns the "port" component of this URI, or -1 if not present. */
+  /** Returns the "port" component of this URI, or -1 if empty or not present. */
   public int getPort() {
-    return port != null ? Integer.parseInt(port) : -1;
+    return port != null && !port.isEmpty() ? Integer.parseInt(port) : -1;
   }
 
   /** Returns the raw port component of this URI in its originally parsed form. */
@@ -934,12 +936,59 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawPort(String port) {
-      try {
-        Integer.parseInt(port); // Result unused.
-      } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid port", e);
+      if (port != null && !port.isEmpty()) {
+        try {
+          Integer.parseInt(port); // Result unused.
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port", e);
+        }
       }
       this.port = port;
+      return this;
+    }
+
+    /**
+     * Specifies the userinfo, host and port URI components all at once using a single string.
+     *
+     * <p>This setter is "raw" in the sense that special characters in userinfo and host must be
+     * passed in percent-encoded. See <a
+     * href="https://datatracker.ietf.org/doc/html/rfc3986#section-3.2">RFC 3986 3.2</a> for the set
+     * of characters allowed in each component of an authority.
+     *
+     * <p>There's no "cooked" method to set authority like for other URI components because
+     * authority is a *compound* URI component whose userinfo, host and port components are
+     * delimited with special characters '@' and ':'. But the first two of those components can
+     * themselves contain these delimiters so we need percent-encoding to parse them unambiguously.
+     *
+     * @param authority an RFC 3986 authority string that will be used to set userinfo, host and
+     *     port, or null to clear all three of those components
+     */
+    @CanIgnoreReturnValue
+    public Builder setRawAuthority(@Nullable String authority) {
+      if (authority == null) {
+        setUserInfo(null);
+        setHost((String) null);
+        setPort(-1);
+      } else {
+        // UserInfo. Easy because '@' cannot appear unencoded inside userinfo or host.
+        int userInfoEnd = authority.indexOf('@');
+        if (userInfoEnd >= 0) {
+          setRawUserInfo(authority.substring(0, userInfoEnd));
+        } else {
+          setUserInfo(null);
+        }
+
+        // Host/Port.
+        int hostStart = userInfoEnd >= 0 ? userInfoEnd + 1 : 0;
+        int portStartColon = findPortStartColon(authority, hostStart);
+        if (portStartColon < 0) {
+          setRawHost(authority.substring(hostStart));
+          setPort(-1);
+        } else {
+          setRawHost(authority.substring(hostStart, portStartColon));
+          setRawPort(authority.substring(portStartColon + 1));
+        }
+      }
       return this;
     }
 

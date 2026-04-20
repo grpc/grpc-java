@@ -28,7 +28,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
-import org.jetbrains.kotlinx.lincheck.strategy.managed.modelchecking.ModelCheckingCTest;
 import org.jetbrains.lincheck.datastructures.BooleanGen;
 import org.jetbrains.lincheck.datastructures.ModelCheckingOptions;
 import org.jetbrains.lincheck.datastructures.Operation;
@@ -49,7 +48,6 @@ import org.junit.runners.JUnit4;
  * test all possibly interleaves (on context switch) between the two threads, and then verify the
  * operations are linearizable in each interleave scenario.
  */
-@ModelCheckingCTest
 @Param(name = "keepReady", gen = BooleanGen.class)
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterConcurrencyTest {

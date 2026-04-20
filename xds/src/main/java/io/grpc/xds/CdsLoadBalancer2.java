@@ -27,6 +27,7 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -369,6 +370,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             String localityName = localityName(locality);
             Attributes attr =
                 endpoint.eag().getAttributes().toBuilder()
+                    .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, clusterName)
                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
                     .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,

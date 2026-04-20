@@ -162,6 +162,42 @@ public final class UriTest {
   }
 
   @Test
+  public void parse_emptyQuery() {
+    Uri uri = Uri.create("scheme:?");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getQuery()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyFragment() {
+    Uri uri = Uri.create("scheme:#");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getFragment()).isEmpty();
+  }
+
+  @Test
+  public void parse_emptyUserInfo() {
+    Uri uri = Uri.create("scheme://@host");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("@host");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getUserInfo()).isEmpty();
+    assertThat(uri.toString()).isEqualTo("scheme://@host");
+  }
+
+  @Test
+  public void parse_emptyPort() {
+    Uri uri = Uri.create("scheme://host:");
+    assertThat(uri.getScheme()).isEqualTo("scheme");
+    assertThat(uri.getAuthority()).isEqualTo("host:");
+    assertThat(uri.getRawAuthority()).isEqualTo("host:");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getPort()).isEqualTo(-1);
+    assertThat(uri.getRawPort()).isEqualTo("");
+    assertThat(uri.toString()).isEqualTo("scheme://host:");
+  }
+
+  @Test
   public void parse_invalidScheme_throws() {
     URISyntaxException e =
         assertThrows(URISyntaxException.class, () -> Uri.parse("1scheme://authority/path"));
@@ -233,13 +269,6 @@ public final class UriTest {
     URISyntaxException e =
         assertThrows(URISyntaxException.class, () -> Uri.parse("http://[::1%25foo\\bar]"));
     assertThat(e).hasMessageThat().contains("Invalid character in scope");
-  }
-
-  @Test
-  public void parse_emptyPort_throws() {
-    URISyntaxException e =
-        assertThrows(URISyntaxException.class, () -> Uri.parse("scheme://user@host:/path"));
-    assertThat(e).hasMessageThat().contains("Invalid port");
   }
 
   @Test
@@ -596,6 +625,53 @@ public final class UriTest {
             .setFragment(null)
             .build();
     assertThat(uri.toString()).isEqualTo("http:");
+  }
+
+  @Test
+  public void builder_canClearAuthorityComponents() {
+    Uri uri = Uri.create("s://user@host:80/path").toBuilder().setRawAuthority(null).build();
+    assertThat(uri.toString()).isEqualTo("s:/path");
+  }
+
+  @Test
+  public void builder_canSetEmptyAuthority() {
+    Uri uri = Uri.create("s://user@host:80/path").toBuilder().setRawAuthority("").build();
+    assertThat(uri.toString()).isEqualTo("s:///path");
+  }
+
+  @Test
+  public void builder_canSetRawAuthority() {
+    Uri uri = Uri.newBuilder().setScheme("http").setRawAuthority("user@host:1234").build();
+    assertThat(uri.getUserInfo()).isEqualTo("user");
+    assertThat(uri.getHost()).isEqualTo("host");
+    assertThat(uri.getPort()).isEqualTo(1234);
+  }
+
+  @Test
+  public void builder_setRawAuthorityPercentDecodes() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setRawAuthority("user:user%40user@host%40host%3Ahost")
+            .build();
+    assertThat(uri.getUserInfo()).isEqualTo("user:user@user");
+    assertThat(uri.getHost()).isEqualTo("host@host:host");
+    assertThat(uri.getPort()).isEqualTo(-1);
+  }
+
+  @Test
+  public void builder_setRawAuthorityReplacesAllComponents() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setUserInfo("user")
+            .setHost("host")
+            .setPort(1234)
+            .setRawAuthority("other")
+            .build();
+    assertThat(uri.getUserInfo()).isNull();
+    assertThat(uri.getHost()).isEqualTo("other");
+    assertThat(uri.getPort()).isEqualTo(-1);
   }
 
   @Test
