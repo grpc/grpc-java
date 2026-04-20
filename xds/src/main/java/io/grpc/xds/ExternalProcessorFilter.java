@@ -966,9 +966,6 @@ public class ExternalProcessorFilter implements Filter {
               listener.onExternalBody(streamed.getBody());
             }
             if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-              if (requestSideClosed.compareAndSet(false, true)) {
-                super.halfClose();
-              }
               listener.proceedWithClose();
             }
           }
