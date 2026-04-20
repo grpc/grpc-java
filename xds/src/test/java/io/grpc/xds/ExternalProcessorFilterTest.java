@@ -1172,13 +1172,13 @@ public class ExternalProcessorFilterTest {
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
-            if (request.hasRequestHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestHeaders(HeadersResponse.newBuilder().build())
-                  .build());
-              return;
-            }
             new Thread(() -> {
+              if (request.hasRequestHeaders()) {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestHeaders(HeadersResponse.newBuilder().build())
+                    .build());
+                return;
+              }
               if (request.hasRequestBody()) {
                 BodyResponse.Builder bodyResponse = BodyResponse.newBuilder();
                 if (request.getRequestBody().getBody().isEmpty()
