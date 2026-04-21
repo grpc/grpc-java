@@ -459,10 +459,10 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     /**
      * Cancels call and schedules onClose() notification. May only be called from within a
-     * DelayedListener callback dispatch (either queued drain or passThrough). Both phases
-     * deliver callbacks serially on the transport's callExecutor, so the write to
-     * {@code exceptionStatus} is serialized with, and thus visible to, subsequent listener
-     * callbacks on that executor.
+     * DelayedListener callback dispatch (either queued drain or passThrough). Visibility of the
+     * write to {@code exceptionStatus} does not rely on a single callback executor; it is a
+     * {@code volatile} field, and callback queuing/pass-through transitions are coordinated by
+     * this listener's synchronization so subsequent callbacks observe the updated status.
      */
     private void exceptionThrown(Throwable t, String description) {
       // onClose() must be delivered exactly once and last. Other callbacks may already be queued
