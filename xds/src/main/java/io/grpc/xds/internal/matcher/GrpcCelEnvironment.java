@@ -19,6 +19,7 @@ package io.grpc.xds.internal.matcher;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
 import dev.cel.runtime.CelVariableResolver;
+import io.grpc.Metadata;
 import java.util.AbstractMap;
 import java.util.List;
 import java.util.Optional;
@@ -71,9 +72,9 @@ final class GrpcCelEnvironment implements CelVariableResolver {
   }
 
   private String getHeader(String key) {
-    io.grpc.Metadata metadata = context.getMetadata();
+    Metadata metadata = context.getMetadata();
     Iterable<String> values = metadata.getAll(
-        io.grpc.Metadata.Key.of(key, io.grpc.Metadata.ASCII_STRING_MARSHALLER));
+        Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
     if (values == null) {
       return "";
     }

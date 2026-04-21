@@ -19,7 +19,11 @@ package io.grpc.xds.internal.matcher;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.runtime.CelEvaluationException;
+import dev.cel.runtime.CelVariableResolver;
 import java.util.Collections;
+import java.util.Optional;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -30,7 +34,7 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_simpleString() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("'foo'");
-    dev.cel.runtime.CelVariableResolver resolver = name -> java.util.Optional.empty();
+    CelVariableResolver resolver = name -> Optional.empty();
     String result = extractor.extract(resolver);
     assertThat(result).isEqualTo("foo");
   }
@@ -38,11 +42,11 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_resolvesVariable() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request['key']");
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of(Collections.singletonMap("key", "value"));
+        return Optional.of(Collections.singletonMap("key", "value"));
       }
-      return java.util.Optional.empty();
+      return Optional.empty();
     };
     
     String result = extractor.extract(resolver);
@@ -52,11 +56,11 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_nonStringResult_returnsNull() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request");
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of(123);
+        return Optional.of(123);
       }
-      return java.util.Optional.empty();
+      return Optional.empty();
     };
     
     String result = extractor.extract(resolver);
@@ -66,28 +70,28 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_evaluationError_throws() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("request.bad");
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of("foo");
+        return Optional.of("foo");
       }
-      return java.util.Optional.empty();
+      return Optional.empty();
     };
     
     try {
       extractor.extract(resolver);
       fail("Should throw CelEvaluationException");
-    } catch (dev.cel.runtime.CelEvaluationException e) {
+    } catch (CelEvaluationException e) {
       // Expected
     }
   }
 
   @Test
   public void extract_nonStringResult_returnsDefaultValue() throws Exception {
-    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request");
+    CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request");
     CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of(123);
+        return Optional.of(123);
       }
       return java.util.Optional.empty();
     };
@@ -98,11 +102,11 @@ public final class CelStringExtractorTest {
 
   @Test
   public void extract_evaluationError_returnsDefaultValue() throws Exception {
-    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
+    CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
     CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of("foo");
+        return Optional.of("foo");
       }
       return java.util.Optional.empty();
     };
@@ -113,12 +117,12 @@ public final class CelStringExtractorTest {
 
   @Test
   public void extract_withCelVariableResolver_resolvesVariable() throws Exception {
-    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request['key']");
+    CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request['key']");
     CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
     
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of(Collections.singletonMap("key", "value"));
+        return Optional.of(Collections.singletonMap("key", "value"));
       }
       return java.util.Optional.empty();
     };
@@ -129,12 +133,12 @@ public final class CelStringExtractorTest {
 
   @Test
   public void extract_withCelVariableResolver_evalError_returnsDefaultValue() throws Exception {
-    dev.cel.common.CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
+    CelAbstractSyntaxTree ast = CelMatcherTestHelper.compileAst("request.bad");
     CelStringExtractor extractor = CelStringExtractor.compile(ast, "default_val");
     
-    dev.cel.runtime.CelVariableResolver resolver = name -> {
+    CelVariableResolver resolver = name -> {
       if ("request".equals(name)) {
-        return java.util.Optional.of("foo");
+        return Optional.of("foo");
       }
       return java.util.Optional.empty();
     };
@@ -156,7 +160,7 @@ public final class CelStringExtractorTest {
   @Test
   public void extract_withCelVariableResolver() throws Exception {
     CelStringExtractor extractor = CelMatcherTestHelper.compileStringExtractor("'val'");
-    dev.cel.runtime.CelVariableResolver resolver = name -> java.util.Optional.empty();
+    CelVariableResolver resolver = name -> Optional.empty();
 
     assertThat(extractor.extract(resolver)).isEqualTo("val");
   }
@@ -167,10 +171,8 @@ public final class CelStringExtractorTest {
     try {
       extractor.extract("not-a-map");
       fail("Should have thrown CelEvaluationException");
-    } catch (dev.cel.runtime.CelEvaluationException e) {
+    } catch (CelEvaluationException e) {
       assertThat(e).hasMessageThat().contains("Unsupported input type");
     }
   }
-
-
 }

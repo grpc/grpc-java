@@ -26,6 +26,7 @@ import dev.cel.runtime.CelStandardFunctions;
 import dev.cel.runtime.CelStandardFunctions.StandardFunction;
 import dev.cel.runtime.standard.AddOperator.AddOverload;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Shared utilities for CEL-based matchers and extractors.
@@ -55,10 +56,32 @@ final class CelCommon {
    */
   private static final ImmutableSet<String> ALLOWED_FUNCTIONS = ImmutableSet.of(
       "size", "matches", "contains", "startsWith", "endsWith", "timestamp", "duration",
-      "int", "uint", "double", "bytes", "bool", "==", "!=", ">", "<", ">=", "<=",
-      "&&", "||", "!", "+", "-", "*", "/", "%", "in", "has", "or", "equals",
-      "index_map", "divide_int64", "int64_to_int64", "uint64_to_int64",
-      "double_to_int64", "string_to_int64", "timestamp_to_int64");
+      "int", "uint", "double", "string", "bytes", "bool", "==", "!=", ">", "<", ">=", "<=",
+      "&&", "||", "!", "+", "-", "*", "/", "%", "in", "has", "or");
+
+  /**
+   * Regular expression pattern to validate internal CEL overload IDs.
+   *
+   * <p>
+   * Standard CEL operators and conversion functions often have empty names in the
+   * AST
+   * and are identified solely by their overload IDs (e.g., {@code equals} for
+   * {@code ==},
+   * {@code divide_int64} for {@code /}).
+   *
+   * <p>
+   * This pattern matches allowed overload IDs by their prefixes (e.g.,
+   * {@code divide},
+   * {@code size}), optionally followed by numeric types (e.g., {@code int64}) and
+   * type-specific
+   * suffixes (e.g., {@code _string}, {@code _int64}).
+   */
+  private static final Pattern ALLOWED_OVERLOAD_ID_PATTERN = Pattern.compile(
+      "^(size|matches|contains|startsWith|endsWith|starts_with|ends_with|"
+          + "timestamp|duration|in|index|has|int|uint|double|string|bytes|bool|"
+          + "equals|not_equals|less|less_equals|greater|greater_equals|"
+          + "add|subtract|multiply|divide|modulo|logical_and|logical_or|logical_not)"
+          + "[0-9]*(_.*)?$");
 
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
       .setStandardEnvironmentEnabled(false)
@@ -87,7 +110,7 @@ final class CelCommon {
         if (name.isEmpty()) {
           boolean allowed = false;
           for (String id : ref.overloadIds()) {
-            if (ALLOWED_FUNCTIONS.contains(id)) {
+            if (ALLOWED_OVERLOAD_ID_PATTERN.matcher(id).matches()) {
               allowed = true;
               break;
             }
