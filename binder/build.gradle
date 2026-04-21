@@ -20,6 +20,13 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     lintOptions { abortOnError = false }
+    buildTypes {
+        debug {
+            testCoverageEnabled true // For robolectric unit tests.
+            enableUnitTestCoverage true // For tests that run on an emulator.
+        }
+    }
+
     publishing {
         singleVariant('release') {
             withSourcesJar()
@@ -132,4 +139,32 @@ publishing {
 afterEvaluate {
     components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseApiPublication) { skip() }
     components.release.withVariantsFromConfiguration(configurations.releaseTestFixturesVariantReleaseRuntimePublication) { skip() }
+}
+
+tasks.withType(Test) {
+    // Robolectric modifies classes in memory at runtime, so they lack a java.security.CodeSource
+    // URL to their on-disk location. By default, JaCoCo ignores classes without this property.
+    // Overriding this allows Robolectric tests to be instrumented.
+    jacoco.includeNoLocationClasses = true
+    // Don't instrument certain JDK internals protected from modification by JEP 403's "strong
+    // encapsulation." Avoids IllegalAccessError, InvalidClassException and similar at runtime.
+    jacoco.excludes = ["jdk.internal.**"]
+}
+
+// Android projects don't automatically get a coverage report task. We must
+// register one manually here and wire it up to AGP's test tasks.
+tasks.register("jacocoTestReport", JacocoReport) {
+    dependsOn "testDebugUnitTest"
+
+    reports {
+        // For codecov.io and coveralls.
+        xml.required = true
+        // Use the same output location as the other subprojects.
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/test/html")
+    }
+
+    sourceDirectories.from = android.sourceSets.main.java.srcDirs
+    classDirectories.from = fileTree(dir: layout.buildDirectory.dir("intermediates/javac/debug/classes"),
+            excludes: ['**/R.class', '**/R$*.class', '**/BuildConfig.class', '**/Manifest*.*', '**/*Test*.*', 'android/**/*.*'])
+    executionData.from = tasks.named("testDebugUnitTest").map { it.jacoco.destinationFile }
 }
