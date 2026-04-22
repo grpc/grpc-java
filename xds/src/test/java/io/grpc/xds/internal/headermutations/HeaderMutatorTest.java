@@ -230,8 +230,8 @@ public class HeaderMutatorTest {
     headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
-    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value", "");
-    assertThat(headers.containsKey(OVERWRITE_KEY)).isFalse();
+    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value");
+    assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("existing-value");
 
     Metadata.Key<String> keepEmptyKey =
         Metadata.Key.of("keep-empty-key", Metadata.ASCII_STRING_MARSHALLER);
@@ -242,6 +242,7 @@ public class HeaderMutatorTest {
     assertThat(headers.get(keepEmptyKey)).isEqualTo("");
     assertThat(headers.containsKey(keepEmptyOverwriteKey)).isTrue();
     assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
+
   }
 
   @Test
