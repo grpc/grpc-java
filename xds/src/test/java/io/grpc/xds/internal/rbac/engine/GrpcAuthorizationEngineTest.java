@@ -55,8 +55,10 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import javax.net.ssl.ExtendedSSLSession;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SNIServerName;
 import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.SSLSession;
 import javax.security.auth.x500.X500Principal;
 import org.junit.Before;
 import org.junit.Rule;
@@ -85,12 +87,13 @@ public class GrpcAuthorizationEngineTest {
   @Mock
   private ServerCall<Void,Void> serverCall;
   @Mock
-  private SSLSession sslSession;
+  private ExtendedSSLSession sslSession;
 
   @Before
   public void setUp() throws Exception {
     X509Certificate[] certs = {TestUtils.loadX509Cert("server1.pem")};
     when(sslSession.getPeerCertificates()).thenReturn(certs);
+    when(sslSession.getRequestedServerNames()).thenReturn(Collections.<SNIServerName>emptyList());
     Attributes attributes = Attributes.newBuilder()
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress(IP_ADDR2, PORT))
         .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(IP_ADDR1, PORT))
@@ -352,6 +355,80 @@ public class GrpcAuthorizationEngineTest {
     AuthDecision decision = engine.evaluate(HEADER, serverCall);
     assertThat(decision.decision()).isEqualTo(Action.DENY);
     assertThat(decision.matchingPolicyName()).isEqualTo(POLICY_NAME);
+  }
+
+  @Test
+  public void requestedServerNameMatcher_matchesTlsSni() {
+    when(sslSession.getRequestedServerNames()).thenReturn(
+        Collections.<SNIServerName>singletonList(new SNIHostName("blocked.example")));
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(
+            StringMatcher.forExact("blocked.example", false));
+    OrMatcher permission = OrMatcher.create(requestedServerNameMatcher);
+    OrMatcher principal = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
+    PolicyMatcher policyMatcher = PolicyMatcher.create("deny-sni", permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.DENY);
+    assertThat(decision.matchingPolicyName()).isEqualTo("deny-sni");
+  }
+
+  @Test
+  public void requestedServerNameMatcher_noTlsSessionDoesNotMatch() {
+    Attributes attributes = Attributes.newBuilder()
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InetSocketAddress(IP_ADDR2, PORT))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InetSocketAddress(IP_ADDR1, PORT))
+        .build();
+    when(serverCall.getAttributes()).thenReturn(attributes);
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(
+            StringMatcher.forExact("blocked.example", false));
+    OrMatcher permission = OrMatcher.create(requestedServerNameMatcher);
+    OrMatcher principal = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
+    PolicyMatcher policyMatcher = PolicyMatcher.create("deny-sni", permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isNull();
+  }
+
+  @Test
+  public void requestedServerNameMatcher_nullTlsSniListDoesNotMatch() {
+    when(sslSession.getRequestedServerNames()).thenReturn(null);
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(
+            StringMatcher.forExact("blocked.example", false));
+    OrMatcher permission = OrMatcher.create(requestedServerNameMatcher);
+    OrMatcher principal = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
+    PolicyMatcher policyMatcher = PolicyMatcher.create("deny-sni", permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isNull();
+  }
+
+  @Test
+  public void requestedServerNameMatcher_nonHostTlsSniDoesNotMatch() {
+    when(sslSession.getRequestedServerNames()).thenReturn(
+        Collections.singletonList(new SNIServerName(1, new byte[] {1}) { }));
+    GrpcAuthorizationEngine.RequestedServerNameMatcher requestedServerNameMatcher =
+        GrpcAuthorizationEngine.RequestedServerNameMatcher.create(
+            StringMatcher.forExact("blocked.example", false));
+    OrMatcher permission = OrMatcher.create(requestedServerNameMatcher);
+    OrMatcher principal = OrMatcher.create(AlwaysTrueMatcher.INSTANCE);
+    PolicyMatcher policyMatcher = PolicyMatcher.create("deny-sni", permission, principal);
+
+    GrpcAuthorizationEngine engine = new GrpcAuthorizationEngine(
+        AuthConfig.create(Collections.singletonList(policyMatcher), Action.DENY));
+    AuthDecision decision = engine.evaluate(new Metadata(), serverCall);
+    assertThat(decision.decision()).isEqualTo(Action.ALLOW);
+    assertThat(decision.matchingPolicyName()).isNull();
   }
 
   @Test
