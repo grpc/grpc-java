@@ -540,11 +540,11 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           Status effectiveStatus = status;
           Metadata effectiveTrailers = trailers;
           if (exceptionStatus != null) {
-            // Ideally exceptionStatus == status, as exceptionStatus was passed to cancel().
-            // However the cancel is racy and this onClose may have already been queued when the
-            // cancellation occurred. Since other callbacks throw away data if exceptionStatus !=
-            // null, it is semantically essential that we _not_ use a status provided by the
-            // server.
+            // Ideally status matches exceptionStatus, since exceptionStatus was used to cancel
+            // the call. However, cancel() may reconstruct a new Status instance, and the cancel
+            // is racy so this onClose may have already been queued when the cancellation
+            // occurred. Since other callbacks throw away data if exceptionStatus != null, it is
+            // semantically essential that we _not_ use a status provided by the server.
             effectiveStatus = exceptionStatus;
             // Replace trailers to prevent mixing sources of status and trailers.
             effectiveTrailers = new Metadata();
