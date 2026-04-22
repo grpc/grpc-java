@@ -245,15 +245,39 @@ public class HeaderMutationFilterTest {
     assertThat(filtered.headersToRemove()).containsExactly("lower-remove");
   }
 
-  @Test
-  public void filter_ignoresGrpcHeadersInRemoval() throws HeaderMutationDisallowedException {
-    HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
+  @Test(expected = HeaderMutationDisallowedException.class)
+  public void filter_disallowIsError_throwsExceptionOnUppercaseHeaders()
+      throws HeaderMutationDisallowedException {
+    HeaderMutationRulesConfig rules =
+        HeaderMutationRulesConfig.builder().disallowIsError(true).build();
+    HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header("Valid-Key", "value")),
+        ImmutableList.of());
+    filter.filter(mutations);
+  }
+
+  @Test(expected = HeaderMutationDisallowedException.class)
+  public void filter_disallowIsError_throwsExceptionOnSystemHeadersRemoval()
+      throws HeaderMutationDisallowedException {
+    HeaderMutationRulesConfig rules =
+        HeaderMutationRulesConfig.builder().disallowIsError(true).build();
+    HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
     HeaderMutations mutations = HeaderMutations.create(
         ImmutableList.of(),
-        ImmutableList.of("grpc-timeout", "valid-remove"));
+        ImmutableList.of(":path"));
+    filter.filter(mutations);
+  }
 
-    HeaderMutations filtered = filter.filter(mutations);
-
-    assertThat(filtered.headersToRemove()).containsExactly("valid-remove");
+  @Test(expected = HeaderMutationDisallowedException.class)
+  public void filter_disallowIsError_throwsExceptionOnSystemHeadersModification()
+      throws HeaderMutationDisallowedException {
+    HeaderMutationRulesConfig rules =
+        HeaderMutationRulesConfig.builder().disallowIsError(true).build();
+    HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header(":path", "/new-path")),
+        ImmutableList.of());
+    filter.filter(mutations);
   }
 }
