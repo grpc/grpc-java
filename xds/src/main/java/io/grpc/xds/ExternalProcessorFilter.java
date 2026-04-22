@@ -8,6 +8,7 @@ import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -143,7 +144,7 @@ public class ExternalProcessorFilter implements Filter {
     return new ExternalProcessorInterceptor(config, cachedChannelManager, scheduler);
   }
 
-  private static ExternalProcessorFilterConfig mergeConfigs(
+  static ExternalProcessorFilterConfig mergeConfigs(
       ExternalProcessorFilterConfig parent, ExternalProcessorFilterConfig override) {
     ExternalProcessor parentProto = parent.getExternalProcessor();
     ExternalProcessor overrideProto = override.getExternalProcessor();
@@ -158,11 +159,7 @@ public class ExternalProcessorFilter implements Filter {
       String fieldName = entry.getKey().getName();
       if (fieldName.equals("processing_mode")) {
         ProcessingMode overrideMode = (ProcessingMode) entry.getValue();
-        ProcessingMode.Builder mergedModeBuilder = mergedProtoBuilder.getProcessingModeBuilder();
-        for (Map.Entry<FieldDescriptor, Object> modeEntry 
-            : overrideMode.getAllFields().entrySet()) {
-          mergedModeBuilder.setField(modeEntry.getKey(), modeEntry.getValue());
-        }
+        mergedProtoBuilder.setProcessingMode(mergeProcessingMode(parentProto.getProcessingMode(), overrideMode));
       } else {
         mergedProtoBuilder.setField(entry.getKey(), entry.getValue());
       }
@@ -180,6 +177,22 @@ public class ExternalProcessorFilter implements Filter {
     checkNotNull(mergedProto, "mergedProto");
     return new ExternalProcessorFilterConfig(
         mergedProto, mergedGrpcServiceConfig, mergedMutationRulesConfig, mergedDeferredCloseTimeoutNanos);
+  }
+
+  private static ProcessingMode mergeProcessingMode(ProcessingMode parent, ProcessingMode override) {
+    ProcessingMode.Builder builder = parent.toBuilder();
+    for (Map.Entry<FieldDescriptor, Object> entry : override.getAllFields().entrySet()) {
+      Object value = entry.getValue();
+      if (value instanceof Descriptors.EnumValueDescriptor) {
+        Descriptors.EnumValueDescriptor enumValue = (Descriptors.EnumValueDescriptor) value;
+        if (enumValue.getType().getFullName().equals("envoy.extensions.filters.http.ext_proc.v3.ProcessingMode.HeaderSendMode")
+            && enumValue.getNumber() == ProcessingMode.HeaderSendMode.DEFAULT_VALUE) {
+          continue;
+        }
+      }
+      builder.setField(entry.getKey(), value);
+    }
+    return builder.build();
   }
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
@@ -918,9 +931,12 @@ public class ExternalProcessorFilter implements Filter {
         }
         ProcessingMode oldMode = currentProcessingMode;
         // The override is valid. Specification says request_header_mode cannot be overridden.
-        currentProcessingMode = modeOverride.toBuilder()
-            .setRequestHeaderMode(oldMode.getRequestHeaderMode())
-            .build();
+        currentProcessingMode = mergeProcessingMode(oldMode, modeOverride.toBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT) // Ensure we don't override it via helper
+            .build());
+
+        // In case the helper skipped request_header_mode because it was DEFAULT, 
+        // mergeProcessingMode(oldMode, ...) will have retained oldMode's value.
 
         // Special handling for enabling/disabling body modes
         if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
@@ -929,7 +945,6 @@ public class ExternalProcessorFilter implements Filter {
           wrappedListener.proceedWithClose();
         }
       }
-
       private boolean isModeMatch(ProcessingMode allowedMode, ProcessingMode override) {
         // Specification says: matching will ignore the value of the request_header_mode field, 
         // since that mode cannot be overridden.
