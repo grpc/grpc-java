@@ -17,15 +17,12 @@
 package io.grpc.xds.internal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 
 import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.services.MetricReport;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.OptionalDouble;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -35,59 +32,66 @@ import org.junit.runners.JUnit4;
 public class MetricReportUtilsTest {
 
   @Test
-  public void getMetric_cpuUtilization() {
+  public void getMetricValue_cpuUtilization() {
     MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "cpu_utilization");
-    assertTrue(result.isPresent());
-    assertEquals(0.5, result.getAsDouble(), 0.0001);
+    MetricReportUtils.ParsedMetricName parsed =
+        MetricReportUtils.ParsedMetricName.parse("cpu_utilization");
+    assertEquals(0.5, MetricReportUtils.getMetricValue(report, parsed), 0.0001);
   }
 
   @Test
-  public void getMetric_applicationUtilization() {
+  public void getMetricValue_applicationUtilization() {
     MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "application_utilization");
-    assertTrue(result.isPresent());
-    assertEquals(0.1, result.getAsDouble(), 0.0001);
+    MetricReportUtils.ParsedMetricName parsed =
+        MetricReportUtils.ParsedMetricName.parse("application_utilization");
+    assertEquals(0.1, MetricReportUtils.getMetricValue(report, parsed), 0.0001);
   }
 
   @Test
-  public void getMetric_memUtilization() {
+  public void getMetricValue_memUtilization() {
     MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
-    OptionalDouble result = MetricReportUtils.getMetric(report, "mem_utilization");
-    assertTrue(result.isPresent());
-    assertEquals(0.2, result.getAsDouble(), 0.0001);
+    MetricReportUtils.ParsedMetricName parsed =
+        MetricReportUtils.ParsedMetricName.parse("mem_utilization");
+    assertEquals(0.2, MetricReportUtils.getMetricValue(report, parsed), 0.0001);
   }
 
   @Test
-  public void getMetric_utilizationMetric() {
+  public void getMetricValue_utilizationMetric() {
     Map<String, Double> utilizationMetrics = new HashMap<>();
     utilizationMetrics.put("foo", 1.23);
     MetricReport report = InternalCallMetricRecorder.createMetricReport(
         0, 0, 0, 0, 0, Collections.emptyMap(), utilizationMetrics, Collections.emptyMap());
 
-    OptionalDouble result = MetricReportUtils.getMetric(report, "utilization.foo");
-    assertTrue(result.isPresent());
-    assertEquals(1.23, result.getAsDouble(), 0.0001);
-    assertFalse(MetricReportUtils.getMetric(report, "utilization.bar").isPresent());
+    MetricReportUtils.ParsedMetricName parsed =
+        MetricReportUtils.ParsedMetricName.parse("utilization.foo");
+    assertEquals(1.23, MetricReportUtils.getMetricValue(report, parsed), 0.0001);
+
+    MetricReportUtils.ParsedMetricName bad =
+        MetricReportUtils.ParsedMetricName.parse("utilization.bar");
+    assertEquals(-1.0, MetricReportUtils.getMetricValue(report, bad), 0.0001);
   }
 
   @Test
-  public void getMetric_namedMetric() {
+  public void getMetricValue_namedMetric() {
     Map<String, Double> namedMetrics = new HashMap<>();
     namedMetrics.put("foo", 7.89);
     MetricReport report = createMetricReport(0, 0, 0, 0, 0, namedMetrics);
-    OptionalDouble result = MetricReportUtils.getMetric(report, "named_metrics.foo");
-    assertTrue(result.isPresent());
-    assertEquals(7.89, result.getAsDouble(), 0.0001);
 
-    assertFalse(MetricReportUtils.getMetric(report, "named_metrics.bar").isPresent());
+    MetricReportUtils.ParsedMetricName parsed =
+        MetricReportUtils.ParsedMetricName.parse("named_metrics.foo");
+    assertEquals(7.89, MetricReportUtils.getMetricValue(report, parsed), 0.0001);
+
+    MetricReportUtils.ParsedMetricName bad =
+        MetricReportUtils.ParsedMetricName.parse("named_metrics.bar");
+    assertEquals(-1.0, MetricReportUtils.getMetricValue(report, bad), 0.0001);
   }
 
   @Test
-  public void getMetric_unknownPrefix() {
-    MetricReport report = createMetricReport(0, 0, 0, 0, 0, Collections.emptyMap());
-    assertFalse(MetricReportUtils.getMetric(report, "unknown.foo").isPresent());
-    assertFalse(MetricReportUtils.getMetric(report, "foo").isPresent());
+  public void getMetricValue_invalidMetric() {
+    MetricReport report = createMetricReport(0.5, 0.1, 0.2, 10.0, 5.0, Collections.emptyMap());
+    MetricReportUtils.ParsedMetricName invalid =
+        MetricReportUtils.ParsedMetricName.parse("invalid_metric");
+    assertEquals(-1.0, MetricReportUtils.getMetricValue(report, invalid), 0.0001);
   }
 
   private MetricReport createMetricReport(double cpu, double app, double mem, double qps,
