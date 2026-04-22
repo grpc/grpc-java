@@ -8,6 +8,8 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation;
@@ -104,6 +106,8 @@ public class ExternalProcessorFilterTest {
   private ScheduledExecutorService scheduler;
   private ExternalProcessorFilter.Provider provider;
   private Filter.FilterContext filterContext;
+  private Bootstrapper.BootstrapInfo bootstrapInfo;
+  private Bootstrapper.ServerInfo serverInfo;
 
   // Define a simple test service
   private static final MethodDescriptor<String, String> METHOD_SAY_HELLO =
@@ -191,11 +195,11 @@ public class ExternalProcessorFilterTest {
     scheduler = fakeClock.getScheduledExecutorService();
     provider = new ExternalProcessorFilter.Provider();
 
-    Bootstrapper.BootstrapInfo bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
+    bootstrapInfo = Mockito.mock(Bootstrapper.BootstrapInfo.class);
     Mockito.when(bootstrapInfo.node()).thenReturn(Node.newBuilder().build());
     Mockito.when(bootstrapInfo.implSpecificObject()).thenReturn(Optional.empty());
 
-    Bootstrapper.ServerInfo serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
+    serverInfo = Mockito.mock(Bootstrapper.ServerInfo.class);
     Mockito.when(serverInfo.isTrustedXdsServer()).thenReturn(true);
     
     filterContext = Filter.FilterContext.builder()
@@ -220,7 +224,9 @@ public class ExternalProcessorFilterTest {
             .build())
         .setAllowModeOverride(true)
         .build();
-    ExternalProcessorFilterConfig filterConfig = ExternalProcessorFilterConfig.create(proto, filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> result = ExternalProcessorFilterConfig.create(proto, filterContext);
+    assertThat(result.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = result.config;
 
     final Metadata.Key<String> reqKey = Metadata.Key.of("req-mutated", Metadata.ASCII_STRING_MARSHALLER);
     final CountDownLatch sidecarLatch = new CountDownLatch(1);
@@ -301,21 +307,53 @@ public class ExternalProcessorFilterTest {
         .build();
     ExternalProcessorFilterConfig parent = ExternalProcessorFilterConfig.create(parentProto, filterContext).config;
 
-    ExternalProcessor overrideProto = createBaseProto()
+    ExtProcOverrides overrides = ExtProcOverrides.newBuilder()
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .build())
         .build();
-    ExternalProcessorFilterConfig override = ExternalProcessorFilterConfig.create(overrideProto, filterContext).config;
 
-    ExternalProcessorFilterConfig merged = ExternalProcessorFilter.mergeConfigs(parent, override);
+    ExternalProcessorFilterConfig merged = ExternalProcessorFilter.mergeConfigs(parent, overrides);
     ProcessingMode mergedMode = merged.getExternalProcessor().getProcessingMode();
     
     // requestHeaderMode was SKIP in parent and DEFAULT in override. Should remain SKIP.
     assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
     // responseHeaderMode was SEND in parent and SKIP in override. Should become SKIP.
     assertThat(mergedMode.getResponseHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
+  }
+
+  @Test
+  public void mergeConfigs_replacesOtherFields() {
+    ExternalProcessor parentProto = createBaseProto()
+        .addRequestAttributes("attr1")
+        .addResponseAttributes("attr2")
+        .setFailureModeAllow(false)
+        .build();
+    ExternalProcessorFilterConfig parent = ExternalProcessorFilterConfig.create(parentProto, filterContext).config;
+
+    GrpcService overrideService = GrpcService.newBuilder()
+        .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+            .setTargetUri("in-process:///overridden")
+            .addChannelCredentialsPlugin(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .build())
+            .build())
+        .build();
+    ExtProcOverrides overrides = ExtProcOverrides.newBuilder()
+        .addRequestAttributes("attr3")
+        .addResponseAttributes("attr4")
+        .setGrpcService(overrideService)
+        .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
+        .build();
+
+    ExternalProcessorFilterConfig merged = ExternalProcessorFilter.mergeConfigs(parent, overrides);
+    ExternalProcessor mergedProto = merged.getExternalProcessor();
+
+    assertThat(mergedProto.getRequestAttributesList()).containsExactly("attr3");
+    assertThat(mergedProto.getResponseAttributesList()).containsExactly("attr4");
+    assertThat(mergedProto.getGrpcService()).isEqualTo(overrideService);
+    assertThat(merged.getFailureModeAllow()).isTrue();
   }
 
   private ExternalProcessor.Builder createBaseProto() {
@@ -409,19 +447,27 @@ public class ExternalProcessorFilterTest {
                 .build())
             .build())
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setGrpcService(GrpcService.newBuilder()
-            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-                .setTargetUri("in-process:///override")
-                .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
-                    .build())
+    
+    GrpcService overrideService = GrpcService.newBuilder()
+        .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+            .setTargetUri("in-process:///override")
+            .addChannelCredentialsPlugin(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
                 .build())
             .build())
         .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setGrpcService(overrideService)
+            .build())
+        .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -436,12 +482,18 @@ public class ExternalProcessorFilterTest {
     ExternalProcessor parentProto = createBaseProto()
         .setFailureModeAllow(false)
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setFailureModeAllow(true)
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
+            .build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -457,13 +509,19 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+            .build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -479,20 +537,32 @@ public class ExternalProcessorFilterTest {
   public void givenOverrideConfig_whenAllFieldsOverridden_thenAllTakeEffect() throws Exception {
     ExternalProcessor parentProto = createBaseProto()
         .setFailureModeAllow(false)
-        .setObservabilityMode(false)
-        .setAllowModeOverride(false)
-        .setStatPrefix("parent")
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setFailureModeAllow(true)
-        .setObservabilityMode(true)
-        .setAllowModeOverride(true)
-        .setStatPrefix("override")
-        .setMessageTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
+    
+    GrpcService overrideService = GrpcService.newBuilder()
+        .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+            .setTargetUri("in-process:///override")
+            .addChannelCredentialsPlugin(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .build())
+            .build())
+        .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
+            .setGrpcService(overrideService)
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+            .addRequestAttributes("attr-over")
+            .build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -500,25 +570,31 @@ public class ExternalProcessorFilterTest {
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
-    assertThat(mergedConfig.getObservabilityMode()).isTrue();
-    assertThat(mergedConfig.getAllowModeOverride()).isTrue();
-    assertThat(mergedConfig.getExternalProcessor().getStatPrefix()).isEqualTo("override");
-    assertThat(mergedConfig.getExternalProcessor().getMessageTimeout().getSeconds()).isEqualTo(10);
+    assertThat(mergedConfig.getExternalProcessor().getGrpcService()).isEqualTo(overrideService);
+    assertThat(mergedConfig.getExternalProcessor().getProcessingMode().getRequestBodyMode())
+        .isEqualTo(ProcessingMode.BodySendMode.GRPC);
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-over");
   }
 
   @Test
   public void givenOverrideConfig_whenSomeFieldsOverridden_thenMergedCorrectly() throws Exception {
     ExternalProcessor parentProto = createBaseProto()
         .setFailureModeAllow(false)
-        .setStatPrefix("parent")
+        .addRequestAttributes("attr-parent")
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setFailureModeAllow(true)
-        // statPrefix NOT set
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
+            // requestAttributes NOT set in override
+            .build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -526,20 +602,25 @@ public class ExternalProcessorFilterTest {
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
-    assertThat(mergedConfig.getExternalProcessor().getStatPrefix()).isEqualTo("parent");
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-parent");
   }
 
   @Test
-  public void givenOverrideConfig_whenAllowedOverrideModesOverridden_thenTakesEffect() throws Exception {
+  public void givenOverrideConfig_whenAllowedOverrideModesOverridden_thenInheritedFromParent() throws Exception {
+    // allowed_override_modes is NOT in ExtProcOverrides, so it's always inherited.
     ExternalProcessor parentProto = createBaseProto()
         .addAllowedOverrideModes(ProcessingMode.newBuilder().setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .addAllowedOverrideModes(ProcessingMode.newBuilder().setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder().build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -547,20 +628,25 @@ public class ExternalProcessorFilterTest {
 
     assertThat(interceptor.getFilterConfig().getAllowedOverrideModes()).hasSize(1);
     assertThat(interceptor.getFilterConfig().getAllowedOverrideModes().get(0).getRequestBodyMode())
-        .isEqualTo(ProcessingMode.BodySendMode.GRPC);
+        .isEqualTo(ProcessingMode.BodySendMode.NONE);
   }
 
   @Test
-  public void givenOverrideConfig_whenDisableImmediateResponseOverridden_thenTakesEffect() throws Exception {
+  public void givenOverrideConfig_whenDisableImmediateResponseOverridden_thenInheritedFromParent() throws Exception {
+    // disable_immediate_response is NOT in ExtProcOverrides.
     ExternalProcessor parentProto = createBaseProto()
-        .setDisableImmediateResponse(false)
-        .build();
-    ExternalProcessor overrideProto = createBaseProto()
         .setDisableImmediateResponse(true)
         .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder().build())
+        .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -570,25 +656,26 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenOverrideConfig_whenMutationRulesOverridden_thenTakesEffect() throws Exception {
-    io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules parentRules = 
-        io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
-            .setDisallowAll(com.google.protobuf.BoolValue.newBuilder().setValue(false).build())
-            .build();
-    io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules overrideRules = 
+  public void givenOverrideConfig_whenMutationRulesOverridden_thenInheritedFromParent() throws Exception {
+    // mutation_rules is NOT in ExtProcOverrides.
+    io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules rules = 
         io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
             .setDisallowAll(com.google.protobuf.BoolValue.newBuilder().setValue(true).build())
             .build();
 
     ExternalProcessor parentProto = createBaseProto()
-        .setMutationRules(parentRules)
+        .setMutationRules(rules)
         .build();
-    ExternalProcessor overrideProto = createBaseProto()
-        .setMutationRules(overrideRules)
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder().build())
         .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -599,16 +686,21 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenOverrideConfig_whenDeferredCloseTimeoutOverridden_thenTakesEffect() throws Exception {
+  public void givenOverrideConfig_whenDeferredCloseTimeoutOverridden_thenInheritedFromParent() throws Exception {
+    // deferred_close_timeout is NOT in ExtProcOverrides.
     ExternalProcessor parentProto = createBaseProto()
-        .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
-        .build();
-    ExternalProcessor overrideProto = createBaseProto()
         .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
         .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder().build())
+        .build();
 
-    ExternalProcessorFilterConfig parentConfig = provider.parseFilterConfig(Any.pack(parentProto), filterContext).config;
-    ExternalProcessorFilterConfig overrideConfig = provider.parseFilterConfig(Any.pack(overrideProto), filterContext).config;
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    assertThat(parentResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -636,6 +728,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -714,6 +807,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -795,6 +889,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -879,6 +974,7 @@ public class ExternalProcessorFilterTest {
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch requestSentLatch = new CountDownLatch(1);
@@ -962,6 +1058,7 @@ public class ExternalProcessorFilterTest {
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1076,6 +1173,7 @@ public class ExternalProcessorFilterTest {
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1168,6 +1266,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch bodySentLatch = new CountDownLatch(1);
@@ -1286,6 +1385,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1406,6 +1506,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1528,6 +1629,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1611,6 +1713,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -1747,6 +1850,7 @@ public class ExternalProcessorFilterTest {
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     Metadata.Key<String> mutatedKey = Metadata.Key.of("mutated-header", Metadata.ASCII_STRING_MARSHALLER);
@@ -1873,6 +1977,7 @@ public class ExternalProcessorFilterTest {
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2272,6 +2377,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2370,6 +2476,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch drainLatch = new CountDownLatch(1);
@@ -2457,6 +2564,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2555,6 +2663,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2691,6 +2800,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2830,6 +2940,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -2946,6 +3057,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3028,6 +3140,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3137,6 +3250,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3219,6 +3333,7 @@ public class ExternalProcessorFilterTest {
         .setFailureModeAllow(false) // Fail Closed
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server triggers error
@@ -3293,6 +3408,7 @@ public class ExternalProcessorFilterTest {
         .setFailureModeAllow(true) // Fail Open
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3378,6 +3494,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3472,6 +3589,7 @@ public class ExternalProcessorFilterTest {
         .setDisableImmediateResponse(true)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server sends immediate response despite being disabled
@@ -3568,6 +3686,7 @@ public class ExternalProcessorFilterTest {
         .setDeferredCloseTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(10).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3678,6 +3797,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3814,6 +3934,7 @@ public class ExternalProcessorFilterTest {
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -3936,6 +4057,7 @@ public class ExternalProcessorFilterTest {
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4052,6 +4174,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4150,6 +4273,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4247,6 +4371,7 @@ public class ExternalProcessorFilterTest {
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4347,6 +4472,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4450,6 +4576,7 @@ public class ExternalProcessorFilterTest {
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4585,6 +4712,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4720,6 +4848,7 @@ public class ExternalProcessorFilterTest {
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4838,6 +4967,7 @@ public class ExternalProcessorFilterTest {
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -4962,6 +5092,7 @@ public class ExternalProcessorFilterTest {
             .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -5080,6 +5211,7 @@ public class ExternalProcessorFilterTest {
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.DEFAULT).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -5212,6 +5344,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
@@ -5295,6 +5428,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(false)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // Sidecar server
@@ -5418,6 +5552,7 @@ public class ExternalProcessorFilterTest {
         .setObservabilityMode(false)
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // Sidecar server
@@ -5564,6 +5699,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final Metadata.Key<String> reqKey = Metadata.Key.of("req-mutated", Metadata.ASCII_STRING_MARSHALLER);
@@ -5758,6 +5894,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final Metadata.Key<String> reqKey = Metadata.Key.of("req-mutated", Metadata.ASCII_STRING_MARSHALLER);

@@ -1,6 +1,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -16,6 +17,8 @@ import com.google.protobuf.Message;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.config.core.v3.HeaderMap;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation;
@@ -126,9 +129,21 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+    public ConfigOrError<ExternalProcessorFilterConfig> parseFilterConfigOverride(
         Message rawProtoMessage, FilterContext context) {
-      return parseFilterConfig(rawProtoMessage, context);
+      if (!(rawProtoMessage instanceof Any)) {
+        return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
+      }
+      ExtProcPerRoute perRoute;
+      try {
+        perRoute = ((Any) rawProtoMessage).unpack(ExtProcPerRoute.class);
+      } catch (InvalidProtocolBufferException e) {
+        return ConfigOrError.fromError("Invalid proto: " + e);
+      }
+      if (perRoute.hasOverrides()) {
+        return ExternalProcessorFilterConfig.create(perRoute.getOverrides(), context);
+      }
+      return ConfigOrError.fromError("ExtProcPerRoute must have overrides");
     }
   }
 
@@ -137,46 +152,48 @@ public class ExternalProcessorFilter implements Filter {
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
     ExternalProcessorFilterConfig config = (ExternalProcessorFilterConfig) filterConfig;
-    if (overrideConfig != null) {
-      config = mergeConfigs(config, (ExternalProcessorFilterConfig) overrideConfig);
+    checkNotNull(config, "filterConfig");
+    if (overrideConfig instanceof ExternalProcessorFilterConfig) {
+      ExtProcOverrides overrides = ((ExternalProcessorFilterConfig) overrideConfig).getExtProcOverrides();
+      if (overrides != null) {
+        config = mergeConfigs(config, overrides);
+      }
     }
     checkNotNull(config, "config");
     return new ExternalProcessorInterceptor(config, cachedChannelManager, scheduler);
   }
 
   static ExternalProcessorFilterConfig mergeConfigs(
-      ExternalProcessorFilterConfig parent, ExternalProcessorFilterConfig override) {
+      ExternalProcessorFilterConfig parent, ExtProcOverrides overrides) {
     ExternalProcessor parentProto = parent.getExternalProcessor();
-    ExternalProcessor overrideProto = override.getExternalProcessor();
     ExternalProcessor.Builder mergedProtoBuilder = parentProto.toBuilder();
 
-    GrpcServiceConfig mergedGrpcServiceConfig = parent.getGrpcServiceConfig();
-    Optional<HeaderMutationRulesConfig> mergedMutationRulesConfig = parent.getMutationRulesConfig();
-    long mergedDeferredCloseTimeoutNanos = parent.getDeferredCloseTimeoutNanos();
-
-    for (Map.Entry<FieldDescriptor, Object> entry
-        : overrideProto.getAllFields().entrySet()) {
-      String fieldName = entry.getKey().getName();
-      if (fieldName.equals("processing_mode")) {
-        ProcessingMode overrideMode = (ProcessingMode) entry.getValue();
-        mergedProtoBuilder.setProcessingMode(mergeProcessingMode(parentProto.getProcessingMode(), overrideMode));
-      } else {
-        mergedProtoBuilder.setField(entry.getKey(), entry.getValue());
-      }
-
-      if (fieldName.equals("grpc_service")) {
-        mergedGrpcServiceConfig = override.getGrpcServiceConfig();
-      } else if (fieldName.equals("mutation_rules")) {
-        mergedMutationRulesConfig = override.getMutationRulesConfig();
-      } else if (fieldName.equals("deferred_close_timeout")) {
-        mergedDeferredCloseTimeoutNanos = override.getDeferredCloseTimeoutNanos();
-      }
+    if (overrides.hasProcessingMode()) {
+      mergedProtoBuilder.setProcessingMode(
+          mergeProcessingMode(parentProto.getProcessingMode(), overrides.getProcessingMode()));
     }
 
-    ExternalProcessor mergedProto = mergedProtoBuilder.build();
-    checkNotNull(mergedProto, "mergedProto");
-    return new ExternalProcessorFilterConfig(
-        mergedProto, mergedGrpcServiceConfig, mergedMutationRulesConfig, mergedDeferredCloseTimeoutNanos);
+    if (overrides.getRequestAttributesCount() > 0) {
+      mergedProtoBuilder.clearRequestAttributes().addAllRequestAttributes(overrides.getRequestAttributesList());
+    }
+    if (overrides.getResponseAttributesCount() > 0) {
+      mergedProtoBuilder.clearResponseAttributes().addAllResponseAttributes(overrides.getResponseAttributesList());
+    }
+    if (overrides.hasGrpcService()) {
+      mergedProtoBuilder.setGrpcService(overrides.getGrpcService());
+    }
+    
+    boolean failureModeAllow = parent.getFailureModeAllow();
+    if (overrides.hasFailureModeAllow()) {
+       failureModeAllow = overrides.getFailureModeAllow().getValue();
+       mergedProtoBuilder.setFailureModeAllow(failureModeAllow);
+    }
+
+    ConfigOrError<ExternalProcessorFilterConfig> merged =
+        ExternalProcessorFilterConfig.create(mergedProtoBuilder.build(), parent.getFilterContext());
+    checkNotNull(merged, "merged");
+    checkState(merged.errorDetail == null, "Error merging configs: %s", merged.errorDetail);
+    return merged.config;
   }
 
   private static ProcessingMode mergeProcessingMode(ProcessingMode parent, ProcessingMode override) {
@@ -198,41 +215,53 @@ public class ExternalProcessorFilter implements Filter {
   static final class ExternalProcessorFilterConfig implements FilterConfig {
 
     private final ExternalProcessor externalProcessor;
+    private final ExtProcOverrides extProcOverrides;
     private final GrpcServiceConfig grpcServiceConfig;
     private final Optional<HeaderMutationRulesConfig> mutationRulesConfig;
     private final boolean allowModeOverride;
     private final boolean disableImmediateResponse;
     private final ImmutableList<ProcessingMode> allowedOverrideModes;
     private final long deferredCloseTimeoutNanos;
+    private final FilterContext filterContext;
 
     static ConfigOrError<ExternalProcessorFilterConfig> create(
         ExternalProcessor externalProcessor, FilterContext context) {
-      ProcessingMode mode = externalProcessor.getProcessingMode();
-      if (mode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC
-          && mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE) {
-        return ConfigOrError.fromError("Invalid request_body_mode: " + mode.getRequestBodyMode()
-            + ". Only GRPC and NONE are supported.");
-      }
-      if (mode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC
-          && mode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE) {
-        return ConfigOrError.fromError("Invalid response_body_mode: " + mode.getResponseBodyMode()
-            + ". Only GRPC and NONE are supported.");
-      }
+      return createInternal(externalProcessor, null, context);
+    }
 
+    static ConfigOrError<ExternalProcessorFilterConfig> create(
+        ExtProcOverrides overrides, FilterContext context) {
+      return createInternal(null, overrides, context);
+    }
+
+    private static ConfigOrError<ExternalProcessorFilterConfig> createInternal(
+        @Nullable ExternalProcessor externalProcessor,
+        @Nullable ExtProcOverrides overrides,
+        FilterContext context) {
+      
+      ProcessingMode mode;
+      GrpcService grpcService;
       HeaderMutationRulesConfig mutationRulesConfig = null;
-      if (externalProcessor.hasMutationRules()) {
-        try {
-          mutationRulesConfig = HeaderMutationRulesParser.parse(externalProcessor.getMutationRules());
-        } catch (HeaderMutationRulesParseException e) {
-          return ConfigOrError.fromError("Error parsing HeaderMutationRules: " + e.getMessage());
-        }
-      }
+      long deferredCloseTimeoutNanos = TimeUnit.SECONDS.toNanos(5);
+      boolean allowModeOverride = false;
+      boolean disableImmediateResponse = false;
+      ImmutableList<ProcessingMode> allowedOverrideModes = ImmutableList.of();
 
-      try {
-        GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
-            externalProcessor.getGrpcService(), context.bootstrapInfo(), context.serverInfo());
-        
-        long deferredCloseTimeoutNanos = TimeUnit.SECONDS.toNanos(5);
+      if (externalProcessor != null) {
+        mode = externalProcessor.getProcessingMode();
+        grpcService = externalProcessor.getGrpcService();
+        allowModeOverride = externalProcessor.getAllowModeOverride();
+        disableImmediateResponse = externalProcessor.getDisableImmediateResponse();
+        allowedOverrideModes = ImmutableList.copyOf(externalProcessor.getAllowedOverrideModesList());
+
+        if (externalProcessor.hasMutationRules()) {
+          try {
+            mutationRulesConfig = HeaderMutationRulesParser.parse(externalProcessor.getMutationRules());
+          } catch (HeaderMutationRulesParseException e) {
+            return ConfigOrError.fromError("Error parsing HeaderMutationRules: " + e.getMessage());
+          }
+        }
+
         if (externalProcessor.hasDeferredCloseTimeout()) {
           Duration deferredCloseTimeout = externalProcessor.getDeferredCloseTimeout();
           try {
@@ -245,24 +274,61 @@ public class ExternalProcessorFilter implements Filter {
             return ConfigOrError.fromError("deferred_close_timeout must be positive");
           }
         }
+      } else if (overrides != null) {
+        mode = overrides.getProcessingMode();
+        grpcService = overrides.getGrpcService();
+      } else {
+        return ConfigOrError.fromError("Either externalProcessor or overrides must be non-null");
+      }
 
+      if (mode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC
+          && mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE) {
+        return ConfigOrError.fromError("Invalid request_body_mode: " + mode.getRequestBodyMode()
+            + ". Only GRPC and NONE are supported.");
+      }
+      if (mode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC
+          && mode.getResponseBodyMode() != ProcessingMode.BodySendMode.NONE) {
+        return ConfigOrError.fromError("Invalid response_body_mode: " + mode.getResponseBodyMode()
+            + ". Only GRPC and NONE are supported.");
+      }
+
+      try {
+        GrpcServiceConfig grpcServiceConfig = null;
+        if (grpcService != null && grpcService.hasGoogleGrpc()) {
+          grpcServiceConfig = GrpcServiceConfigParser.parse(
+              grpcService, context.bootstrapInfo(), context.serverInfo());
+        } else if (externalProcessor != null) {
+           return ConfigOrError.fromError("Error parsing GrpcService config: Unsupported: GrpcService must have GoogleGrpc, got: " + grpcService);
+        }
+        
         return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(
-            externalProcessor, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig), deferredCloseTimeoutNanos));
+            externalProcessor, overrides, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig), 
+            allowModeOverride, disableImmediateResponse, allowedOverrideModes,
+            deferredCloseTimeoutNanos, context));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
       }
     }
 
-    ExternalProcessorFilterConfig(ExternalProcessor externalProcessor,
-        GrpcServiceConfig grpcServiceConfig, Optional<HeaderMutationRulesConfig> mutationRulesConfig,
-        long deferredCloseTimeoutNanos) {
+    ExternalProcessorFilterConfig(
+        @Nullable ExternalProcessor externalProcessor,
+        @Nullable ExtProcOverrides extProcOverrides,
+        GrpcServiceConfig grpcServiceConfig,
+        Optional<HeaderMutationRulesConfig> mutationRulesConfig,
+        boolean allowModeOverride,
+        boolean disableImmediateResponse,
+        ImmutableList<ProcessingMode> allowedOverrideModes,
+        long deferredCloseTimeoutNanos,
+        FilterContext filterContext) {
       this.externalProcessor = externalProcessor;
+      this.extProcOverrides = extProcOverrides;
       this.grpcServiceConfig = grpcServiceConfig;
       this.mutationRulesConfig = mutationRulesConfig;
-      this.allowModeOverride = externalProcessor.getAllowModeOverride();
-      this.disableImmediateResponse = externalProcessor.getDisableImmediateResponse();
-      this.allowedOverrideModes = ImmutableList.copyOf(externalProcessor.getAllowedOverrideModesList());
+      this.allowModeOverride = allowModeOverride;
+      this.disableImmediateResponse = disableImmediateResponse;
+      this.allowedOverrideModes = allowedOverrideModes;
       this.deferredCloseTimeoutNanos = deferredCloseTimeoutNanos;
+      this.filterContext = filterContext;
     }
 
     @Override
@@ -270,8 +336,14 @@ public class ExternalProcessorFilter implements Filter {
       return TYPE_URL;
     }
 
+    @Nullable
     ExternalProcessor getExternalProcessor() {
       return externalProcessor;
+    }
+
+    @Nullable
+    ExtProcOverrides getExtProcOverrides() {
+      return extProcOverrides;
     }
 
     GrpcServiceConfig getGrpcServiceConfig() {
@@ -298,12 +370,19 @@ public class ExternalProcessorFilter implements Filter {
       return deferredCloseTimeoutNanos;
     }
 
+    FilterContext getFilterContext() {
+      return filterContext;
+    }
+
     boolean getObservabilityMode() {
-      return externalProcessor.getObservabilityMode();
+      return externalProcessor != null ? externalProcessor.getObservabilityMode() : false;
     }
 
     boolean getFailureModeAllow() {
-      return externalProcessor.getFailureModeAllow();
+      if (extProcOverrides != null && extProcOverrides.hasFailureModeAllow()) {
+        return extProcOverrides.getFailureModeAllow().getValue();
+      }
+      return externalProcessor != null ? externalProcessor.getFailureModeAllow() : false;
     }
   }
 
