@@ -51,36 +51,30 @@ final class CelCommon {
           })
           .build();
 
-  /**
-   * Set of allowed function names based on gRFC A106.
-   */
-  private static final ImmutableSet<String> ALLOWED_FUNCTIONS = ImmutableSet.of(
-      "size", "matches", "contains", "startsWith", "endsWith", "timestamp", "duration",
-      "int", "uint", "double", "string", "bytes", "bool", "==", "!=", ">", "<", ">=", "<=",
-      "&&", "||", "!", "+", "-", "*", "/", "%", "in", "has", "or");
+
+
+  private static final ImmutableSet<String> ALLOWED_EXACT_OVERLOAD_IDS = ImmutableSet.of(
+      "equals", "not_equals", "logical_and", "logical_or", "logical_not");
 
   /**
    * Regular expression pattern to validate internal CEL overload IDs.
    *
    * <p>
    * Standard CEL operators and conversion functions often have empty names in the
-   * AST
-   * and are identified solely by their overload IDs (e.g., {@code equals} for
-   * {@code ==},
-   * {@code divide_int64} for {@code /}).
+   * AST and are identified solely by their overload IDs (e.g., {@code equals} for
+   * {@code ==}, {@code divide_int64} for {@code /}).
    *
    * <p>
    * This pattern matches allowed overload IDs by their prefixes (e.g.,
-   * {@code divide},
-   * {@code size}), optionally followed by numeric types (e.g., {@code int64}) and
-   * type-specific
-   * suffixes (e.g., {@code _string}, {@code _int64}).
+   * {@code divide}, {@code size}), optionally followed by numeric types 
+   * (e.g., {@code int64}) and type-specific suffixes (e.g., {@code _string}, 
+   * {@code _int64}).
    */
-  private static final Pattern ALLOWED_OVERLOAD_ID_PATTERN = Pattern.compile(
+  private static final Pattern ALLOWED_OVERLOAD_ID_PREFIX_PATTERN = Pattern.compile(
       "^(size|matches|contains|startsWith|endsWith|starts_with|ends_with|"
           + "timestamp|duration|in|index|has|int|uint|double|string|bytes|bool|"
-          + "equals|not_equals|less|less_equals|greater|greater_equals|"
-          + "add|subtract|multiply|divide|modulo|logical_and|logical_or|logical_not)"
+          + "less|less_equals|greater|greater_equals|"
+          + "add|subtract|multiply|divide|modulo|negate)"
           + "[0-9]*(_.*)?$");
 
   static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
@@ -110,7 +104,8 @@ final class CelCommon {
         if (name.isEmpty()) {
           boolean allowed = false;
           for (String id : ref.overloadIds()) {
-            if (ALLOWED_OVERLOAD_ID_PATTERN.matcher(id).matches()) {
+            if (ALLOWED_EXACT_OVERLOAD_IDS.contains(id)
+                || ALLOWED_OVERLOAD_ID_PREFIX_PATTERN.matcher(id).matches()) {
               allowed = true;
               break;
             }
@@ -120,9 +115,9 @@ final class CelCommon {
                 "CEL expression references unknown function with overload IDs: "
                     + ref.overloadIds());
           }
-        } else if (!ALLOWED_FUNCTIONS.contains(name)) {
+        } else {
           throw new IllegalArgumentException(
-              "CEL expression references unknown function: " + name);
+              "CEL expression references unsupported named function: " + name);
         }
       }
     }

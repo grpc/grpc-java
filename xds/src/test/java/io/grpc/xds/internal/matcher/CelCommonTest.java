@@ -122,4 +122,10 @@ public final class CelCommonTest {
           .contains("CEL expression references unknown variable: unknown_var");
     }
   }
+
+  @Test
+  public void checkAllowedReferences_negation() throws Exception {
+    assertAllowed("-(1) == -1");
+    assertAllowed("-(1.0) == -1.0");
+  }
 }

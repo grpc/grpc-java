@@ -16,12 +16,10 @@
 
 package io.grpc.xds.internal.matcher;
 
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableSet;
 import dev.cel.runtime.CelVariableResolver;
 import io.grpc.Metadata;
 import java.util.AbstractMap;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -30,7 +28,6 @@ import javax.annotation.Nullable;
  * CEL Environment for gRPC xDS matching.
  */
 final class GrpcCelEnvironment implements CelVariableResolver {
-  private static final Splitter SPLITTER = Splitter.on('.').limit(2);
   private final MatchContext context;
 
   GrpcCelEnvironment(MatchContext context) {
@@ -41,10 +38,6 @@ final class GrpcCelEnvironment implements CelVariableResolver {
   public Optional<Object> find(String name) {
     if (name.equals("request")) {
       return Optional.of(new LazyRequestMap(this));
-    }
-    List<String> components = SPLITTER.splitToList(name);
-    if (components.size() == 2 && components.get(0).equals("request")) {
-      return Optional.ofNullable(getRequestField(components.get(1)));
     }
     return Optional.empty();
   }

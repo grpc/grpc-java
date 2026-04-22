@@ -66,23 +66,22 @@ public final class CelStringExtractor {
    * fails.
    */
   public String extract(Object input) throws CelEvaluationException {
-    Object result;
-    try {
-      if (input instanceof CelVariableResolver) {
-        result = program.eval((CelVariableResolver) input);
-      } else {
-        throw new CelEvaluationException(
-            "Unsupported input type for CEL evaluation: " + input.getClass().getName());
-      }
-    } catch (CelEvaluationException e) {
-      if (defaultValue != null) {
-        return defaultValue;
-      }
-      throw e;
-    }
+    if (input instanceof CelVariableResolver) {
+      try {
+        Object result = program.eval((CelVariableResolver) input);
 
-    if (result instanceof String) {
-      return (String) result;
+        if (result instanceof String) {
+          return (String) result;
+        }
+      } catch (CelEvaluationException e) {
+        if (defaultValue == null) {
+          throw e;
+        }
+      }
+    } else if (defaultValue == null) {
+      throw new CelEvaluationException(
+          "Unsupported input type for CEL evaluation: "
+              + (input == null ? "null" : input.getClass().getName()));
     }
     return defaultValue;
   }

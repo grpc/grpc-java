@@ -91,9 +91,13 @@ public final class CelEnvironmentTest {
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
-    Optional<Object> result = env.find("request.path");
+    Optional<Object> result = env.find("request");
     assertThat(result.isPresent()).isTrue();
-    assertThat(result.get()).isEqualTo("/foo");
+    assertThat(result.get()).isInstanceOf(Map.class);
+    
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("path")).isEqualTo("/foo");
   }
 
   @Test
@@ -201,9 +205,11 @@ public final class CelEnvironmentTest {
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
-    Optional<Object> result = env.find("request.method");
+    Optional<Object> result = env.find("request");
     assertThat(result.isPresent()).isTrue();
-    assertThat(result.get()).isEqualTo("POST");
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("method")).isEqualTo("POST");
   }
 
   @Test
@@ -233,14 +239,14 @@ public final class CelEnvironmentTest {
     MatchContext context = MatchContext.newBuilder().build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
-    Optional<Object> result = env.find("request.time");
-    assertThat(result.isPresent()).isFalse();
-    
-    // But it should be present in the map key set
-    Map<?, ?> requestMap = (Map<?, ?>) env.find("request").get();
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
     assertThat(requestMap.containsKey("time")).isTrue();
     assertThat(requestMap.get("time")).isNull();
   }
+
 
   @Test
   public void headersWrapper_size() {
@@ -265,24 +271,32 @@ public final class CelEnvironmentTest {
         .setMethod("GET")
         .build();
 
-
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
 
-    assertThat(env.find("request.host").get()).isEqualTo("host");
-    assertThat(env.find("request.id").get()).isEqualTo("id");
-    assertThat(env.find("request.method").get()).isEqualTo("GET");
-    assertThat(env.find("request.scheme").get()).isEqualTo("");
-    assertThat(env.find("request.protocol").get()).isEqualTo("");
-    assertThat(env.find("request.query").get())
-        .isEqualTo("");
-    assertThat(env.find("request.headers").get()).isInstanceOf(HeadersWrapper.class);
+    assertThat(requestMap.get("host")).isEqualTo("host");
+    assertThat(requestMap.get("id")).isEqualTo("id");
+    assertThat(requestMap.get("method")).isEqualTo("GET");
+    assertThat(requestMap.get("scheme")).isEqualTo("");
+    assertThat(requestMap.get("protocol")).isEqualTo("");
+    assertThat(requestMap.get("query")).isEqualTo("");
+    assertThat(requestMap.get("headers")).isInstanceOf(HeadersWrapper.class);
   }
 
   @Test
   public void celEnvironment_find_unknownField() {
     MatchContext context = MatchContext.newBuilder().build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
-    assertThat(env.find("request.unknown").isPresent()).isFalse();
+    
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("unknown")).isNull();
+    
     assertThat(env.find("other").isPresent()).isFalse();
   }
 
@@ -426,8 +440,12 @@ public final class CelEnvironmentTest {
         .build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
-    assertThat(env.find("request.referer").get()).isEqualTo("http://example.com");
-    assertThat(env.find("request.useragent").get()).isEqualTo("grpc-test");
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("referer")).isEqualTo("http://example.com");
+    assertThat(requestMap.get("useragent")).isEqualTo("grpc-test");
   }
 
   @Test
@@ -441,8 +459,11 @@ public final class CelEnvironmentTest {
         .build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
-    // Tests the String.join logic in getHeader
-    assertThat(env.find("request.referer").get()).isEqualTo("v1,v2");
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("referer")).isEqualTo("v1,v2");
   }
 
   @Test
@@ -451,7 +472,12 @@ public final class CelEnvironmentTest {
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("other.path").isPresent()).isFalse();
-    assertThat(env.find("request.a.b").isPresent()).isFalse();
+    
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("a")).isNull();
   }
 
   @Test
@@ -469,7 +495,11 @@ public final class CelEnvironmentTest {
     MatchContext context = MatchContext.newBuilder().build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
-    assertThat(env.find("request.referer").get()).isEqualTo("");
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("referer")).isEqualTo("");
   }
 
 
