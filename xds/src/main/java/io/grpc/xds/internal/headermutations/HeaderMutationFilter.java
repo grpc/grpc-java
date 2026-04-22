@@ -97,8 +97,9 @@ public class HeaderMutationFilter {
         && rules.disallowExpression().get().matcher(headerName).matches()) {
       return false;
     }
-    if (rules.allowExpression().isPresent()) {
-      return rules.allowExpression().get().matcher(headerName).matches();
+    if (rules.allowExpression().isPresent()
+        && rules.allowExpression().get().matcher(headerName).matches()) {
+      return true;
     }
     return !rules.disallowAll();
   }

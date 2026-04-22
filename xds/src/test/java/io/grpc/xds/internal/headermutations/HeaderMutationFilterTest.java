@@ -154,10 +154,29 @@ public class HeaderMutationFilterTest {
     HeaderMutations filtered = filter.filter(mutations);
 
 
-    assertThat(filtered.headersToRemove()).containsExactly("x-allowed-remove");
+    assertThat(filtered.headersToRemove()).containsExactly("x-allowed-remove",
+        "not-allowed-remove");
     assertThat(filtered.headers()).containsExactly(header("x-allowed-key", "value"),
-            header("x-allowed-resp-key", "value"));
+        header("not-allowed-key", "value"), header("x-allowed-resp-key", "value"),
+        header("not-allowed-resp-key", "value"));
   }
+
+  @Test
+  public void filter_allowExpression_fallsThroughToDisallowAll()
+      throws HeaderMutationDisallowedException {
+    HeaderMutationRulesConfig rules = HeaderMutationRulesConfig.builder().disallowAll(true)
+        .allowExpression(Pattern.compile("^x-allowed-.*")).build();
+    HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
+    HeaderMutations mutations = HeaderMutations.create(
+        ImmutableList.of(header("x-allowed-key", "value"), header("not-allowed-key", "value")),
+        ImmutableList.of("x-allowed-remove", "not-allowed-remove"));
+
+    HeaderMutations filtered = filter.filter(mutations);
+
+    assertThat(filtered.headersToRemove()).containsExactly("x-allowed-remove");
+    assertThat(filtered.headers()).containsExactly(header("x-allowed-key", "value"));
+  }
+
 
   @Test
   public void filter_allowExpression_overridesDisallowAll()
