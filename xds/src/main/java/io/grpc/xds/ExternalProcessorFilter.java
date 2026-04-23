@@ -7,6 +7,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
@@ -163,7 +164,7 @@ public class ExternalProcessorFilter implements Filter {
     return new ExternalProcessorInterceptor(config, cachedChannelManager, scheduler);
   }
 
-  static ExternalProcessorFilterConfig mergeConfigs(
+  private static ExternalProcessorFilterConfig mergeConfigs(
       ExternalProcessorFilterConfig parent, ExtProcOverrides overrides) {
     ExternalProcessor parentProto = parent.getExternalProcessor();
     ExternalProcessor.Builder mergedProtoBuilder = parentProto.toBuilder();
@@ -198,16 +199,15 @@ public class ExternalProcessorFilter implements Filter {
 
   private static ProcessingMode mergeProcessingMode(ProcessingMode parent, ProcessingMode override) {
     ProcessingMode.Builder builder = parent.toBuilder();
-    for (Map.Entry<FieldDescriptor, Object> entry : override.getAllFields().entrySet()) {
-      Object value = entry.getValue();
-      if (value instanceof Descriptors.EnumValueDescriptor) {
-        Descriptors.EnumValueDescriptor enumValue = (Descriptors.EnumValueDescriptor) value;
-        if (enumValue.getType().getFullName().equals("envoy.extensions.filters.http.ext_proc.v3.ProcessingMode.HeaderSendMode")
-            && enumValue.getNumber() == ProcessingMode.HeaderSendMode.DEFAULT_VALUE) {
-          continue;
-        }
+    for (FieldDescriptor field : override.getDescriptorForType().getFields()) {
+      Object value = override.getField(field);
+      // For HeaderSendMode DEFAULT means "no change" in an override.
+      if (value instanceof Descriptors.EnumValueDescriptor
+          && ((Descriptors.EnumValueDescriptor) value).getType().getFullName().endsWith("HeaderSendMode")
+          && ((Descriptors.EnumValueDescriptor) value).getName().equals("DEFAULT")) {
+        continue;
       }
-      builder.setField(entry.getKey(), value);
+      builder.setField(field, value);
     }
     return builder.build();
   }
@@ -603,6 +603,7 @@ public class ExternalProcessorFilter implements Filter {
       private volatile ProcessingMode currentProcessingMode;
 
       private volatile Metadata requestHeaders;
+      final AtomicBoolean activated = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
       final AtomicBoolean notifiedApp = new AtomicBoolean(false);
@@ -629,7 +630,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void activateCall() {
-        if (extProcStreamFailed.get()) {
+        if (extProcStreamFailed.get() || !activated.compareAndSet(false, true)) {
           return;
         }
         Runnable toRun = delayedCall.setCall(rawCall);
@@ -898,6 +899,9 @@ public class ExternalProcessorFilter implements Filter {
       public boolean isReady() {
         if (extProcStreamCompleted.get()) {
           return super.isReady();
+        }
+        if (!activated.get() && !config.getObservabilityMode()) {
+          return false;
         }
         boolean sidecarReady = isSidecarReady();
         if (config.getObservabilityMode()) {

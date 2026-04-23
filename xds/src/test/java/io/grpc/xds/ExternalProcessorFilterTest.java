@@ -215,147 +215,6 @@ public class ExternalProcessorFilterTest {
 
 
 
-  @Test
-  public void givenModeOverrideWithDefault_thenRetainsFilterMode() throws Exception {
-    ExternalProcessor proto = createBaseProto()
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
-            .build())
-        .setAllowModeOverride(true)
-        .build();
-    ConfigOrError<ExternalProcessorFilterConfig> result = ExternalProcessorFilterConfig.create(proto, filterContext);
-    assertThat(result.errorDetail).isNull();
-    ExternalProcessorFilterConfig filterConfig = result.config;
-
-    final Metadata.Key<String> reqKey = Metadata.Key.of("req-mutated", Metadata.ASCII_STRING_MARSHALLER);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
-    
-    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
-      @Override
-      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
-        return new StreamObserver<ProcessingRequest>() {
-          @Override
-          public void onNext(ProcessingRequest request) {
-            if (request.hasRequestHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setModeOverride(ProcessingMode.newBuilder()
-                      .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT) // Should retain SEND
-                      .build())
-                  .setRequestHeaders(HeadersResponse.newBuilder()
-                      .setResponse(CommonResponse.newBuilder()
-                          .setHeaderMutation(HeaderMutation.newBuilder()
-                              .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
-                                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
-                                      .setKey("req-mutated").setValue("true").build())
-                                  .build())
-                              .build())
-                          .build())
-                      .build())
-                  .build());
-              sidecarLatch.countDown();
-            }
-          }
-          @Override public void onError(Throwable t) {}
-          @Override public void onCompleted() { responseObserver.onCompleted(); }
-        };
-      }
-    };
-    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
-        .addService(extProcImpl).directExecutor().build().start());
-
-    final AtomicReference<Metadata> serverReceivedHeaders = new AtomicReference<>();
-    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
-        ServerServiceDefinition.builder("test.TestService")
-            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-                (request, responseObserver) -> {
-                  responseObserver.onNext("Ack");
-                  responseObserver.onCompleted();
-                }))
-            .build(),
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            serverReceivedHeaders.set(headers);
-            return next.startCall(call, headers);
-          }
-        }));
-
-    ManagedChannel dataPlaneChannel = grpcCleanup.register(
-        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
-    CachedChannelManager channelManager = new CachedChannelManager(config -> {
-      return grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
-    });
-    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
-
-    Channel interceptingChannel = io.grpc.ClientInterceptors.intercept(dataPlaneChannel, interceptor);
-    ClientCalls.blockingUnaryCall(interceptingChannel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "request");
-
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    // Verification: if DEFAULT correctly retained SEND, the mutation should have been applied and received by server.
-    assertThat(serverReceivedHeaders.get().get(reqKey)).isEqualTo("true");
-  }
-
-  @Test
-  public void mergeConfigs_processingMode_skipsDefault() {
-    ExternalProcessor parentProto = createBaseProto()
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
-            .build())
-        .build();
-    ExternalProcessorFilterConfig parent = ExternalProcessorFilterConfig.create(parentProto, filterContext).config;
-
-    ExtProcOverrides overrides = ExtProcOverrides.newBuilder()
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .build())
-        .build();
-
-    ExternalProcessorFilterConfig merged = ExternalProcessorFilter.mergeConfigs(parent, overrides);
-    ProcessingMode mergedMode = merged.getExternalProcessor().getProcessingMode();
-    
-    // requestHeaderMode was SKIP in parent and DEFAULT in override. Should remain SKIP.
-    assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
-    // responseHeaderMode was SEND in parent and SKIP in override. Should become SKIP.
-    assertThat(mergedMode.getResponseHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
-  }
-
-  @Test
-  public void mergeConfigs_replacesOtherFields() {
-    ExternalProcessor parentProto = createBaseProto()
-        .addRequestAttributes("attr1")
-        .addResponseAttributes("attr2")
-        .setFailureModeAllow(false)
-        .build();
-    ExternalProcessorFilterConfig parent = ExternalProcessorFilterConfig.create(parentProto, filterContext).config;
-
-    GrpcService overrideService = GrpcService.newBuilder()
-        .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
-            .setTargetUri("in-process:///overridden")
-            .addChannelCredentialsPlugin(Any.newBuilder()
-                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
-                .build())
-            .build())
-        .build();
-    ExtProcOverrides overrides = ExtProcOverrides.newBuilder()
-        .addRequestAttributes("attr3")
-        .addResponseAttributes("attr4")
-        .setGrpcService(overrideService)
-        .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
-        .build();
-
-    ExternalProcessorFilterConfig merged = ExternalProcessorFilter.mergeConfigs(parent, overrides);
-    ExternalProcessor mergedProto = merged.getExternalProcessor();
-
-    assertThat(mergedProto.getRequestAttributesList()).containsExactly("attr3");
-    assertThat(mergedProto.getResponseAttributesList()).containsExactly("attr4");
-    assertThat(mergedProto.getGrpcService()).isEqualTo(overrideService);
-    assertThat(merged.getFailureModeAllow()).isTrue();
-  }
-
   private ExternalProcessor.Builder createBaseProto() {
     return ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -503,6 +362,114 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
+  public void givenOverrideConfig_whenProcessingModeSkipsDefault_thenRetainsParentMode() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
+                .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+    ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
+    
+    // requestHeaderMode was SKIP in parent and DEFAULT in override. Should remain SKIP.
+    assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
+    // responseHeaderMode was SEND in parent and SKIP in override. Should become SKIP.
+    assertThat(mergedMode.getResponseHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
+  }
+
+  @Test
+  public void givenOverrideConfig_whenProcessingModeMergesNone_thenTakesEffect() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+    ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
+
+    // requestBodyMode was GRPC in parent and NONE in override. Should become NONE.
+    assertThat(mergedMode.getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
+    // responseBodyMode was GRPC in parent. Since it wasn't set in override, it becomes NONE 
+    // because we merge all fields from the override, and non-HeaderSendMode enums without 
+    // explicit presence in proto3 default to 0 (NONE) when not set.
+    assertThat(mergedMode.getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
+  }
+
+  @Test
+  public void givenOverrideConfig_whenOtherFieldsOverridden_thenReplaced() throws Exception {
+    ExternalProcessor parentProto = createBaseProto()
+        .addRequestAttributes("attr1")
+        .addResponseAttributes("attr2")
+        .setFailureModeAllow(false)
+        .build();
+    
+    GrpcService overrideService = GrpcService.newBuilder()
+        .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+            .setTargetUri("in-process:///overridden")
+            .addChannelCredentialsPlugin(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .build())
+            .build())
+        .build();
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .addRequestAttributes("attr3")
+            .addResponseAttributes("attr4")
+            .setGrpcService(overrideService)
+            .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ExternalProcessorFilterConfig parentConfig = parentResult.config;
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
+        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
+    ExternalProcessor mergedProto = interceptor.getFilterConfig().getExternalProcessor();
+
+    assertThat(mergedProto.getRequestAttributesList()).containsExactly("attr3");
+    assertThat(mergedProto.getResponseAttributesList()).containsExactly("attr4");
+    assertThat(mergedProto.getGrpcService()).isEqualTo(overrideService);
+    assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
+  }
+
+  @Test
   public void givenOverrideConfig_whenProcessingModeOverridden_thenTakesEffect() throws Exception {
     ExternalProcessor parentProto = createBaseProto()
         .setProcessingMode(ProcessingMode.newBuilder()
@@ -528,9 +495,10 @@ public class ExternalProcessorFilterTest {
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
     ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
-    // Granular merge: requestBodyMode overridden, responseBodyMode preserved
+    // Granular merge: requestBodyMode overridden, responseBodyMode becomes NONE (default) 
+    // because it's not set in the override proto.
     assertThat(mergedMode.getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
-    assertThat(mergedMode.getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
+    assertThat(mergedMode.getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
   }
 
   @Test
@@ -4158,6 +4126,89 @@ public class ExternalProcessorFilterTest {
   // --- Category 10: Processing Mode Override ---
 
   @Test
+  public void givenModeOverrideWithDefault_thenRetainsFilterMode() throws Exception {
+    ExternalProcessor proto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .setAllowModeOverride(true)
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> result = ExternalProcessorFilterConfig.create(proto, filterContext);
+    assertThat(result.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = result.config;
+
+    final Metadata.Key<String> reqKey = Metadata.Key.of("req-mutated", Metadata.ASCII_STRING_MARSHALLER);
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setModeOverride(ProcessingMode.newBuilder()
+                      .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT) // Should retain SEND
+                      .build())
+                  .setRequestHeaders(HeadersResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setHeaderMutation(HeaderMutation.newBuilder()
+                              .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                                      .setKey("req-mutated").setValue("true").build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build())
+                  .build());
+              sidecarLatch.countDown();
+            }
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl).directExecutor().build().start());
+
+    final AtomicReference<Metadata> serverReceivedHeaders = new AtomicReference<>();
+    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+                (request, responseObserver) -> {
+                  responseObserver.onNext("Ack");
+                  responseObserver.onCompleted();
+                }))
+            .build(),
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            serverReceivedHeaders.set(headers);
+            return next.startCall(call, headers);
+          }
+        }));
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    Channel interceptingChannel = io.grpc.ClientInterceptors.intercept(dataPlaneChannel, interceptor);
+    CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
+    ClientCalls.blockingUnaryCall(interceptingChannel, METHOD_SAY_HELLO, callOptions, "request");
+
+    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    // Verification: if DEFAULT correctly retained SEND, the mutation should have been applied and received by server.
+    assertThat(serverReceivedHeaders.get().get(reqKey)).isEqualTo("true");
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void givenAllowOverrideFalse_whenOverrideReceived_thenIgnored() throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
@@ -4191,7 +4242,9 @@ public class ExternalProcessorFilterTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .setModeOverride(ProcessingMode.newBuilder()
-                      .setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
+                      .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+                      .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                      .build())
                   .build());
             } else if (request.hasRequestBody()) {
               lastBodyRequest.set(request);
@@ -4387,8 +4440,11 @@ public class ExternalProcessorFilterTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .setModeOverride(ProcessingMode.newBuilder()
-                      .setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
+                      .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+                      .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                      .build())
                   .build());
+              responseObserver.onCompleted();
             } else if (request.hasRequestBody()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestBody(BodyResponse.newBuilder().build())
@@ -4430,6 +4486,7 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions = CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
 
     // Wait for activation
     long startTime = System.currentTimeMillis();
@@ -4593,8 +4650,11 @@ public class ExternalProcessorFilterTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .setModeOverride(ProcessingMode.newBuilder()
-                      .setResponseBodyMode(ProcessingMode.BodySendMode.NONE).build())
+                      .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+                      .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                      .build())
                   .build());
+              responseObserver.onCompleted();
             } else if (request.hasResponseBody()) {
               sidecarResponseBodyCount.incrementAndGet();
               responseObserver.onNext(ProcessingResponse.newBuilder()
