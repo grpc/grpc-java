@@ -1000,10 +1000,16 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
+        ProcessingMode oldMode = currentProcessingMode;
+        // Specification says request_header_mode cannot be overridden.
+        ProcessingMode potentialNewMode = mergeProcessingMode(oldMode, modeOverride.toBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT) // Ensure we don't override it
+            .build());
+
         if (!config.getAllowedOverrideModes().isEmpty()) {
           boolean matched = false;
           for (ProcessingMode allowedMode : config.getAllowedOverrideModes()) {
-            if (isModeMatch(allowedMode, modeOverride)) {
+            if (isModeMatch(allowedMode, potentialNewMode)) {
               matched = true;
               break;
             }
@@ -1012,14 +1018,8 @@ public class ExternalProcessorFilter implements Filter {
             return;
           }
         }
-        ProcessingMode oldMode = currentProcessingMode;
-        // The override is valid. Specification says request_header_mode cannot be overridden.
-        currentProcessingMode = mergeProcessingMode(oldMode, modeOverride.toBuilder()
-            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT) // Ensure we don't override it via helper
-            .build());
-
-        // In case the helper skipped request_header_mode because it was DEFAULT, 
-        // mergeProcessingMode(oldMode, ...) will have retained oldMode's value.
+        
+        currentProcessingMode = potentialNewMode;
 
         // Special handling for enabling/disabling body modes
         if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
