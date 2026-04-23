@@ -207,6 +207,7 @@ public class HeaderMutatorTest {
     Metadata headers = new Metadata();
     headers.put(APPEND_KEY, "existing-value");
     headers.put(OVERWRITE_KEY, "existing-value");
+    headers.put(OVERWRITE_IF_EXISTS_KEY, "existing-value");
 
     HeaderMutations mutations =
         HeaderMutations.create(
@@ -214,24 +215,42 @@ public class HeaderMutatorTest {
                 header(NEW_ADD_KEY.name(), "", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 header(APPEND_KEY.name(), "", HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 header(OVERWRITE_KEY.name(), "", HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD),
-                HeaderValueOption.create(
+                header(ADD_KEY.name(), "", HeaderAppendAction.ADD_IF_ABSENT),
+                header(OVERWRITE_IF_EXISTS_KEY.name(), "", HeaderAppendAction.OVERWRITE_IF_EXISTS),
+                    HeaderValueOption.create(
                     HeaderValue.create("keep-empty-key", ""),
                     HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
                     true),
                 HeaderValueOption.create(
                     HeaderValue.create("keep-empty-overwrite-key", ""),
                     HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD,
-                    true)),
+                    true),
+                    HeaderValueOption.create(
+                    HeaderValue.create("keep-empty-bin-key-bin", ByteString.EMPTY),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, true),
+                HeaderValueOption.create(
+                    HeaderValue.create("ignore-empty-bin-key-bin", ByteString.EMPTY),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false),
+                HeaderValueOption.create(
+                    HeaderValue.create("overwrite-empty-bin-key-bin", ByteString.EMPTY),
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD, false)),
             ImmutableList.of());
 
     headers.put(
         Metadata.Key.of("keep-empty-overwrite-key", Metadata.ASCII_STRING_MARSHALLER), "old");
+
+    Metadata.Key<byte[]> overwriteEmptyBinKey =
+        Metadata.Key.of("overwrite-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    byte[] originalBinValue = new byte[] {1, 2, 3};
+    headers.put(overwriteEmptyBinKey, originalBinValue);
 
     headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
     assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value");
     assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("existing-value");
+    assertThat(headers.containsKey(ADD_KEY)).isFalse();
+    assertThat(headers.get(OVERWRITE_IF_EXISTS_KEY)).isEqualTo("existing-value");
 
     Metadata.Key<String> keepEmptyKey =
         Metadata.Key.of("keep-empty-key", Metadata.ASCII_STRING_MARSHALLER);
@@ -243,6 +262,15 @@ public class HeaderMutatorTest {
     assertThat(headers.containsKey(keepEmptyOverwriteKey)).isTrue();
     assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
 
+    Metadata.Key<byte[]> keepEmptyBinKey =
+        Metadata.Key.of("keep-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
+    Metadata.Key<byte[]> ignoreEmptyBinKey =
+        Metadata.Key.of("ignore-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
+
+    assertThat(headers.containsKey(keepEmptyBinKey)).isTrue();
+    assertThat(headers.get(keepEmptyBinKey)).isEqualTo(new byte[0]);
+    assertThat(headers.containsKey(ignoreEmptyBinKey)).isFalse();
+    assertThat(headers.get(overwriteEmptyBinKey)).isEqualTo(originalBinValue);
   }
 
   @Test
