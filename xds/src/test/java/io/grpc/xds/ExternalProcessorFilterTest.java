@@ -4163,6 +4163,7 @@ public class ExternalProcessorFilterTest {
                           .build())
                       .build())
                   .build());
+              responseObserver.onCompleted();
               sidecarLatch.countDown();
             }
           }

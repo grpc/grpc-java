@@ -606,6 +606,7 @@ public class ExternalProcessorFilter implements Filter {
       final AtomicBoolean activated = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
       final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
+      final AtomicBoolean passThroughMode = new AtomicBoolean(false);
       final AtomicBoolean notifiedApp = new AtomicBoolean(false);
       final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
       final AtomicBoolean halfClosed = new AtomicBoolean(false);
@@ -897,6 +898,9 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public boolean isReady() {
+        if (passThroughMode.get()) {
+          return super.isReady();
+        }
         if (extProcStreamCompleted.get()) {
           return super.isReady();
         }
@@ -912,7 +916,7 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void request(int numMessages) {
-        if (extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || extProcStreamCompleted.get()) {
           super.request(numMessages);
           return;
         }
@@ -930,7 +934,7 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || extProcStreamCompleted.get()) {
           super.sendMessage(message);
           return;
         }
@@ -961,7 +965,7 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void halfClose() {
         halfClosed.set(true);
-        if (extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || extProcStreamCompleted.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             super.halfClose();
           }
@@ -1112,6 +1116,7 @@ public class ExternalProcessorFilter implements Filter {
     private static class ExtProcListener extends ForwardingClientCallListener.SimpleForwardingClientCallListener<InputStream> {
       private final ClientCall<?, ?> rawCall;
       private final ExtProcClientCall extProcClientCall;
+      private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
       private volatile Metadata savedHeaders;
       private volatile Metadata savedTrailers;
       private volatile Status savedStatus;
@@ -1139,7 +1144,9 @@ public class ExternalProcessorFilter implements Filter {
             == ProcessingMode.HeaderSendMode.SEND
             || extProcClientCall.currentProcessingMode.getResponseHeaderMode() == ProcessingMode.HeaderSendMode.DEFAULT;
 
-        if (extProcClientCall.extProcStreamCompleted.get() || !sendResponseHeaders) {
+        if (extProcClientCall.passThroughMode.get() 
+            || extProcClientCall.extProcStreamCompleted.get() 
+            || !sendResponseHeaders) {
           super.onHeaders(headers);
           return;
         }
@@ -1166,9 +1173,18 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onMessage(InputStream message) {
+        if (extProcClientCall.passThroughMode.get()) {
+          super.onMessage(message);
+          return;
+        }
+
         if (extProcClientCall.extProcStreamCompleted.get()
             || extProcClientCall.currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
-          super.onMessage(message);
+          if (savedHeaders != null) {
+            savedMessages.add(message);
+          } else {
+            super.onMessage(message);
+          }
           return;
         }
 
@@ -1192,7 +1208,7 @@ public class ExternalProcessorFilter implements Filter {
           }
           return;
         }
-        if (extProcClientCall.extProcStreamCompleted.get()) {
+        if (extProcClientCall.passThroughMode.get()) {
           if (extProcClientCall.notifiedApp.compareAndSet(false, true)) {
             super.onClose(status, trailers);
           }
@@ -1201,6 +1217,11 @@ public class ExternalProcessorFilter implements Filter {
 
         this.savedStatus = status;
         this.savedTrailers = trailers;
+
+        if (extProcClientCall.extProcStreamCompleted.get()) {
+           // We are in transition or failed open. proceedWithClose will be called by unblockAfterStreamComplete.
+           return;
+        }
 
         boolean sendResponseTrailers = extProcClientCall.currentProcessingMode.getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND;
 
@@ -1272,7 +1293,12 @@ public class ExternalProcessorFilter implements Filter {
 
       void unblockAfterStreamComplete() {
         proceedWithHeaders();
+        InputStream msg;
+        while ((msg = savedMessages.poll()) != null) {
+          super.onMessage(msg);
+        }
         onReadyNotify();
+        extProcClientCall.passThroughMode.set(true);
         proceedWithClose();
       }
     }
