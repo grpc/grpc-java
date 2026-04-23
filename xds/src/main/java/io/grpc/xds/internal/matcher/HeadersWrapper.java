@@ -48,10 +48,10 @@ final class HeadersWrapper extends AbstractMap<String, String> {
       return null;
     }
     switch (headerName) {
-      case ":method": return context.getMethod();
-      case ":authority": return context.getHost();
-      case "host": return context.getHost();
-      case ":path": return context.getPath();
+      case ":method": return (String) context.getAttribute("method");
+      case ":authority": return (String) context.getAttribute("host");
+      case "host": return (String) context.getAttribute("host");
+      case ":path": return (String) context.getAttribute("path");
       default: return getHeader(headerName);
     }
   }

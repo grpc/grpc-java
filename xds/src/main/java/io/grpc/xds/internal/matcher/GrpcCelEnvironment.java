@@ -18,7 +18,6 @@ package io.grpc.xds.internal.matcher;
 
 import com.google.common.collect.ImmutableSet;
 import dev.cel.runtime.CelVariableResolver;
-import io.grpc.Metadata;
 import java.util.AbstractMap;
 import java.util.Optional;
 import java.util.Set;
@@ -44,48 +43,10 @@ final class GrpcCelEnvironment implements CelVariableResolver {
 
   @Nullable
   private Object getRequestField(String requestField) {
-    switch (requestField) {
-      case "headers": return new HeadersWrapper(context);
-      case "host": return orEmpty(context.getHost());
-      case "id": return orEmpty(context.getId());
-      case "method": return or(context.getMethod(), "POST");
-      case "path":
-      case "url_path":
-        return orEmpty(context.getPath());
-      case "query": return "";
-      case "scheme": return "";
-      case "protocol": return "";
-      case "time": return null;
-      case "referer": return getHeader("referer");
-      case "useragent": return getHeader("user-agent");
-
-      default:
-        return null; 
-    }
-  }
-
-  private String getHeader(String key) {
-    Metadata metadata = context.getMetadata();
-    Iterable<String> values = metadata.getAll(
-        Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
-    if (values == null) {
-      return "";
-    }
-    return String.join(",", values);
-  }
-  
-  private static String orEmpty(@Nullable String s) {
-    return s == null ? "" : s;
-  }
-
-  private static String or(@Nullable String s, String def) {
-    return s == null ? def : s;
+    return context.getAttribute(requestField);
   }
 
   private static final class LazyRequestMap extends AbstractMap<String, Object> {
-    private static final Set<String> KNOWN_KEYS = ImmutableSet.of(
-        "headers", "host", "id", "method", "path", "url_path", "query", "scheme", "protocol",
-        "referer", "useragent", "time");
     private final GrpcCelEnvironment resolver;
 
     LazyRequestMap(GrpcCelEnvironment resolver) {
@@ -95,34 +56,37 @@ final class GrpcCelEnvironment implements CelVariableResolver {
     @Override
     public Object get(Object key) {
       if (key instanceof String) {
-        Object val = resolver.getRequestField((String) key);
-        if (val == null) {
-          return null;
-        }
-        return val;
+        return resolver.getRequestField((String) key);
       }
       return null;
     }
 
     @Override
     public boolean containsKey(Object key) {
-      boolean contains = key instanceof String && KNOWN_KEYS.contains(key);
-      return contains;
+      if (!(key instanceof String)) {
+        return false;
+      }
+      String name = (String) key;
+      return AttributeProviderRegistry.getDefaultRegistry().get(name) != null
+          || resolver.context.getRawAttribute(name) != null;
     }
 
     @Override
     public Set<String> keySet() {
-      return KNOWN_KEYS;
+      ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+      builder.addAll(AttributeProviderRegistry.getDefaultRegistry().getRegisteredNames());
+      builder.addAll(resolver.context.getRawAttributes().keySet());
+      return builder.build();
     }
 
     @Override
     public int size() {
-      return KNOWN_KEYS.size();
+      return keySet().size();
     }
 
     @Override
     public boolean isEmpty() {
-      return false;
+      return keySet().isEmpty();
     }
 
     @Override

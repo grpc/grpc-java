@@ -36,9 +36,9 @@ public final class CelEnvironmentTest {
   @Test
   public void headersWrapper_resolvesPseudoHeaders() {
     MatchContext context = MatchContext.newBuilder()
-        .setPath("/path")
-        .setMethod("POST")
-        .setHost("example.com")
+        .setAttribute("path", "/path")
+        .setAttribute("method", "POST")
+        .setAttribute("host", "example.com")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
@@ -79,7 +79,7 @@ public final class CelEnvironmentTest {
   @Test
   public void celEnvironment_resolvesRequestField() {
     MatchContext context = MatchContext.newBuilder()
-        .setPath("/foo")
+        .setAttribute("path", "/foo")
         .build();
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
@@ -131,7 +131,7 @@ public final class CelEnvironmentTest {
   @Test
   public void headers_hostAliasing() {
     MatchContext context = MatchContext.newBuilder()
-        .setHost("example.com")
+        .setAttribute("host", "example.com")
         .build();
     Map<String, String> headers = new HeadersWrapper(context);
     
@@ -259,9 +259,9 @@ public final class CelEnvironmentTest {
   @Test
   public void celEnvironment_accessAllFields() {
     MatchContext context = MatchContext.newBuilder()
-        .setHost("host")
-        .setId("id")
-        .setMethod("GET")
+        .setAttribute("host", "host")
+        .setAttribute("id", "id")
+        .setAttribute("method", "GET")
         .build();
 
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
@@ -438,6 +438,31 @@ public final class CelEnvironmentTest {
     assertThat(requestMap.get("referer")).isEqualTo("");
   }
 
+  @Test
+  public void celEnvironment_resolvesCustomAttribute() {
+    AttributeProvider customProvider = new AttributeProvider() {
+      @Override
+      public Iterable<String> names() {
+        return java.util.Collections.singletonList("custom_attr");
+      }
 
+      @Override
+      public Object get(MatchContext context) {
+        return "custom_value";
+      }
+    };
+    
+    AttributeProviderRegistry.getDefaultRegistry().register(customProvider);
+    
+    MatchContext context = MatchContext.newBuilder().build();
+    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
+    Optional<Object> result = env.find("request");
+    assertThat(result.isPresent()).isTrue();
+    @SuppressWarnings("unchecked")
+    Map<String, Object> requestMap = (Map<String, Object>) result.get();
+    assertThat(requestMap.get("custom_attr")).isEqualTo("custom_value");
+    assertThat(requestMap.containsKey("custom_attr")).isTrue();
+    assertThat(requestMap.keySet()).contains("custom_attr");
+  }
 }

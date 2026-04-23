@@ -18,51 +18,40 @@ package io.grpc.xds.internal.matcher;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 public final class MatchContext {
   private final Metadata metadata;
-  @Nullable 
-  private final String path;
-  @Nullable 
-  private final String host;
-  @Nullable 
-  private final String method;
-  @Nullable 
-  private final String id;
+  private final Map<String, Object> attributes;
 
-  public MatchContext(Metadata metadata, @Nullable String path,
-      @Nullable String host, @Nullable String method,
-      @Nullable String id) {
+  private MatchContext(Metadata metadata, Map<String, Object> attributes) {
     this.metadata = Preconditions.checkNotNull(metadata, "metadata");
-    this.path = path;
-    this.host = host;
-    this.method = method;
-    this.id = id;
+    this.attributes = Collections.unmodifiableMap(new HashMap<>(attributes));
   }
 
   public Metadata getMetadata() {
     return metadata;
   }
-  
+
   @Nullable
-  public String getPath() {
-    return path;
+  public Object getAttribute(String name) {
+    AttributeProvider provider = AttributeProviderRegistry.getDefaultRegistry().get(name);
+    if (provider != null) {
+      return provider.get(this);
+    }
+    return attributes.get(name);
   }
-  
+
   @Nullable
-  public String getHost() {
-    return host;
+  public Object getRawAttribute(String name) {
+    return attributes.get(name);
   }
-  
-  @Nullable
-  public String getMethod() {
-    return method;
-  }
-  
-  @Nullable
-  public String getId() {
-    return id;
+
+  public Map<String, Object> getRawAttributes() {
+    return attributes;
   }
 
   public static Builder newBuilder() {
@@ -71,38 +60,20 @@ public final class MatchContext {
 
   public static final class Builder {
     private Metadata metadata = new Metadata();
-    private String path;
-    private String host;
-    private String method;
-    private String id;
+    private final Map<String, Object> attributes = new HashMap<>();
 
     public Builder setMetadata(Metadata metadata) {
-      this.metadata = metadata;
+      this.metadata = Preconditions.checkNotNull(metadata, "metadata");
       return this;
     }
 
-    public Builder setPath(String path) {
-      this.path = path;
-      return this;
-    }
-
-    public Builder setHost(String host) {
-      this.host = host;
-      return this;
-    }
-
-    public Builder setMethod(String method) {
-      this.method = method;
-      return this;
-    }
-
-    public Builder setId(String id) {
-      this.id = id;
+    public Builder setAttribute(String name, Object value) {
+      attributes.put(name, value);
       return this;
     }
 
     public MatchContext build() {
-      return new MatchContext(metadata, path, host, method, id);
+      return new MatchContext(metadata, attributes);
     }
   }
 }
