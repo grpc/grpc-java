@@ -274,6 +274,11 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>Policy implementations are looked up in the
    * {@link LoadBalancerRegistry#getDefaultRegistry default LoadBalancerRegistry}.
    *
+   * <p>The provided policy name is validated against the
+   * {@link LoadBalancerRegistry#getDefaultRegistry default LoadBalancerRegistry} immediately.
+   * If no provider is found for the given policy name, an {@link IllegalArgumentException}
+   * is thrown.
+   * 
    * <p>This method is implemented by all stock channel builders that are shipped with gRPC, but may
    * not be implemented by custom channel builders, in which case this method will throw.
    *
