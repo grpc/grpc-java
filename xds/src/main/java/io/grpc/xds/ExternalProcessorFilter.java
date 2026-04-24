@@ -7,7 +7,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
@@ -201,7 +200,7 @@ public class ExternalProcessorFilter implements Filter {
     ProcessingMode.Builder builder = parent.toBuilder();
     for (FieldDescriptor field : override.getDescriptorForType().getFields()) {
       Object value = override.getField(field);
-      // For HeaderSendMode DEFAULT means "no change" in an override.
+      // For HeaderSendMode DEFAULT means \"no change\" in an override.
       if (value instanceof Descriptors.EnumValueDescriptor
           && ((Descriptors.EnumValueDescriptor) value).getType().getFullName().endsWith("HeaderSendMode")
           && ((Descriptors.EnumValueDescriptor) value).getName().equals("DEFAULT")) {
@@ -773,10 +772,12 @@ public class ExternalProcessorFilter implements Filter {
               else if (response.hasResponseBody()) {
                 if (checkCompressionSupport(response.getResponseBody())) {
                   handleResponseBodyResponse(response.getResponseBody(), wrappedListener);
-                  if (response.getResponseBody().hasResponse() && response.getResponseBody().getResponse().hasBodyMutation()) {
+                  if (response.getResponseBody().hasResponse() 
+                      && response.getResponseBody().getResponse().hasBodyMutation()) {
                     BodyMutation mutation = response.getResponseBody().getResponse().getBodyMutation();
-                    if (mutation.hasStreamedResponse() && (mutation.getStreamedResponse().getEndOfStream() || mutation.getStreamedResponse().getEndOfStreamWithoutMessage())) {
-                       closeExtProcStream();
+                    if (mutation.hasStreamedResponse() && (mutation.getStreamedResponse().getEndOfStream() 
+                        || mutation.getStreamedResponse().getEndOfStreamWithoutMessage())) {
+                      closeExtProcStream();
                     }
                   }
                 }
@@ -1029,7 +1030,9 @@ public class ExternalProcessorFilter implements Filter {
         if (oldMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
             && currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.NONE) {
           wrappedListener.proceedWithHeaders();
-          wrappedListener.proceedWithClose();
+          if (wrappedListener.savedStatus != null) {
+             wrappedListener.proceedWithClose();
+          }
         }
       }
       private boolean isModeMatch(ProcessingMode allowedMode, ProcessingMode override) {
@@ -1086,23 +1089,20 @@ public class ExternalProcessorFilter implements Filter {
           applyHeaderMutations(trailers, immediate.getHeaders());
         }
 
+        // ImmediateResponse should take precedence over any other closure if it arrives before the app is notified.
+        wrappedListener.savedStatus = status;
+        wrappedListener.savedTrailers = trailers;
+
         if (isProcessingTrailers.get()) {
-          // If sent in response to a server trailers event, sets the status and optionally headers to be included in the trailers.
-          // Note: savedStatus is NOT null if isProcessingTrailers is true.
-          if (extProcStreamCompleted.compareAndSet(false, true)) {
-            wrappedListener.savedStatus = status;
-            wrappedListener.savedTrailers = trailers;
-            wrappedListener.proceedWithClose();
-          }
+          // If sent in response to a server trailers event, sets the status and optionally
+          // headers to be included in the trailers.
+          wrappedListener.unblockAfterStreamComplete();
         } else {
-          // If sent in response to any other event, it will cause the data plane RPC to immediately fail 
-          // with the specified status as if it were an out-of-band cancellation.
-          if (extProcStreamCompleted.compareAndSet(false, true)) {
-            if (notifiedApp.compareAndSet(false, true)) {
-              rawCall.cancel(status.getDescription(), null);
-              listener.onClose(status, trailers);
-            }
-          }
+          // If sent in response to any other event, it will cause the data plane RPC to
+          // immediately fail with the specified status as if it were an out-of-band
+          // cancellation.
+          rawCall.cancel(status.getDescription(), null);
+          wrappedListener.unblockAfterStreamComplete();
         }
         closeExtProcStream();
       }
@@ -1159,8 +1159,7 @@ public class ExternalProcessorFilter implements Filter {
             .build());
 
         if (extProcClientCall.config.getObservabilityMode()) {
-          super.onHeaders(headers);
-          this.savedHeaders = null;
+          proceedWithHeaders();
         }
       }
 
@@ -1168,6 +1167,14 @@ public class ExternalProcessorFilter implements Filter {
         if (savedHeaders != null) {
           super.onHeaders(savedHeaders);
           savedHeaders = null;
+          InputStream msg;
+          while ((msg = savedMessages.poll()) != null) {
+            onMessage(msg);
+          }
+          onReadyNotify();
+          if (savedStatus != null) {
+             maybeTriggerTermination();
+          }
         }
       }
 
@@ -1218,9 +1225,25 @@ public class ExternalProcessorFilter implements Filter {
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
-        if (extProcClientCall.extProcStreamCompleted.get()) {
-           // We are in transition or failed open. proceedWithClose will be called by unblockAfterStreamComplete.
+        if (extProcClientCall.extProcStreamCompleted.get() || savedHeaders != null) {
            return;
+        }
+
+        maybeTriggerTermination();
+
+        if (extProcClientCall.config.getObservabilityMode()) {
+          super.onClose(status, trailers);
+          @SuppressWarnings("unused")
+          ScheduledFuture<?> unused = extProcClientCall.scheduler.schedule(
+              extProcClientCall::closeExtProcStream,
+              extProcClientCall.config.getDeferredCloseTimeoutNanos(),
+              TimeUnit.NANOSECONDS);
+        }
+      }
+
+      private void maybeTriggerTermination() {
+        if (extProcClientCall.extProcStreamCompleted.get()) {
+          return;
         }
 
         boolean sendResponseTrailers = extProcClientCall.currentProcessingMode.getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND;
@@ -1247,15 +1270,6 @@ public class ExternalProcessorFilter implements Filter {
               extProcClientCall.closeExtProcStream();
             }
           }
-        }
-
-        if (extProcClientCall.config.getObservabilityMode()) {
-          super.onClose(status, trailers);
-          @SuppressWarnings("unused")
-          ScheduledFuture<?> unused = extProcClientCall.scheduler.schedule(
-              extProcClientCall::closeExtProcStream,
-              extProcClientCall.config.getDeferredCloseTimeoutNanos(),
-              TimeUnit.NANOSECONDS);
         }
       }
 
@@ -1293,11 +1307,6 @@ public class ExternalProcessorFilter implements Filter {
 
       void unblockAfterStreamComplete() {
         proceedWithHeaders();
-        InputStream msg;
-        while ((msg = savedMessages.poll()) != null) {
-          super.onMessage(msg);
-        }
-        onReadyNotify();
         extProcClientCall.passThroughMode.set(true);
         proceedWithClose();
       }

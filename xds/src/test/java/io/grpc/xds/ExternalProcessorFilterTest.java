@@ -925,6 +925,125 @@ public class ExternalProcessorFilterTest {
   // --- Category 4: Request Header Processing ---
 
   @Test
+  public void givenPendingData_whenImmediateResponseReceived_thenDeliversDataBeforeStatus() throws Exception {
+    final String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    final String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+    final List<String> appEvents = Collections.synchronizedList(new ArrayList<>());
+    final CountDownLatch finishLatch = new CountDownLatch(1);
+    final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
+    final ExecutorService sidecarResponseExecutor = Executors.newSingleThreadExecutor();
+    final Metadata.Key<String> immediateKey = Metadata.Key.of("x-immediate-header", Metadata.ASCII_STRING_MARSHALLER);
+    final AtomicReference<Metadata> appTrailers = new AtomicReference<>();
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            sidecarResponseExecutor.submit(() -> {
+              synchronized (responseObserver) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder().build())
+                          .build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  try { Thread.sleep(500); } catch (InterruptedException e) {}
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setImmediateResponse(ImmediateResponse.newBuilder()
+                          .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
+                              .setStatus(Status.UNAUTHENTICATED.getCode().value())
+                              .build())
+                          .setDetails("Immediate Auth Failure")
+                          .setHeaders(io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation.newBuilder()
+                              .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
+                                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                                      .setKey("x-immediate-header").setValue("true").build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                  responseObserver.onCompleted();
+                }
+              }
+            });
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { extProcCompletedLatch.countDown(); }
+        };
+      }
+    };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl).directExecutor().build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorFilter filter = new ExternalProcessorFilter("test-filter", channelManager);
+    ExternalProcessor proto = createBaseProto()
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError = provider.parseFilterConfig(Any.pack(proto), filterContext);
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    ClientInterceptor interceptor = filter.buildClientInterceptor(filterConfig, null, scheduler);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, (call, headers) -> {
+          call.sendHeaders(new Metadata());
+          call.request(1);
+          return new ServerCall.Listener<String>() {
+            @Override
+            public void onMessage(String message) {
+              call.sendMessage("server-response");
+              call.close(Status.OK, new Metadata());
+            }
+          };
+        })
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .executor(Executors.newSingleThreadExecutor())
+        .build().start());
+
+    ManagedChannel channel = grpcCleanup.register(InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
+    Channel interceptedChannel = io.grpc.ClientInterceptors.intercept(channel, interceptor);
+
+    ClientCall<String, String> call = interceptedChannel.newCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()));
+    call.start(new ClientCall.Listener<String>() {
+      @Override public void onHeaders(Metadata headers) { appEvents.add("HEADERS"); }
+      @Override public void onMessage(String message) { appEvents.add("MESSAGE"); }
+      @Override public void onClose(Status status, Metadata trailers) {
+        appEvents.add("CLOSE:" + status.getCode());
+        appTrailers.set(trailers);
+        finishLatch.countDown();
+      }
+    }, new Metadata());
+
+    call.request(1);
+    call.sendMessage("request-body");
+    call.halfClose();
+
+    assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appEvents).containsExactly("HEADERS", "MESSAGE", "CLOSE:UNAUTHENTICATED");
+    assertThat(appTrailers.get().get(immediateKey)).isEqualTo("true");
+    assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    
+    sidecarResponseExecutor.shutdown();
+    channelManager.close();
+  }
+
+  @Test
   @SuppressWarnings("unchecked")
   public void givenRequestHeaderModeSend_whenStartCalled_thenExtProcReceivesHeadersAndCallIsBuffered() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
@@ -4043,8 +4162,15 @@ public class ExternalProcessorFilterTest {
                       .setResponse(CommonResponse.newBuilder().build())
                       .build())
                   .build());
+            } else if (request.hasResponseHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder().build())
+                      .build())
+                  .build());
             } else if (request.hasResponseTrailers()) {
               new Thread(() -> {
+
                 responseObserver.onNext(ProcessingResponse.newBuilder()
                     .setImmediateResponse(ImmediateResponse.newBuilder()
                         .setGrpcStatus(io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
@@ -5919,7 +6045,7 @@ public class ExternalProcessorFilterTest {
     if (!sidecarActionLatch.await(10, TimeUnit.SECONDS)) {
        throw new AssertionError("Sidecar actions failed. Received: " + receivedPhases);
     }
-    assertThat(finishLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(serverReceivedHeaders.get().get(reqKey)).isEqualTo("true");
     assertThat(serverReceivedBody.get()).isEqualTo("MutatedRequest");
@@ -6106,7 +6232,7 @@ public class ExternalProcessorFilterTest {
     if (!sidecarBidiLatch.await(10, TimeUnit.SECONDS)) {
        throw new AssertionError("Sidecar bidi actions failed. Received: " + receivedPhases);
     }
-    assertThat(finishLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(serverReceivedHeaders.get().get(reqKey)).isEqualTo("true");
     assertThat(bidiHeadersFromInterceptor.get().get(respKey)).isEqualTo("true");
