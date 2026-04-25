@@ -99,7 +99,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
-  private final HandlerRegistry registry;
+  private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
   // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
@@ -498,8 +498,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
+      final ServerMethodDefinition<?, ?> primaryMethod = registry.lookupMethod(methodName, null);
 
       final Context.CancellableContext context = createContext(headers, statsTraceCtx);
+      if (primaryMethod != null) {
+        statsTraceCtx.serverCallMethodResolved(primaryMethod.getMethodDescriptor());
+      }
 
       final Link link = PerfMark.linkOut();
 
@@ -536,7 +540,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           ServerMethodDefinition<?, ?> wrapMethod;
           ServerCallParameters<?, ?> callParams;
           try {
-            ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+            ServerMethodDefinition<?, ?> method = primaryMethod;
             if (method == null) {
               method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
             }
@@ -554,7 +558,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               future.cancel(false);
               return;
             }
-            wrapMethod = wrapMethod(stream, method, statsTraceCtx);
+            statsTraceCtx.serverCallStarted(
+                new ServerCallInfoImpl<>(
+                    method.getMethodDescriptor(), // notify with original method descriptor
+                    stream.getAttributes(),
+                    stream.getAuthority()));
+            wrapMethod = wrapMethod(method);
             callParams = maySwitchExecutor(wrapMethod, stream, headers, context, tag);
             future.set(callParams);
           } catch (Throwable t) {
@@ -653,14 +662,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerMethodDefinition<?,?> wrapMethod(ServerStream stream,
-        ServerMethodDefinition<ReqT, RespT> methodDef, StatsTraceContext statsTraceCtx) {
-      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
-      statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<>(
-              methodDef.getMethodDescriptor(), // notify with original method descriptor
-              stream.getAttributes(),
-              stream.getAuthority()));
+    private <ReqT, RespT> ServerMethodDefinition<?,?> wrapMethod(
+        ServerMethodDefinition<ReqT, RespT> methodDef) {
       ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, handler);
