@@ -558,12 +558,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               future.cancel(false);
               return;
             }
-            statsTraceCtx.serverCallStarted(
-                new ServerCallInfoImpl<>(
-                    method.getMethodDescriptor(), // notify with original method descriptor
-                    stream.getAttributes(),
-                    stream.getAuthority()));
-            wrapMethod = wrapMethod(method);
+            wrapMethod = wrapMethod(stream, method, statsTraceCtx);
             callParams = maySwitchExecutor(wrapMethod, stream, headers, context, tag);
             future.set(callParams);
           } catch (Throwable t) {
@@ -662,8 +657,14 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     /** Never returns {@code null}. */
-    private <ReqT, RespT> ServerMethodDefinition<?,?> wrapMethod(
-        ServerMethodDefinition<ReqT, RespT> methodDef) {
+    private <ReqT, RespT> ServerMethodDefinition<?,?> wrapMethod(ServerStream stream,
+        ServerMethodDefinition<ReqT, RespT> methodDef, StatsTraceContext statsTraceCtx) {
+      // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
+      statsTraceCtx.serverCallStarted(
+          new ServerCallInfoImpl<>(
+              methodDef.getMethodDescriptor(), // notify with original method descriptor
+              stream.getAttributes(),
+              stream.getAuthority()));
       ServerCallHandler<ReqT, RespT> handler = methodDef.getServerCallHandler();
       for (ServerInterceptor interceptor : interceptors) {
         handler = InternalServerInterceptors.interceptCallHandlerCreate(interceptor, handler);
