@@ -58,25 +58,25 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
       getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
               throws CertStoreException {
+    UpstreamTlsContext upstreamTlsContext = (UpstreamTlsContext) tlsContext;
     XdsTrustManagerFactory trustManagerFactory;
     if (savedSpiffeTrustMap != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
               savedSpiffeTrustMap,
               certificateValidationContext,
-              autoSniSanValidationDoesNotApply
-                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
+              upstreamTlsContext.getAutoSniSanValidation());
     } else if (savedTrustedRoots != null) {
       trustManagerFactory = new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContext,
-              autoSniSanValidationDoesNotApply
-                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
+              upstreamTlsContext.getAutoSniSanValidation());
     } else {
       // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
       throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
     }
 
-    SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(trustManagerFactory);
+    SslContextBuilder sslContextBuilder =
+        GrpcSslContexts.forClient().trustManager(trustManagerFactory);
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }

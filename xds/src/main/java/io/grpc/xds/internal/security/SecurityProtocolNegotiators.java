@@ -257,7 +257,6 @@ public final class SecurityProtocolNegotiators {
                   InternalProtocolNegotiators.tls(
                       sslContextAndTm.getKey(), sni, sslContextAndTm.getValue())
                       .newHandler(grpcHandler);
-
               // Delegate rest of handshake to TLS handler
               ctx.pipeline().addAfter(ctx.name(), null, handler);
               fireProtocolNegotiationEvent(ctx);

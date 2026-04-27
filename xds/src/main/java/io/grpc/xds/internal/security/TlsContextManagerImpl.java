@@ -69,8 +69,15 @@ public final class TlsContextManagerImpl implements TlsContextManager {
 
   @Override
   public SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext) {
+      UpstreamTlsContext upstreamTlsContext, boolean autoSniSanValidationDoesNotApply) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
+    if (autoSniSanValidationDoesNotApply && upstreamTlsContext.getAutoSniSanValidation()) {
+      upstreamTlsContext = new UpstreamTlsContext(
+          upstreamTlsContext.getCommonTlsContext(),
+          upstreamTlsContext.getSni(),
+          upstreamTlsContext.getAutoHostSni(),
+          false);
+    }
     return mapForClients.get(upstreamTlsContext);
   }
 

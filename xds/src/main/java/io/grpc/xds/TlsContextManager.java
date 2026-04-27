@@ -30,7 +30,7 @@ public interface TlsContextManager {
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
   SslContextProvider findOrCreateClientSslContextProvider(
-      UpstreamTlsContext upstreamTlsContext);
+      UpstreamTlsContext upstreamTlsContext, boolean autoSniSanValidationDoesNotApply);
 
   /**
    * Releases an instance of the given client-side {@link SslContextProvider}.

@@ -60,14 +60,11 @@ public final class SslContextProviderSupplier implements Closeable {
     try {
       if (!shutdown) {
         if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider();
-          if (tlsContext instanceof UpstreamTlsContext && autoSniSanValidationDoesNotApply) {
-            ((DynamicSslContextProvider) sslContextProvider).setAutoSniSanValidationDoesNotApply();
-          }
+          sslContextProvider = getSslContextProvider(autoSniSanValidationDoesNotApply);
         }
       }
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider();
+      final SslContextProvider toRelease = getSslContextProvider(autoSniSanValidationDoesNotApply);
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
@@ -102,9 +99,10 @@ public final class SslContextProviderSupplier implements Closeable {
     }
   }
 
-  private SslContextProvider getSslContextProvider() {
+  private SslContextProvider getSslContextProvider(boolean autoSniSanValidationDoesNotApply) {
     return tlsContext instanceof UpstreamTlsContext
-        ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
+        ? tlsContextManager.findOrCreateClientSslContextProvider(
+            (UpstreamTlsContext) tlsContext, autoSniSanValidationDoesNotApply)
         : tlsContextManager.findOrCreateServerSslContextProvider(
             (DownstreamTlsContext) tlsContext);
   }
