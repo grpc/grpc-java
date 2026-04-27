@@ -262,6 +262,59 @@ public class FileWatcherCertificateProviderTest {
   }
 
   @Test
+  public void certFileUpdateOnly()
+      throws IOException, CertificateException, InterruptedException {
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    // Ideally we'd use a matching cert/key pair here, but we don't actually have any ready-made.
+    // The test doesn't notice they don't match though.
+    populateTarget(
+        CLIENT_PEM_FILE, SERVER_0_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+
+    reset(mockWatcher, timeService);
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
+    // It's normal to get a newer cert while continuing to use the same private key
+    populateTarget(SERVER_0_PEM_FILE, null, null, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(SERVER_0_PEM_FILE, null, null);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
+  public void keyFileUpdateOnly()
+      throws IOException, CertificateException, InterruptedException {
+    TestScheduledFuture<?> scheduledFuture =
+        new TestScheduledFuture<>();
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    // Assume the key/cert is not updated atomically and we see a tear between them. Or maybe this
+    // was just a bug.
+    populateTarget(
+        SERVER_0_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+
+    reset(mockWatcher, timeService);
+    doReturn(scheduledFuture)
+        .when(timeService)
+        .schedule(any(Runnable.class), any(Long.TYPE), eq(TimeUnit.SECONDS));
+    timeProvider.forwardTime(1, TimeUnit.SECONDS);
+    // Even though it is strange the key updated without a cert update, we do still want to use the
+    // new files, as this recovers from the earlier tear.
+    populateTarget(null, SERVER_0_KEY_FILE, null, null, false, false, false, false);
+    provider.checkAndReloadCertificates();
+    verifyWatcherUpdates(SERVER_0_PEM_FILE, null, null);
+    verifyTimeServiceAndScheduledFuture();
+  }
+
+  @Test
   public void spiffeTrustMapFileUpdateOnly() throws Exception {
     provider = new FileWatcherCertificateProvider(watcher, true, certFile, keyFile, null,
         spiffeTrustMapFile, 600L, timeService, timeProvider);
