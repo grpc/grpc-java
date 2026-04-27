@@ -7,6 +7,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
@@ -67,6 +68,8 @@ import io.grpc.xds.internal.headermutations.HeaderValueOption;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -480,8 +483,8 @@ public class ExternalProcessorFilter implements Filter {
         stub = stub.withInterceptors(new ClientInterceptor() {
           @Override
           public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
-              MethodDescriptor<ExtReqT, ExtRespT> extMethod, CallOptions extCallOptions, Channel next) {
-            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(next.newCall(extMethod, extCallOptions)) {
+              MethodDescriptor<ExtReqT, ExtRespT> extMethod, CallOptions extCallOptions, Channel extNext) {
+            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(extNext.newCall(extMethod, extCallOptions)) {
               @Override
               public void start(Listener<ExtRespT> responseListener, Metadata headers) {
                 for (HeaderValue headerValue : initialMetadata) {
