@@ -7,6 +7,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Descriptors;
@@ -20,6 +21,7 @@ import io.envoyproxy.envoy.config.core.v3.HeaderMap;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
+import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.HeaderForwardingRules;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.envoyproxy.envoy.service.ext_proc.v3.BodyMutation;
 import io.envoyproxy.envoy.service.ext_proc.v3.BodyResponse;
@@ -53,6 +55,8 @@ import io.grpc.xds.internal.grpcservice.CachedChannelManager;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceParseException;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
+import io.grpc.xds.internal.Matchers;
+import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException;
 import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
@@ -64,6 +68,8 @@ import io.grpc.xds.internal.headermutations.HeaderValueOption;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -218,6 +224,7 @@ public class ExternalProcessorFilter implements Filter {
     private final ExtProcOverrides extProcOverrides;
     private final GrpcServiceConfig grpcServiceConfig;
     private final Optional<HeaderMutationRulesConfig> mutationRulesConfig;
+    private final Optional<HeaderForwardingRulesConfig> forwardRulesConfig;
     private final boolean disableImmediateResponse;
     private final long deferredCloseTimeoutNanos;
     private final FilterContext filterContext;
@@ -240,6 +247,7 @@ public class ExternalProcessorFilter implements Filter {
       ProcessingMode mode;
       GrpcService grpcService;
       HeaderMutationRulesConfig mutationRulesConfig = null;
+      HeaderForwardingRulesConfig forwardRulesConfig = null;
       long deferredCloseTimeoutNanos = TimeUnit.SECONDS.toNanos(5);
       boolean disableImmediateResponse = false;
 
@@ -254,6 +262,10 @@ public class ExternalProcessorFilter implements Filter {
           } catch (HeaderMutationRulesParseException e) {
             return ConfigOrError.fromError("Error parsing HeaderMutationRules: " + e.getMessage());
           }
+        }
+
+        if (externalProcessor.hasForwardRules()) {
+          forwardRulesConfig = HeaderForwardingRulesConfig.create(externalProcessor.getForwardRules());
         }
 
         if (externalProcessor.hasDeferredCloseTimeout()) {
@@ -297,6 +309,7 @@ public class ExternalProcessorFilter implements Filter {
         
         return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(
             externalProcessor, overrides, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig), 
+            Optional.ofNullable(forwardRulesConfig),
             disableImmediateResponse, deferredCloseTimeoutNanos, context));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
@@ -308,6 +321,7 @@ public class ExternalProcessorFilter implements Filter {
         @Nullable ExtProcOverrides extProcOverrides,
         GrpcServiceConfig grpcServiceConfig,
         Optional<HeaderMutationRulesConfig> mutationRulesConfig,
+        Optional<HeaderForwardingRulesConfig> forwardRulesConfig,
         boolean disableImmediateResponse,
         long deferredCloseTimeoutNanos,
         FilterContext filterContext) {
@@ -315,6 +329,7 @@ public class ExternalProcessorFilter implements Filter {
       this.extProcOverrides = extProcOverrides;
       this.grpcServiceConfig = grpcServiceConfig;
       this.mutationRulesConfig = mutationRulesConfig;
+      this.forwardRulesConfig = forwardRulesConfig;
       this.disableImmediateResponse = disableImmediateResponse;
       this.deferredCloseTimeoutNanos = deferredCloseTimeoutNanos;
       this.filterContext = filterContext;
@@ -343,6 +358,10 @@ public class ExternalProcessorFilter implements Filter {
       return mutationRulesConfig;
     }
 
+    Optional<HeaderForwardingRulesConfig> getForwardRulesConfig() {
+      return forwardRulesConfig;
+    }
+
     boolean getDisableImmediateResponse() {
       return disableImmediateResponse;
     }
@@ -364,6 +383,54 @@ public class ExternalProcessorFilter implements Filter {
         return extProcOverrides.getFailureModeAllow().getValue();
       }
       return externalProcessor != null ? externalProcessor.getFailureModeAllow() : false;
+    }
+  }
+
+  static final class HeaderForwardingRulesConfig {
+    private final ImmutableList<Matchers.StringMatcher> allowedHeaders;
+    private final ImmutableList<Matchers.StringMatcher> disallowedHeaders;
+
+    HeaderForwardingRulesConfig(
+        @Nullable ImmutableList<Matchers.StringMatcher> allowedHeaders,
+        @Nullable ImmutableList<Matchers.StringMatcher> disallowedHeaders) {
+      this.allowedHeaders = allowedHeaders;
+      this.disallowedHeaders = disallowedHeaders;
+    }
+
+    static HeaderForwardingRulesConfig create(HeaderForwardingRules proto) {
+      ImmutableList<Matchers.StringMatcher> allowedHeaders = null;
+      if (proto.hasAllowedHeaders()) {
+        allowedHeaders = MatcherParser.parseListStringMatcher(proto.getAllowedHeaders());
+      }
+      ImmutableList<Matchers.StringMatcher> disallowedHeaders = null;
+      if (proto.hasDisallowedHeaders()) {
+        disallowedHeaders = MatcherParser.parseListStringMatcher(proto.getDisallowedHeaders());
+      }
+      return new HeaderForwardingRulesConfig(allowedHeaders, disallowedHeaders);
+    }
+
+    boolean isAllowed(String headerName) {
+      String lowerHeaderName = headerName.toLowerCase(Locale.ROOT);
+      if (allowedHeaders != null) {
+        boolean matched = false;
+        for (Matchers.StringMatcher matcher : allowedHeaders) {
+          if (matcher.matches(lowerHeaderName)) {
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) {
+          return false;
+        }
+      }
+      if (disallowedHeaders != null) {
+        for (Matchers.StringMatcher matcher : disallowedHeaders) {
+          if (matcher.matches(lowerHeaderName)) {
+            return false;
+          }
+        }
+      }
+      return true;
     }
   }
 
@@ -416,8 +483,8 @@ public class ExternalProcessorFilter implements Filter {
         stub = stub.withInterceptors(new ClientInterceptor() {
           @Override
           public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
-              MethodDescriptor<ExtReqT, ExtRespT> extMethod, CallOptions extCallOptions, Channel next) {
-            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(next.newCall(extMethod, extCallOptions)) {
+              MethodDescriptor<ExtReqT, ExtRespT> extMethod, CallOptions extCallOptions, Channel extNext) {
+            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(extNext.newCall(extMethod, extCallOptions)) {
               @Override
               public void start(Listener<ExtRespT> responseListener, Metadata headers) {
                 for (HeaderValue headerValue : initialMetadata) {
@@ -517,11 +584,14 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     // --- SHARED UTILITY METHODS ---
-    private static HeaderMap toHeaderMap(Metadata metadata) {
+    private static HeaderMap toHeaderMap(Metadata metadata, Optional<HeaderForwardingRulesConfig> forwardRules) {
       HeaderMap.Builder builder =
           HeaderMap.newBuilder();
 
       for (String key : metadata.keys()) {
+        if (forwardRules.isPresent() && !forwardRules.get().isAllowed(key)) {
+          continue;
+        }
         // Skip binary headers for this basic mapping
         if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
           Metadata.Key<byte[]> binKey = Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
@@ -791,7 +861,7 @@ public class ExternalProcessorFilter implements Filter {
         if (sendRequestHeaders) {
           sendToExtProc(ProcessingRequest.newBuilder()
               .setRequestHeaders(HttpHeaders.newBuilder()
-                  .setHeaders(toHeaderMap(headers))
+                  .setHeaders(toHeaderMap(headers, config.getForwardRulesConfig()))
                   .setEndOfStream(false)
                   .build())
               .build());
@@ -1109,7 +1179,7 @@ public class ExternalProcessorFilter implements Filter {
         this.savedHeaders = headers;
         extProcClientCall.sendToExtProc(ProcessingRequest.newBuilder()
             .setResponseHeaders(HttpHeaders.newBuilder()
-                .setHeaders(toHeaderMap(headers))
+                .setHeaders(toHeaderMap(headers, extProcClientCall.config.getForwardRulesConfig()))
                 .build())
             .build());
 
@@ -1213,7 +1283,7 @@ public class ExternalProcessorFilter implements Filter {
           extProcClientCall.isProcessingTrailers.set(true);
           extProcClientCall.sendToExtProc(ProcessingRequest.newBuilder()
               .setResponseTrailers(HttpTrailers.newBuilder()
-                  .setTrailers(toHeaderMap(savedTrailers))
+                  .setTrailers(toHeaderMap(savedTrailers, extProcClientCall.config.getForwardRulesConfig()))
                   .build())
               .build());
         } else {
