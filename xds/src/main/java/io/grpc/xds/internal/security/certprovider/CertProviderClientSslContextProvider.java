@@ -58,39 +58,25 @@ final class CertProviderClientSslContextProvider extends CertProviderSslContextP
       getSslContextBuilderAndTrustManager(
           CertificateValidationContext certificateValidationContext)
               throws CertStoreException {
-    SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient();
+    XdsTrustManagerFactory trustManagerFactory;
     if (savedSpiffeTrustMap != null) {
-      sslContextBuilder = sslContextBuilder.trustManager(
-        new XdsTrustManagerFactory(
-            savedSpiffeTrustMap,
-            certificateValidationContext,
-            autoSniSanValidationDoesNotApply
-                ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
+      trustManagerFactory = new XdsTrustManagerFactory(
+              savedSpiffeTrustMap,
+              certificateValidationContext,
+              autoSniSanValidationDoesNotApply
+                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
     } else if (savedTrustedRoots != null) {
-      sslContextBuilder = sslContextBuilder.trustManager(
-          new XdsTrustManagerFactory(
+      trustManagerFactory = new XdsTrustManagerFactory(
               savedTrustedRoots.toArray(new X509Certificate[0]),
               certificateValidationContext,
               autoSniSanValidationDoesNotApply
-                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation()));
+                  ? false : ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
     } else {
       // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
       throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
     }
-    XdsTrustManagerFactory trustManagerFactory;
-    if (savedSpiffeTrustMap != null) {
-      trustManagerFactory = new XdsTrustManagerFactory(
-          savedSpiffeTrustMap,
-          certificateValidationContext,
-          ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
-      sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
-    } else {
-      trustManagerFactory = new XdsTrustManagerFactory(
-          savedTrustedRoots.toArray(new X509Certificate[0]),
-          certificateValidationContext,
-          ((UpstreamTlsContext) tlsContext).getAutoSniSanValidation());
-      sslContextBuilder = sslContextBuilder.trustManager(trustManagerFactory);
-    }
+
+    SslContextBuilder sslContextBuilder = GrpcSslContexts.forClient().trustManager(trustManagerFactory);
     if (isMtls()) {
       sslContextBuilder.keyManager(savedKey, savedCertChain);
     }
