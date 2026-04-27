@@ -5,6 +5,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -15,6 +16,8 @@ import com.google.protobuf.Descriptors.FieldDescriptor;
 import com.google.protobuf.Duration;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
 import io.envoyproxy.envoy.config.core.v3.HeaderMap;
@@ -156,14 +159,16 @@ public class ExternalProcessorFilter implements Filter {
 
   @Nullable
   @Override
-  public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
+  public ClientInterceptor buildClientInterceptor(@Nullable FilterConfig filterConfig,
       @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
     ExternalProcessorFilterConfig config = (ExternalProcessorFilterConfig) filterConfig;
-    checkNotNull(config, "filterConfig");
     if (overrideConfig instanceof ExternalProcessorFilterConfig) {
-      ExtProcOverrides overrides = ((ExternalProcessorFilterConfig) overrideConfig).getExtProcOverrides();
-      if (overrides != null) {
+      ExternalProcessorFilterConfig over = (ExternalProcessorFilterConfig) overrideConfig;
+      ExtProcOverrides overrides = over.getExtProcOverrides();
+      if (overrides != null && config != null) {
         config = mergeConfigs(config, overrides);
+      } else {
+        config = over;
       }
     }
     checkNotNull(config, "config");
@@ -225,6 +230,7 @@ public class ExternalProcessorFilter implements Filter {
     private final GrpcServiceConfig grpcServiceConfig;
     private final Optional<HeaderMutationRulesConfig> mutationRulesConfig;
     private final Optional<HeaderForwardingRulesConfig> forwardRulesConfig;
+    private final ImmutableList<String> requestAttributes;
     private final boolean disableImmediateResponse;
     private final long deferredCloseTimeoutNanos;
     private final FilterContext filterContext;
@@ -248,6 +254,7 @@ public class ExternalProcessorFilter implements Filter {
       GrpcService grpcService;
       HeaderMutationRulesConfig mutationRulesConfig = null;
       HeaderForwardingRulesConfig forwardRulesConfig = null;
+      ImmutableList<String> requestAttributes = ImmutableList.of();
       long deferredCloseTimeoutNanos = TimeUnit.SECONDS.toNanos(5);
       boolean disableImmediateResponse = false;
 
@@ -255,6 +262,7 @@ public class ExternalProcessorFilter implements Filter {
         mode = externalProcessor.getProcessingMode();
         grpcService = externalProcessor.getGrpcService();
         disableImmediateResponse = externalProcessor.getDisableImmediateResponse();
+        requestAttributes = ImmutableList.copyOf(externalProcessor.getRequestAttributesList());
 
         if (externalProcessor.hasMutationRules()) {
           try {
@@ -283,6 +291,7 @@ public class ExternalProcessorFilter implements Filter {
       } else if (overrides != null) {
         mode = overrides.getProcessingMode();
         grpcService = overrides.getGrpcService();
+        requestAttributes = ImmutableList.copyOf(overrides.getRequestAttributesList());
       } else {
         return ConfigOrError.fromError("Either externalProcessor or overrides must be non-null");
       }
@@ -309,7 +318,7 @@ public class ExternalProcessorFilter implements Filter {
         
         return ConfigOrError.fromConfig(new ExternalProcessorFilterConfig(
             externalProcessor, overrides, grpcServiceConfig, Optional.ofNullable(mutationRulesConfig), 
-            Optional.ofNullable(forwardRulesConfig),
+            Optional.ofNullable(forwardRulesConfig), requestAttributes,
             disableImmediateResponse, deferredCloseTimeoutNanos, context));
       } catch (GrpcServiceParseException e) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
@@ -322,6 +331,7 @@ public class ExternalProcessorFilter implements Filter {
         GrpcServiceConfig grpcServiceConfig,
         Optional<HeaderMutationRulesConfig> mutationRulesConfig,
         Optional<HeaderForwardingRulesConfig> forwardRulesConfig,
+        ImmutableList<String> requestAttributes,
         boolean disableImmediateResponse,
         long deferredCloseTimeoutNanos,
         FilterContext filterContext) {
@@ -330,6 +340,7 @@ public class ExternalProcessorFilter implements Filter {
       this.grpcServiceConfig = grpcServiceConfig;
       this.mutationRulesConfig = mutationRulesConfig;
       this.forwardRulesConfig = forwardRulesConfig;
+      this.requestAttributes = requestAttributes;
       this.disableImmediateResponse = disableImmediateResponse;
       this.deferredCloseTimeoutNanos = deferredCloseTimeoutNanos;
       this.filterContext = filterContext;
@@ -360,6 +371,10 @@ public class ExternalProcessorFilter implements Filter {
 
     Optional<HeaderForwardingRulesConfig> getForwardRulesConfig() {
       return forwardRulesConfig;
+    }
+
+    ImmutableList<String> getRequestAttributes() {
+      return requestAttributes;
     }
 
     boolean getDisableImmediateResponse() {
@@ -518,7 +533,7 @@ public class ExternalProcessorFilter implements Filter {
 
       ExtProcClientCall extProcCall = new ExtProcClientCall(
           delayedCall, rawCall, stub, filterConfig, filterConfig.getMutationRulesConfig(),
-          scheduler);
+          scheduler, method, next);
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -625,6 +640,106 @@ public class ExternalProcessorFilter implements Filter {
       return builder.build();
     }
 
+    private static ImmutableMap<String, Struct> collectAttributes(
+        ImmutableList<String> requestedAttributes,
+        MethodDescriptor<?, ?> method,
+        Channel channel,
+        Metadata headers) {
+      if (requestedAttributes.isEmpty()) {
+        return ImmutableMap.of();
+      }
+      ImmutableMap.Builder<String, Struct> attributes = ImmutableMap.builder();
+      for (String attr : requestedAttributes) {
+        switch (attr) {
+          case "request.path":
+          case "request.url_path":
+            attributes.put(attr, encodeAttribute("/" + method.getFullMethodName()));
+            break;
+          case "request.host":
+            attributes.put(attr, encodeAttribute(channel.authority()));
+            break;
+          case "request.method":
+            attributes.put(attr, encodeAttribute("POST"));
+            break;
+          case "request.headers":
+            attributes.put(attr, encodeHeaders(headers));
+            break;
+          case "request.referer":
+            String referer = getHeaderValue(headers, "referer");
+            if (referer != null) {
+              attributes.put(attr, encodeAttribute(referer));
+            }
+            break;
+          case "request.useragent":
+            String ua = getHeaderValue(headers, "user-agent");
+            if (ua != null) {
+              attributes.put(attr, encodeAttribute(ua));
+            }
+            break;
+          case "request.id":
+            String id = getHeaderValue(headers, "x-request-id");
+            if (id != null) {
+              attributes.put(attr, encodeAttribute(id));
+            }
+            break;
+          case "request.query":
+            attributes.put(attr, encodeAttribute(""));
+            break;
+          default:
+            // "Not set" attributes or unrecognized ones (already validated) are skipped.
+            break;
+        }
+      }
+      return attributes.buildOrThrow();
+    }
+
+    private static Struct encodeAttribute(String value) {
+      return Struct.newBuilder()
+          .putFields("", Value.newBuilder().setStringValue(value).build())
+          .build();
+    }
+
+    private static Struct encodeHeaders(Metadata headers) {
+      Struct.Builder builder = Struct.newBuilder();
+      for (String key : headers.keys()) {
+        String value = getHeaderValue(headers, key);
+        if (value != null) {
+          builder.putFields(key.toLowerCase(Locale.ROOT),
+              Value.newBuilder().setStringValue(value).build());
+        }
+      }
+      return builder.build();
+    }
+
+    @Nullable
+    private static String getHeaderValue(Metadata headers, String headerName) {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        Metadata.Key<byte[]> key;
+        try {
+          key = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+        } catch (IllegalArgumentException e) {
+          return null;
+        }
+        Iterable<byte[]> values = headers.getAll(key);
+        if (values == null) {
+          return null;
+        }
+        java.util.List<String> encoded = new ArrayList<>();
+        for (byte[] v : values) {
+          encoded.add(BaseEncoding.base64().omitPadding().encode(v));
+        }
+        return com.google.common.base.Joiner.on(",").join(encoded);
+      }
+      Metadata.Key<String> key;
+      try {
+        key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+      } catch (IllegalArgumentException e) {
+        return null;
+      }
+      Iterable<String> values = headers.getAll(key);
+      return values == null ? null : com.google.common.base.Joiner.on(",").join(values);
+    }
+
     /**
      * A local subclass to expose the protected constructor of DelayedClientCall.
      */
@@ -652,6 +767,8 @@ public class ExternalProcessorFilter implements Filter {
       private final HeaderMutator mutator = HeaderMutator.create();
       private final AtomicInteger pendingRequests = new AtomicInteger(0);
       private final ProcessingMode currentProcessingMode;
+      private final MethodDescriptor<?, ?> method;
+      private final Channel channel;
 
       private volatile Metadata requestHeaders;
       final AtomicBoolean activated = new AtomicBoolean(false);
@@ -670,7 +787,9 @@ public class ExternalProcessorFilter implements Filter {
           ExternalProcessorGrpc.ExternalProcessorStub stub,
           ExternalProcessorFilterConfig config,
           Optional<HeaderMutationRulesConfig> mutationRulesConfig,
-          ScheduledExecutorService scheduler) {
+          ScheduledExecutorService scheduler,
+          MethodDescriptor<?, ?> method,
+          Channel channel) {
         super(delayedCall);
         this.delayedCall = delayedCall;
         this.rawCall = rawCall;
@@ -679,6 +798,8 @@ public class ExternalProcessorFilter implements Filter {
         this.currentProcessingMode = config.getExternalProcessor().getProcessingMode();
         this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
         this.scheduler = scheduler;
+        this.method = method;
+        this.channel = channel;
       }
 
       private void activateCall() {
@@ -864,6 +985,7 @@ public class ExternalProcessorFilter implements Filter {
                   .setHeaders(toHeaderMap(headers, config.getForwardRulesConfig()))
                   .setEndOfStream(false)
                   .build())
+              .putAllAttributes(collectAttributes(config.getRequestAttributes(), method, channel, headers))
               .build());
         }
 

@@ -7,7 +7,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Struct;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.config.core.v3.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
@@ -432,7 +434,7 @@ public class ExternalProcessorFilterTest {
   @Test
   public void givenOverrideConfig_whenOtherFieldsOverridden_thenReplaced() throws Exception {
     ExternalProcessor parentProto = createBaseProto()
-        .addRequestAttributes("attr1")
+        .addRequestAttributes("request.path")
         .addResponseAttributes("attr2")
         .setFailureModeAllow(false)
         .build();
@@ -447,7 +449,7 @@ public class ExternalProcessorFilterTest {
         .build();
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
         .setOverrides(ExtProcOverrides.newBuilder()
-            .addRequestAttributes("attr3")
+            .addRequestAttributes("request.host")
             .addResponseAttributes("attr4")
             .setGrpcService(overrideService)
             .setFailureModeAllow(com.google.protobuf.BoolValue.of(true))
@@ -464,7 +466,7 @@ public class ExternalProcessorFilterTest {
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
     ExternalProcessor mergedProto = interceptor.getFilterConfig().getExternalProcessor();
 
-    assertThat(mergedProto.getRequestAttributesList()).containsExactly("attr3");
+    assertThat(mergedProto.getRequestAttributesList()).containsExactly("request.host");
     assertThat(mergedProto.getResponseAttributesList()).containsExactly("attr4");
     assertThat(mergedProto.getGrpcService()).isEqualTo(overrideService);
     assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
@@ -522,7 +524,7 @@ public class ExternalProcessorFilterTest {
             .setGrpcService(overrideService)
             .setProcessingMode(ProcessingMode.newBuilder()
                 .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC).build())
-            .addRequestAttributes("attr-over")
+            .addRequestAttributes("request.path")
             .build())
         .build();
 
@@ -542,14 +544,14 @@ public class ExternalProcessorFilterTest {
     assertThat(mergedConfig.getExternalProcessor().getGrpcService()).isEqualTo(overrideService);
     assertThat(mergedConfig.getExternalProcessor().getProcessingMode().getRequestBodyMode())
         .isEqualTo(ProcessingMode.BodySendMode.GRPC);
-    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-over");
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("request.path");
   }
 
   @Test
   public void givenOverrideConfig_whenSomeFieldsOverridden_thenMergedCorrectly() throws Exception {
     ExternalProcessor parentProto = createBaseProto()
         .setFailureModeAllow(false)
-        .addRequestAttributes("attr-parent")
+        .addRequestAttributes("request.host")
         .build();
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
         .setOverrides(ExtProcOverrides.newBuilder()
@@ -571,7 +573,7 @@ public class ExternalProcessorFilterTest {
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
-    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-parent");
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("request.host");
   }
 
 
@@ -5432,6 +5434,236 @@ public class ExternalProcessorFilterTest {
     assertThat(headerNames).contains("x-foo-1");
     assertThat(headerNames).doesNotContain("x-foo-secret");
     assertThat(headerNames).doesNotContain("x-bar");
+    
+    channelManager.close();
+  }
+
+  // --- Category 14: Request Attributes ---
+
+  @Test
+  public void parseFilterConfig_withUnrecognizedRequestAttribute_isIgnored() {
+    ExternalProcessor proto = createBaseProto()
+        .addRequestAttributes("invalid.attribute")
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(result.errorDetail).isNull();
+    assertThat(result.config.getRequestAttributes()).containsExactly("invalid.attribute");
+  }
+
+  @Test
+  public void parseFilterConfig_withRecognizedRequestAttributes_succeeds() {
+    ExternalProcessor proto = createBaseProto()
+        .addRequestAttributes("request.path")
+        .addRequestAttributes("request.host")
+        .addRequestAttributes("request.scheme") // Recognized but not set
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(result.errorDetail).isNull();
+    assertThat(result.config.getRequestAttributes()).containsExactly(
+        "request.path", "request.host", "request.scheme");
+  }
+
+  @Test
+  public void givenRequestAttributes_whenHeaderPhase_thenAttributesSent() throws Exception {
+    ExternalProcessor proto = createBaseProto()
+        .addRequestAttributes("request.path")
+        .addRequestAttributes("request.host")
+        .addRequestAttributes("request.method")
+        .addRequestAttributes("request.query")
+        .addRequestAttributes("request.scheme") // Not set, should be ignored
+        .build();
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName)
+          .directExecutor()
+          .build());
+    });
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+    
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "123");
+    
+    final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarCompletedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              capturedRequest.set(request);
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              sidecarLatch.countDown();
+            } else if (request.hasResponseBody() && request.getResponseBody().getEndOfStreamWithoutMessage()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseBody(BodyResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setBodyMutation(BodyMutation.newBuilder()
+                              .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                  .setEndOfStream(true).build()).build()).build()).build())
+                  .build());
+            }
+          }
+          @Override public void onError(Throwable t) { sidecarCompletedLatch.countDown(); }
+          @Override public void onCompleted() {
+            responseObserver.onCompleted();
+            sidecarCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    
+    final CountDownLatch callLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) { callLatch.countDown(); }
+    }, headers);
+    proxyCall.request(1);
+    proxyCall.halfClose();
+
+    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(callLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    
+    ProcessingRequest request = capturedRequest.get();
+    assertThat(request.hasRequestHeaders()).isTrue();
+    
+    java.util.Map<String, com.google.protobuf.Struct> attributes = request.getAttributesMap();
+    assertThat(attributes).containsKey("request.path");
+    assertThat(attributes.get("request.path").getFieldsOrThrow("").getStringValue()).isEqualTo("/test.TestService/SayHello");
+    
+    assertThat(attributes).containsKey("request.host");
+    assertThat(attributes.get("request.host").getFieldsOrThrow("").getStringValue()).isEqualTo(dataPlaneChannel.authority());
+    
+    assertThat(attributes).containsKey("request.method");
+    assertThat(attributes.get("request.method").getFieldsOrThrow("").getStringValue()).isEqualTo("POST");
+    
+    assertThat(attributes).containsKey("request.query");
+    assertThat(attributes.get("request.query").getFieldsOrThrow("").getStringValue()).isEqualTo("");
+    
+    assertThat(attributes).doesNotContainKey("request.scheme");
+    
+    channelManager.close();
+  }
+
+  @Test
+  public void givenMetadataAttributes_whenHeadersPresent_thenAttributesSent() throws Exception {
+    ExternalProcessor proto = createBaseProto()
+        .addRequestAttributes("request.referer")
+        .addRequestAttributes("request.useragent")
+        .addRequestAttributes("request.id")
+        .addRequestAttributes("request.headers")
+        .build();
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(extProcServerName)
+          .directExecutor()
+          .build());
+    });
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+    
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("referer", Metadata.ASCII_STRING_MARSHALLER), "http://google.com");
+    headers.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "custom-ua");
+    headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "req-123");
+    headers.put(Metadata.Key.of("custom-header", Metadata.ASCII_STRING_MARSHALLER), "val");
+    
+    final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarCompletedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              capturedRequest.set(request);
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              sidecarLatch.countDown();
+            } else if (request.hasResponseBody() && request.getResponseBody().getEndOfStreamWithoutMessage()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseBody(BodyResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setBodyMutation(BodyMutation.newBuilder()
+                              .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                  .setEndOfStream(true).build()).build()).build()).build())
+                  .build());
+            }
+          }
+          @Override public void onError(Throwable t) { sidecarCompletedLatch.countDown(); }
+          @Override public void onCompleted() {
+            responseObserver.onCompleted();
+            sidecarCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    
+    final CountDownLatch callLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) { callLatch.countDown(); }
+    }, headers);
+    proxyCall.request(1);
+    proxyCall.halfClose();
+
+    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(callLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    
+    ProcessingRequest request = capturedRequest.get();
+    java.util.Map<String, com.google.protobuf.Struct> attributes = request.getAttributesMap();
+    
+    assertThat(attributes.get("request.referer").getFieldsOrThrow("").getStringValue()).isEqualTo("http://google.com");
+    assertThat(attributes.get("request.useragent").getFieldsOrThrow("").getStringValue()).isEqualTo("custom-ua");
+    assertThat(attributes.get("request.id").getFieldsOrThrow("").getStringValue()).isEqualTo("req-123");
+    
+    com.google.protobuf.Struct headerStruct = attributes.get("request.headers");
+    assertThat(headerStruct.getFieldsOrThrow("referer").getStringValue()).isEqualTo("http://google.com");
+    assertThat(headerStruct.getFieldsOrThrow("user-agent").getStringValue()).isEqualTo("custom-ua");
+    assertThat(headerStruct.getFieldsOrThrow("x-request-id").getStringValue()).isEqualTo("req-123");
+    assertThat(headerStruct.getFieldsOrThrow("custom-header").getStringValue()).isEqualTo("val");
     
     channelManager.close();
   }
