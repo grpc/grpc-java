@@ -116,7 +116,7 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
         FileTime currentCertTime = Files.getLastModifiedTime(certFile);
         FileTime currentKeyTime = Files.getLastModifiedTime(keyFile);
         if (!currentCertTime.equals(lastModifiedTimeCert)
-            && !currentKeyTime.equals(lastModifiedTimeKey)) {
+            || !currentKeyTime.equals(lastModifiedTimeKey)) {
           byte[] certFileContents = Files.readAllBytes(certFile);
           byte[] keyFileContents = Files.readAllBytes(keyFile);
           FileTime currentCertTime2 = Files.getLastModifiedTime(certFile);
