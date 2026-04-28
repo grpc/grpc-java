@@ -23,8 +23,8 @@ import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction
 import java.util.logging.Logger;
 
 /**
- * The HeaderMutator class is an implementation of the HeaderMutator interface. It provides methods
- * to apply header mutations to a given set of headers based on a given set of rules.
+ * The HeaderMutator provides methods to apply header mutations to a given set of headers based on a
+ * given set of rules.
  */
 public class HeaderMutator {
 
@@ -71,15 +71,21 @@ public class HeaderMutator {
 
     if (header.key().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
       if (header.rawValue().isPresent()) {
-        updateHeader(action, Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER),
-            header.rawValue().get().toByteArray(), mutableHeaders, keepEmptyValue);
+        byte[] value = header.rawValue().get().toByteArray();
+        if (value.length > 0 || keepEmptyValue) {
+          updateHeader(action, Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER),
+                  value, mutableHeaders);
+        }
       } else {
         logger.fine("Missing binary rawValue for header: " + header.key());
       }
     } else {
       if (header.value().isPresent()) {
-        updateHeader(action, Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER),
-            header.value().get(), mutableHeaders, keepEmptyValue);
+        String value = header.value().get();
+        if (!value.isEmpty() || keepEmptyValue) {
+          updateHeader(action, Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER),
+                  value, mutableHeaders);
+        }
       } else {
         logger.fine("Missing value for header: " + header.key());
       }
@@ -87,7 +93,7 @@ public class HeaderMutator {
   }
 
   private <T> void updateHeader(final HeaderAppendAction action, final Metadata.Key<T> key,
-      final T value, Metadata mutableHeaders, boolean keepEmptyValue) {
+      final T value, Metadata mutableHeaders) {
     switch (action) {
       case APPEND_IF_EXISTS_OR_ADD:
         mutableHeaders.put(key, value);
@@ -112,33 +118,6 @@ public class HeaderMutator {
         // Should be unreachable unless there's a proto schema mismatch.
         logger.fine("Unknown HeaderAppendAction: " + action);
     }
-
-    if (!keepEmptyValue) {
-      checkAndRemoveEmpty(key, mutableHeaders);
-    }
-  }
-
-  private <T> void checkAndRemoveEmpty(Metadata.Key<T> key, Metadata headers) {
-    Iterable<T> values = headers.getAll(key);
-    if (values == null) {
-      return;
-    }
-    boolean allEmpty = true;
-    for (T val : values) {
-      if (val instanceof String) {
-        if (!((String) val).isEmpty()) {
-          allEmpty = false;
-          break;
-        }
-      } else if (val instanceof byte[]) {
-        if (((byte[]) val).length > 0) {
-          allEmpty = false;
-          break;
-        }
-      }
-    }
-    if (allEmpty) {
-      headers.discardAll(key);
-    }
   }
 }
+
