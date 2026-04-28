@@ -839,6 +839,9 @@ public class ExternalProcessorFilter implements Filter {
       private void applyHeaderMutations(Metadata metadata,
           HeaderMutation mutation)
           throws HeaderMutationDisallowedException {
+        if (metadata == null) {
+          return;
+        }
         ImmutableList.Builder<HeaderValueOption> headersToModify = ImmutableList.builder();
         for (io.envoyproxy.envoy.config.core.v3.HeaderValueOption protoOption : mutation.getSetHeadersList()) {
           io.envoyproxy.envoy.config.core.v3.HeaderValue protoHeader = protoOption.getHeader();
@@ -928,9 +931,15 @@ public class ExternalProcessorFilter implements Filter {
               // 4. Server Headers
               else if (response.hasResponseHeaders()) {
                 if (response.getResponseHeaders().hasResponse()) {
-                  applyHeaderMutations(wrappedListener.savedHeaders, response.getResponseHeaders().getResponse().getHeaderMutation());
+                  Metadata target = wrappedListener.trailersOnly.get()
+                      ? wrappedListener.savedTrailers : wrappedListener.savedHeaders;
+                  applyHeaderMutations(target, response.getResponseHeaders().getResponse().getHeaderMutation());
                 }
-                wrappedListener.proceedWithHeaders();
+                if (wrappedListener.trailersOnly.get()) {
+                  wrappedListener.proceedWithClose();
+                } else {
+                  wrappedListener.proceedWithHeaders();
+                }
               }
               // 5. Server Message (Response Body)
               else if (response.hasResponseBody()) {
@@ -1227,34 +1236,17 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void checkEndOfStream(ProcessingResponse response) {
-        boolean eos = false;
+        boolean terminal = false;
         if (response.hasResponseTrailers()) {
-          eos = true;
-        } else if (response.hasRequestHeaders() && response.getRequestHeaders().hasResponse()) {
-          eos = isEos(response.getRequestHeaders().getResponse());
-        } else if (response.hasResponseHeaders() && response.getResponseHeaders().hasResponse()) {
-          eos = isEos(response.getResponseHeaders().getResponse());
-        } else if (response.hasRequestBody() && response.getRequestBody().hasResponse()) {
-          eos = isEos(response.getRequestBody().getResponse());
-        } else if (response.hasResponseBody() && response.getResponseBody().hasResponse()) {
-          eos = isEos(response.getResponseBody().getResponse());
+          terminal = true;
+        } else if (response.hasResponseHeaders() && wrappedListener.trailersOnly.get()) {
+          terminal = true;
         }
 
-        if (eos) {
+        if (terminal) {
           wrappedListener.unblockAfterStreamComplete();
           closeExtProcStream();
         }
-      }
-
-      private boolean isEos(CommonResponse commonResponse) {
-        if (commonResponse.hasBodyMutation()) {
-          BodyMutation mutation = commonResponse.getBodyMutation();
-          if (mutation.hasStreamedResponse()) {
-            StreamedBodyResponse streamed = mutation.getStreamedResponse();
-            return streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage();
-          }
-        }
-        return false;
       }
     }
 
@@ -1267,6 +1259,8 @@ public class ExternalProcessorFilter implements Filter {
       private volatile Metadata savedTrailers;
       private volatile Status savedStatus;
       private final AtomicBoolean terminationTriggered = new AtomicBoolean(false);
+      private final AtomicBoolean responseHeadersSent = new AtomicBoolean(false);
+      private final AtomicBoolean trailersOnly = new AtomicBoolean(false);
 
       protected ExtProcListener(ClientCall.Listener<InputStream> delegate, ClientCall<?, ?> rawCall,
                                 ExtProcClientCall extProcClientCall) {
@@ -1287,6 +1281,7 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onHeaders(Metadata headers) {
+        responseHeadersSent.set(true);
         boolean sendResponseHeaders = extProcClientCall.currentProcessingMode.getResponseHeaderMode() 
             == ProcessingMode.HeaderSendMode.SEND
             || extProcClientCall.currentProcessingMode.getResponseHeaderMode() == ProcessingMode.HeaderSendMode.DEFAULT;
@@ -1320,7 +1315,7 @@ public class ExternalProcessorFilter implements Filter {
           }
           onReadyNotify();
           if (savedStatus != null) {
-             triggerHandshake();
+             triggerCloseHandshake();
           }
         }
       }
@@ -1382,7 +1377,11 @@ public class ExternalProcessorFilter implements Filter {
            return;
         }
 
-        triggerHandshake();
+        if (!responseHeadersSent.get()) {
+           trailersOnly.set(true);
+        }
+
+        triggerCloseHandshake();
 
         if (extProcClientCall.config.getObservabilityMode()) {
           proceedWithClose();
@@ -1394,8 +1393,18 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      private void triggerHandshake() {
+      private void triggerCloseHandshake() {
         if (extProcClientCall.extProcStreamCompleted.get() || !terminationTriggered.compareAndSet(false, true)) {
+          return;
+        }
+
+        if (trailersOnly.get()) {
+          extProcClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+              .setResponseHeaders(HttpHeaders.newBuilder()
+                  .setHeaders(toHeaderMap(savedTrailers, extProcClientCall.config.getForwardRulesConfig()))
+                  .setEndOfStream(true)
+                  .build())
+              .build());
           return;
         }
 
