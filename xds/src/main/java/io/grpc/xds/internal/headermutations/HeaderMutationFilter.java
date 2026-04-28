@@ -62,10 +62,14 @@ public class HeaderMutationFilter {
       throws HeaderMutationDisallowedException {
     ImmutableList.Builder<T> allowed = ImmutableList.builder();
     for (T item : items) {
-      if (isIgnoredPredicate.test(item)) {
-        continue;
-      }
-      if (isAllowedPredicate.test(item)) {
+      boolean isIgnored = isIgnoredPredicate.test(item);
+      boolean isAllowed = isAllowedPredicate.test(item);
+
+      // TODO(sauravzg): The specification is ambiguous regarding whether system headers
+      // should be silently ignored or trigger an error when disallowIsError is enabled.
+      // We default to triggering errors matching Envoy's implementation.
+      // Ref: https://github.com/grpc/proposal/pull/481#discussion_r3124453674
+      if (!isIgnored && isAllowed) {
         allowed.add(item);
       } else if (disallowIsError()) {
         throw new HeaderMutationDisallowedException("Header mutation disallowed");
@@ -97,8 +101,9 @@ public class HeaderMutationFilter {
         && rules.disallowExpression().get().matcher(headerName).matches()) {
       return false;
     }
-    if (rules.allowExpression().isPresent()) {
-      return rules.allowExpression().get().matcher(headerName).matches();
+    if (rules.allowExpression().isPresent()
+        && rules.allowExpression().get().matcher(headerName).matches()) {
+      return true;
     }
     return !rules.disallowAll();
   }
