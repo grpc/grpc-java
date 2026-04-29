@@ -4447,7 +4447,7 @@ public class ExternalProcessorFilterTest {
     }
   }
 
-  // --- Category 11: Resource Management ---
+  // --- Category 10: Resource Management ---
 
   @Test
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
@@ -4459,6 +4459,8 @@ public class ExternalProcessorFilterTest {
     
     Mockito.verify(mockChannelManager).close();
   }
+
+  // --- Category 11: Data plane rpc cancellation ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -4540,8 +4542,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-
-
+  // --- Category 12: Flow Control when side stream is full ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -4804,7 +4805,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 11: Streaming Completeness (Client & Bi-Di) ---
+  // --- Category 13: Streaming Completeness (Client & Bi-Di) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -5177,7 +5178,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 13: Header Forwarding Rules ---
+  // --- Category 14: Header Forwarding Rules ---
 
   @Test
   public void givenAllowedHeaders_whenHeadersForwarded_thenOnlyAllowedAreSent() throws Exception {
@@ -5487,7 +5488,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 14: Request Attributes ---
+  // --- Category 15: Request Attributes ---
 
   @Test
   public void parseFilterConfig_withUnrecognizedRequestAttribute_isIgnored() {
@@ -5707,7 +5708,192 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 15: Trailers-Only Response ---
+  // --- Category 16: Response Trailers ---
+
+  @Test
+  public void givenResponseTrailerModeSend_whenCallCloses_thenResponseTrailersSentToExtProc() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasResponseTrailers()) {
+              capturedRequest.set(request);
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseTrailers(TrailersResponse.newBuilder().build())
+                  .build());
+              sidecarLatch.countDown();
+              responseObserver.onCompleted();
+            } else if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+            } else if (request.hasResponseHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+            }
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl).executor(Executors.newSingleThreadExecutor()).build().start());
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName).executor(Executors.newSingleThreadExecutor()).build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    // Improved Data Plane Server with trailers
+    MutableHandlerRegistry uniqueDataPlaneRegistry = new MutableHandlerRegistry();
+    uniqueDataPlaneRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+              responseObserver.onNext("Hello");
+              responseObserver.onCompleted();
+            })).build(),
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            return next.startCall(new io.grpc.ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT>(call) {
+              @Override
+              public void close(Status status, Metadata trailers) {
+                trailers.put(Metadata.Key.of("x-trailer", Metadata.ASCII_STRING_MARSHALLER), "val");
+                super.close(status, trailers);
+              }
+            }, headers);
+          }
+        }));
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueDataPlaneRegistry)
+        .executor(Executors.newSingleThreadExecutor())
+        .build().start());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(InProcessChannelBuilder.forName(uniqueDataPlaneServerName).executor(Executors.newSingleThreadExecutor()).build());
+
+    final CountDownLatch callLatch = new CountDownLatch(1);
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+        @Override public void onClose(Status status, Metadata trailers) { callLatch.countDown(); }
+    }, new Metadata());
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+    proxyCall.halfClose();
+
+    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(callLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedRequest.get().hasResponseTrailers()).isTrue();
+    assertThat(capturedRequest.get().getResponseTrailers().getTrailers().getHeadersList()).isNotEmpty();
+    
+    channelManager.close();
+  }
+
+  @Test
+  public void givenResponseTrailerModeDefault_whenCallCloses_thenResponseTrailersNotSentToExtProc() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    final AtomicInteger sidecarTrailerCount = new AtomicInteger(0);
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarHeadersLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasResponseTrailers()) {
+              sidecarTrailerCount.incrementAndGet();
+            } else if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              sidecarLatch.countDown();
+            } else if (request.hasResponseHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              sidecarHeadersLatch.countDown();
+              responseObserver.onCompleted();
+            }
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl).executor(Executors.newSingleThreadExecutor()).build().start());
+
+    // DEFAULT mode for trailers (interpreted as SKIP)
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.DEFAULT)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName).executor(Executors.newSingleThreadExecutor()).build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    MutableHandlerRegistry uniqueDataPlaneRegistry = new MutableHandlerRegistry();
+    uniqueDataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+    
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueDataPlaneRegistry)
+        .executor(Executors.newSingleThreadExecutor())
+        .build().start());
+        
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(InProcessChannelBuilder.forName(uniqueDataPlaneServerName).executor(Executors.newSingleThreadExecutor()).build());
+
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+        @Override public void onClose(Status status, Metadata trailers) { appCloseLatch.countDown(); }
+    }, new Metadata());
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+    proxyCall.halfClose();
+
+    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    // Wait a bit to ensure no trailers arrive
+    Thread.sleep(500);
+    assertThat(sidecarTrailerCount.get()).isEqualTo(0);
+    
+    channelManager.close();
+  }
+
+  // --- Category 17: Trailers-Only Response ---
 
   @Test
   public void givenTrailersOnly_whenResponseReceived_thenResponseHeadersSentWithEos() throws Exception {
@@ -5808,7 +5994,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 16: Response Ordering Checks ---
+  // --- Category 18: Response Ordering Checks ---
 
   @Test
   public void givenOutOfOrderReqResponses_whenMessageArrivesBeforeHeaders_thenFails() throws Exception {
@@ -5955,7 +6141,7 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
-  // --- Category 17: Header Response Status Checks ---
+  // --- Category 19: Header Response Status Checks ---
 
   @Test
   public void givenRequestHeadersResponse_whenStatusIsContinueAndReplace_thenFails() throws Exception {
