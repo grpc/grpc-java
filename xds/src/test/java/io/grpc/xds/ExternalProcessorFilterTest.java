@@ -1,10 +1,10 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+
+import io.grpc.internal.GrpcUtil;
 import java.util.Arrays;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
@@ -23,16 +23,13 @@ import io.envoyproxy.envoy.service.ext_proc.v3.HeadersResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
-import io.envoyproxy.envoy.service.ext_proc.v3.ProtocolConfiguration;
 import io.envoyproxy.envoy.service.ext_proc.v3.StreamedBodyResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.TrailersResponse;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
-import io.grpc.Context;
 import io.grpc.Deadline;
-import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -50,8 +47,6 @@ import io.grpc.internal.SerializingExecutor;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.ClientCalls;
-import io.grpc.stub.ClientCallStreamObserver;
-import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.ServerCalls;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
@@ -62,7 +57,7 @@ import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
-import io.grpc.xds.internal.grpcservice.ChannelCredsConfig;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -90,7 +85,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 /**
@@ -224,7 +218,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + targetName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build());
@@ -295,6 +290,41 @@ public class ExternalProcessorFilterTest {
   }
 
 
+  @Test
+  public void provider_registeredInFilterRegistry_basedOnFlag() {
+    // Test with flag true
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
+    try {
+      FilterRegistry registry = FilterRegistry.newRegistry().register(
+          new FaultFilter.Provider(),
+          new RouterFilter.Provider(),
+          new RbacFilter.Provider(),
+          new GcpAuthenticationFilter.Provider());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+         registry.register(new ExternalProcessorFilter.Provider());
+      }
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    }
+
+    // Test with flag false
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
+    try {
+      FilterRegistry registry = FilterRegistry.newRegistry().register(
+          new FaultFilter.Provider(),
+          new RouterFilter.Provider(),
+          new RbacFilter.Provider(),
+          new GcpAuthenticationFilter.Provider());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+         registry.register(new ExternalProcessorFilter.Provider());
+      }
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNull();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    }
+  }
+
   // --- Category 2: Configuration Override ---
 
   @Test
@@ -304,7 +334,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///parent")
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -314,7 +345,8 @@ public class ExternalProcessorFilterTest {
         .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
             .setTargetUri("in-process:///override")
             .addChannelCredentialsPlugin(Any.newBuilder()
-                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                 .build())
             .build())
         .build();
@@ -324,10 +356,12 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -335,8 +369,8 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
-    assertThat(interceptor.getFilterConfig().getExternalProcessor().getGrpcService().getGoogleGrpc().getTargetUri())
-        .isEqualTo("in-process:///override");
+    assertThat(interceptor.getFilterConfig().getExternalProcessor().getGrpcService()
+        .getGoogleGrpc().getTargetUri()).isEqualTo("in-process:///override");
   }
 
   @Test
@@ -350,10 +384,12 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -378,7 +414,8 @@ public class ExternalProcessorFilterTest {
         .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
             .setTargetUri("in-process:///overridden")
             .addChannelCredentialsPlugin(Any.newBuilder()
-                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                 .build())
             .build())
         .build();
@@ -391,9 +428,11 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
@@ -423,10 +462,12 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -434,7 +475,8 @@ public class ExternalProcessorFilterTest {
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
-    ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
+    ProcessingMode mergedMode = 
+        interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
     // Full replacement: requestBodyMode becomes GRPC, others become defaults (0/DEFAULT/NONE)
     assertThat(mergedMode.getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
     assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.DEFAULT);
@@ -452,7 +494,8 @@ public class ExternalProcessorFilterTest {
         .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
             .setTargetUri("in-process:///override")
             .addChannelCredentialsPlugin(Any.newBuilder()
-                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                 .build())
             .build())
         .build();
@@ -466,10 +509,12 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -482,7 +527,8 @@ public class ExternalProcessorFilterTest {
     assertThat(mergedConfig.getExternalProcessor().getGrpcService()).isEqualTo(overrideService);
     assertThat(mergedConfig.getExternalProcessor().getProcessingMode().getRequestBodyMode())
         .isEqualTo(ProcessingMode.BodySendMode.GRPC);
-    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-over");
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList())
+        .containsExactly("attr-over");
   }
 
   @Test
@@ -498,10 +544,12 @@ public class ExternalProcessorFilterTest {
             .build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -511,7 +559,8 @@ public class ExternalProcessorFilterTest {
 
     ExternalProcessorFilterConfig mergedConfig = interceptor.getFilterConfig();
     assertThat(mergedConfig.getFailureModeAllow()).isTrue();
-    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList()).containsExactly("attr-parent");
+    assertThat(mergedConfig.getExternalProcessor().getRequestAttributesList())
+        .containsExactly("attr-parent");
   }
 
 
@@ -525,10 +574,12 @@ public class ExternalProcessorFilterTest {
         .setOverrides(ExtProcOverrides.newBuilder().build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -554,10 +605,12 @@ public class ExternalProcessorFilterTest {
         .setOverrides(ExtProcOverrides.newBuilder().build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -579,10 +632,12 @@ public class ExternalProcessorFilterTest {
         .setOverrides(ExtProcOverrides.newBuilder().build())
         .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
+        provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
 
@@ -606,7 +661,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -684,7 +740,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .setTimeout(com.google.protobuf.Duration.newBuilder().setSeconds(5).build())
@@ -763,7 +820,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .addInitialMetadata(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
@@ -1051,7 +1109,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1135,7 +1194,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1250,7 +1310,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1342,7 +1403,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1461,7 +1523,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1582,7 +1645,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1705,7 +1769,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1789,7 +1854,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -1927,7 +1993,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2052,7 +2119,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2191,7 +2259,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2333,7 +2402,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2455,7 +2525,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2555,7 +2626,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2642,7 +2714,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2742,7 +2815,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -2875,7 +2949,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3018,7 +3093,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3136,7 +3212,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3218,7 +3295,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3329,7 +3407,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3411,7 +3490,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3486,7 +3566,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3573,7 +3654,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3667,7 +3749,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3763,7 +3846,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -3874,7 +3958,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4011,7 +4096,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4134,7 +4220,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4257,7 +4344,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + uniqueExtProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4408,7 +4496,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4490,7 +4579,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
@@ -4614,7 +4704,8 @@ public class ExternalProcessorFilterTest {
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
                 .setTargetUri("in-process:///" + extProcServerName)
                 .addChannelCredentialsPlugin(Any.newBuilder()
-                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service.channel_credentials.insecure.v3.InsecureCredentials")
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
             .build())
