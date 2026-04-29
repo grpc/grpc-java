@@ -23,6 +23,7 @@ import io.envoyproxy.envoy.service.ext_proc.v3.HeadersResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProtocolConfiguration;
 import io.envoyproxy.envoy.service.ext_proc.v3.StreamedBodyResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.TrailersResponse;
 import io.grpc.CallOptions;
@@ -900,6 +901,88 @@ public class ExternalProcessorFilterTest {
   }
 
   // --- Category 4: Request Header Processing ---
+
+  @Test
+  public void givenProcessingMode_whenRequestHeadersSent_thenProtocolConfigIsPopulated() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    final CountDownLatch sidecarLatch = new CountDownLatch(2);
+    final List<ProcessingRequest> capturedRequests = Collections.synchronizedList(new ArrayList<>());
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            capturedRequests.add(request);
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+            }
+            sidecarLatch.countDown();
+          }
+          @Override public void onError(Throwable t) {}
+          @Override public void onCompleted() { responseObserver.onCompleted(); }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl).directExecutor().build().start());
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
+
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+
+    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    
+    assertThat(capturedRequests).hasSize(3);
+    
+    // First request (RequestHeaders) should have protocol_config
+    ProcessingRequest firstReq = capturedRequests.get(0);
+    assertThat(firstReq.hasRequestHeaders()).isTrue();
+    assertThat(firstReq.hasProtocolConfig()).isTrue();
+    assertThat(firstReq.getProtocolConfig().getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
+    assertThat(firstReq.getProtocolConfig().getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
+    
+    // Second request (ResponseHeaders) should NOT have protocol_config
+    ProcessingRequest secondReq = capturedRequests.get(1);
+    assertThat(secondReq.hasResponseHeaders()).isTrue();
+    assertThat(secondReq.hasProtocolConfig()).isFalse();
+
+    // Third request (RequestBody) should NOT have protocol_config
+    ProcessingRequest thirdReq = capturedRequests.get(2);
+    assertThat(thirdReq.hasRequestBody()).isTrue();
+    assertThat(thirdReq.hasProtocolConfig()).isFalse();
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
 
   @Test
   public void givenPendingData_whenImmediateResponseReceived_thenDeliversDataBeforeStatus() throws Exception {

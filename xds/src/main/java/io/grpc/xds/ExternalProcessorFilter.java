@@ -37,6 +37,7 @@ import io.envoyproxy.envoy.service.ext_proc.v3.HttpTrailers;
 import io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
+import io.envoyproxy.envoy.service.ext_proc.v3.ProtocolConfiguration;
 import io.envoyproxy.envoy.service.ext_proc.v3.StreamedBodyResponse;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -1050,6 +1051,10 @@ public class ExternalProcessorFilter implements Filter {
                   .setEndOfStream(false)
                   .build())
               .putAllAttributes(collectAttributes(config.getRequestAttributes(), method, channel, headers))
+              .setProtocolConfig(ProtocolConfiguration.newBuilder()
+                  .setRequestBodyMode(currentProcessingMode.getRequestBodyMode())
+                  .setResponseBodyMode(currentProcessingMode.getResponseBodyMode())
+                  .build())
               .build());
         }
 
