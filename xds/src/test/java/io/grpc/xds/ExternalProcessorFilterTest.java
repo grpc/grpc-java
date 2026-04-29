@@ -364,72 +364,7 @@ public class ExternalProcessorFilterTest {
     assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
   }
 
-  @Test
-  public void givenOverrideConfig_whenProcessingModeSkipsDefault_thenRetainsParentMode() throws Exception {
-    ExternalProcessor parentProto = createBaseProto(extProcServerName)
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
-            .build())
-        .build();
-    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
-        .setOverrides(ExtProcOverrides.newBuilder()
-            .setProcessingMode(ProcessingMode.newBuilder()
-                .setRequestHeaderMode(ProcessingMode.HeaderSendMode.DEFAULT)
-                .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-                .build())
-            .build())
-        .build();
 
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
-    ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
-
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
-    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
-    ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
-    
-    // requestHeaderMode was SKIP in parent and DEFAULT in override. Should remain SKIP.
-    assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
-    // responseHeaderMode was SEND in parent and SKIP in override. Should become SKIP.
-    assertThat(mergedMode.getResponseHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.SKIP);
-  }
-
-  @Test
-  public void givenOverrideConfig_whenProcessingModeMergesNone_thenTakesEffect() throws Exception {
-    ExternalProcessor parentProto = createBaseProto(extProcServerName)
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
-            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
-            .build())
-        .build();
-    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
-        .setOverrides(ExtProcOverrides.newBuilder()
-            .setProcessingMode(ProcessingMode.newBuilder()
-                .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
-                .build())
-            .build())
-        .build();
-
-    ConfigOrError<ExternalProcessorFilterConfig> parentResult = provider.parseFilterConfig(Any.pack(parentProto), filterContext);
-    ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
-
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
-    ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
-        filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
-    ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
-
-    // requestBodyMode was GRPC in parent and NONE in override. Should become NONE.
-    assertThat(mergedMode.getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
-    // responseBodyMode was GRPC in parent. Since it wasn't set in override, it becomes NONE 
-    // because we merge all fields from the override, and non-HeaderSendMode enums without 
-    // explicit presence in proto3 default to 0 (NONE) when not set.
-    assertThat(mergedMode.getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
-  }
 
   @Test
   public void givenOverrideConfig_whenOtherFieldsOverridden_thenReplaced() throws Exception {
@@ -473,10 +408,12 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenOverrideConfig_whenProcessingModeOverridden_thenTakesEffect() throws Exception {
+  public void givenOverrideConfig_whenProcessingModeOverridden_thenReplacesWholeMode() throws Exception {
     ExternalProcessor parentProto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
@@ -498,9 +435,10 @@ public class ExternalProcessorFilterTest {
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
     ProcessingMode mergedMode = interceptor.getFilterConfig().getExternalProcessor().getProcessingMode();
-    // Granular merge: requestBodyMode overridden, responseBodyMode becomes NONE (default) 
-    // because it's not set in the override proto.
+    // Full replacement: requestBodyMode becomes GRPC, others become defaults (0/DEFAULT/NONE)
     assertThat(mergedMode.getRequestBodyMode()).isEqualTo(ProcessingMode.BodySendMode.GRPC);
+    assertThat(mergedMode.getRequestHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.DEFAULT);
+    assertThat(mergedMode.getResponseHeaderMode()).isEqualTo(ProcessingMode.HeaderSendMode.DEFAULT);
     assertThat(mergedMode.getResponseBodyMode()).isEqualTo(ProcessingMode.BodySendMode.NONE);
   }
 

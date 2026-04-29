@@ -182,8 +182,7 @@ public class ExternalProcessorFilter implements Filter {
     ExternalProcessor.Builder mergedProtoBuilder = parentProto.toBuilder();
 
     if (overrides.hasProcessingMode()) {
-      mergedProtoBuilder.setProcessingMode(
-          mergeProcessingMode(parentProto.getProcessingMode(), overrides.getProcessingMode()));
+      mergedProtoBuilder.setProcessingMode(overrides.getProcessingMode());
     }
 
     if (overrides.getRequestAttributesCount() > 0) {
@@ -209,20 +208,7 @@ public class ExternalProcessorFilter implements Filter {
     return merged.config;
   }
 
-  private static ProcessingMode mergeProcessingMode(ProcessingMode parent, ProcessingMode override) {
-    ProcessingMode.Builder builder = parent.toBuilder();
-    for (FieldDescriptor field : override.getDescriptorForType().getFields()) {
-      Object value = override.getField(field);
-      // For HeaderSendMode DEFAULT means \"no change\" in an override.
-      if (value instanceof Descriptors.EnumValueDescriptor
-          && ((Descriptors.EnumValueDescriptor) value).getType().getFullName().endsWith("HeaderSendMode")
-          && ((Descriptors.EnumValueDescriptor) value).getName().equals("DEFAULT")) {
-        continue;
-      }
-      builder.setField(field, value);
-    }
-    return builder.build();
-  }
+
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
 
