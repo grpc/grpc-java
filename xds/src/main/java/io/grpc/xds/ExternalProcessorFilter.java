@@ -754,12 +754,21 @@ public class ExternalProcessorFilter implements Filter {
      * Buffers the actual RPC start until the Ext Proc header response is received.
      */
     private static class ExtProcClientCall extends SimpleForwardingClientCall<InputStream, InputStream> {
+      private enum EventType {
+        REQUEST_HEADERS,
+        REQUEST_BODY,
+        RESPONSE_HEADERS,
+        RESPONSE_BODY,
+        RESPONSE_TRAILERS
+      }
+
       private final ExternalProcessorGrpc.ExternalProcessorStub stub;
       private final ExternalProcessorFilterConfig config;
       private final ClientCall<InputStream, InputStream> rawCall;
       private final ExtProcDelayedCall<InputStream, InputStream> delayedCall;
       private final ScheduledExecutorService scheduler;
       private final Object streamLock = new Object();
+      private final Queue<EventType> expectedResponses = new ConcurrentLinkedQueue<>();
       private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private final Queue<ProcessingRequest> pendingProcessingRequests = new ConcurrentLinkedQueue<>();
       private volatile ExtProcListener wrappedListener;
@@ -905,6 +914,31 @@ public class ExternalProcessorFilter implements Filter {
                 return;
               }
 
+              EventType expected = expectedResponses.peek();
+              EventType received = null;
+              if (response.hasRequestHeaders()) {
+                received = EventType.REQUEST_HEADERS;
+              } else if (response.hasRequestBody()) {
+                received = EventType.REQUEST_BODY;
+              } else if (response.hasResponseHeaders()) {
+                received = EventType.RESPONSE_HEADERS;
+              } else if (response.hasResponseBody()) {
+                received = EventType.RESPONSE_BODY;
+              } else if (response.hasResponseTrailers()) {
+                received = EventType.RESPONSE_TRAILERS;
+              }
+
+              if (received != null) {
+                if (expected == null || expected != received) {
+                  onError(Status.INTERNAL
+                      .withDescription("Protocol error: received response out of order. Expected: " 
+                          + expected + ", Received: " + received)
+                      .asRuntimeException());
+                  return;
+                }
+                expectedResponses.poll();
+              }
+
               if (response.getRequestDrain()) {
                 drainingExtProcStream.set(true);
                 halfCloseExtProcStream();
@@ -1008,6 +1042,19 @@ public class ExternalProcessorFilter implements Filter {
           if (extProcStreamCompleted.get()) {
             return;
           }
+          
+          if (request.hasRequestHeaders()) {
+            expectedResponses.add(EventType.REQUEST_HEADERS);
+          } else if (request.hasRequestBody()) {
+            expectedResponses.add(EventType.REQUEST_BODY);
+          } else if (request.hasResponseHeaders()) {
+            expectedResponses.add(EventType.RESPONSE_HEADERS);
+          } else if (request.hasResponseBody()) {
+            expectedResponses.add(EventType.RESPONSE_BODY);
+          } else if (request.hasResponseTrailers()) {
+            expectedResponses.add(EventType.RESPONSE_TRAILERS);
+          }
+
           if (extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onNext(request);
           } else {
