@@ -5871,4 +5871,191 @@ public class ExternalProcessorFilterTest {
     
     channelManager.close();
   }
+
+  // --- Category 17: Header Response Status Checks ---
+
+  @Test
+  public void givenRequestHeadersResponse_whenStatusIsContinueAndReplace_thenFails() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarFinishedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setStatus(CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE)
+                          .build())
+                      .build())
+                  .build());
+              sidecarLatch.countDown();
+              responseObserver.onCompleted();
+            }
+          }
+          @Override public void onError(Throwable t) {
+            sidecarFinishedLatch.countDown();
+          }
+          @Override public void onCompleted() {
+            sidecarFinishedLatch.countDown();
+            responseObserver.onCompleted();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .executor(Executors.newSingleThreadExecutor())
+        .build().start());
+
+    // Enable fail-open
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setFailureModeAllow(true)
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName)
+          .executor(Executors.newSingleThreadExecutor())
+          .build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).executor(Executors.newSingleThreadExecutor()).build());
+
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    final AtomicReference<Status> appStatus = new AtomicReference<>();
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        appStatus.set(status);
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+    try {
+      proxyCall.halfClose();
+    } catch (IllegalStateException ignored) {}
+
+    assertThat(sidecarLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(appCloseLatch.await(30, TimeUnit.SECONDS)).isTrue();
+
+    // Call should succeed due to fail-open
+    assertThat(appStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
+
+  @Test
+  public void givenResponseHeadersResponse_whenStatusIsContinueAndReplace_thenFails() throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+
+    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarFinishedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      public StreamObserver<ProcessingRequest> process(final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+            } else if (request.hasResponseHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder()
+                      .setResponse(CommonResponse.newBuilder()
+                          .setStatus(CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE)
+                          .build())
+                      .build())
+                  .build());
+              sidecarLatch.countDown();
+              responseObserver.onCompleted();
+            }
+          }
+          @Override public void onError(Throwable t) {
+            sidecarFinishedLatch.countDown();
+          }
+          @Override public void onCompleted() {
+            sidecarFinishedLatch.countDown();
+            responseObserver.onCompleted();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .executor(Executors.newSingleThreadExecutor())
+        .build().start());
+
+    // Enable response headers and fail-open
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig = provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName)
+          .executor(Executors.newSingleThreadExecutor())
+          .build());
+    });
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("Hello");
+          responseObserver.onCompleted();
+        })).build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).executor(Executors.newSingleThreadExecutor()).build());
+
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    final AtomicReference<Status> appStatus = new AtomicReference<>();
+    ClientCall<String, String> proxyCall = interceptor.interceptCall(METHOD_SAY_HELLO, CallOptions.DEFAULT.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override public void onClose(Status status, Metadata trailers) {
+        appStatus.set(status);
+        appCloseLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+    try {
+      proxyCall.halfClose();
+    } catch (IllegalStateException ignored) {}
+
+    assertThat(sidecarLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(appCloseLatch.await(30, TimeUnit.SECONDS)).isTrue();
+
+    // The call should succeed due to fail-open
+    assertThat(appStatus.get().getCode()).isEqualTo(Status.Code.OK);
+
+    channelManager.close();
+  }
 }

@@ -829,7 +829,7 @@ public class ExternalProcessorFilter implements Filter {
               bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasStreamedResponse()
               && mutation.getStreamedResponse().getGrpcMessageCompressed()) {
-            StatusRuntimeException ex = Status.INTERNAL
+            StatusRuntimeException ex = Status.UNAVAILABLE
                 .withDescription("gRPC message compression not supported in ext_proc")
                 .asRuntimeException();
             if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
@@ -901,7 +901,7 @@ public class ExternalProcessorFilter implements Filter {
             try {
               if (response.hasImmediateResponse()) {
                 if (config.getDisableImmediateResponse()) {
-                  onError(Status.INTERNAL
+                  onError(Status.UNAVAILABLE
                       .withDescription("Immediate response is disabled but received from external processor")
                       .asRuntimeException());
                   return;
@@ -930,7 +930,7 @@ public class ExternalProcessorFilter implements Filter {
 
               if (received != null) {
                 if (expected == null || expected != received) {
-                  onError(Status.INTERNAL
+                  onError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
                           + expected + ", Received: " + received)
                       .asRuntimeException());
@@ -948,6 +948,13 @@ public class ExternalProcessorFilter implements Filter {
               // 1. Client Headers
               if (response.hasRequestHeaders()) {
                 if (response.getRequestHeaders().hasResponse()) {
+                  if (response.getRequestHeaders().getResponse().getStatus()
+                      == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+                    onError(Status.UNAVAILABLE
+                        .withDescription("CONTINUE_AND_REPLACE is not supported")
+                        .asRuntimeException());
+                    return;
+                  }
                   applyHeaderMutations(requestHeaders, response.getRequestHeaders().getResponse().getHeaderMutation());
                 }
                 activateCall();
@@ -965,6 +972,13 @@ public class ExternalProcessorFilter implements Filter {
               // 4. Server Headers
               else if (response.hasResponseHeaders()) {
                 if (response.getResponseHeaders().hasResponse()) {
+                  if (response.getResponseHeaders().getResponse().getStatus()
+                      == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+                    onError(Status.UNAVAILABLE
+                        .withDescription("CONTINUE_AND_REPLACE is not supported")
+                        .asRuntimeException());
+                    return;
+                  }
                   Metadata target = wrappedListener.trailersOnly.get()
                       ? wrappedListener.savedTrailers : wrappedListener.savedHeaders;
                   applyHeaderMutations(target, response.getResponseHeaders().getResponse().getHeaderMutation());
@@ -1000,12 +1014,19 @@ public class ExternalProcessorFilter implements Filter {
           @Override
           public void onError(Throwable t) {
             if (extProcStreamCompleted.compareAndSet(false, true)) {
+              synchronized (streamLock) {
+                if (extProcClientCallRequestObserver != null) {
+                  extProcClientCallRequestObserver.onError(t);
+                  extProcClientCallRequestObserver = null;
+                }
+              }
               if (config.getFailureModeAllow()) {
                 handleFailOpen(wrappedListener);
               } else {
                 extProcStreamFailed.set(true);
                 String message = "External processor stream failed";
                 delayedCall.cancel(message, t);
+                wrappedListener.proceedWithClose();
               }
             }
           }
@@ -1280,6 +1301,7 @@ public class ExternalProcessorFilter implements Filter {
       private void handleFailOpen(ExtProcListener listener) {
         activateCall();
         listener.unblockAfterStreamComplete();
+        closeExtProcStream();
       }
 
       private void checkEndOfStream(ProcessingResponse response) {
