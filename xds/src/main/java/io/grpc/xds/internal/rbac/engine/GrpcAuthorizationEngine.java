@@ -41,8 +41,11 @@ import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.net.ssl.ExtendedSSLSession;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SNIServerName;
 
 /**
  * Implementation of gRPC server access control based on envoy RBAC protocol:
@@ -411,6 +414,20 @@ public final class GrpcAuthorizationEngine {
     }
 
     private String getRequestedServerName() {
+      SSLSession sslSession = serverCall.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+      if (!(sslSession instanceof ExtendedSSLSession)) {
+        return "";
+      }
+      List<SNIServerName> requestedServerNames =
+          ((ExtendedSSLSession) sslSession).getRequestedServerNames();
+      if (requestedServerNames == null) {
+        return "";
+      }
+      for (SNIServerName requestedServerName : requestedServerNames) {
+        if (requestedServerName instanceof SNIHostName) {
+          return ((SNIHostName) requestedServerName).getAsciiName();
+        }
+      }
       return "";
     }
   }
