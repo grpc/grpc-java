@@ -77,6 +77,7 @@ import io.grpc.xds.internal.security.SecurityProtocolNegotiators;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import io.grpc.xds.internal.security.TlsContextManagerImpl;
 import io.grpc.xds.internal.security.certprovider.FileWatcherCertificateProviderProvider;
+import io.grpc.xds.internal.security.trust.CertificateUtils;
 import io.netty.handler.ssl.NotSslRecordException;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -378,7 +379,11 @@ public class XdsSecurityClientServerTest {
   public void tlsClientServer_autoSniValidation_noSniApplicable_usesMatcherFromCmnVdnCtx()
       throws Exception {
     Path trustStoreFilePath = getCacertFilePathForTestCa();
+    boolean originalUseChannelAuthorityIfNoSniApplicable =
+            CertificateUtils.useChannelAuthorityIfNoSniApplicable;
     try {
+      CertificateUtils.useChannelAuthorityIfNoSniApplicable =
+              true;
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
           setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
@@ -398,6 +403,8 @@ public class XdsSecurityClientServerTest {
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       unaryRpc(/* requestMessage= */ "buddy", blockingStub);
     } finally {
+      CertificateUtils.useChannelAuthorityIfNoSniApplicable =
+              originalUseChannelAuthorityIfNoSniApplicable;
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
     }
