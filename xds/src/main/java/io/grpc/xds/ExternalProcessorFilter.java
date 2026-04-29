@@ -481,7 +481,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       ImmutableList<HeaderValue> initialMetadata = filterConfig.grpcServiceConfig.initialMetadata();
-      if (initialMetadata != null && !initialMetadata.isEmpty()) {
+      if (!initialMetadata.isEmpty()) {
         stub = stub.withInterceptors(new ClientInterceptor() {
           @Override
           public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
