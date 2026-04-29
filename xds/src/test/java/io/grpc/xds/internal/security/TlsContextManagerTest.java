@@ -83,11 +83,11 @@ public class TlsContextManagerTest {
 
     TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(bootstrapInfoForClient);
     SslContextProvider clientSecretProvider =
-        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext, false);
+        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
 
     SslContextProvider clientSecretProvider1 =
-        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext, false);
+        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider1).isSameInstanceAs(clientSecretProvider);
   }
 
@@ -127,14 +127,14 @@ public class TlsContextManagerTest {
 
     TlsContextManagerImpl tlsContextManagerImpl = new TlsContextManagerImpl(bootstrapInfoForClient);
     SslContextProvider clientSecretProvider =
-        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext, false);
+        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isNotNull();
 
     UpstreamTlsContext upstreamTlsContext1 =
         CommonTlsContextTestsUtil.buildUpstreamTlsContext("cert-instance-2", true);
 
     SslContextProvider clientSecretProvider1 =
-        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext1, false);
+        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext1);
     assertThat(clientSecretProvider1).isNotSameInstanceAs(clientSecretProvider);
   }
 
@@ -168,7 +168,7 @@ public class TlsContextManagerTest {
     SslContextProvider mockProvider = mock(SslContextProvider.class);
     when(mockClientFactory.create(upstreamTlsContext)).thenReturn(mockProvider);
     SslContextProvider clientSecretProvider =
-        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext, false);
+        tlsContextManagerImpl.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
     when(mockProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);

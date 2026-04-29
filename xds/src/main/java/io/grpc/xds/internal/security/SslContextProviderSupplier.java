@@ -100,11 +100,19 @@ public final class SslContextProviderSupplier implements Closeable {
   }
 
   private SslContextProvider getSslContextProvider(boolean autoSniSanValidationDoesNotApply) {
-    return tlsContext instanceof UpstreamTlsContext
-        ? tlsContextManager.findOrCreateClientSslContextProvider(
-            (UpstreamTlsContext) tlsContext, autoSniSanValidationDoesNotApply)
-        : tlsContextManager.findOrCreateServerSslContextProvider(
-            (DownstreamTlsContext) tlsContext);
+    if (tlsContext instanceof UpstreamTlsContext) {
+      UpstreamTlsContext upstreamTlsContext = (UpstreamTlsContext) tlsContext;
+      if (autoSniSanValidationDoesNotApply && upstreamTlsContext.getAutoSniSanValidation()) {
+        upstreamTlsContext = new UpstreamTlsContext(
+            upstreamTlsContext.getCommonTlsContext(),
+            upstreamTlsContext.getSni(),
+            upstreamTlsContext.getAutoHostSni(),
+            false);
+      }
+      return tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
+    }
+    return tlsContextManager.findOrCreateServerSslContextProvider(
+        (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

@@ -1360,15 +1360,8 @@ public class ClusterImplLoadBalancerTest {
   private static final class FakeTlsContextManager implements TlsContextManager {
     @Override
     public SslContextProvider findOrCreateClientSslContextProvider(
-        UpstreamTlsContext upstreamTlsContext, boolean autoSniSanValidationDoesNotApply) {
+        UpstreamTlsContext upstreamTlsContext) {
       SslContextProvider sslContextProvider = mock(SslContextProvider.class);
-      if (autoSniSanValidationDoesNotApply && upstreamTlsContext.getAutoSniSanValidation()) {
-        upstreamTlsContext = new UpstreamTlsContext(
-            upstreamTlsContext.getCommonTlsContext(),
-            upstreamTlsContext.getSni(),
-            upstreamTlsContext.getAutoHostSni(),
-            false);
-      }
       when(sslContextProvider.getUpstreamTlsContext()).thenReturn(upstreamTlsContext);
       return sslContextProvider;
     }
