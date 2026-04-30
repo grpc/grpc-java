@@ -193,7 +193,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
   private SSLSocketFactory sslSocketFactory;
   private final boolean freezeSecurityConfiguration;
   private HostnameVerifier hostnameVerifier;
-  private ConnectionSpec connectionSpec;
+  private ConnectionSpec connectionSpec = initialConnectionSpec();
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
@@ -224,7 +224,6 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
         new OkHttpChannelDefaultPortProvider());
     this.freezeSecurityConfiguration = false;
     this.channelCredentials = null;
-    this.connectionSpec = initialConnectionSpec();
   }
 
   OkHttpChannelBuilder(
@@ -238,7 +237,6 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     this.negotiationType = factory == null ? NegotiationType.PLAINTEXT : NegotiationType.TLS;
     this.freezeSecurityConfiguration = true;
     this.channelCredentials = channelCreds;
-    this.connectionSpec = initialConnectionSpec();
   }
 
   private final class OkHttpChannelTransportFactoryBuilder
