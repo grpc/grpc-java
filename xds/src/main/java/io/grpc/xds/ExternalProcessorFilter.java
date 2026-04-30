@@ -487,39 +487,37 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       ImmutableList<HeaderValue> initialMetadata = filterConfig.grpcServiceConfig.initialMetadata();
-      if (!initialMetadata.isEmpty()) {
-        extProcStub = extProcStub.withInterceptors(new ClientInterceptor() {
-          @Override
-          public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
-              MethodDescriptor<ExtReqT, ExtRespT> extMethod, 
-              CallOptions extCallOptions, 
-              Channel extNext) {
-            return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(
-                extNext.newCall(extMethod, extCallOptions)) {
-              @Override
-              public void start(Listener<ExtRespT> responseListener, Metadata headers) {
-                for (HeaderValue headerValue : initialMetadata) {
-                  String key = headerValue.key();
-                  if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-                    if (headerValue.rawValue().isPresent()) {
-                      Metadata.Key<byte[]> metadataKey = 
-                          Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
-                      headers.put(metadataKey, headerValue.rawValue().get().toByteArray());
-                    }
-                  } else {
-                    if (headerValue.value().isPresent()) {
-                      Metadata.Key<String> metadataKey = 
-                          Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
-                      headers.put(metadataKey, headerValue.value().get());
-                    }
+      extProcStub = extProcStub.withInterceptors(new ClientInterceptor() {
+        @Override
+        public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
+            MethodDescriptor<ExtReqT, ExtRespT> extMethod, 
+            CallOptions extCallOptions, 
+            Channel extNext) {
+          return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(
+              extNext.newCall(extMethod, extCallOptions)) {
+            @Override
+            public void start(Listener<ExtRespT> responseListener, Metadata headers) {
+              for (HeaderValue headerValue : initialMetadata) {
+                String key = headerValue.key();
+                if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+                  if (headerValue.rawValue().isPresent()) {
+                    Metadata.Key<byte[]> metadataKey = 
+                        Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
+                    headers.put(metadataKey, headerValue.rawValue().get().toByteArray());
+                  }
+                } else {
+                  if (headerValue.value().isPresent()) {
+                    Metadata.Key<String> metadataKey = 
+                        Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+                    headers.put(metadataKey, headerValue.value().get());
                   }
                 }
-                super.start(responseListener, headers);
               }
-            };
-          }
-        });
-      }
+              super.start(responseListener, headers);
+            }
+          };
+        }
+      });
 
       MethodDescriptor<InputStream, InputStream> rawMethod = 
           method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
