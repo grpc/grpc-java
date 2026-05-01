@@ -21,15 +21,15 @@ import com.google.re2j.PatternSyntaxException;
 
 // TODO(zivy@): may reuse common matchers parsers.
 public final class MatcherParser {
-  /** Translates envoy proto HeaderMatcher to internal HeaderMatcher.*/
+  /** Translates envoy proto HeaderMatcher to internal HeaderMatcher. */
   public static Matchers.HeaderMatcher parseHeaderMatcher(
-          io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
+      io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {
     switch (proto.getHeaderMatchSpecifierCase()) {
       case EXACT_MATCH:
         @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String exactMatch = proto.getExactMatch();
         return Matchers.HeaderMatcher.forExactValue(
-                        proto.getName(), exactMatch, proto.getInvertMatch());
+            proto.getName(), exactMatch, proto.getInvertMatch());
       case SAFE_REGEX_MATCH:
         @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String rawPattern = proto.getSafeRegexMatch().getRegex();
@@ -38,47 +38,47 @@ public final class MatcherParser {
           safeRegExMatch = Pattern.compile(rawPattern);
         } catch (PatternSyntaxException e) {
           throw new IllegalArgumentException(
-                "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
-                        + e.getMessage());
+              "HeaderMatcher [" + proto.getName() + "] contains malformed safe regex pattern: "
+                  + e.getMessage());
         }
         return Matchers.HeaderMatcher.forSafeRegEx(
-              proto.getName(), safeRegExMatch, proto.getInvertMatch());
+            proto.getName(), safeRegExMatch, proto.getInvertMatch());
       case RANGE_MATCH:
         Matchers.HeaderMatcher.Range rangeMatch = Matchers.HeaderMatcher.Range.create(
-              proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
+            proto.getRangeMatch().getStart(), proto.getRangeMatch().getEnd());
         return Matchers.HeaderMatcher.forRange(
-              proto.getName(), rangeMatch, proto.getInvertMatch());
+            proto.getName(), rangeMatch, proto.getInvertMatch());
       case PRESENT_MATCH:
         return Matchers.HeaderMatcher.forPresent(
-              proto.getName(), proto.getPresentMatch(), proto.getInvertMatch());
+            proto.getName(), proto.getPresentMatch(), proto.getInvertMatch());
       case PREFIX_MATCH:
         @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String prefixMatch = proto.getPrefixMatch();
         return Matchers.HeaderMatcher.forPrefix(
-              proto.getName(), prefixMatch, proto.getInvertMatch());
+            proto.getName(), prefixMatch, proto.getInvertMatch());
       case SUFFIX_MATCH:
         @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String suffixMatch = proto.getSuffixMatch();
         return Matchers.HeaderMatcher.forSuffix(
-              proto.getName(), suffixMatch, proto.getInvertMatch());
+            proto.getName(), suffixMatch, proto.getInvertMatch());
       case CONTAINS_MATCH:
         @SuppressWarnings("deprecation") // gRFC A63: support indefinitely
         String containsMatch = proto.getContainsMatch();
         return Matchers.HeaderMatcher.forContains(
-              proto.getName(), containsMatch, proto.getInvertMatch());
+            proto.getName(), containsMatch, proto.getInvertMatch());
       case STRING_MATCH:
         return Matchers.HeaderMatcher.forString(
-          proto.getName(), parseStringMatcher(proto.getStringMatch()), proto.getInvertMatch());
+            proto.getName(), parseStringMatcher(proto.getStringMatch()), proto.getInvertMatch());
       case HEADERMATCHSPECIFIER_NOT_SET:
       default:
         throw new IllegalArgumentException(
-                "Unknown header matcher type: " + proto.getHeaderMatchSpecifierCase());
+            "Unknown header matcher type: " + proto.getHeaderMatchSpecifierCase());
     }
   }
 
   /** Translate StringMatcher envoy proto to internal StringMatcher. */
   public static Matchers.StringMatcher parseStringMatcher(
-            io.envoyproxy.envoy.type.matcher.v3.StringMatcher proto) {
+      io.envoyproxy.envoy.type.matcher.v3.StringMatcher proto) {
     switch (proto.getMatchPatternCase()) {
       case EXACT:
         return Matchers.StringMatcher.forExact(proto.getExact(), proto.getIgnoreCase());
@@ -88,14 +88,46 @@ public final class MatcherParser {
         return Matchers.StringMatcher.forSuffix(proto.getSuffix(), proto.getIgnoreCase());
       case SAFE_REGEX:
         return Matchers.StringMatcher.forSafeRegEx(
-                Pattern.compile(proto.getSafeRegex().getRegex()));
+            Pattern.compile(proto.getSafeRegex().getRegex()));
       case CONTAINS:
-        return Matchers.StringMatcher.forContains(proto.getContains());
+        return Matchers.StringMatcher.forContains(proto.getContains(), proto.getIgnoreCase());
       case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException(
-                "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
+            "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
     }
+  }
+
+  /** Translate StringMatcher xDS proto to internal StringMatcher. */
+  public static Matchers.StringMatcher parseStringMatcher(
+      com.github.xds.type.matcher.v3.StringMatcher proto) {
+    switch (proto.getMatchPatternCase()) {
+      case EXACT:
+        return Matchers.StringMatcher.forExact(proto.getExact(), proto.getIgnoreCase());
+      case PREFIX:
+        return Matchers.StringMatcher.forPrefix(
+            checkNonEmpty(proto.getPrefix(), "prefix"), proto.getIgnoreCase());
+      case SUFFIX:
+        return Matchers.StringMatcher.forSuffix(
+            checkNonEmpty(proto.getSuffix(), "suffix"), proto.getIgnoreCase());
+      case CONTAINS:
+        return Matchers.StringMatcher.forContains(
+            checkNonEmpty(proto.getContains(), "contains"), proto.getIgnoreCase());
+      case SAFE_REGEX:
+        String regex = checkNonEmpty(proto.getSafeRegex().getRegex(), "regex");
+        return Matchers.StringMatcher.forSafeRegEx(Pattern.compile(regex));
+      default:
+        throw new IllegalArgumentException(
+            "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
+    }
+  }
+
+  private static String checkNonEmpty(String value, String name) {
+    if (value.isEmpty()) {
+      throw new IllegalArgumentException("StringMatcher " + name
+          + " (match_pattern) must be non-empty");
+    }
+    return value;
   }
 
   /** Translates envoy proto FractionalPercent to internal FractionMatcher. */
