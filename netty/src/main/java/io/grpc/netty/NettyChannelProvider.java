@@ -19,6 +19,8 @@ package io.grpc.netty;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import java.net.SocketAddress;
 import java.util.Collection;
 
@@ -53,6 +55,19 @@ public final class NettyChannelProvider extends ManagedChannelProvider {
     }
     return NewChannelBuilderResult.channelBuilder(
         new NettyChannelBuilder(target, creds, result.callCredentials, result.negotiator));
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
+                                                   NameResolverRegistry nameResolverRegistry,
+                                                   NameResolverProvider nameResolverProvider) {
+    ProtocolNegotiators.FromChannelCredentialsResult result = ProtocolNegotiators.from(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    NettyChannelBuilder builder = new NettyChannelBuilder(target, creds,
+        result.callCredentials, result.negotiator, nameResolverRegistry, nameResolverProvider);
+    return NewChannelBuilderResult.channelBuilder(builder);
   }
 
   @Override

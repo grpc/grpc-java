@@ -118,7 +118,8 @@ public class ManagedChannelImplGetNameResolverTest {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
-          "foo.googleapis.com:8080", nameResolverRegistry);
+          "foo.googleapis.com:8080", nameResolverRegistry,
+          null);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       // expected
@@ -130,7 +131,7 @@ public class ManagedChannelImplGetNameResolverTest {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("testscheme");
     try {
       ManagedChannelImplBuilder.getNameResolverProvider(
-              "testscheme:///foo.googleapis.com:8080", nameResolverRegistry)
+              "testscheme:///foo.googleapis.com:8080", nameResolverRegistry, null)
           .checkAddressTypes(Collections.singleton(CustomSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
@@ -143,7 +144,7 @@ public class ManagedChannelImplGetNameResolverTest {
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
     ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-        ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry);
+        ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry, null);
     assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
     assertThat(resolved.targetUri).isEqualTo(wrap(expectedUri));
     assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
@@ -154,7 +155,7 @@ public class ManagedChannelImplGetNameResolverTest {
 
     try {
       ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-          ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry);
+          ManagedChannelImplBuilder.getNameResolverProvider(target, nameResolverRegistry, null);
       FakeNameResolverProvider nameResolverProvider = (FakeNameResolverProvider) resolved.provider;
       fail("Should have failed, but got resolver provider " + nameResolverProvider);
     } catch (IllegalArgumentException e) {
