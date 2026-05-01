@@ -1,0 +1,49 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: Protobuf'
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.protobuf')
+    }
+}
+
+dependencies {
+    api project(':grpc-api'),
+            libraries.jsr305,
+            libraries.protobuf.java
+    implementation libraries.guava
+
+    api (libraries.google.api.protos) {
+        // 'com.google.api:api-common' transitively depends on auto-value, which breaks our
+        // annotations.
+        exclude group: 'com.google.api', module: 'api-common'
+    }
+
+    implementation (project(':grpc-protobuf-lite')) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
+    }
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+tasks.named("javadoc").configure {
+    options.linksOffline 'https://protobuf.dev/reference/java/api-docs/',
+        "${rootProject.projectDir}/gradle/javadoc/protobuf.dev-reference-java-api-docs/"
+}

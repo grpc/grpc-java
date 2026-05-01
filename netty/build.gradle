@@ -1,0 +1,105 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Netty"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.netty')
+    }
+}
+
+dependencies {
+    api project(':grpc-api'),
+            libraries.animalsniffer.annotations,
+            libraries.netty.codec.http2
+    implementation project(':grpc-core'),
+            libs.netty.handler.proxy,
+            libraries.guava,
+            libraries.errorprone.annotations,
+            libraries.perfmark.api,
+            libraries.netty.unix.common
+    runtimeOnly project(":grpc-util")  // need grpc-util to pull in round robin
+
+    // Tests depend on base class defined by core module.
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            libraries.conscrypt,
+            libraries.netty.transport.epoll
+    testRuntimeOnly libraries.netty.tcnative,
+            libraries.netty.tcnative.classes
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "linux-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "osx-aarch_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.tcnative) {
+        artifact {
+            classifier = "windows-x86_64"
+        }
+    }
+    testRuntimeOnly (libraries.netty.transport.epoll) {
+        artifact {
+            classifier = "linux-x86_64"
+        }
+    }
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+import net.ltgt.gradle.errorprone.CheckSeverity
+
+[tasks.named("compileJava"), tasks.named("compileTestJava")]*.configure {
+    // Netty returns a lot of futures that we mostly don't care about.
+    options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
+}
+
+tasks.named("javadoc").configure {
+    options.linksOffline 'https://netty.io/4.1/api/',
+        "${rootProject.projectDir}/gradle/javadoc/netty.io-4.1-api/"
+    exclude 'io/grpc/netty/*Provider.java'
+    exclude 'io/grpc/netty/GrpcHttp2ConnectionHandler.java'
+    exclude 'io/grpc/netty/Internal*'
+    exclude 'io/grpc/netty/ProtocolNegotiationEvent.java'
+}
+
+tasks.named("jmh").configure {
+    // Workaround
+    // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
+    includeTests = true
+}
+
+tasks.named("checkstyleMain").configure {
+    source = source.minus(fileTree(dir: "src/main", include: "**/Http2ControlFrameLimitEncoder.java"))
+}

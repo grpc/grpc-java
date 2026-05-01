@@ -1,0 +1,363 @@
+/*
+ * Copyright 2021 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+package io.grpc.xds;
+
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.DataPlaneRule.ENDPOINT_HOST_NAME;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
+import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
+import static org.junit.Assert.assertEquals;
+
+import com.github.xds.type.v3.TypedStruct;
+import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster;
+import io.envoyproxy.envoy.config.cluster.v3.Cluster.LbPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy;
+import io.envoyproxy.envoy.config.cluster.v3.LoadBalancingPolicy.Policy;
+import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.SocketAddress;
+import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
+import io.envoyproxy.envoy.config.endpoint.v3.ClusterLoadAssignment;
+import io.envoyproxy.envoy.config.endpoint.v3.Endpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LbEndpoint;
+import io.envoyproxy.envoy.config.endpoint.v3.LocalityLbEndpoints;
+import io.envoyproxy.envoy.config.route.v3.Route;
+import io.envoyproxy.envoy.config.route.v3.RouteAction;
+import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
+import io.envoyproxy.envoy.config.route.v3.RouteMatch;
+import io.envoyproxy.envoy.config.route.v3.VirtualHost;
+import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
+import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientStreamTracer;
+import io.grpc.FlagResetRule;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener;
+import io.grpc.InternalFeatureFlags;
+import io.grpc.LoadBalancerRegistry;
+import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import java.net.InetSocketAddress;
+import java.util.Arrays;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
+
+/**
+ * Xds integration tests using a local control plane, implemented in {@link
+ * XdsTestControlPlaneService}. Test cases can inject xds configs to the control plane for testing.
+ *
+ * <p>Test components:
+ * 1) A Control Plane {@link XdsTestControlPlaneService} accepts xds requests from multiple clients
+ * from the Data Plane, see {@link ControlPlaneRule}.
+ * 2) A test xDS server {@link XdsServerWrapper}, see {@link DataPlaneRule}.
+ * 3) A test xDS client that uses a testing scheme {@link XdsNameResolverProvider#createForTest},
+ * see {@link DataPlaneRule}.
+ *
+ * <p>The configuration dependency and ephemeral port allocation requires the components to
+ * be initialized in a certain order:
+ * 1) Start the Control Plane server {@link XdsTestControlPlaneService}. After start the bootstrap
+ * information (w/ Control Plane's address) can be constructed for the Data Plane to initialize.
+ * 2) Set LDS and RDS config at the Control Plane. Get the bootstrap file from the Control
+ * Plane from 1). And then start the test xDS server (requires LDS/RDS and bootstrap file to start).
+ * 3) Construct EDS config w/ test server address from 2). Set CDS and EDS Config at the Control
+ * Plane. Then start the test xDS client (requires EDS to do xDS name resolution).
+ */
+@RunWith(Parameterized.class)
+public class FakeControlPlaneXdsIntegrationTest {
+
+  @Rule(order = 0)
+  public ControlPlaneRule controlPlane = new ControlPlaneRule();
+  @Rule(order = 1)
+  public DataPlaneRule dataPlane = new DataPlaneRule(controlPlane);
+  @Rule(order = 2)
+  public final FlagResetRule flagResetRule = new FlagResetRule();
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
+  @Before
+  public void setupRfc3986UrisFeatureFlag() throws Exception {
+    flagResetRule.setFlagForTest(
+        InternalFeatureFlags::setRfc3986UrisEnabled, enableRfc3986UrisParam);
+  }
+
+  @Test
+  public void pingPong() throws Exception {
+    ManagedChannel channel = dataPlane.getManagedChannel();
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+        channel);
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS! Authority= test-server")
+        .build();
+    assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+  }
+
+  @Test
+  public void pingPong_edsEndpoint_authorityOverride() throws Exception {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
+    try {
+      ManagedChannel channel = dataPlane.getManagedChannel();
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+          channel);
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
+      SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+          .setResponseMessage("Hi, xDS! Authority= " + ENDPOINT_HOST_NAME)
+          .build();
+      assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
+    }
+  }
+
+  @Test
+  public void pingPong_metadataLoadBalancer() throws Exception {
+    MetadataLoadBalancerProvider metadataLbProvider = new MetadataLoadBalancerProvider();
+    try {
+      LoadBalancerRegistry.getDefaultRegistry().register(metadataLbProvider);
+
+      // Use the LoadBalancingPolicy to configure a custom LB that adds a header to server calls.
+      Policy metadataLbPolicy = Policy.newBuilder().setTypedExtensionConfig(
+          TypedExtensionConfig.newBuilder().setTypedConfig(Any.pack(
+              TypedStruct.newBuilder().setTypeUrl("type.googleapis.com/test.MetadataLoadBalancer")
+                  .setValue(Struct.newBuilder()
+                      .putFields("metadataKey", Value.newBuilder().setStringValue("foo").build())
+                      .putFields("metadataValue", Value.newBuilder().setStringValue("bar").build()))
+                  .build()))).build();
+      Policy wrrLocalityPolicy = Policy.newBuilder()
+          .setTypedExtensionConfig(TypedExtensionConfig.newBuilder().setTypedConfig(
+              Any.pack(WrrLocality.newBuilder().setEndpointPickingPolicy(
+                  LoadBalancingPolicy.newBuilder().addPolicies(metadataLbPolicy)).build())))
+          .build();
+      controlPlane.setCdsConfig(
+          ControlPlaneRule.buildCluster().toBuilder().setLoadBalancingPolicy(
+              LoadBalancingPolicy.newBuilder()
+                  .addPolicies(wrrLocalityPolicy)).build());
+
+      ResponseHeaderClientInterceptor responseHeaderInterceptor
+          = new ResponseHeaderClientInterceptor();
+
+      // We add an interceptor to catch the response headers from the server.
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+          dataPlane.getManagedChannel()).withInterceptors(responseHeaderInterceptor);
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
+      SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+          .setResponseMessage("Hi, xDS! Authority= test-server")
+          .build();
+      assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+
+      // Make sure we got back the header we configured the LB with.
+      assertThat(responseHeaderInterceptor.reponseHeaders.get(
+          Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER))).isEqualTo("bar");
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(metadataLbProvider);
+    }
+  }
+
+  // Try to trigger "UNAVAILABLE: CDS encountered error: unable to find available subchannel for
+  // cluster cluster:cluster1" race, if XdsNameResolver updates its ConfigSelector before
+  // cluster_manager config.
+  @Test
+  public void changeClusterForRoute() throws Exception {
+    // Start with route to cluster0
+    InetSocketAddress edsInetSocketAddress
+        = (InetSocketAddress) dataPlane.getServer().getListenSockets().get(0);
+    controlPlane.getService().setXdsConfig(
+        ADS_TYPE_URL_EDS,
+        ImmutableMap.of(
+          "eds-service-0",
+          ControlPlaneRule.buildClusterLoadAssignment(
+              edsInetSocketAddress.getHostName(), "", edsInetSocketAddress.getPort(),
+              "eds-service-0"),
+          "eds-service-1",
+          ControlPlaneRule.buildClusterLoadAssignment(
+              edsInetSocketAddress.getHostName(), "", edsInetSocketAddress.getPort(),
+              "eds-service-1")));
+    controlPlane.getService().setXdsConfig(
+        ADS_TYPE_URL_CDS,
+        ImmutableMap.of(
+            "cluster0",
+            ControlPlaneRule.buildCluster("cluster0", "eds-service-0"),
+            "cluster1",
+            ControlPlaneRule.buildCluster("cluster1", "eds-service-1")));
+    controlPlane.setRdsConfig(RouteConfiguration.newBuilder()
+        .setName("route-config.googleapis.com")
+        .addVirtualHosts(VirtualHost.newBuilder()
+          .addDomains("test-server")
+          .addRoutes(Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder().setPrefix("/").build())
+            .setRoute(RouteAction.newBuilder().setCluster("cluster0").build())
+            .build())
+          .build())
+        .build());
+
+    class ClusterClientStreamTracer extends ClientStreamTracer {
+      boolean usedCluster1;
+
+      @Override
+      public void addOptionalLabel(String key, String value) {
+        if ("grpc.lb.backend_service".equals(key)) {
+          usedCluster1 = "cluster1".equals(value);
+        }
+      }
+    }
+
+    ClusterClientStreamTracer tracer = new ClusterClientStreamTracer();
+    ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
+      @Override
+      public ClientStreamTracer newClientStreamTracer(
+          ClientStreamTracer.StreamInfo info, Metadata headers) {
+        return tracer;
+      }
+    };
+    ClientInterceptor tracerInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
+      }
+    };
+    SimpleServiceGrpc.SimpleServiceBlockingStub stub = SimpleServiceGrpc
+        .newBlockingStub(dataPlane.getManagedChannel())
+        .withInterceptors(tracerInterceptor);
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS! Authority= test-server")
+        .build();
+    assertThat(stub.unaryRpc(request)).isEqualTo(goldenResponse);
+    assertThat(tracer.usedCluster1).isFalse();
+
+    // Check for errors when swapping route to cluster1
+    controlPlane.setRdsConfig(RouteConfiguration.newBuilder()
+        .setName("route-config.googleapis.com")
+        .addVirtualHosts(VirtualHost.newBuilder()
+          .addDomains("test-server")
+          .addRoutes(Route.newBuilder()
+            .setMatch(RouteMatch.newBuilder().setPrefix("/").build())
+            .setRoute(RouteAction.newBuilder().setCluster("cluster1").build())
+            .build())
+          .build())
+        .build());
+
+    for (int j = 0; j < 10; j++) {
+      stub.unaryRpc(request);
+      if (tracer.usedCluster1) {
+        break;
+      }
+    }
+    assertThat(tracer.usedCluster1).isTrue();
+  }
+
+  // Captures response headers from the server.
+  private static class ResponseHeaderClientInterceptor implements ClientInterceptor {
+    Metadata reponseHeaders;
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
+        CallOptions callOptions, Channel next) {
+
+      return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+        @Override
+        public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
+          super.start(new ForwardingClientCallListener<RespT>() {
+            @Override
+            protected ClientCall.Listener<RespT> delegate() {
+              return responseListener;
+            }
+
+            @Override
+            public void onHeaders(Metadata headers) {
+              reponseHeaders = headers;
+            }
+          }, headers);
+        }
+      };
+    }
+  }
+
+  /**
+   * Basic test to make sure RING_HASH configuration works.
+   */
+  @Test
+  public void pingPong_ringHash() {
+    controlPlane.setCdsConfig(
+        ControlPlaneRule.buildCluster().toBuilder()
+            .setLbPolicy(LbPolicy.RING_HASH).build());
+
+    ManagedChannel channel = dataPlane.getManagedChannel();
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+        channel);
+    SimpleRequest request = SimpleRequest.getDefaultInstance();
+    SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setResponseMessage("Hi, xDS! Authority= test-server")
+        .build();
+    assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+  }
+
+  @Test
+  public void pingPong_logicalDns_authorityOverride() {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE", "true");
+    try {
+      InetSocketAddress serverAddress =
+          (InetSocketAddress) dataPlane.getServer().getListenSockets().get(0);
+      controlPlane.setCdsConfig(
+          ControlPlaneRule.buildCluster().toBuilder()
+              .setType(Cluster.DiscoveryType.LOGICAL_DNS)
+              .setLoadAssignment(
+                  ClusterLoadAssignment.newBuilder().addEndpoints(
+                          LocalityLbEndpoints.newBuilder().addLbEndpoints(
+                              LbEndpoint.newBuilder().setEndpoint(
+                                  Endpoint.newBuilder().setAddress(
+                                      Address.newBuilder().setSocketAddress(
+                                          SocketAddress.newBuilder()
+                                              .setAddress("localhost")
+                                              .setPortValue(serverAddress.getPort()))))))
+                      .build())
+              .build());
+
+      ManagedChannel channel = dataPlane.getManagedChannel();
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+          channel);
+      SimpleRequest request = SimpleRequest.getDefaultInstance();
+      SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+          .setResponseMessage("Hi, xDS! Authority= localhost:" + serverAddress.getPort())
+          .build();
+      assertEquals(goldenResponse, blockingStub.unaryRpc(request));
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
+    }
+  }
+}

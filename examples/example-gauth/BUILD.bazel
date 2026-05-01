@@ -1,0 +1,28 @@
+load("@rules_java//java:java_binary.bzl", "java_binary")
+load("@rules_java//java:java_library.bzl", "java_library")
+
+java_library(
+    name = "example-gauth",
+    testonly = 1,
+    srcs = glob(
+        ["src/main/java/**/*.java"],
+    ),
+    deps = [
+        "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//auth",
+        "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//stub",
+        "@maven//:com_google_api_grpc_grpc_google_cloud_pubsub_v1",
+        "@maven//:com_google_api_grpc_proto_google_cloud_pubsub_v1",
+        "@maven//:com_google_auth_google_auth_library_oauth2_http",
+    ],
+)
+
+java_binary(
+    name = "google-auth-client",
+    testonly = 1,
+    main_class = "io.grpc.examples.googleAuth.GoogleAuthClient",
+    runtime_deps = [
+        ":example-gauth",
+    ],
+)

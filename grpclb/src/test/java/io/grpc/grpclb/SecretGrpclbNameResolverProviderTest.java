@@ -1,0 +1,143 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.grpclb;
+
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+
+import io.grpc.ChannelLogger;
+import io.grpc.NameResolver;
+import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.SynchronizationContext;
+import io.grpc.Uri;
+import io.grpc.internal.DnsNameResolverProvider;
+import io.grpc.internal.GrpcUtil;
+import java.net.URI;
+import java.util.Arrays;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
+
+/** Unit tests for {@link SecretGrpclbNameResolverProvider}. */
+@RunWith(Parameterized.class)
+public class SecretGrpclbNameResolverProviderTest {
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(8080)
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
+      .build();
+
+  private SecretGrpclbNameResolverProvider.Provider provider =
+      new SecretGrpclbNameResolverProvider.Provider();
+
+  @Parameters(name = "enableRfc3986UrisParam={0}")
+  public static Iterable<Object[]> data() {
+    return Arrays.asList(new Object[][] {{true}, {false}});
+  }
+
+  @Parameter public boolean enableRfc3986UrisParam;
+
+  @Test
+  public void isAvailable() {
+    assertThat(provider.isAvailable()).isTrue();
+  }
+
+  @Test
+  public void priority_shouldBeHigherThanDefaultDnsNameResolver() {
+    DnsNameResolverProvider defaultDnsNameResolver = new DnsNameResolverProvider();
+
+    assertThat(provider.priority()).isGreaterThan(defaultDnsNameResolver.priority());
+  }
+
+  @Test
+  public void newNameResolverReturnsCorrectType() {
+    assertThat(newNameResolver("dns:///localhost:443", args))
+        .isInstanceOf(GrpclbNameResolver.class);
+    assertThat(newNameResolver("notdns:///localhost:443", args)).isNull();
+  }
+
+  @Test
+  public void invalidDnsName() throws Exception {
+    testInvalidUri("dns:/%5Binvalid%5D");
+  }
+
+  @Test
+  public void validIpv6() throws Exception {
+    testValidUri("dns:/%5B::1%5D");
+  }
+
+  @Test
+  public void validDnsNameWithoutPort() throws Exception {
+    testValidUri("dns:/foo.googleapis.com");
+  }
+
+  @Test
+  public void validDnsNameWithPort() throws Exception {
+    testValidUri("dns:/foo.googleapis.com:456");
+  }
+
+  @Test
+  public void newNameResolver_rejectsExtraPathSegments() {
+    assume().that(enableRfc3986UrisParam).isTrue();
+    IllegalArgumentException iae =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> newNameResolver("dns:///localhost:443/extras", args));
+    assertThat(iae).hasMessageThat().contains("expected 1 path segment in target");
+  }
+
+  @Test
+  public void newNameResolver_toleratesExtraPathSegments() {
+    assume().that(enableRfc3986UrisParam).isFalse();
+    newNameResolver("dns:///localhost:443/extras", args);
+  }
+
+  private void testInvalidUri(String uri) {
+    try {
+      newNameResolver(uri, args);
+      fail("Should have failed");
+    } catch (IllegalArgumentException e) {
+      // expected
+    }
+  }
+
+  private void testValidUri(String uri) {
+    NameResolver resolver = newNameResolver(uri, args);
+    assertThat(resolver).isNotNull();
+  }
+
+  private NameResolver newNameResolver(String uriString, NameResolver.Args args) {
+    return enableRfc3986UrisParam
+        ? provider.newNameResolver(Uri.create(uriString), args)
+        : provider.newNameResolver(URI.create(uriString), args);
+  }
+}

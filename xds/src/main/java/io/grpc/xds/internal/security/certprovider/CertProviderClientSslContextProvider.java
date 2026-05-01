@@ -1,0 +1,87 @@
+/*
+ * Copyright 2020 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds.internal.security.certprovider;
+
+import io.envoyproxy.envoy.config.core.v3.Node;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
+import io.grpc.netty.GrpcSslContexts;
+import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
+import io.grpc.xds.client.Bootstrapper.CertificateProviderInfo;
+import io.grpc.xds.internal.security.trust.XdsTrustManagerFactory;
+import io.netty.handler.ssl.SslContextBuilder;
+import java.security.cert.CertStoreException;
+import java.security.cert.X509Certificate;
+import java.util.AbstractMap;
+import java.util.Arrays;
+import java.util.Map;
+import javax.annotation.Nullable;
+import javax.net.ssl.X509TrustManager;
+
+/** A client SslContext provider using CertificateProviderInstance to fetch secrets. */
+final class CertProviderClientSslContextProvider extends CertProviderSslContextProvider {
+
+  CertProviderClientSslContextProvider(
+      Node node,
+      @Nullable Map<String, CertificateProviderInfo> certProviders,
+      CommonTlsContext.CertificateProviderInstance certInstance,
+      CommonTlsContext.CertificateProviderInstance rootCertInstance,
+      CertificateValidationContext staticCertValidationContext,
+      UpstreamTlsContext upstreamTlsContext,
+      CertificateProviderStore certificateProviderStore) {
+    super(
+        node,
+        certProviders,
+        certInstance,
+        rootCertInstance,
+        staticCertValidationContext,
+        upstreamTlsContext,
+        certificateProviderStore);
+  }
+
+  @Override
+  protected final AbstractMap.SimpleImmutableEntry<SslContextBuilder, X509TrustManager>
+      getSslContextBuilderAndTrustManager(
+          CertificateValidationContext certificateValidationContext)
+              throws CertStoreException {
+    UpstreamTlsContext upstreamTlsContext = (UpstreamTlsContext) tlsContext;
+    XdsTrustManagerFactory trustManagerFactory;
+    if (savedSpiffeTrustMap != null) {
+      trustManagerFactory = new XdsTrustManagerFactory(
+              savedSpiffeTrustMap,
+              certificateValidationContext,
+              upstreamTlsContext.getAutoSniSanValidation());
+    } else if (savedTrustedRoots != null) {
+      trustManagerFactory = new XdsTrustManagerFactory(
+              savedTrustedRoots.toArray(new X509Certificate[0]),
+              certificateValidationContext,
+              upstreamTlsContext.getAutoSniSanValidation());
+    } else {
+      // Should be impossible because of the check in CertProviderClientSslContextProviderFactory
+      throw new IllegalStateException("There must be trusted roots or a SPIFFE trust map");
+    }
+
+    SslContextBuilder sslContextBuilder =
+        GrpcSslContexts.forClient().trustManager(trustManagerFactory);
+    if (isMtls()) {
+      sslContextBuilder.keyManager(savedKey, savedCertChain);
+    }
+    return new AbstractMap.SimpleImmutableEntry<>(sslContextBuilder,
+        io.grpc.internal.CertificateUtils.getX509ExtendedTrustManager(
+            Arrays.asList(trustManagerFactory.getTrustManagers())));
+  }
+}

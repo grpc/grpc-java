@@ -1,0 +1,834 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds.internal.security.trust;
+
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_SERVER_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.BAD_WILDCARD_DNS_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CA_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.CLIENT_SPIFFE_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_0_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_PEM_FILE;
+import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CertificateValidationContext;
+import io.envoyproxy.envoy.type.matcher.v3.RegexMatcher;
+import io.envoyproxy.envoy.type.matcher.v3.StringMatcher;
+import io.grpc.testing.TlsTesting;
+import java.io.IOException;
+import java.security.cert.CertStoreException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.X509ExtendedTrustManager;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
+
+/**
+ * Unit tests for {@link XdsX509TrustManager}.
+ */
+@RunWith(Parameterized.class)
+public class XdsX509TrustManagerTest {
+
+  @Rule
+  public final MockitoRule mockitoRule = MockitoJUnit.rule();
+
+  @Mock
+  private X509ExtendedTrustManager mockDelegate;
+
+  @Mock
+  private SSLSession mockSession;
+
+  private XdsX509TrustManager trustManager;
+
+  private final TestParam testParam;
+
+  public XdsX509TrustManagerTest(TestParam testParam) {
+    this.testParam = testParam;
+  }
+
+  @Test
+  public void nullCertContextTest() throws CertificateException, IOException {
+    trustManager = new XdsX509TrustManager(null, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, new ArrayList<>());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void emptySanListContextTest() throws CertificateException, IOException {
+    CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void missingPeerCerts() {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    @SuppressWarnings("deprecation")
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    try {
+      trustManager.verifySubjectAltNameInChain(null, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void emptyArrayPeerCerts() {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    try {
+      trustManager.verifySubjectAltNameInChain(
+          new X509Certificate[0], certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate(s) missing");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void noSansInPeerCerts() throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("foo.com").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsVerifies() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setExact("waterzooi.test.google.be")
+            .setIgnoreCase(false)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsVerifies_differentCase_expectException()
+      throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setExact("waterZooi.test.Google.be")
+            .setIgnoreCase(false)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsVerifies_ignoreCase() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setExact("Waterzooi.Test.google.be").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_prefix() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setPrefix("waterzooi.") // test.google.be
+            .setIgnoreCase(false)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsPrefix_differentCase_expectException()
+      throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setPrefix("waterZooi.").setIgnoreCase(false).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_prefixIgnoreCase() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setPrefix("WaterZooi.") // test.google.be
+            .setIgnoreCase(true)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_suffix() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setSuffix(".google.be").setIgnoreCase(false).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsSuffix_differentCase_expectException()
+      throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setSuffix(".gooGle.bE").setIgnoreCase(false).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_suffixIgnoreCase() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setSuffix(".GooGle.BE").setIgnoreCase(true).build();
+    @SuppressWarnings("deprecation")
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_substring() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setContains("zooi.test.google").setIgnoreCase(false).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsSubstring_differentCase_expectException()
+      throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setContains("zooi.Test.gooGle").setIgnoreCase(false).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_substringIgnoreCase() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setContains("zooI.Test.Google").setIgnoreCase(true).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_safeRegex() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setSafeRegex(
+                RegexMatcher.newBuilder().setRegex("water[[:alpha:]]{1}ooi\\.test\\.google\\.be"))
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_safeRegex1() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setSafeRegex(
+                RegexMatcher.newBuilder().setRegex("no-match-string|\\*\\.test\\.youtube\\.com"))
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_safeRegex_ipAddress() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setSafeRegex(
+                RegexMatcher.newBuilder().setRegex("([[:digit:]]{1,3}\\.){3}[[:digit:]]{1,3}"))
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCerts_safeRegex_noMatch() throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setSafeRegex(
+                RegexMatcher.newBuilder().setRegex("water[[:alpha:]]{2}ooi\\.test\\.google\\.be"))
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsVerifiesMultipleVerifySans()
+          throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    StringMatcher stringMatcher1 =
+        StringMatcher.newBuilder().setExact("waterzooi.test.google.be").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .addMatchSubjectAltNames(stringMatcher1)
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneSanInPeerCertsNotFoundException()
+          throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void wildcardSanInPeerCertsVerifiesMultipleVerifySans()
+          throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    StringMatcher stringMatcher1 =
+        StringMatcher.newBuilder().setSuffix("test.youTube.Com").setIgnoreCase(true).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .addMatchSubjectAltNames(stringMatcher1) // should match suffix test.youTube.Com
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void wildcardSanInPeerCertsVerifiesMultipleVerifySans1()
+          throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    StringMatcher stringMatcher1 =
+        StringMatcher.newBuilder().setContains("est.Google.f").setIgnoreCase(true).build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .addMatchSubjectAltNames(stringMatcher1) // should contain est.Google.f
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void wildcardSanInPeerCertsSubdomainMismatch()
+          throws CertificateException, IOException {
+    // 2. Asterisk (*) cannot match across domain name labels.
+    //    For example, *.example.com matches test.example.com but does not match
+    //    sub.test.example.com.
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder().setExact("sub.abc.test.youtube.com").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneIpAddressInPeerCertsVerifies() throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    StringMatcher stringMatcher1 = StringMatcher.newBuilder().setExact("192.168.1.3").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .addMatchSubjectAltNames(stringMatcher1)
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void oneIpAddressInPeerCertsMismatch() throws CertificateException, IOException {
+    StringMatcher stringMatcher = StringMatcher.newBuilder().setExact("x.foo.com").build();
+    StringMatcher stringMatcher1 = StringMatcher.newBuilder().setExact("192.168.2.3").build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .addMatchSubjectAltNames(stringMatcher1)
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSslEngine()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+    verify(sslEngine, times(1)).getHandshakeSession();
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslEngineSpiffeTrustMap()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+    verify(sslEngine, times(1)).getHandshakeSession();
+    assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslEngineSpiffeTrustMap_missing_spiffe_id()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .isEqualTo("Failed to extract SPIFFE ID from peer leaf certificate");
+    }
+  }
+
+  @Test
+  public void checkServerTrustedSpiffeSslEngineTrustMap_missing_trust_domain()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("unknown.com", caCerts), null, false);
+    try {
+      trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Spiffe Trust Map doesn't contain trust"
+          + " domain 'example.com' from peer leaf certificate");
+    }
+  }
+
+  @Test
+  public void checkClientTrustedSpiffeTrustMap()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] clientCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(CLIENT_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("foo.bar.com", caCerts), null, false);
+    trustManager.checkClientTrusted(clientCerts, "RSA");
+  }
+
+  @Test
+  public void checkServerTrustedSslEngine_untrustedServer_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslEngine sslEngine = buildTrustManagerAndGetSslEngine();
+    X509Certificate[] badServerCert =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(BAD_SERVER_PEM_FILE));
+    try {
+      trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslEngine);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .endsWith("unable to find valid certification path to requested target");
+    }
+    verify(sslEngine, times(1)).getHandshakeSession();
+  }
+
+  @Test
+  public void checkServerTrustedSslSocket()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
+    assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslSocketSpiffeTrustMap()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    X509Certificate[] serverCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_SPIFFE_PEM_FILE));
+    List<X509Certificate> caCerts = Arrays.asList(CertificateUtils
+        .toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE)));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(
+        ImmutableMap.of("example.com", caCerts), null, false);
+    trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
+    assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
+  }
+
+  @Test
+  public void checkServerTrustedSslSocket_untrustedServer_expectException()
+      throws CertificateException, IOException, CertStoreException {
+    TestSslSocket sslSocket = buildTrustManagerAndGetSslSocket();
+    X509Certificate[] badServerCert =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(BAD_SERVER_PEM_FILE));
+    try {
+      trustManager.checkServerTrusted(badServerCert, "ECDHE_ECDSA", sslSocket);
+      fail("exception expected");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat()
+          .endsWith("unable to find valid certification path to requested target");
+    }
+    verify(sslSocket, times(1)).isConnected();
+    verify(sslSocket, times(1)).getHandshakeSession();
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void unsupportedAltNameType() throws CertificateException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setExact("waterzooi.test.google.be")
+            .setIgnoreCase(false)
+            .build();
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder().addMatchSubjectAltNames(stringMatcher).build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate mockCert = mock(X509Certificate.class);
+
+    when(mockCert.getSubjectAlternativeNames())
+        .thenReturn(Collections.<List<?>>singleton(ImmutableList.of(Integer.valueOf(1), "foo")));
+    X509Certificate[] certs = new X509Certificate[] {mockCert};
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      fail("no exception thrown");
+    } catch (CertificateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void testDnsWildcardPatterns()
+      throws CertificateException, IOException {
+    StringMatcher stringMatcher =
+        StringMatcher.newBuilder()
+            .setExact(testParam.sanPattern)
+            .setIgnoreCase(testParam.ignoreCase)
+            .build();
+    @SuppressWarnings("deprecation")
+    CertificateValidationContext certContext =
+        CertificateValidationContext.newBuilder()
+            .addMatchSubjectAltNames(stringMatcher)
+            .build();
+    trustManager = new XdsX509TrustManager(certContext, mockDelegate, false);
+    X509Certificate[] certs =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(testParam.certFile));
+    try {
+      trustManager.verifySubjectAltNameInChain(certs, certContext.getMatchSubjectAltNamesList());
+      assertThat(testParam.expected).isTrue();
+    } catch (CertificateException certException) {
+      assertThat(testParam.expected).isFalse();
+      assertThat(certException).hasMessageThat().isEqualTo("Peer certificate SAN check failed");
+    }
+  }
+
+  @Parameters(name = "{index}: {0}")
+  public static Collection<Object[]> getParameters() {
+    return Arrays.asList(new Object[][] {
+        {new TestParam("*.test.google.fr", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("*.test.youtube.com", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("waterzooi.test.google.be", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("192.168.1.3", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, true, true)},
+        {new TestParam("w*i.test.google.be", SERVER_1_PEM_FILE, false, true)},
+        {new TestParam("w*a.test.google.be", SERVER_1_PEM_FILE, false, false)},
+        {new TestParam("*.test.google.com.au", SERVER_0_PEM_FILE, false, false)},
+        {new TestParam("*.TEST.YOUTUBE.com", SERVER_1_PEM_FILE, false, false)},
+        {new TestParam("*waterzooi", SERVER_1_PEM_FILE, false, false)},
+        {new TestParam("*.lyft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("ly**ft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("*yft.c*m", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("xn--*.lyft.com", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+        {new TestParam("", BAD_WILDCARD_DNS_PEM_FILE, false, false)},
+    });
+  }
+
+  private TestSslEngine buildTrustManagerAndGetSslEngine()
+      throws CertificateException, IOException, CertStoreException {
+    SSLParameters sslParams = buildTrustManagerAndGetSslParameters();
+
+    TestSslEngine sslEngine = mock(TestSslEngine.class, CALLS_REAL_METHODS);
+    sslEngine.setSSLParameters(sslParams);
+    doReturn(mockSession).when(sslEngine).getHandshakeSession();
+    return sslEngine;
+  }
+
+  private TestSslSocket buildTrustManagerAndGetSslSocket()
+      throws CertificateException, IOException, CertStoreException {
+    SSLParameters sslParams = buildTrustManagerAndGetSslParameters();
+
+    TestSslSocket sslSocket = mock(TestSslSocket.class, CALLS_REAL_METHODS);
+    sslSocket.setSSLParameters(sslParams);
+    doReturn(true).when(sslSocket).isConnected();
+    doReturn(mockSession).when(sslSocket).getHandshakeSession();
+    return sslSocket;
+  }
+
+  private SSLParameters buildTrustManagerAndGetSslParameters()
+      throws CertificateException, IOException, CertStoreException {
+    X509Certificate[] caCerts =
+        CertificateUtils.toX509Certificates(TlsTesting.loadCert(CA_PEM_FILE));
+    trustManager = XdsTrustManagerFactory.createX509TrustManager(caCerts,
+        null, false);
+    when(mockSession.getProtocol()).thenReturn("TLSv1.2");
+    when(mockSession.getPeerHost()).thenReturn("peer-host-from-mock");
+    SSLParameters sslParams = new SSLParameters();
+    sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+    return sslParams;
+  }
+
+  private abstract static class TestSslSocket extends SSLSocket {
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslParameters;
+    }
+
+    @Override
+    public void setSSLParameters(SSLParameters sslParameters) {
+      this.sslParameters = sslParameters;
+    }
+
+    private SSLParameters sslParameters;
+  }
+
+  private abstract static class TestSslEngine extends SSLEngine {
+
+    @Override
+    public SSLParameters getSSLParameters() {
+      return sslParameters;
+    }
+
+    @Override
+    public void setSSLParameters(SSLParameters sslParameters) {
+      this.sslParameters = sslParameters;
+    }
+
+    private SSLParameters sslParameters;
+  }
+
+  private static class TestParam {
+    final String sanPattern;
+    final String certFile;
+    final boolean ignoreCase;
+    final boolean expected;
+
+    TestParam(String sanPattern, String certFile, boolean ignoreCase, boolean expected) {
+      this.sanPattern = sanPattern;
+      this.certFile = certFile;
+      this.ignoreCase = ignoreCase;
+      this.expected = expected;
+    }
+  }
+}

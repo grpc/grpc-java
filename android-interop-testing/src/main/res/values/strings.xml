@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">gRPC Integration Test</string>
+    <string name="testing_message">Testing…</string>
+</resources>

@@ -1,0 +1,70 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: OkHttp"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.okhttp')
+    }
+}
+
+dependencies {
+    api project(':grpc-api')
+    implementation project(':grpc-util'),
+            project(':grpc-core'),
+            libraries.okio,
+            libraries.guava,
+            libraries.perfmark.api
+    // Make okhttp dependencies compile only
+    compileOnly libraries.okhttp
+
+    // Tests depend on base class defined by core module.
+    testImplementation testFixtures(project(':grpc-core')),
+            testFixtures(project(':grpc-api')),
+            project(':grpc-testing'),
+            project(':grpc-testing-proto'),
+            libraries.netty.codec.http2,
+            libraries.okhttp
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
+
+project.sourceSets {
+    main { java { srcDir "${projectDir}/third_party/okhttp/main/java" } }
+    test { java { srcDir "${projectDir}/third_party/okhttp/test/java" } }
+}
+
+tasks.named("checkstyleMain").configure {
+    exclude '**/io/grpc/okhttp/internal/**'
+}
+
+tasks.named("javadoc").configure {
+    options.linksOffline 'https://square.github.io/okhttp/2.x/okhttp/',
+        "${rootProject.projectDir}/gradle/javadoc/square.github.io-okhttp-2.x-okhttp/"
+    exclude 'io/grpc/okhttp/Internal*'
+    exclude 'io/grpc/okhttp/*Provider.java'
+    exclude 'io/grpc/okhttp/internal/**'
+}
+
+tasks.named("jacocoTestReport").configure {
+    classDirectories.from = sourceSets.main.output.collect {
+        fileTree(dir: it,
+        exclude: [
+                '**/io/grpc/okhttp/internal/**',
+        ])
+    }
+}

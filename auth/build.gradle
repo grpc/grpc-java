@@ -1,0 +1,35 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
+}
+
+description = "gRPC: Auth"
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.auth')
+    }
+}
+
+dependencies {
+    api project(':grpc-api'),
+            libraries.google.auth.credentials
+    implementation libraries.guava
+    testImplementation project(':grpc-testing'),
+            project(':grpc-core'),
+            project(":grpc-context"), // Override google-auth dependency with our newer version
+            libraries.google.auth.oauth2Http
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+    signature (libraries.signature.android) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}

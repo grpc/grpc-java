@@ -1,0 +1,14 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+}
+
+description = 'gRPC: Context'
+
+dependencies {
+    runtimeOnly (project(":grpc-api")) {
+        exclude group: "com.google.guava", module: "guava"
+        exclude group: "com.google.code.findbugs", module: "jsr305"
+        exclude group: "com.google.errorprone", module: "error_prone_annotations"
+    }
+}

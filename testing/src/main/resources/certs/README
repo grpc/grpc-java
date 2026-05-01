@@ -1,0 +1,103 @@
+The test credentials (CONFIRMEDTESTKEY) have been generated with the following
+commands:
+
+Bad credentials (badclient.* / badserver.*):
+============================================
+
+These are self-signed certificates:
+
+$ openssl req -x509 -newkey rsa:2048 -keyout badserver.key -out badserver.pem \
+  -days 3650 -nodes
+
+When prompted for certificate information, everything is default except the
+common name which is set to badserver.test.google.com.
+
+
+Valid test credentials:
+=======================
+
+The ca is self-signed:
+----------------------
+
+$ openssl req -x509 -new -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem \
+  -config ca-openssl.cnf -days 3650 -extensions v3_req
+When prompted for certificate information, everything is default.
+
+client is issued by CA:
+-----------------------
+
+$ openssl genrsa -out client.key.rsa 2048
+$ openssl pkcs8 -topk8 -in client.key.rsa -out client.key -nocrypt
+$ openssl req -new -key client.key -out client.csr
+
+When prompted for certificate information, everything is default except the
+common name which is set to testclient.
+
+$ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial -in client.csr \
+  -out client.pem -days 3650
+
+server0 is issued by CA:
+------------------------
+
+$ openssl genrsa -out server0.key.rsa 2048
+$ openssl pkcs8 -topk8 -in server0.key.rsa -out server0.key -nocrypt
+$ openssl req -new -key server0.key -out server0.csr
+
+When prompted for certificate information, everything is default except the
+common name which is set to *.test.google.com.au.
+
+$ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial -in server0.csr \
+  -out server0.pem -days 3650
+
+server1 is issued by CA with a special config for subject alternative names:
+----------------------------------------------------------------------------
+
+$ openssl genrsa -out server1.key.rsa 2048
+$ openssl pkcs8 -topk8 -in server1.key.rsa -out server1.key -nocrypt
+$ openssl req -new -key server1.key -out server1.csr -config server1-openssl.cnf
+
+When prompted for certificate information, everything is default except the
+common name which is set to *.test.google.com.
+
+$ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial -in server1.csr \
+  -out server1.pem -extensions req_ext -extfile server1-openssl.cnf -days 3650
+
+ecdsa.key is used to test keys with algorithm other than RSA:
+----------------------------------------------------------------------------
+$ openssl ecparam -name secp256k1 -genkey -noout -out ecdsa.pem
+$ openssl pkcs8 -topk8 -in ecdsa.pem -out ecdsa.key -nocrypt
+
+SPIFFE test credentials:
+=======================
+
+The SPIFFE related extensions are listed in spiffe-openssl.cnf config. Both
+client_spiffe.pem and server1_spiffe.pem are generated in the same way with
+original client.pem and server1.pem but with using that config. Here are the
+exact commands (we pass "-subj" as argument in this case):
+----------------------
+$ openssl req -new -key client.key -out spiffe-cert.csr \
+ -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=testclient/ \
+ -config spiffe-openssl.cnf -reqexts spiffe_client_e2e
+$ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial \
+ -in spiffe-cert.csr -out client_spiffe.pem -extensions spiffe_client_e2e \
+  -extfile spiffe-openssl.cnf -days 3650 -sha256
+$ openssl req -new -key server1.key -out spiffe-cert.csr \
+ -subj /C=US/ST=CA/L=SVL/O=gRPC/CN=*.test.google.com/ \
+ -config spiffe-openssl.cnf -reqexts spiffe_server_e2e
+$ openssl x509 -req -CA ca.pem -CAkey ca.key -CAcreateserial \
+ -in spiffe-cert.csr -out server1_spiffe.pem -extensions spiffe_server_e2e \
+  -extfile spiffe-openssl.cnf -days 3650 -sha256
+
+Additionally, SPIFFE trust bundle map files spiffebundle.json and \
+spiffebundle1.json are manually created for end to end testing. The \
+spiffebundle.json contains "example.com" trust domain (only this entry is used \
+in e2e tests) matching URI SAN of server1_spiffe.pem, and the CA certificate \
+there is ca.pem. The spiffebundle.json file contains "foo.bar.com" trust \
+domain (only this entry is used in e2e tests) matching URI SAN of \
+client_spiffe.pem, and the CA certificate there is also ca.pem.
+
+Clean up:
+---------
+$ rm *.rsa
+$ rm *.csr
+$ rm ca.srl

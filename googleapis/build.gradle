@@ -1,0 +1,29 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+
+    id "ru.vyarus.animalsniffer"
+}
+
+description = 'gRPC: googleapis'
+
+tasks.named("jar").configure {
+    manifest {
+        attributes('Automatic-Module-Name': 'io.grpc.googleapis')
+    }
+}
+
+dependencies {
+    api project(':grpc-api')
+    implementation project(path: ':grpc-alts', configuration: 'shadow'),
+                   project(':grpc-core'),
+                   project(path: ':grpc-xds', configuration: 'shadow'),
+                   libraries.guava.jre // JRE required by transitive protobuf-java-util
+    testImplementation testFixtures(project(':grpc-core'))
+
+    signature (libraries.signature.java) {
+        artifact {
+            extension = "signature"
+        }
+    }
+}
