@@ -99,7 +99,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final ObjectPool<? extends Executor> executorPool;
   /** Executor for application processing. Safe to read after {@link #start()}. */
   private Executor executor;
-  private final HandlerRegistry registry;
+  private final InternalHandlerRegistry registry;
   private final HandlerRegistry fallbackRegistry;
   private final List<ServerTransportFilter> transportFilters;
   // This is iterated on a per-call basis.  Use an array instead of a Collection to avoid iterator
@@ -498,8 +498,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
+      final ServerMethodDefinition<?, ?> primaryMethod = registry.lookupMethod(methodName, null);
 
       final Context.CancellableContext context = createContext(headers, statsTraceCtx);
+      if (primaryMethod != null) {
+        statsTraceCtx.serverCallMethodResolved(primaryMethod.getMethodDescriptor());
+      }
 
       final Link link = PerfMark.linkOut();
 
@@ -536,7 +540,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           ServerMethodDefinition<?, ?> wrapMethod;
           ServerCallParameters<?, ?> callParams;
           try {
-            ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+            ServerMethodDefinition<?, ?> method = primaryMethod;
             if (method == null) {
               method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
             }
