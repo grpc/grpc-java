@@ -46,6 +46,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <absl/strings/escaping.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/io/printer.h>
@@ -1206,7 +1207,7 @@ static void PrintService(const ServiceDescriptor* service,
                          bool disable_version,
                          GeneratedAnnotation generated_annotation) {
   (*vars)["service_name"] = service->name();
-  (*vars)["file_name"] = service->file()->name();
+  (*vars)["file_name"] = absl::Utf8SafeCEscape(service->file()->name());
   (*vars)["service_class_name"] = ServiceClassName(service);
   (*vars)["grpc_version"] = "";
   #ifdef GRPC_VERSION
