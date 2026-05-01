@@ -793,7 +793,7 @@ public final class Uri {
     }
 
     @CanIgnoreReturnValue
-    Builder setRawQuery(String query) {
+    public Builder setRawQuery(String query) {
       checkPercentEncodedArg(query, "query", queryChars);
       this.query = query;
       return this;
