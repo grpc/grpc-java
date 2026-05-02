@@ -222,13 +222,15 @@ final class AsyncServletOutputStreamWriter {
       if (actionItem == completeAction) {
         return;
       }
-      if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("the servlet output stream becomes not ready");
-      }
+      // Even if isReady() returns true, the previous write may still be in progress
+      // in the servlet container. Set readyAndDrained to false to require onWritePossible()
+      // to re-enable direct writes. This prevents "write when not ready" errors from Tomcat
+      // and other servlet containers that require onWritePossible() to fire between writes.
+      boolean successful =
+          writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+      LockSupport.unpark(parkingThread);
+      checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+      log.finest("the servlet output stream becomes not ready");
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
       if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
