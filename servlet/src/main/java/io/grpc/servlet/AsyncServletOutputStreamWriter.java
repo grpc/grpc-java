@@ -222,13 +222,11 @@ final class AsyncServletOutputStreamWriter {
       if (actionItem == completeAction) {
         return;
       }
-      if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("the servlet output stream becomes not ready");
-      }
+      boolean successful =
+          writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+      LockSupport.unpark(parkingThread);
+      checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+      log.finest("the servlet output stream becomes not ready");
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
       if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
