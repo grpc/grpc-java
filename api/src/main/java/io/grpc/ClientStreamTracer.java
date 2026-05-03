@@ -19,13 +19,14 @@ package io.grpc;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * {@link StreamTracer} for the client-side.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
-@ThreadSafe
 public abstract class ClientStreamTracer extends StreamTracer {
   /**
    * Indicates how long the call was delayed, in nanoseconds, due to waiting for name resolution

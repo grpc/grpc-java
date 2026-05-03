@@ -24,13 +24,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Utility to record call metrics for load-balancing. One instance per call.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6012")
-@ThreadSafe
 public final class CallMetricRecorder {
   private static final CallMetricRecorder NOOP = new CallMetricRecorder().disable();
 

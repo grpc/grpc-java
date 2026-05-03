@@ -22,13 +22,14 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Encloses classes related to the compression and decompression of messages.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
-@ThreadSafe
 public final class CompressorRegistry {
   private static final CompressorRegistry DEFAULT_INSTANCE = new CompressorRegistry(
       new Codec.Gzip(),

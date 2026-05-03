@@ -20,7 +20,6 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.stub.ClientCalls.StubType;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Stub implementations for blocking stubs.
@@ -28,9 +27,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>DO NOT MOCK: Customizing options doesn't work properly in mocks. Use InProcessChannelBuilder
  * to create a real channel suitable for testing. It is also possible to mock Channel instead.
  *
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ *
  * @since 1.26.0
  */
-@ThreadSafe
 @CheckReturnValue
 public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
     extends AbstractStub<S> {

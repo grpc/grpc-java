@@ -49,7 +49,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A gRPC InternalServer which accepts connections via a host AndroidService.
@@ -58,8 +57,10 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p><b>IMPORTANT</b>: This implementation must comply with this published wire format.
  * https://github.com/grpc/proposal/blob/master/L73-java-binderchannel/wireformat.md
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class BinderServer implements InternalServer, LeakSafeOneWayBinder.TransactionHandler {
   private static final Logger logger = Logger.getLogger(BinderServer.class.getName());
 

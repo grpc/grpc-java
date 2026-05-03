@@ -21,13 +21,14 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Server for listening for and dispatching incoming calls. It is not expected to be implemented by
  * application code or interceptors.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public abstract class Server {
 
   /**

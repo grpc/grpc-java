@@ -20,12 +20,13 @@ import com.google.common.base.Preconditions;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A {@code long} atomically updated due to errors caused by the value being too small.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 public final class AtomicBackoff {
   private static final Logger log = Logger.getLogger(AtomicBackoff.class.getName());
 
@@ -44,7 +45,10 @@ public final class AtomicBackoff {
     return new State(value.get());
   }
 
-  @ThreadSafe
+  /**
+   * This is thread-safe and should be considered
+   * for the errorprone ThreadSafe annotation in the future.
+   */
   public final class State {
     private final long savedValue;
 

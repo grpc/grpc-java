@@ -27,13 +27,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Encloses classes related to the compression and decompression of messages.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1704")
-@ThreadSafe
 public final class DecompressorRegistry {
   static final Joiner ACCEPT_ENCODING_JOINER = Joiner.on(',');
 

@@ -33,9 +33,11 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
-import javax.annotation.concurrent.ThreadSafe;
 
-@ThreadSafe
+/**
+ * This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
+ */
 final class InProcessServer implements InternalServer {
   private static final ConcurrentMap<String, InProcessServer> registry
       = new ConcurrentHashMap<>();

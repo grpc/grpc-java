@@ -69,12 +69,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A binary log class that is configured for a specific {@link MethodDescriptor}.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
-@ThreadSafe
 final class BinlogHelper {
   private static final Logger logger = Logger.getLogger(BinlogHelper.class.getName());
   // Normally 'grpc-' metadata keys are set from within gRPC, and applications are not allowed

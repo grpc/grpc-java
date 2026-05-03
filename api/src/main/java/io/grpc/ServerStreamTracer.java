@@ -17,13 +17,14 @@
 package io.grpc;
 
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Listens to events on a stream to collect metrics.
+ * 
+ * <p>This is thread-safe and should be considered
+ * for the errorprone ThreadSafe annotation in the future.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
-@ThreadSafe
 public abstract class ServerStreamTracer extends StreamTracer {
   /**
    * Called before the interceptors and the call handlers and make changes to the Context object
