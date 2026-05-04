@@ -91,7 +91,7 @@ interface Filter extends Closeable {
      *   <li>Filter name+typeUrl in FilterChain's HCM.http_filters.</li>
      * </ol>
      */
-    Filter newInstance(String name, GrpcServiceXdsContextProvider grpcServiceXdsContextProvider);
+    Filter newInstance(String name);
 
     /**
      * Parses the top-level filter config from raw proto message. The message may be either a {@link
