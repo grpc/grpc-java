@@ -41,7 +41,7 @@ public final class SslSocketFactoryServerCredentials {
     private final ConnectionSpec connectionSpec;
 
     ServerCredentials(SSLSocketFactory factory) {
-      this(factory, OkHttpChannelBuilder.INTERNAL_DEFAULT_CONNECTION_SPEC);
+      this(factory, OkHttpChannelBuilder.INTERNAL_LEGACY_CONNECTION_SPEC);
     }
 
     ServerCredentials(SSLSocketFactory factory, ConnectionSpec connectionSpec) {

@@ -85,6 +85,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.Nullable;
 
+/**
+ * Filter for external processing as per gRFC A93.
+ */
 public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = 
       "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
@@ -208,8 +211,6 @@ public class ExternalProcessorFilter implements Filter {
     checkState(merged.errorDetail == null, "Error merging configs: %s", merged.errorDetail);
     return merged.config;
   }
-
-
 
   static final class ExternalProcessorFilterConfig implements FilterConfig {
 
