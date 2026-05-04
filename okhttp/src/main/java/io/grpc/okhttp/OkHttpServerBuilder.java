@@ -27,6 +27,7 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -111,7 +112,15 @@ public final class OkHttpServerBuilder extends ForwardingServerBuilder<OkHttpSer
     return new OkHttpServerBuilder(address, result.factory);
   }
 
-  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(this::buildTransportServers);
+  final ServerImplBuilder serverImplBuilder = new ServerImplBuilder(
+      new ServerImplBuilder.ClientTransportServersBuilder() {
+        @Override
+        public InternalServer buildClientTransportServers(
+            List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+            MetricRecorder metricRecorder) {
+          return buildTransportServers(streamTracerFactories);
+        }
+      });
   final SocketAddress listenAddress;
   final HandshakerSocketFactory handshakerSocketFactory;
   TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();

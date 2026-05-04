@@ -44,6 +44,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.FlagResetRule;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
@@ -150,13 +151,6 @@ public class DnsNameResolverTest {
         name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted());
   }
 
-  private RetryingNameResolver newResolver(String name, int defaultPort, boolean isAndroid) {
-    return newResolver(
-        name, defaultPort, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(),
-        isAndroid);
-  }
-
-
   private RetryingNameResolver newResolver(
       String name,
       int defaultPort,
@@ -227,29 +221,13 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve_androidIgnoresPropertyValue() throws Exception {
-    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "2");
-    resolveNeverCache(true);
-  }
-
-  @Test
-  public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
-    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
-    resolveNeverCache(true);
-  }
-
-  @Test
   public void resolve_neverCache() throws Exception {
     flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
-    resolveNeverCache(false);
-  }
-
-  private void resolveNeverCache(boolean isAndroid) throws Exception {
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
 
-    RetryingNameResolver resolver = newResolver(name, 81, isAndroid);
+    RetryingNameResolver resolver = newResolver(name, 81);
     DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
@@ -443,25 +421,37 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void resolve_androidIgnoresPropertyValue() throws Exception {
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "2");
+    resolveDefaultValue(true);
+  }
+
+  @Test
+  public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
+    flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+    resolveDefaultValue(true);
+  }
+
+  @Test
   public void resolve_invalidTtlPropertyValue() throws Exception {
     flagResetRule.setSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
-    resolveDefaultValue();
+    resolveDefaultValue(false);
   }
 
   @Test
   public void resolve_noPropertyValue() throws Exception {
     flagResetRule.clearSystemPropertyForTest(NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    resolveDefaultValue();
+    resolveDefaultValue(false);
   }
 
-  private void resolveDefaultValue() throws Exception {
+  private void resolveDefaultValue(boolean isAndroid) throws Exception {
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
     FakeTicker fakeTicker = new FakeTicker();
 
     RetryingNameResolver resolver = newResolver(
-        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+        name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker), isAndroid);
     DnsNameResolver dnsResolver = (DnsNameResolver) resolver.getRetriedNameResolver();
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
@@ -694,7 +684,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve_addressFailure_neverLookUpServiceConfig() throws Exception {
+  public void resolve_addressFailure_stillLookUpServiceConfig() throws Exception {
     DnsNameResolver.enableTxt = true;
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
@@ -713,7 +703,7 @@ public class DnsNameResolverTest {
     Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(errorStatus.getCause()).hasMessageThat().contains("no addr");
-    verify(mockResourceResolver, never()).resolveTxt(anyString());
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + name);
 
     assertEquals(0, fakeClock.numPendingTasks());
     // A retry should be scheduled

@@ -19,6 +19,7 @@ package io.grpc.opentelemetry;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BACKEND_SERVICE_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
+import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.CUSTOM_LABEL_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.LOCALITY_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.METHOD_KEY;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.STATUS_KEY;
@@ -39,6 +40,7 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Deadline;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -99,6 +101,7 @@ final class OpenTelemetryMetricsModule {
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final boolean localityEnabled;
   private final boolean backendServiceEnabled;
+  private final boolean customLabelEnabled;
   private final ImmutableList<OpenTelemetryPlugin> plugins;
   @Nullable
   private final TargetFilter targetAttributeFilter;
@@ -117,6 +120,7 @@ final class OpenTelemetryMetricsModule {
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.localityEnabled = optionalLabels.contains(LOCALITY_KEY.getKey());
     this.backendServiceEnabled = optionalLabels.contains(BACKEND_SERVICE_KEY.getKey());
+    this.customLabelEnabled = optionalLabels.contains(CUSTOM_LABEL_KEY.getKey());
     this.plugins = ImmutableList.copyOf(plugins);
     this.targetAttributeFilter = targetAttributeFilter;
   }
@@ -157,14 +161,6 @@ final class OpenTelemetryMetricsModule {
 
   static String recordMethodName(String fullMethodName, boolean isGeneratedMethod) {
     return isGeneratedMethod ? fullMethodName : "other";
-  }
-
-  private static Context otelContextWithBaggage() {
-    Baggage baggage = BAGGAGE_KEY.get();
-    if (baggage == null) {
-      return Context.current();
-    }
-    return Context.current().with(baggage);
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
@@ -277,12 +273,11 @@ final class OpenTelemetryMetricsModule {
           statusCode = Code.DEADLINE_EXCEEDED;
         }
       }
-      attemptsState.attemptEnded();
+      attemptsState.attemptEnded(info.getCallOptions());
       recordFinishedAttempt();
     }
 
     void recordFinishedAttempt() {
-      Context otelContext = otelContextWithBaggage();
       AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
@@ -301,6 +296,10 @@ final class OpenTelemetryMetricsModule {
         }
         builder.put(BACKEND_SERVICE_KEY, savedBackendService);
       }
+      if (module.customLabelEnabled) {
+        builder.put(
+            CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
       for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
       }
@@ -308,15 +307,15 @@ final class OpenTelemetryMetricsModule {
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
-            .record(attemptNanos * SECONDS_PER_NANO, attribute, otelContext);
+            .record(attemptNanos * SECONDS_PER_NANO, attribute, attemptsState.otelContext);
       }
       if (module.resource.clientTotalSentCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalSentCompressedMessageSizeCounter()
-            .record(outboundWireSize, attribute, otelContext);
+            .record(outboundWireSize, attribute, attemptsState.otelContext);
       }
       if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalReceivedCompressedMessageSizeCounter()
-            .record(inboundWireSize, attribute, otelContext);
+            .record(inboundWireSize, attribute, attemptsState.otelContext);
       }
     }
   }
@@ -331,6 +330,7 @@ final class OpenTelemetryMetricsModule {
     private boolean callEnded;
     private final String fullMethodName;
     private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
+    private final Context otelContext;
     private Status status;
     private long retryDelayNanos;
     private long callLatencyNanos;
@@ -346,22 +346,29 @@ final class OpenTelemetryMetricsModule {
     CallAttemptsTracerFactory(
         OpenTelemetryMetricsModule module,
         String target,
+        CallOptions callOptions,
         String fullMethodName,
-        List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins) {
+        List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins, Context otelContext) {
       this.module = checkNotNull(module, "module");
       this.target = checkNotNull(target, "target");
       this.fullMethodName = checkNotNull(fullMethodName, "fullMethodName");
       this.callPlugins = checkNotNull(callPlugins, "callPlugins");
+      this.otelContext = checkNotNull(otelContext, "otelContext");
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      io.opentelemetry.api.common.Attributes attribute = io.opentelemetry.api.common.Attributes.of(
-          METHOD_KEY, fullMethodName,
-          TARGET_KEY, target);
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          .put(METHOD_KEY, fullMethodName)
+          .put(TARGET_KEY, target);
+      if (module.customLabelEnabled) {
+        builder.put(
+            CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
+      io.opentelemetry.api.common.Attributes attribute = builder.build();
 
       // Record here in case mewClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
-        module.resource.clientAttemptCountCounter().add(1, attribute);
+        module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
       }
     }
 
@@ -381,11 +388,16 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        io.opentelemetry.api.common.Attributes attribute =
-            io.opentelemetry.api.common.Attributes.of(METHOD_KEY, fullMethodName,
-                TARGET_KEY, target);
+        AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+            .put(METHOD_KEY, fullMethodName)
+            .put(TARGET_KEY, target);
+        if (module.customLabelEnabled) {
+          builder.put(
+              CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+        }
+        io.opentelemetry.api.common.Attributes attribute = builder.build();
         if (module.resource.clientAttemptCountCounter() != null) {
-          module.resource.clientAttemptCountCounter().add(1, attribute);
+          module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
         }
       }
       if (info.isTransparentRetry()) {
@@ -411,7 +423,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     // Called whenever each attempt is ended.
-    void attemptEnded() {
+    void attemptEnded(CallOptions callOptions) {
       boolean shouldRecordFinishedCall = false;
       synchronized (lock) {
         if (--activeStreams == 0) {
@@ -423,11 +435,11 @@ final class OpenTelemetryMetricsModule {
         }
       }
       if (shouldRecordFinishedCall) {
-        recordFinishedCall();
+        recordFinishedCall(callOptions);
       }
     }
 
-    void callEnded(Status status) {
+    void callEnded(Status status, CallOptions callOptions) {
       callStopWatch.stop();
       this.status = status;
       boolean shouldRecordFinishedCall = false;
@@ -443,12 +455,11 @@ final class OpenTelemetryMetricsModule {
         }
       }
       if (shouldRecordFinishedCall) {
-        recordFinishedCall();
+        recordFinishedCall(callOptions);
       }
     }
 
-    void recordFinishedCall() {
-      Context otelContext = otelContextWithBaggage();
+    void recordFinishedCall(CallOptions callOptions) {
       if (attemptsPerCall.get() == 0) {
         ClientTracer tracer = newClientTracer(null);
         tracer.attemptNanos = attemptDelayStopwatch.elapsed(TimeUnit.NANOSECONDS);
@@ -458,11 +469,13 @@ final class OpenTelemetryMetricsModule {
       callLatencyNanos = callStopWatch.elapsed(TimeUnit.NANOSECONDS);
 
       // Base attributes
-      io.opentelemetry.api.common.Attributes baseAttributes =
-          io.opentelemetry.api.common.Attributes.of(
-              METHOD_KEY, fullMethodName,
-              TARGET_KEY, target
-          );
+      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          .put(METHOD_KEY, fullMethodName)
+          .put(TARGET_KEY, target);
+      if (module.customLabelEnabled) {
+        builder.put(CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
+      io.opentelemetry.api.common.Attributes baseAttributes = builder.build();
 
       // Duration
       if (module.resource.clientCallDurationCounter() != null) {
@@ -548,6 +561,7 @@ final class OpenTelemetryMetricsModule {
     private final OpenTelemetryMetricsModule module;
     private final String fullMethodName;
     private final List<OpenTelemetryPlugin.ServerStreamPlugin> streamPlugins;
+    private Context otelContext = Context.root();
     private volatile boolean isGeneratedMethod;
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
@@ -563,18 +577,30 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
+    public io.grpc.Context filterContext(io.grpc.Context context) {
+      Baggage baggage = BAGGAGE_KEY.get(context);
+      if (baggage != null) {
+        otelContext = Context.current().with(baggage);
+      } else {
+        otelContext = Context.current();
+      }
+      return context;
+    }
+
+    @Override
     public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
       // which is true for all generated methods. Otherwise, programmatically
       // created methods result in high cardinality metrics.
       boolean isSampledToLocalTracing = callInfo.getMethodDescriptor().isSampledToLocalTracing();
       isGeneratedMethod = isSampledToLocalTracing;
+
       io.opentelemetry.api.common.Attributes attribute =
           io.opentelemetry.api.common.Attributes.of(
               METHOD_KEY, recordMethodName(fullMethodName, isSampledToLocalTracing));
 
       if (module.resource.serverCallCountCounter() != null) {
-        module.resource.serverCallCountCounter().add(1, attribute);
+        module.resource.serverCallCountCounter().add(1, attribute, otelContext);
       }
     }
 
@@ -606,7 +632,6 @@ final class OpenTelemetryMetricsModule {
      */
     @Override
     public void streamClosed(Status status) {
-      Context otelContext = otelContextWithBaggage();
       if (streamClosedUpdater != null) {
         if (streamClosedUpdater.getAndSet(this, 1) != 0) {
           return;
@@ -657,7 +682,8 @@ final class OpenTelemetryMetricsModule {
         }
         streamPlugins = Collections.unmodifiableList(streamPluginsMutable);
       }
-      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName, streamPlugins);
+      return new ServerTracer(OpenTelemetryMetricsModule.this, fullMethodName,
+          streamPlugins);
     }
   }
 
@@ -688,13 +714,14 @@ final class OpenTelemetryMetricsModule {
           callOptions = plugin.filterCallOptions(callOptions);
         }
       }
+      final CallOptions finalCallOptions = callOptions;
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
       // which is true for all generated methods. Otherwise, programatically
       // created methods result in high cardinality metrics.
       final CallAttemptsTracerFactory tracerFactory = new CallAttemptsTracerFactory(
-          OpenTelemetryMetricsModule.this, target,
+          OpenTelemetryMetricsModule.this, target, callOptions,
           recordMethodName(method.getFullMethodName(), method.isSampledToLocalTracing()),
-          callPlugins);
+          callPlugins, Context.current());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
@@ -707,7 +734,7 @@ final class OpenTelemetryMetricsModule {
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
                 public void onClose(Status status, Metadata trailers) {
-                  tracerFactory.callEnded(status);
+                  tracerFactory.callEnded(status, finalCallOptions);
                   super.onClose(status, trailers);
                 }
               },
@@ -717,3 +744,4 @@ final class OpenTelemetryMetricsModule {
     }
   }
 }
+

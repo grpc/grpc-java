@@ -43,6 +43,7 @@ public class S2AStub implements AutoCloseable {
   private final BlockingQueue<Result> responses = new ArrayBlockingQueue<>(10);
   private S2AServiceGrpc.S2AServiceStub serviceStub;
   private StreamObserver<SessionReq> writer;
+  private long deadlineSeconds = HANDSHAKE_RPC_DEADLINE_SECS;
   private boolean doneReading = false;
   private boolean doneWriting = false;
   private boolean isClosed = false;
@@ -54,6 +55,14 @@ public class S2AStub implements AutoCloseable {
   }
 
   @VisibleForTesting
+  static S2AStub newInstanceWithDeadline(
+      S2AServiceGrpc.S2AServiceStub serviceStub, long deadlineSeconds) {
+    checkNotNull(serviceStub);
+    checkArgument(deadlineSeconds > 0);
+    return new S2AStub(serviceStub, deadlineSeconds);
+  }
+
+  @VisibleForTesting
   static S2AStub newInstanceForTesting(StreamObserver<SessionReq> writer) {
     checkNotNull(writer);
     return new S2AStub(writer);
@@ -61,6 +70,11 @@ public class S2AStub implements AutoCloseable {
 
   private S2AStub(S2AServiceGrpc.S2AServiceStub serviceStub) {
     this.serviceStub = serviceStub;
+  }
+
+  private S2AStub(S2AServiceGrpc.S2AServiceStub serviceStub, long deadlineSeconds) {
+    this.serviceStub = serviceStub;
+    this.deadlineSeconds = deadlineSeconds;
   }
 
   private S2AStub(StreamObserver<SessionReq> writer) {
@@ -154,7 +168,7 @@ public class S2AStub implements AutoCloseable {
       writer =
           serviceStub
               .withWaitForReady()
-              .withDeadlineAfter(HANDSHAKE_RPC_DEADLINE_SECS, SECONDS)
+              .withDeadlineAfter(deadlineSeconds, SECONDS)
               .setUpSession(reader);
     }
   }

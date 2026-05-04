@@ -308,7 +308,7 @@ final class XdsX509TrustManager extends X509ExtendedTrustManager implements X509
 
   private List<StringMatcher> getAutoSniSanMatchers(SSLParameters sslParams) {
     List<StringMatcher> sniNamesToMatch = new ArrayList<>();
-    if (CertificateUtils.isXdsSniEnabled && autoSniSanValidation) {
+    if (autoSniSanValidation) {
       List<SNIServerName> serverNames = sslParams.getServerNames();
       if (serverNames != null) {
         for (SNIServerName serverName : serverNames) {

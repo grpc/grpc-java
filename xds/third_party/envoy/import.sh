@@ -79,7 +79,9 @@ envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
 envoy/extensions/filters/http/composite/v3/composite.proto
 envoy/extensions/filters/http/ext_authz/v3/ext_authz.proto
+envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
+envoy/extensions/filters/http/composite/v3/composite.proto
 envoy/extensions/filters/http/rate_limit_quota/v3/rate_limit_quota.proto
 envoy/extensions/filters/http/gcp_authn/v3/gcp_authn.proto
 envoy/extensions/filters/http/rbac/v3/rbac.proto
@@ -117,6 +119,7 @@ envoy/type/matcher/v3/http_inputs.proto
 envoy/config/common/matcher/v3/matcher.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
+envoy/config/common/matcher/v3/matcher.proto
 envoy/type/matcher/v3/number.proto
 envoy/type/matcher/v3/path.proto
 envoy/type/matcher/v3/regex.proto

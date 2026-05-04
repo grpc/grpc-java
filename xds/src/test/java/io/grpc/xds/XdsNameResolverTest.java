@@ -104,8 +104,6 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -201,7 +199,7 @@ public class XdsNameResolverTest {
   private XdsNameResolver resolver;
   private TestCall<?, ?> testCall;
   private boolean originalEnableTimeout;
-  private URI targetUri;
+  private String targetUri = AUTHORITY;
   private final NameResolver.Args nameResolverArgs = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
@@ -215,12 +213,6 @@ public class XdsNameResolverTest {
   @Before
   public void setUp() {
     lenient().doReturn(Status.OK).when(mockListener).onResult2(any());
-
-    try {
-      targetUri = new URI(AUTHORITY);
-    } catch (URISyntaxException e) {
-      targetUri = null;
-    }
 
     originalEnableTimeout = XdsNameResolver.enableTimeout;
     XdsNameResolver.enableTimeout = true;
@@ -301,6 +293,40 @@ public class XdsNameResolverTest {
         scheduler, xdsClientPoolFactory,
         mockRandom, FilterRegistry.getDefaultRegistry(), rawBootstrap, metricRecorder,
         nameResolverArgs);
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
+  public void resolving_emptyTargetAuthority_templateWithXdstp() {
+    bootstrapInfo =
+        BootstrapInfo.builder()
+            .servers(
+                ImmutableList.of(
+                    ServerInfo.create("td.googleapis.com", InsecureChannelCredentials.create())))
+            .node(Node.newBuilder().build())
+            .clientDefaultListenerResourceNameTemplate(
+                "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+            .build();
+    String serviceAuthority = "[::FFFF:129.144.52.38]:80";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "%5B::FFFF:129.144.52.38%5D:80?id=1";
+    resolver =
+        new XdsNameResolver(
+            "xds:///foo.googleapis.com",
+            "",
+            serviceAuthority,
+            null,
+            serviceConfigParser,
+            syncContext,
+            scheduler,
+            xdsClientPoolFactory,
+            mockRandom,
+            FilterRegistry.getDefaultRegistry(),
+            rawBootstrap,
+            metricRecorder,
+            nameResolverArgs);
     resolver.start(mockListener);
     verify(mockListener, never()).onError(any(Status.class));
   }

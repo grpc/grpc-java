@@ -46,6 +46,7 @@ import io.grpc.InsecureServerCredentials;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -389,7 +390,9 @@ public class ProtocolNegotiatorsTest {
         .buildTransportFactory();
     InternalServer server = NettyServerBuilder
         .forPort(0, serverCreds)
-        .buildTransportServers(Collections.<ServerStreamTracer.Factory>emptyList());
+        .buildTransportServers(
+            Collections.<ServerStreamTracer.Factory>emptyList(),
+            new MetricRecorder() {});
     server.start(serverListener);
 
     ManagedClientTransport.Listener clientTransportListener =

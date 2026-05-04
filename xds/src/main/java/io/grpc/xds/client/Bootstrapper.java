@@ -26,6 +26,7 @@ import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.Nullable;
 
 /**
@@ -205,11 +206,18 @@ public abstract class Bootstrapper {
      */
     public abstract ImmutableMap<String, AuthorityInfo> authorities();
 
+    /**
+     * Parsed configuration for implementation-specific extensions.
+     * Returns an opaque object containing the parsed configuration.
+     */
+    public abstract Optional<Object> implSpecificObject();
+
     @VisibleForTesting
     public static Builder builder() {
       return new AutoValue_Bootstrapper_BootstrapInfo.Builder()
           .clientDefaultListenerResourceNameTemplate("%s")
-          .authorities(ImmutableMap.<String, AuthorityInfo>of());
+          .authorities(ImmutableMap.<String, AuthorityInfo>of())
+          .implSpecificObject(Optional.empty());
     }
 
     @AutoValue.Builder
@@ -231,7 +239,10 @@ public abstract class Bootstrapper {
 
       public abstract Builder authorities(Map<String, AuthorityInfo> authorities);
 
+      public abstract Builder implSpecificObject(Optional<Object> implSpecificObject);
+
       public abstract BootstrapInfo build();
     }
   }
+
 }

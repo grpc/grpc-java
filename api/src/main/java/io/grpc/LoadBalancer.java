@@ -156,15 +156,16 @@ public abstract class LoadBalancer {
   private int recursionCount;
 
   /**
-   * Handles newly resolved server groups and metadata attributes from name resolution system.
-   * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
-   * but may be flattened into a single list if needed.
-   *
-   * <p>Implementations should not modify the given {@code servers}.
+   * Handles newly resolved addresses and metadata attributes from name resolution system.
+   * Addresses in {@link EquivalentAddressGroup} should be considered equivalent but may be
+   * flattened into a single list if needed.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.21.0
+   *
+   * @deprecated  Use instead {@link #acceptResolvedAddresses(ResolvedAddresses)}
    */
+  @Deprecated
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     if (recursionCount++ == 0) {
       // Note that the information about the addresses actually being accepted will be lost
@@ -179,12 +180,10 @@ public abstract class LoadBalancer {
    * EquivalentAddressGroup} addresses should be considered equivalent but may be flattened into a
    * single list if needed.
    *
-   * <p>Implementations can choose to reject the given addresses by returning {@code false}.
+   * @param resolvedAddresses the resolved server addresses, attributes, and config
+   * @return {@code Status.OK} if the resolved addresses were accepted, otherwise an error to report
+   *     to the name resolver
    *
-   * <p>Implementations should not modify the given {@code addresses}.
-   *
-   * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @return {@code true} if the resolved addresses were accepted. {@code false} if rejected.
    * @since 1.49.0
    */
   public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -418,7 +417,16 @@ public abstract class LoadBalancer {
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
+   * 
+   * <p>Note that this method is only called when implementing {@code handleResolvedAddresses()}
+   * instead of {@code acceptResolvedAddresses()}.
+   *
+   * @deprecated Instead of overwriting this and {@code handleResolvedAddresses()}, only
+   *     overwrite {@code acceptResolvedAddresses()} which indicates if the addresses provided
+   *     by the name resolver are acceptable with the {@code boolean} return value.
    */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public boolean canHandleEmptyAddressListFromNameResolution() {
     return false;
   }
@@ -632,6 +640,8 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones, 
+    // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
       return new PickResult(
@@ -659,6 +669,28 @@ public abstract class LoadBalancer {
      */
     public static PickResult withSubchannel(Subchannel subchannel) {
       return withSubchannel(subchannel, null);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code subchannel},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithSubchannel(Subchannel subchannel) {
+      return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
+          status, drop, authorityOverride);
+    }
+
+    /**
+     * Creates a new {@code PickResult} with the given {@code streamTracerFactory},
+     * but retains all other properties from this {@code PickResult}.
+     *
+     * @since 1.80.0
+     */
+    public PickResult copyWithStreamTracerFactory(
+        @Nullable ClientStreamTracer.Factory streamTracerFactory) {
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
     }
 
     /**

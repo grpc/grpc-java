@@ -42,6 +42,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
@@ -80,6 +81,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final InternalChannelz channelz;
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
+  private final MetricRecorder metricRecorder;
   private final ChannelLogger channelLogger;
   private final boolean reconnectDisabled;
 
@@ -191,6 +193,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.scheduledExecutor = scheduledExecutor;
     this.connectingTimer = stopwatchSupplier.get();
     this.syncContext = syncContext;
+    this.metricRecorder = metricRecorder;
     this.callback = callback;
     this.channelz = channelz;
     this.callsTracer = callsTracer;
@@ -265,6 +268,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           .setAuthority(eagChannelAuthority != null ? eagChannelAuthority : authority)
           .setEagAttributes(currentEagAttributes)
           .setUserAgent(userAgent)
+          .setMetricRecorder(metricRecorder)
           .setHttpConnectProxiedSocketAddress(proxiedAddr);
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId
@@ -603,8 +607,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             connectedAddressAttributes = addressIndex.getCurrentEagAttributes();
             gotoNonErrorState(READY);
             subchannelMetrics.recordConnectionAttemptSucceeded(/* target= */ target,
-                /* backendService= */ getAttributeOrDefault(
-                    addressIndex.getCurrentEagAttributes(), NameResolver.ATTR_BACKEND_SERVICE),
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
                     EquivalentAddressGroup.ATTR_LOCALITY_NAME),
                 /* securityLevel= */ extractSecurityLevel(addressIndex.getCurrentEagAttributes()
@@ -635,8 +639,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             addressIndex.reset();
             gotoNonErrorState(IDLE);
             subchannelMetrics.recordDisconnection(/* target= */ target,
-                /* backendService= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
-                    NameResolver.ATTR_BACKEND_SERVICE),
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
                     EquivalentAddressGroup.ATTR_LOCALITY_NAME),
                 /* disconnectError= */ disconnectError.toErrorString(),
@@ -644,8 +648,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                     .get(GrpcAttributes.ATTR_SECURITY_LEVEL)));
           } else if (pendingTransport == transport) {
             subchannelMetrics.recordConnectionAttemptFailed(/* target= */ target,
-                /* backendService= */getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
-                    NameResolver.ATTR_BACKEND_SERVICE),
+                /* backendService= */ getBackendServiceOrDefault(
+                    addressIndex.getCurrentEagAttributes()),
                 /* locality= */ getAttributeOrDefault(addressIndex.getCurrentEagAttributes(),
                     EquivalentAddressGroup.ATTR_LOCALITY_NAME));
             Preconditions.checkState(state.getState() == CONNECTING,
@@ -706,6 +710,14 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     private String getAttributeOrDefault(Attributes attributes, Attributes.Key<String> key) {
       String value = attributes.get(key);
+      return value == null ? "" : value;
+    }
+
+    private String getBackendServiceOrDefault(Attributes attributes) {
+      String value = attributes.get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE);
+      if (value == null) {
+        value = attributes.get(NameResolver.ATTR_BACKEND_SERVICE);
+      }
       return value == null ? "" : value;
     }
   }

@@ -166,7 +166,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       final boolean wasCancelled = (scheduledRetry != null) ? scheduledRetry.isCancelled() : false;
       final Future<?> retryFuture;
-      if (scheduledRetry != null) {
+      final boolean retryWasScheduled = scheduledRetry != null;
+      if (retryWasScheduled) {
         retryFuture = scheduledRetry.markCancelled();
         scheduledRetry = null;
       } else {
@@ -190,8 +191,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
             }
           }
-          if (retryFuture != null) {
-            retryFuture.cancel(false);
+          if (retryWasScheduled) {
+            if (retryFuture != null) {
+              retryFuture.cancel(false);
+            }
             if (!wasCancelled && inFlightSubStreams.decrementAndGet() == Integer.MIN_VALUE) {
               assert savedCloseMasterListenerReason != null;
               listenerSerializeExecutor.execute(
@@ -853,7 +856,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   public static long intervalWithJitter(long intervalNanos) {
     double inverseJitterFactor = isExperimentalRetryJitterEnabled
-            ? 0.8 * random.nextDouble() + 0.4 : random.nextDouble();
+            ? 0.4 * random.nextDouble() + 0.8 : random.nextDouble();
     return (long) (intervalNanos * inverseJitterFactor);
   }
 

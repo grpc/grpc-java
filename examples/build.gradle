@@ -21,12 +21,14 @@ java {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.80.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.82.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protobufVersion = '3.25.8'
 def protocVersion = protobufVersion
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+    // Even though client-side won't call grpc-services directly, it needs the
+    // dependency to enable the health-aware round_robin implementation
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
 

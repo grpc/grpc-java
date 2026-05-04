@@ -91,10 +91,10 @@ public class UdsNameResolverTest {
   @Test
   public void testNonNullAuthority() {
     try {
-      udsNameResolver = new UdsNameResolver("authority", "sock.sock", args);
+      udsNameResolver = new UdsNameResolver("somehost", "sock.sock", args);
       fail("exception expected");
     } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessageThat().isEqualTo("non-null authority not supported");
+      assertThat(e).hasMessageThat().isEqualTo("authority not supported: somehost");
     }
   }
 }

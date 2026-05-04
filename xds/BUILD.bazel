@@ -343,6 +343,7 @@ java_library(
         ":xds",
         ":xds_java_proto",
         "//api",
+        "//api:test_fixtures",
         "//core:internal",
         "//stub",
         "//testing-proto:simpleservice_java_grpc",

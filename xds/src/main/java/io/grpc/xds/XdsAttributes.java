@@ -20,6 +20,7 @@ import com.google.protobuf.Struct;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Grpc;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.xds.XdsNameResolverProvider.CallCounterProvider;
 import io.grpc.xds.client.Locality;
@@ -86,8 +87,7 @@ final class XdsAttributes {
    * Endpoint weight for load balancing purposes.
    */
   @EquivalentAddressGroup.Attr
-  static final Attributes.Key<Long> ATTR_SERVER_WEIGHT =
-      Attributes.Key.create("io.grpc.xds.XdsAttributes.serverWeight");
+  static final Attributes.Key<Long> ATTR_SERVER_WEIGHT = InternalEquivalentAddressGroup.ATTR_WEIGHT;
 
   /**
    * Filter chain match for network filters.
