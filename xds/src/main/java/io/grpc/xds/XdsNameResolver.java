@@ -110,7 +110,7 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
-  // Encoded version of the service authority as per
+  // Encoded version of the service authority as per 
   // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
   private final String encodedServiceAuthority;
   private final String overrideAuthority;
@@ -154,8 +154,8 @@ final class XdsNameResolver extends NameResolver {
     this(target, targetAuthority, name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler,
         bootstrapOverride == null
-            ? SharedXdsClientPoolProvider.getDefaultProvider()
-            : new SharedXdsClientPoolProvider(),
+          ? SharedXdsClientPoolProvider.getDefaultProvider()
+          : new SharedXdsClientPoolProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
         metricRecorder, nameResolverArgs);
   }
@@ -172,8 +172,8 @@ final class XdsNameResolver extends NameResolver {
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
-    this.encodedServiceAuthority =
-        GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
+    this.encodedServiceAuthority = 
+      GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
 
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
@@ -234,7 +234,7 @@ final class XdsNameResolver extends NameResolver {
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
-    ) {
+        ) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;
@@ -921,8 +921,8 @@ final class XdsNameResolver extends NameResolver {
       // the config selector handles the error message itself.
       listener.onResult2(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
-              .set(InternalConfigSelector.KEY, configSelector)
-              .build())
+            .set(InternalConfigSelector.KEY, configSelector)
+            .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
     }
