@@ -1029,4 +1029,80 @@ public class CompositeFilterTest {
 
     assertThat(result.errorDetail).contains("Maximum recursion depth of 8 exceeded");
   }
+
+  @Test
+  public void clientInterceptorSkipsOnSkipFilter() {
+    // Setup Config with a matcher that MATCHES, but action is SkipFilter
+    
+    Any skipActionAny = Any.newBuilder()
+        .setTypeUrl("type.googleapis.com/envoy.extensions.filters.common.matcher.action"
+            + ".v3.SkipFilter")
+        .setValue(com.google.protobuf.ByteString.EMPTY)
+        .build();
+
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(skipActionAny)
+            .build())
+        .build();
+
+    Matcher matcher = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                    .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                        .setInput(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+                            .setName("request_headers")
+                            .setTypedConfig(Any.pack(
+                                HttpRequestHeaderMatchInput.newBuilder()
+                                    .setHeaderName("foo")
+                                    .build()))
+                            .build())
+                        .setValueMatch(StringMatcher.newBuilder().setExact("bar").build())
+                        .build())
+                    .build())
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcher)
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(proto));
+
+    assertThat(result.errorDetail).isNull();
+
+    CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
+    ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
+        mock(ScheduledExecutorService.class));
+
+    Channel next = mock(Channel.class);
+    ClientCall nextCall = mock(ClientCall.class);
+    when(next.newCall(any(), any())).thenReturn(nextCall);
+
+    MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(marshaller)
+        .setResponseMarshaller(marshaller)
+        .build();
+
+    ClientCall<Void, Void> call = interceptor.interceptCall(method, CallOptions.DEFAULT, next);
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar"); // This matches
+
+    call.start(mock(ClientCall.Listener.class), headers);
+
+    // Verify it SKIPS (calls next directly, never calls fakeClientInterceptor)
+    verify(fakeClientInterceptor, org.mockito.Mockito.never()).interceptCall(any(), any(), any());
+    verify(next).newCall(any(), any());
+    verify(nextCall).start(any(), eq(headers));
+  }
 }

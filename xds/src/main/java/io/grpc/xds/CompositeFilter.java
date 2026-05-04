@@ -246,6 +246,9 @@ public final class CompositeFilter implements Filter {
             delegates.add(new DelegateEntry(provider, parsed.config, childFilterConfig.getName()));
           }
           return new FilterDelegate(delegates, samplePercent);
+        } else if (actionAny.getTypeUrl().equals(
+            "type.googleapis.com/envoy.extensions.filters.common.matcher.action.v3.SkipFilter")) {
+          return new FilterDelegate(Collections.emptyList(), null);
         }
       } catch (InvalidProtocolBufferException e) {
         throw new RuntimeException(e);
