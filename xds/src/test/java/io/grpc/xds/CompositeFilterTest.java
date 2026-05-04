@@ -31,13 +31,17 @@ import io.envoyproxy.envoy.extensions.common.matching.v3.ExtensionWithMatcher;
 import io.envoyproxy.envoy.extensions.common.matching.v3.ExtensionWithMatcherPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.Composite;
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.ExecuteFilterAction;
+import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
+import io.grpc.Status;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.internal.UnifiedMatcher;
 import java.util.concurrent.ScheduledExecutorService;
@@ -46,6 +50,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -734,4 +739,294 @@ public class CompositeFilterTest {
     assertThat(result.config.matcher).isNull();
   }
 
+  @Test
+  public void clientInterceptorUsesOverrideMatcher() {
+    // Base matcher that matches "foo=bar"
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.filters.http.composite"
+                    + ".v3.ExecuteFilterAction")
+                .setValue(ExecuteFilterAction.newBuilder()
+                    .setTypedConfig(TypedExtensionConfig.newBuilder()
+                        .setName("child")
+                        .setTypedConfig(Any.newBuilder().setTypeUrl(FAKE_TYPE_URL).build())
+                        .build())
+                    .build().toByteString())
+                .build())
+            .build())
+        .build();
+
+    Matcher baseMatcherProto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                    .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                        .setInput(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+                            .setName("request_headers")
+                            .setTypedConfig(Any.pack(
+                                HttpRequestHeaderMatchInput.newBuilder()
+                                    .setHeaderName("foo")
+                                    .build()))
+                            .build())
+                        .setValueMatch(StringMatcher.newBuilder().setExact("bar").build())
+                        .build())
+                    .build())
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher baseProto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(baseMatcherProto)
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> baseResult = provider
+        .parseFilterConfig(Any.pack(baseProto));
+
+    // Override matcher that is empty (skips everything)
+    Matcher overrideMatcherProto = Matcher.newBuilder().build();
+    ExtensionWithMatcherPerRoute overrideProto = ExtensionWithMatcherPerRoute.newBuilder()
+        .setXdsMatcher(overrideMatcherProto)
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> overrideResult = provider
+        .parseFilterConfigOverride(Any.pack(overrideProto));
+
+    CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
+    ClientInterceptor interceptor = filter.buildClientInterceptor(
+        baseResult.config, overrideResult.config, mock(ScheduledExecutorService.class));
+
+    Channel next = mock(Channel.class);
+    ClientCall nextCall = mock(ClientCall.class);
+    when(next.newCall(any(), any())).thenReturn(nextCall);
+
+    MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(marshaller)
+        .setResponseMarshaller(marshaller)
+        .build();
+
+    ClientCall<Void, Void> call = interceptor.interceptCall(method, CallOptions.DEFAULT, next);
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
+    // This would match base, but should be overridden
+
+    call.start(mock(ClientCall.Listener.class), headers);
+
+    // Verify it SKIPS (calls next directly, never calls fakeClientInterceptor)
+    verify(fakeClientInterceptor, org.mockito.Mockito.never()).interceptCall(any(), any(), any());
+    verify(next).newCall(any(), any());
+    verify(nextCall).start(any(), eq(headers));
+  }
+
+  @Test
+  public void serverInterceptorDelegates() {
+    // Setup Config with simple matcher equivalent logic
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.filters.http.composite"
+                    + ".v3.ExecuteFilterAction")
+                .setValue(ExecuteFilterAction.newBuilder()
+                    .setTypedConfig(TypedExtensionConfig.newBuilder()
+                        .setName("child")
+                        .setTypedConfig(Any.newBuilder().setTypeUrl(FAKE_TYPE_URL).build())
+                        .build())
+                    .build().toByteString())
+                .build())
+            .build())
+        .build();
+
+    Matcher matcher = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                    .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                        .setInput(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+                            .setName("request_headers")
+                            .setTypedConfig(Any.pack(
+                                HttpRequestHeaderMatchInput.newBuilder()
+                                    .setHeaderName("foo")
+                                    .build()))
+                            .build())
+                        .setValueMatch(StringMatcher.newBuilder().setExact("bar").build())
+                        .build())
+                    .build())
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcher)
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(proto));
+
+    CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
+    ServerInterceptor interceptor = filter.buildServerInterceptor(result.config, null);
+
+    ServerCall call = mock(ServerCall.class);
+    when(call.getAttributes()).thenReturn(io.grpc.Attributes.EMPTY);
+    
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
+
+    ServerCallHandler next = mock(ServerCallHandler.class);
+    ServerCall.Listener listener = mock(ServerCall.Listener.class);
+    when(next.startCall(any(), any())).thenReturn(listener);
+
+    interceptor.interceptCall(call, headers, next);
+
+    verify(fakeServerInterceptor).interceptCall(eq(call), eq(headers), any());
+  }
+
+  @Test
+  public void clientInterceptorClosesFiltersOnClose() {
+    // Setup Config with simple matcher equivalent logic
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.filters.http.composite"
+                    + ".v3.ExecuteFilterAction")
+                .setValue(ExecuteFilterAction.newBuilder()
+                    .setTypedConfig(TypedExtensionConfig.newBuilder()
+                        .setName("child")
+                        .setTypedConfig(Any.newBuilder().setTypeUrl(FAKE_TYPE_URL).build())
+                        .build())
+                    .build().toByteString())
+                .build())
+            .build())
+        .build();
+
+    Matcher matcher = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                    .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                        .setInput(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+                            .setName("request_headers")
+                            .setTypedConfig(Any.pack(
+                                HttpRequestHeaderMatchInput.newBuilder()
+                                    .setHeaderName("foo")
+                                    .build()))
+                            .build())
+                        .setValueMatch(StringMatcher.newBuilder().setExact("bar").build())
+                        .build())
+                    .build())
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcher)
+        .build();
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(proto));
+
+    CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
+    ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
+        mock(ScheduledExecutorService.class));
+
+    Channel next = mock(Channel.class);
+    ClientCall childCall = mock(ClientCall.class);
+    when(fakeClientInterceptor.interceptCall(any(), any(), any())).thenReturn(childCall);
+
+    MethodDescriptor.Marshaller<Void> marshaller = mock(MethodDescriptor.Marshaller.class);
+    MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNARY)
+        .setFullMethodName("service/method")
+        .setRequestMarshaller(marshaller)
+        .setResponseMarshaller(marshaller)
+        .build();
+
+    ClientCall<Void, Void> call = interceptor.interceptCall(method, CallOptions.DEFAULT, next);
+
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("foo", Metadata.ASCII_STRING_MARSHALLER), "bar");
+
+    ClientCall.Listener responseListener = mock(ClientCall.Listener.class);
+    call.start(responseListener, headers);
+
+    // Capture the listener passed to childCall
+    ArgumentCaptor<ClientCall.Listener> listenerCaptor =
+        ArgumentCaptor.forClass(ClientCall.Listener.class);
+    verify(childCall).start(listenerCaptor.capture(), eq(headers));
+
+    ClientCall.Listener capturedListener = listenerCaptor.getValue();
+    
+    // Trigger onClose
+    capturedListener.onClose(Status.OK, new Metadata());
+
+    // Verify filter.close() was called
+    verify(fakeFilter).close();
+  }
+
+  @Test
+  public void parseFilterConfigExceedsRecursionLimit() {
+    // Setup matcher that resolves to fakeProvider
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.newBuilder()
+                .setTypeUrl("type.googleapis.com/envoy.extensions.filters.http.composite"
+                    + ".v3.ExecuteFilterAction")
+                .setValue(ExecuteFilterAction.newBuilder()
+                    .setTypedConfig(TypedExtensionConfig.newBuilder()
+                        .setName("child")
+                        .setTypedConfig(Any.newBuilder().setTypeUrl(FAKE_TYPE_URL).build())
+                        .build())
+                    .build().toByteString())
+                .build())
+            .build())
+        .build();
+
+    Matcher matcherProto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher configProto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcherProto)
+        .build();
+
+    final Any configAny = Any.pack(configProto);
+
+    // Mock fakeProvider to call provider.parseFilterConfig recursively
+    when(fakeProvider.parseFilterConfig(any()))
+        .thenAnswer(new org.mockito.stubbing.Answer<ConfigOrError>() {
+          private int depth = 0;
+          @Override
+          public ConfigOrError answer(
+              org.mockito.invocation.InvocationOnMock invocation) throws Throwable {
+            depth++;
+            if (depth > 15) { // Safety break
+              return ConfigOrError.fromError("Infinite recursion safety break");
+            }
+            return provider.parseFilterConfig(configAny);
+          }
+        });
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(configAny);
+
+    assertThat(result.errorDetail).contains("Maximum recursion depth of 8 exceeded");
+  }
 }

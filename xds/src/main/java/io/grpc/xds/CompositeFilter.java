@@ -83,6 +83,8 @@ public final class CompositeFilter implements Filter {
   }
 
   static final class Provider implements Filter.Provider {
+    private static final ThreadLocal<Integer> recursionDepth = ThreadLocal.withInitial(() -> 0);
+
     @Override
     public String[] typeUrls() {
       return new String[] {
@@ -117,6 +119,11 @@ public final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
+      int currentDepth = recursionDepth.get();
+      if (currentDepth > 8) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
+      recursionDepth.set(currentDepth + 1);
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcher.class)) {
@@ -127,6 +134,8 @@ public final class CompositeFilter implements Filter {
         }
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
+      } finally {
+        recursionDepth.set(currentDepth);
       }
       return ConfigOrError.fromError("Unsupported message type in parseFilterConfig");
     }
@@ -141,6 +150,11 @@ public final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
+      int currentDepth = recursionDepth.get();
+      if (currentDepth > 8) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
+      recursionDepth.set(currentDepth + 1);
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcherPerRoute.class)) {
@@ -149,6 +163,8 @@ public final class CompositeFilter implements Filter {
         }
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
+      } finally {
+        recursionDepth.set(currentDepth);
       }
       return ConfigOrError.fromError("Unsupported message type in "
           + "parseFilterConfigOverride");
@@ -524,10 +540,7 @@ public final class CompositeFilter implements Filter {
 
     @Override
     public void start(Listener<RespT> responseListener, Metadata headers) {
-      if (started) {
-        delegate.start(responseListener, headers);
-        return;
-      }
+      Preconditions.checkState(!started, "Already started");
       started = true;
 
       UnifiedMatcher.MatchingData data = new MatchingDataImpl(headers, callOptions);

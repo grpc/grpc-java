@@ -38,8 +38,7 @@ final class FilterRegistry {
           new FaultFilter.Provider(),
           new RouterFilter.Provider(),
           new RbacFilter.Provider(),
-          new GcpAuthenticationFilter.Provider(),
-          new CompositeFilter.Provider());
+          new GcpAuthenticationFilter.Provider());
     }
     return instance;
   }
