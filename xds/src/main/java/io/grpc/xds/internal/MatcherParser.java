@@ -122,6 +122,7 @@ public final class MatcherParser {
         throw new IllegalArgumentException(
             "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());
     }
+  }
   /** Translates envoy proto FractionalPercent to internal FractionMatcher. */
   public static Matchers.FractionMatcher parseFractionMatcher(
       io.envoyproxy.envoy.type.v3.FractionalPercent proto) {
