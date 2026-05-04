@@ -40,6 +40,7 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -189,6 +190,20 @@ public class ProxyDetectorImplTest {
           }
         },
         authenticator);
+    assertNull(proxyDetector.proxyFor(destination));
+  }
+
+  @Test
+  public void returnNullWhenProxySelectorReturnsEmptyList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(Collections.<Proxy>emptyList());
+
+    assertNull(proxyDetector.proxyFor(destination));
+  }
+
+  @Test
+  public void returnNullWhenProxySelectorReturnsNullList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(null);
+
     assertNull(proxyDetector.proxyFor(destination));
   }
 }
