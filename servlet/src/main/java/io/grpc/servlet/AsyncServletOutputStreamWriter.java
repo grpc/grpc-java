@@ -222,11 +222,28 @@ final class AsyncServletOutputStreamWriter {
       if (actionItem == completeAction) {
         return;
       }
-      boolean successful =
-          writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-      LockSupport.unpark(parkingThread);
-      checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-      log.finest("the servlet output stream becomes not ready");
+      if (actionItem == writeAction) {
+        // For writeBytes, always set readyAndDrained to false even when isReady()
+        // returns true. Tomcat requires onWritePossible() to fire between writes,
+        // even if isReady() is still true. For flush, keep the original behavior
+        // since flush is less latency-sensitive and can safely wait for
+        // onWritePossible.
+        boolean successful =
+            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+        LockSupport.unpark(parkingThread);
+        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        log.finest("the servlet output stream becomes not ready");
+      } else {
+        // For flush, only set to false if isReady() returns false.
+        // If isReady() is still true, keep readyAndDrained true so flush goes direct.
+        if (!isReady.getAsBoolean()) {
+          boolean successful =
+              writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+          LockSupport.unpark(parkingThread);
+          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+          log.finest("the servlet output stream becomes not ready");
+        }
+      }
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
       if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
@@ -272,9 +289,10 @@ final class AsyncServletOutputStreamWriter {
      * check of {@link javax.servlet.ServletOutputStream#isReady()} is true.
      *
      * <p>readyAndDrained turns from true to false when:
-     * {@code runOrBuffer()} exits while either the action item is written directly to the
-     * servlet output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()}
-     * right after that returns false, or the action item is buffered into the writeChain.
+     * {@code runOrBuffer()} exits after writing directly to the servlet output stream.
+     * For writeBytes actions, it always transitions to false. For flush actions,
+     * it transitions to false only when {@link javax.servlet.ServletOutputStream#isReady()}
+     * returns false, or when the action is buffered into the writeChain.
      */
     final boolean readyAndDrained;
 
