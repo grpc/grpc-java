@@ -399,6 +399,13 @@ abstract class Inbound<L extends StreamListener> implements StreamListener.Messa
       numBytes = parcel.dataPosition() - startPos;
     } else {
       numBytes = parcel.readInt();
+      if (numBytes > parcel.dataAvail()) {
+        throw Status.INTERNAL
+            .withDescription(
+                "Message size is larger than remaining parcel size: "
+                + numBytes + " > " + parcel.dataAvail())
+            .asException();
+      }
       block = BlockPool.acquireBlock(numBytes);
       if (numBytes > 0) {
         parcel.readByteArray(block);
