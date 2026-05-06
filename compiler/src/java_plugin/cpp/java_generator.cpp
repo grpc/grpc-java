@@ -46,7 +46,7 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <absl/strings/escaping.h>
+#include "absl/strings/escaping.h"
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/io/printer.h>
