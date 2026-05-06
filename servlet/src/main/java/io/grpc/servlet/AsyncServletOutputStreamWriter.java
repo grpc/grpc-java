@@ -222,12 +222,10 @@ final class AsyncServletOutputStreamWriter {
       if (actionItem == completeAction) {
         return;
       }
-      if (actionItem == writeAction) {
-        // For writeBytes, always set readyAndDrained to false even when isReady()
-        // returns true. Tomcat requires onWritePossible() to fire between writes,
-        // even if isReady() is still true. For flush, keep the original behavior
-        // since flush is less latency-sensitive and can safely wait for
-        // onWritePossible.
+      if (actionItem != flushAction) {
+        // This is a writeBytes action. Always set readyAndDrained to false even when
+        // isReady() returns true. Tomcat requires onWritePossible() to fire between
+        // writes, even if isReady() is still true.
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
         LockSupport.unpark(parkingThread);
