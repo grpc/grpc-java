@@ -208,7 +208,7 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
    */
   private final boolean useGetForSafeMethods = false;
 
-  private static ConnectionSpec initialConnectionSpec() {
+  static ConnectionSpec initialConnectionSpec() {
     return (OkHttpProtocolNegotiator.get() instanceof OkHttpProtocolNegotiator.AndroidNegotiator)
         ? INTERNAL_DEFAULT_CONNECTION_SPEC
         : INTERNAL_LEGACY_CONNECTION_SPEC;
