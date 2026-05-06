@@ -490,9 +490,14 @@ final class Hpack {
           writeByteString(name);
           writeByteString(value);
           insertIntoDynamicTable(header);
-        } else if (name.startsWith(PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
-          // Follow Chromes lead - only include the :authority pseudo header, but exclude all other
-          // pseudo headers. Literal Header Field without Indexing - Indexed Name.
+        } else if (name.startsWith(PSEUDO_PREFIX)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_PATH.equals(name)) {
+          // Allow :authority and :path pseudo headers to be indexed. Other pseudo headers are not
+          // indexed.
+          // This is a departure from the original Chrome-inspired behavior, as gRPC paths
+          // (ServiceName/MethodName)
+          // are stable and benefit from indexing.
           writeInt(headerNameIndex, PREFIX_4_BITS, 0);
           writeByteString(value);
         } else {
