@@ -66,6 +66,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
+import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterOverrideConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorInterceptor;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData.Node;
@@ -394,10 +395,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -405,6 +406,24 @@ public class ExternalProcessorFilterTest {
 
     assertThat(interceptor.getFilterConfig().getExternalProcessor().getGrpcService()
         .getGoogleGrpc().getTargetUri()).isEqualTo("in-process:///override");
+  }
+
+  @Test
+  public void givenOverrideConfig_whenOverridesMissing_thenFallsBackToDefaultInstance()
+      throws Exception {
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder().build();
+
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+    assertThat(overrideResult.errorDetail).isNull();
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
+
+    assertThat(overrideConfig.hasProcessingMode()).isFalse();
+    assertThat(overrideConfig.hasRequestAttributes()).isFalse();
+    assertThat(overrideConfig.hasResponseAttributes()).isFalse();
+    assertThat(overrideConfig.hasGrpcService()).isFalse();
+    assertThat(overrideConfig.hasFailureModeAllow()).isFalse();
+    assertThat(overrideConfig.getGrpcServiceConfig()).isNull();
   }
 
   @Test
@@ -423,10 +442,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -466,9 +485,9 @@ public class ExternalProcessorFilterTest {
     ConfigOrError<ExternalProcessorFilterConfig> parentResult = 
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -502,10 +521,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -549,10 +568,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -584,10 +603,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -615,10 +634,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -647,10 +666,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
@@ -675,10 +694,10 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(parentProto), filterContext);
     assertThat(parentResult.errorDetail).isNull();
     ExternalProcessorFilterConfig parentConfig = parentResult.config;
-    ConfigOrError<ExternalProcessorFilterConfig> overrideResult = 
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> overrideResult = 
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     assertThat(overrideResult.errorDetail).isNull();
-    ExternalProcessorFilterConfig overrideConfig = overrideResult.config;
+    ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
     ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
