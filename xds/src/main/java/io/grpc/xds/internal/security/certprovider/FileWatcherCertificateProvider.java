@@ -73,16 +73,27 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
     this.scheduledExecutorService =
         checkNotNull(scheduledExecutorService, "scheduledExecutorService");
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
-    this.certFile = Paths.get(checkNotNull(certFile, "certFile"));
-    this.keyFile = Paths.get(checkNotNull(keyFile, "keyFile"));
-    checkArgument((trustFile != null || spiffeTrustMapFile != null),
-        "either trustFile or spiffeTrustMapFile must be present");
+    checkArgument(certFile == null || keyFile != null,
+        "keyFile must be set when certFile is set");
+    checkArgument(keyFile == null || certFile != null,
+        "certFile must be set when keyFile is set");
+    checkArgument(certFile != null || trustFile != null || spiffeTrustMapFile != null,
+        "at least one of identity (certFile/keyFile), trustFile, or spiffeTrustMapFile must be"
+            + " present");
+    if (notifyCertUpdates && certFile == null) {
+      // UnsupportedOperationException so CertificateProviderStore.createOrGetProvider's catch
+      // block falls back to notifyCertUpdates=false for roots-only configs.
+      throw new UnsupportedOperationException(
+          "certFile/keyFile must be set when notifyCertUpdates is true");
+    }
+    this.certFile = certFile == null ? null : Paths.get(certFile);
+    this.keyFile = keyFile == null ? null : Paths.get(keyFile);
     if (spiffeTrustMapFile != null) {
       this.spiffeTrustMapFile = Paths.get(spiffeTrustMapFile);
       this.trustFile = null;
     } else {
       this.spiffeTrustMapFile = null;
-      this.trustFile = Paths.get(trustFile);
+      this.trustFile = trustFile == null ? null : Paths.get(trustFile);
     }
     this.refreshIntervalInSeconds = refreshIntervalInSeconds;
   }
@@ -112,28 +123,31 @@ final class FileWatcherCertificateProvider extends CertificateProvider implement
   @VisibleForTesting
   void checkAndReloadCertificates() {
     try {
-      try {
-        FileTime currentCertTime = Files.getLastModifiedTime(certFile);
-        FileTime currentKeyTime = Files.getLastModifiedTime(keyFile);
-        if (!currentCertTime.equals(lastModifiedTimeCert)
-            || !currentKeyTime.equals(lastModifiedTimeKey)) {
-          byte[] certFileContents = Files.readAllBytes(certFile);
-          byte[] keyFileContents = Files.readAllBytes(keyFile);
-          FileTime currentCertTime2 = Files.getLastModifiedTime(certFile);
-          FileTime currentKeyTime2 = Files.getLastModifiedTime(keyFile);
-          if (currentCertTime2.equals(currentCertTime) && currentKeyTime2.equals(currentKeyTime)) {
-            try (ByteArrayInputStream certStream = new ByteArrayInputStream(certFileContents);
-                ByteArrayInputStream keyStream = new ByteArrayInputStream(keyFileContents)) {
-              PrivateKey privateKey = CertificateUtils.getPrivateKey(keyStream);
-              X509Certificate[] certs = CertificateUtils.toX509Certificates(certStream);
-              getWatcher().updateCertificate(privateKey, Arrays.asList(certs));
+      if (certFile != null) {
+        try {
+          FileTime currentCertTime = Files.getLastModifiedTime(certFile);
+          FileTime currentKeyTime = Files.getLastModifiedTime(keyFile);
+          if (!currentCertTime.equals(lastModifiedTimeCert)
+              || !currentKeyTime.equals(lastModifiedTimeKey)) {
+            byte[] certFileContents = Files.readAllBytes(certFile);
+            byte[] keyFileContents = Files.readAllBytes(keyFile);
+            FileTime currentCertTime2 = Files.getLastModifiedTime(certFile);
+            FileTime currentKeyTime2 = Files.getLastModifiedTime(keyFile);
+            if (currentCertTime2.equals(currentCertTime)
+                && currentKeyTime2.equals(currentKeyTime)) {
+              try (ByteArrayInputStream certStream = new ByteArrayInputStream(certFileContents);
+                  ByteArrayInputStream keyStream = new ByteArrayInputStream(keyFileContents)) {
+                PrivateKey privateKey = CertificateUtils.getPrivateKey(keyStream);
+                X509Certificate[] certs = CertificateUtils.toX509Certificates(certStream);
+                getWatcher().updateCertificate(privateKey, Arrays.asList(certs));
+              }
+              lastModifiedTimeCert = currentCertTime;
+              lastModifiedTimeKey = currentKeyTime;
             }
-            lastModifiedTimeCert = currentCertTime;
-            lastModifiedTimeKey = currentKeyTime;
           }
+        } catch (Throwable t) {
+          generateErrorIfCurrentCertExpired(t);
         }
-      } catch (Throwable t) {
-        generateErrorIfCurrentCertExpired(t);
       }
       try {
         if (spiffeTrustMapFile != null) {
