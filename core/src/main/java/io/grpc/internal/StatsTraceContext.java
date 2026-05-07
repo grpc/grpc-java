@@ -23,6 +23,7 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.Status;
@@ -38,6 +39,14 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class StatsTraceContext {
+  /**
+   * Internal hook for server tracers that can use the resolved method descriptor before
+   * {@link ServerStreamTracer#serverCallStarted(ServerCallInfo)} runs.
+   */
+  public interface ServerCallMethodListener {
+    void serverCallMethodResolved(MethodDescriptor<?, ?> method);
+  }
+
   public static final StatsTraceContext NOOP = new StatsTraceContext(new StreamTracer[0]);
 
   private final StreamTracer[] tracers;
@@ -141,6 +150,20 @@ public final class StatsTraceContext {
   public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
     for (StreamTracer tracer : tracers) {
       ((ServerStreamTracer) tracer).serverCallStarted(callInfo);
+    }
+  }
+
+  /**
+   * Notifies server tracers that a primary-registry method descriptor was resolved before
+   * {@link ServerStreamTracer#serverCallStarted(ServerCallInfo)}.
+   *
+   * <p>Called from {@link io.grpc.internal.ServerImpl}.
+   */
+  public void serverCallMethodResolved(MethodDescriptor<?, ?> method) {
+    for (StreamTracer tracer : tracers) {
+      if (tracer instanceof ServerCallMethodListener) {
+        ((ServerCallMethodListener) tracer).serverCallMethodResolved(method);
+      }
     }
   }
 

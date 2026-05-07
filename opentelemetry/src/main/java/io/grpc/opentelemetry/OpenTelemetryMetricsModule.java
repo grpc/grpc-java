@@ -47,6 +47,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StreamTracer;
+import io.grpc.internal.StatsTraceContext.ServerCallMethodListener;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.common.AttributesBuilder;
@@ -526,7 +527,8 @@ final class OpenTelemetryMetricsModule {
     }
   }
 
-  private static final class ServerTracer extends ServerStreamTracer {
+  private static final class ServerTracer extends ServerStreamTracer
+      implements ServerCallMethodListener {
     @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
     @Nullable private static final AtomicLongFieldUpdater<ServerTracer> outboundWireSizeUpdater;
     @Nullable private static final AtomicLongFieldUpdater<ServerTracer> inboundWireSizeUpdater;
@@ -588,6 +590,11 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
+    public void serverCallMethodResolved(MethodDescriptor<?, ?> method) {
+      isGeneratedMethod = method.isSampledToLocalTracing();
+    }
+
+    @Override
     public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
       // Only record method name as an attribute if isSampledToLocalTracing is set to true,
       // which is true for all generated methods. Otherwise, programmatically
@@ -644,9 +651,24 @@ final class OpenTelemetryMetricsModule {
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
-          .put(METHOD_KEY, recordMethodName(fullMethodName, isGeneratedMethod))
-          .put(STATUS_KEY, status.getCode().toString());
+      recordClosedStream(
+          status,
+          elapsedTimeNanos,
+          outboundWireSize,
+          inboundWireSize,
+          isGeneratedMethod);
+    }
+
+    private void recordClosedStream(
+        Status status,
+        long elapsedTimeNanos,
+        long closedOutboundWireSize,
+        long closedInboundWireSize,
+        boolean generatedMethod) {
+      AttributesBuilder builder =
+          io.opentelemetry.api.common.Attributes.builder()
+              .put(METHOD_KEY, recordMethodName(fullMethodName, generatedMethod))
+              .put(STATUS_KEY, status.getCode().toString());
       for (OpenTelemetryPlugin.ServerStreamPlugin plugin : streamPlugins) {
         plugin.addLabels(builder);
       }
@@ -658,11 +680,11 @@ final class OpenTelemetryMetricsModule {
       }
       if (module.resource.serverTotalSentCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalSentCompressedMessageSizeCounter()
-            .record(outboundWireSize, attributes, otelContext);
+            .record(closedOutboundWireSize, attributes, otelContext);
       }
       if (module.resource.serverTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.serverTotalReceivedCompressedMessageSizeCounter()
-            .record(inboundWireSize, attributes, otelContext);
+            .record(closedInboundWireSize, attributes, otelContext);
       }
     }
   }
@@ -744,4 +766,3 @@ final class OpenTelemetryMetricsModule {
     }
   }
 }
-
