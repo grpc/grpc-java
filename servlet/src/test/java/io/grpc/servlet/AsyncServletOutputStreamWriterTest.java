@@ -33,19 +33,59 @@ import org.junit.runners.JUnit4;
 /**
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
  * Tests two scenarios: (1) writes with isReady always true, where onWritePossible()
- * is called between writes; (2) writes with isReady becoming false, where buffered
- * writes are only drained when onWritePossible() is called.
+ * is called between writes; (2) writes with readyAndDrained=false (triggered by first
+ * write), where subsequent writes are buffered until onWritePossible() drains them.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
 
   /**
+   * Test that a write without an intervening onWritePossible() is buffered and
+   * does not execute immediately. This validates the Tomcat fix: writeBytes sets
+   * readyAndDrained=false so subsequent writes go through the container callback.
+   */
+  @Test
+  public void writeBytes_withoutOnWritePossible_isBuffered() throws IOException {
+    AtomicBoolean isReady = new AtomicBoolean(true);
+    List<String> actions = new ArrayList<>();
+
+    BiFunction<byte[], Integer, ActionItem> writeAction =
+        (bytes, numBytes) -> () -> {
+          actions.add("write");
+        };
+
+    ActionItem flushAction = () -> {};
+
+    ActionItem completeAction = () -> {};
+
+    BooleanSupplier isReadySupplier = () -> isReady.get();
+
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
+
+    // Initial onWritePossible to set readyAndDrained=true
+    writer.onWritePossible();
+
+    // First write - goes direct, readyAndDrained becomes false
+    byte[] data1 = new byte[]{1};
+    writer.writeBytes(data1, 1);
+    assertEquals("First write should execute", 1, actions.size());
+
+    // Second write without onWritePossible - should be buffered since readyAndDrained=false
+    byte[] data2 = new byte[]{2};
+    writer.writeBytes(data2, 1);
+
+    // Without onWritePossible, second write should be buffered, not executed
+    assertEquals("Second write should be buffered until onWritePossible", 1, actions.size());
+
+    // onWritePossible drains the buffered write
+    writer.onWritePossible();
+    assertEquals("Buffered write should drain after onWritePossible", 2, actions.size());
+  }
+
+  /**
    * Test that multiple consecutive writes succeed when isReady() always returns true
    * and the container calls onWritePossible() between writes.
-   *
-   * <p>Each writeBytes() call is followed by onWritePossible() to drain any buffered
-   * writes. This validates that the writer can handle the Tomcat-style callback pattern
-   * where isReady() stays true but onWritePossible() fires between writes.
    */
   @Test
   public void writeBytes_onWritePossibleBetweenWrites_succeeds() throws IOException {
@@ -83,8 +123,8 @@ public class AsyncServletOutputStreamWriterTest {
   }
 
   /**
-   * Test that when isReady() returns false, writes are buffered and only drain
-   * when onWritePossible() is called.
+   * Test that when isReady() returns false after a direct write, subsequent writes
+   * are buffered and only drain when onWritePossible() is called.
    */
   @Test
   public void writeBytes_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
@@ -110,21 +150,21 @@ public class AsyncServletOutputStreamWriterTest {
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
-    // First write - isReady is true, goes direct, readyAndDrained=false
+    // First write - goes direct, readyAndDrained becomes false
     byte[] data1 = new byte[]{1};
     writer.writeBytes(data1, 1);
 
-    // Simulate isReady becoming false (container buffer full)
+    // After first write, readyAndDrained=false, so any subsequent write is buffered
     isReady.set(false);
 
-    // Second write - should be buffered since isReady=false
+    // Second write - should be buffered since readyAndDrained=false
     byte[] data2 = new byte[]{2};
     writer.writeBytes(data2, 1);
 
     // Only the first write should have executed
     assertEquals("First write should complete, second buffered", 1, actions.size());
 
-    // Container calls onWritePossible to signal readiness
+    // Container calls onWritePossible to drain buffered writes
     isReady.set(true);
     writer.onWritePossible();
 
