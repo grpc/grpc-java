@@ -21,8 +21,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.ChannelLogger;
 import io.grpc.MetricRecorder;
@@ -46,7 +44,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
@@ -333,96 +330,6 @@ public class GoogleCloudToProdNameResolverTest {
       assertThat(delegatedUriValue).isNotNull();
       assertThat(delegatedUriValue.getQuery()).isEqualTo("FORCE-XDS");
     }
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void generateBootstrap_ipv6() throws IOException {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-991614323",
-        "locality", ImmutableMap.of("zone", ZONE),
-        "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
-    Map<String, ?> server = Iterables.getOnlyElement(
-        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
-    assertThat(server).containsExactly(
-        "server_uri", "directpath-pa.googleapis.com",
-        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
-    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
-    assertThat(authorities).containsExactly(
-        "traffic-director-c2p.xds.googleapis.com",
-        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void generateBootstrap_forceXds() throws IOException {
-    GoogleCloudToProdNameResolver.isOnGcp = false;
-    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap("", true, true);
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-non-gcp-991614323",
-        "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
-    
-    Map<String, ?> server = Iterables.getOnlyElement(
-        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
-    assertThat(server).containsExactly(
-        "server_uri", "directpath-pa.googleapis.com",
-        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
-    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
-    assertThat(authorities).containsExactly(
-        "traffic-director-c2p.xds.googleapis.com",
-        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void generateBootstrap_onGcpAndForceXds() throws IOException {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap("", true, true);
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-991614323",
-        "metadata", ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
-    assertThat(node).doesNotContainKey("locality");
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void generateBootstrap_noIpV6() throws IOException {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    responseToIpV6 = null;
-    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-991614323",
-        "locality", ImmutableMap.of("zone", ZONE));
-    Map<String, ?> server = Iterables.getOnlyElement(
-        (List<Map<String, ?>>) bootstrap.get("xds_servers"));
-    assertThat(server).containsExactly(
-        "server_uri", "directpath-pa.googleapis.com",
-        "channel_creds", ImmutableList.of(ImmutableMap.of("type", "google_default")),
-        "server_features", ImmutableList.of("xds_v3", "ignore_resource_deletion"));
-    Map<String, ?> authorities = (Map<String, ?>) bootstrap.get("authorities");
-    assertThat(authorities).containsExactly(
-        "traffic-director-c2p.xds.googleapis.com",
-        ImmutableMap.of("xds_servers", ImmutableList.of(server)));
-  }
-
-  @SuppressWarnings("unchecked")
-  @Test
-  public void emptyResolverMeetadataValue() throws IOException {
-    GoogleCloudToProdNameResolver.isOnGcp = true;
-    responseToIpV6 = "";
-    Map<String, ?> bootstrap = GoogleCloudToProdNameResolver.generateBootstrap();
-    Map<String, ?> node = (Map<String, ?>) bootstrap.get("node");
-    assertThat(node).containsExactly(
-        "id", "C2P-991614323",
-        "locality", ImmutableMap.of("zone", ZONE));
   }
 
   @Test

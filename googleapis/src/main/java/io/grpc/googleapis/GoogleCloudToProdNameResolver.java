@@ -76,33 +76,31 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private static final String serverUriOverride =
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
 
-  private static final Object BOOTSTRAP_LOCK = new Object();
-
-  @GuardedBy("BOOTSTRAP_LOCK")
-  static BootstrapInfo bootstrapInfo;
+  @GuardedBy("GoogleCloudToProdNameResolver.class")
+  private static BootstrapInfo bootstrapInfo;
   private static HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
   private static int c2pId = new Random().nextInt();
 
-  private static BootstrapInfo getBootstrapInfo(boolean isForcedXds)
+  private static synchronized BootstrapInfo getBootstrapInfo(boolean isForcedXds)
       throws XdsInitializationException, IOException {
-    synchronized (BOOTSTRAP_LOCK) {
-      if (bootstrapInfo != null) {
+    if (bootstrapInfo != null) {
         return bootstrapInfo;
       }
       BootstrapInfo newInfo;
       if (isForcedXds) {
         newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
-            generateBootstrap("", true, true));
+            generateBootstrap("", true));
       } else {
         newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
-            generateBootstrap());
+            generateBootstrap(
+                queryZoneMetadata(METADATA_URL_ZONE),
+                queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6)));
       }
       // Avoid setting global when testing
       if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
         bootstrapInfo = newInfo;
       }
       return newInfo;
-    }
   }
 
   private final String authority;
@@ -297,22 +295,15 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     executor.execute(new Resolve());
   }
 
-  @VisibleForTesting
-  static ImmutableMap<String, ?> generateBootstrap() throws IOException {
-    return generateBootstrap(
-        queryZoneMetadata(METADATA_URL_ZONE),
-        queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6), false);
-  }
-
-  static ImmutableMap<String, ?> generateBootstrap(
-      String zone, boolean supportIpv6, boolean isForcedXds) {
+  private static ImmutableMap<String, ?> generateBootstrap(
+      String zone, boolean supportIpv6) {
     ImmutableMap.Builder<String, Object> nodeBuilder = ImmutableMap.builder();
     String nodeIdPrefix = isOnGcp ? "C2P-" : "C2P-non-gcp-";
     nodeBuilder.put("id", nodeIdPrefix + (c2pId & Integer.MAX_VALUE));
-    if (!isForcedXds && !zone.isEmpty()) {
+    if (!zone.isEmpty()) {
       nodeBuilder.put("locality", ImmutableMap.of("zone", zone));
     }
-    if (isForcedXds || supportIpv6) {
+    if (supportIpv6) {
       nodeBuilder.put("metadata",
           ImmutableMap.of("TRAFFICDIRECTOR_DIRECTPATH_C2P_IPV6_CAPABLE", true));
     }
