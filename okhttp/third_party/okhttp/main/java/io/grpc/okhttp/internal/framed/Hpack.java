@@ -354,6 +354,13 @@ final class Hpack {
         if ((b & 0x80) != 0) { // Equivalent to (b >= 128) since b is in [0..255].
           result += (b & 0x7f) << shift;
           shift += 7;
+          // We can safely store 31 bits, and then next byte will have 7 more bits. While the next
+          // byte may not have high bits set to cause an overflow, that's only useful for 256+ MiB
+          // values, which is excessive. This also gives us at least one bit of spare, which is
+          // necessary to store the carry from the addition.
+          if (shift >= 28) {
+            throw new IOException("Varint overflowed");
+          }
         } else {
           result += b << shift; // Last byte.
           break;
@@ -483,9 +490,14 @@ final class Hpack {
           writeByteString(name);
           writeByteString(value);
           insertIntoDynamicTable(header);
-        } else if (name.startsWith(PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
-          // Follow Chromes lead - only include the :authority pseudo header, but exclude all other
-          // pseudo headers. Literal Header Field without Indexing - Indexed Name.
+        } else if (name.startsWith(PSEUDO_PREFIX)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_PATH.equals(name)) {
+          // Allow :authority and :path pseudo headers to be indexed. Other pseudo headers are not
+          // indexed.
+          // This is a departure from the original Chrome-inspired behavior, as gRPC paths
+          // (ServiceName/MethodName)
+          // are stable and benefit from indexing.
           writeInt(headerNameIndex, PREFIX_4_BITS, 0);
           writeByteString(value);
         } else {
@@ -508,6 +520,9 @@ final class Hpack {
       // Write the mask to start a multibyte value.
       out.writeByte(bits | prefixMask);
       value -= prefixMask;
+      if (value > 0xfffffff) {
+        throw new IOException("Varint would overflow reader");
+      }
 
       // Write 7 bits at a time 'til we're done.
       while (value >= 0x80) {

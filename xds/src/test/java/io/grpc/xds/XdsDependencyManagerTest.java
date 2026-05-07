@@ -410,6 +410,32 @@ public class XdsDependencyManagerTest {
   }
 
   @Test
+  public void testControlPlaneError() {
+    Status forcedStatus = Status.NOT_FOUND
+        .withDescription("expected")
+        .withCause(new IllegalArgumentException("a random exception"));
+    xdsClient.shutdown();
+    xdsClient = XdsTestUtils.createXdsClient(
+      Collections.singletonList("control-plane"),
+      serverInfo -> new GrpcXdsTransportFactory.GrpcXdsTransport(
+          InProcessChannelBuilder.forName(serverInfo.target())
+            .directExecutor()
+            .intercept(new FailingClientInterceptor(forcedStatus))
+            .build()),
+      fakeClock);
+    xdsDependencyManager = new XdsDependencyManager(
+        xdsClient, syncContext, serverName, serverName, nameResolverArgs);
+    xdsDependencyManager.start(xdsConfigWatcher);
+
+    verify(xdsConfigWatcher).onUpdate(
+        argThat(StatusOrMatcher.hasStatus(
+            statusHasCode(Status.Code.UNAVAILABLE)
+              .andDescriptionContains(forcedStatus.getDescription())
+              .andCause(forcedStatus.getCause()))));
+    testWatcher.verifyStats(0, 1);
+  }
+
+  @Test
   public void testMissingRds() {
     String rdsName = "badRdsName";
     Listener clientListener = ControlPlaneRule.buildClientListener(serverName, rdsName);

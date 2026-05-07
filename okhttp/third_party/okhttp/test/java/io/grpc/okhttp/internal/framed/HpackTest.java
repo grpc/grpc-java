@@ -272,14 +272,18 @@ public class HpackTest {
 
   /**
    * http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-12#appendix-C.2.2
+   *
+   * <p>This test mimics the draft example which uses ":path", but since gRPC-Java now indexes
+   * ":path" for performance, we use ":method" (with a non-static value like "PUT") to verify the
+   * "Literal Header Field without Indexing - Indexed Name" representation.
    */
   @Test public void literalHeaderFieldWithoutIndexingIndexedName() throws IOException {
-    List<Header> headerBlock = headerEntries(":path", "/sample/path");
+    List<Header> headerBlock = headerEntries(":method", "PUT");
 
-    bytesIn.writeByte(0x04); // == Literal not indexed ==
-    // Indexed name (idx = 4) -> :path
-    bytesIn.writeByte(0x0c); // Literal value (len = 12)
-    bytesIn.writeUtf8("/sample/path");
+    bytesIn.writeByte(0x02); // == Literal not indexed ==
+    // Indexed name (idx = 2) -> :method
+    bytesIn.writeByte(0x03); // Literal value (len = 3)
+    bytesIn.writeUtf8("PUT");
 
     hpackWriter.writeHeaders(headerBlock);
     assertEquals(bytesIn, bytesOut);
@@ -455,7 +459,7 @@ public class HpackTest {
       hpackReader.readHeaders();
       fail();
     } catch (IOException e) {
-      assertEquals("Header index too large -2147483521", e.getMessage());
+      assertEquals("Varint overflowed", e.getMessage());
     }
   }
 
@@ -497,7 +501,7 @@ public class HpackTest {
       hpackReader.readHeaders();
       fail();
     } catch (IOException e) {
-      assertEquals("Invalid dynamic table size update -2147483648", e.getMessage());
+      assertEquals("Varint overflowed", e.getMessage());
     }
   }
 
@@ -856,11 +860,53 @@ public class HpackTest {
     assertBytes(0xe0 | 31, 154, 10);
   }
 
-  @Test public void max31BitValue() throws IOException {
-    hpackWriter.writeInt(0x7fffffff, 31, 0);
-    assertBytes(31, 224, 255, 255, 255, 7);
-    assertEquals(0x7fffffff,
-        newReader(byteStream(224, 255, 255, 255, 7)).readInt(31, 31));
+  @Test public void max29BitValue() throws IOException {
+    hpackWriter.writeInt(0x100000fe, 0xff, 0xff);
+    assertBytes(0xff, 0xff, 0xff, 0xff, 0x7f);
+    assertEquals(0x100000fe,
+        newReader(byteStream(0xff, 0xff, 0xff, 0x7f)).readInt(0xff, 0xff));
+  }
+
+  @Test public void beyondMax29BitValue() throws IOException {
+    try {
+      hpackWriter.writeInt(0x100000ff, 0xff, 0xff);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint would overflow reader", e.getMessage());
+    }
+    try {
+      newReader(byteStream(0xff, 0xff, 0xff, 0xff, 0x80)).readInt(0xff, 0xff);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
+  }
+
+  @Test public void beyondMax29BitValue_smallPrefix() throws IOException {
+    try {
+      hpackWriter.writeInt(0x10000001, 1, 1);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint would overflow reader", e.getMessage());
+    }
+    try {
+      newReader(byteStream(0xff, 0xff, 0xff, 0xff, 0x80)).readInt(1, 1);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
+  }
+
+  @Test public void readerAbortsLongVarintsWithZeros() throws IOException {
+    try {
+      // The reader should fail before getting to the end, because it will overflow as soon as there
+      // is a 1 bit, and the only reason to use this many continuations is to eventually have a 1
+      // bit.
+      newReader(byteStream(0x80, 0x80, 0x80, 0x80, 0x80)).readInt(31, 31);
+      fail();
+    } catch (IOException e) {
+      assertEquals("Varint overflowed", e.getMessage());
+    }
   }
 
   @Test public void prefixMask() throws IOException {
@@ -1062,14 +1108,29 @@ public class HpackTest {
   }
 
   @Test
-  public void doNotIndexPseudoHeaders() throws IOException {
+  public void pseudoHeaderIndexing() throws IOException {
+    // :method is not indexed (unless it's GET or POST, which are in the static table)
     hpackWriter.writeHeaders(headerEntries(":method", "PUT"));
     assertBytes(0x02, 3, 'P', 'U', 'T');
     assertEquals(0, hpackWriter.dynamicTableHeaderCount);
 
+    // :path should now be indexed
     hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
-    assertBytes(0x04, 7, '/', 'o', 'k', 'h', 't', 't', 'p');
-    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+    assertBytes(0x44, 7, '/', 'o', 'k', 'h', 't', 't', 'p');
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+    // Second time should be an index
+    hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
+    assertBytes(0xbe);
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    // :authority should be indexed
+    hpackWriter.writeHeaders(headerEntries(":authority", "test.com"));
+    assertBytes(0x41, 8, 't', 'e', 's', 't', '.', 'c', 'o', 'm');
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+    // Second time should be an index
+    hpackWriter.writeHeaders(headerEntries(":authority", "test.com"));
+    assertBytes(0xbe);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
   }
 
   @Test

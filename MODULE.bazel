@@ -1,6 +1,6 @@
 module(
     name = "grpc-java",
-    version = "1.81.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
+    version = "1.82.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
     compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
 )
@@ -47,6 +47,7 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 ]
 # GRPC_DEPS_END
 
+bazel_dep(name = "abseil-cpp", version = "20250512.1")
 bazel_dep(name = "bazel_jar_jar", version = "0.1.11.bcr.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", version = "0.0.0-20240326-1c8d509c5", repo_name = "com_google_googleapis")

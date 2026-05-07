@@ -30,6 +30,7 @@ import io.grpc.NameResolverProvider;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.RetryingNameResolver;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
 import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
@@ -652,13 +653,10 @@ final class XdsDependencyManager implements XdsConfig.XdsClusterSubscriptionRegi
         data = update;
         subscribeToChildren(update.getValue());
       } else {
-        Status status = update.getStatus();
-        Status translatedStatus = Status.UNAVAILABLE.withDescription(
-            String.format("Error retrieving %s: %s. Details: %s%s",
-                toContextString(),
-                status.getCode(),
-                status.getDescription() != null ? status.getDescription() : "",
-                nodeInfo()));
+        Status translatedStatus = GrpcUtil.statusWithDetails(
+            Status.Code.UNAVAILABLE,
+            "Error retrieving " + toContextString() + nodeInfo(),
+            update.getStatus());
 
         data = StatusOr.fromStatus(translatedStatus);
       }

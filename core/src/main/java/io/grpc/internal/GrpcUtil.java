@@ -219,7 +219,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  public static final String IMPLEMENTATION_VERSION = "1.81.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  public static final String IMPLEMENTATION_VERSION = "1.82.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -240,6 +240,12 @@ public final class GrpcUtil {
    * The default timeout in nanos for a server keepalive ping request.
    */
   public static final long DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(20L);
+
+  /**
+   * The default minimum time between client keepalive pings permitted by server.
+   */
+  public static final long DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS
+          = TimeUnit.MINUTES.toNanos(5L);
 
   /**
    * The magic keepalive time value that disables keepalive.
