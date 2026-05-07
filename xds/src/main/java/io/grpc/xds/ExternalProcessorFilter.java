@@ -18,6 +18,8 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Joiner;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -66,6 +68,7 @@ import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -234,15 +237,15 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     try {
-      GrpcServiceConfig grpcServiceConfig = null;
       if (grpcService != null && grpcService.hasGoogleGrpc()) {
-        grpcServiceConfig = GrpcServiceConfigParser.parse(
+        GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
             grpcService, context.bootstrapInfo(), context.serverInfo());
+        return ConfigOrError.fromConfig(Optional.of(grpcServiceConfig));
       } else if (isParent) {
         return ConfigOrError.fromError("Error parsing GrpcService config: " 
             + "Unsupported: GrpcService must have GoogleGrpc, got: " + grpcService);
       }
-      return ConfigOrError.fromConfig(Optional.ofNullable(grpcServiceConfig));
+      return ConfigOrError.fromConfig(Optional.empty());
     } catch (GrpcServiceParseException e) {
       return ConfigOrError.fromError("Error parsing GrpcService config: " + e.getMessage());
     }
@@ -517,49 +520,37 @@ public class ExternalProcessorFilter implements Filter {
       SerializingExecutor serializingExecutor = new SerializingExecutor(callOptions.getExecutor());
       
       ExternalProcessorGrpc.ExternalProcessorStub extProcStub = ExternalProcessorGrpc.newStub(
-          cachedChannelManager.getChannel(filterConfig.grpcServiceConfig))
+          cachedChannelManager.getChannel(filterConfig.getGrpcServiceConfig()))
           .withExecutor(serializingExecutor);
       
-      if (filterConfig.grpcServiceConfig.timeout() != null 
-          && filterConfig.grpcServiceConfig.timeout().isPresent()) {
-        long timeoutNanos = filterConfig.grpcServiceConfig.timeout().get().toNanos();
+      if (filterConfig.getGrpcServiceConfig().timeout().isPresent()) {
+        long timeoutNanos = filterConfig.getGrpcServiceConfig().timeout().get().toNanos();
         if (timeoutNanos > 0) {
           extProcStub = extProcStub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
         }
       }
 
-      ImmutableList<HeaderValue> initialMetadata = filterConfig.grpcServiceConfig.initialMetadata();
-      extProcStub = extProcStub.withInterceptors(new ClientInterceptor() {
-        @Override
-        public <ExtReqT, ExtRespT> ClientCall<ExtReqT, ExtRespT> interceptCall(
-            MethodDescriptor<ExtReqT, ExtRespT> extMethod, 
-            CallOptions extCallOptions, 
-            Channel extNext) {
-          return new SimpleForwardingClientCall<ExtReqT, ExtRespT>(
-              extNext.newCall(extMethod, extCallOptions)) {
-            @Override
-            public void start(Listener<ExtRespT> responseListener, Metadata headers) {
-              for (HeaderValue headerValue : initialMetadata) {
-                String key = headerValue.key();
-                if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-                  if (headerValue.rawValue().isPresent()) {
-                    Metadata.Key<byte[]> metadataKey = 
-                        Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
-                    headers.put(metadataKey, headerValue.rawValue().get().toByteArray());
-                  }
-                } else {
-                  if (headerValue.value().isPresent()) {
-                    Metadata.Key<String> metadataKey = 
-                        Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
-                    headers.put(metadataKey, headerValue.value().get());
-                  }
-                }
-              }
-              super.start(responseListener, headers);
+      ImmutableList<HeaderValue> initialMetadata = filterConfig.getGrpcServiceConfig().initialMetadata();
+      if (!initialMetadata.isEmpty()) {
+        Metadata extraHeaders = new Metadata();
+        for (HeaderValue headerValue : initialMetadata) {
+          String key = headerValue.key();
+          if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+            if (headerValue.rawValue().isPresent()) {
+              Metadata.Key<byte[]> metadataKey = 
+                  Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
+              extraHeaders.put(metadataKey, headerValue.rawValue().get().toByteArray());
             }
-          };
+          } else {
+            if (headerValue.value().isPresent()) {
+              Metadata.Key<String> metadataKey = 
+                  Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+              extraHeaders.put(metadataKey, headerValue.value().get());
+            }
+          }
         }
-      });
+        extProcStub = extProcStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
+      }
 
       MethodDescriptor<InputStream, InputStream> rawMethod = 
           method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
@@ -647,17 +638,16 @@ public class ExternalProcessorFilter implements Filter {
         if (forwardRules.isPresent() && !forwardRules.get().isAllowed(key)) {
           continue;
         }
-        // Skip binary headers for this basic mapping
+        // Map binary headers using raw_value
         if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
           Metadata.Key<byte[]> binKey = Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
           Iterable<byte[]> values = metadata.getAll(binKey);
           if (values != null) {
             for (byte[] binValue : values) {
-              String encoded = BaseEncoding.base64().encode(binValue);
               io.envoyproxy.envoy.config.core.v3.HeaderValue headerValue =
                   io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
                       .setKey(key.toLowerCase(Locale.ROOT))
-                      .setValue(encoded)
+                      .setRawValue(ByteString.copyFrom(binValue))
                       .build();
               builder.addHeaders(headerValue);
             }
@@ -754,30 +744,20 @@ public class ExternalProcessorFilter implements Filter {
     @Nullable
     private static String getHeaderValue(Metadata headers, String headerName) {
       if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        Metadata.Key<byte[]> key;
-        try {
-          key = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
-        } catch (IllegalArgumentException e) {
-          return null;
-        }
+        Metadata.Key<byte[]> key = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
         Iterable<byte[]> values = headers.getAll(key);
         if (values == null) {
           return null;
         }
-        java.util.List<String> encoded = new ArrayList<>();
+        List<String> encoded = new ArrayList<>();
         for (byte[] v : values) {
           encoded.add(BaseEncoding.base64().omitPadding().encode(v));
         }
-        return com.google.common.base.Joiner.on(",").join(encoded);
+        return Joiner.on(",").join(encoded);
       }
-      Metadata.Key<String> key;
-      try {
-        key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
-      } catch (IllegalArgumentException e) {
-        return null;
-      }
+      Metadata.Key<String> key = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
       Iterable<String> values = headers.getAll(key);
-      return values == null ? null : com.google.common.base.Joiner.on(",").join(values);
+      return values == null ? null : Joiner.on(",").join(values);
     }
 
     /**
