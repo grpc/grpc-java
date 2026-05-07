@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
@@ -28,6 +27,7 @@ import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
+import io.grpc.QueryParams;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.Uri;
@@ -163,7 +163,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (newQuery != null) {
       modifiedTargetBuilder.setRawQuery(newQuery);
     } else {
-      modifiedTargetBuilder.setQuery(null);
+      modifiedTargetBuilder.setRawQuery(null);
     }
     if (schemeOverride.equals("xds")) {
       modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
@@ -214,7 +214,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (newQuery != null) {
       modifiedTargetBuilder.setRawQuery(newQuery);
     } else {
-      modifiedTargetBuilder.setQuery(null);
+      modifiedTargetBuilder.setRawQuery(null);
     }
 
     if (schemeOverride.equals("xds")) {
@@ -429,13 +429,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (query == null) {
       return false;
     }
-    for (String part : Splitter.on('&').split(query)) {
-      if (part.equals("force-xds")) {
+    QueryParams params = QueryParams.fromRawQuery(query);
+    for (QueryParams.Entry entry : params.asList()) {
+      if ("force-xds".equals(entry.getKey())) {
         return true;
-      }
-      if (part.startsWith("force-xds=")) {
-        String value = part.substring("force-xds=".length());
-        return !value.equalsIgnoreCase("false") && !value.equals("0");
       }
     }
     return false;
@@ -445,16 +442,10 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     if (query == null) {
       return null;
     }
-    StringBuilder sb = new StringBuilder();
-    for (String part : Splitter.on('&').split(query)) {
-      if (!part.equals("force-xds") && !part.startsWith("force-xds=")) {
-        if (sb.length() > 0) {
-          sb.append("&");
-        }
-        sb.append(part);
-      }
-    }
-    return sb.length() == 0 ? null : sb.toString();
+    QueryParams params = QueryParams.fromRawQuery(query);
+    params.asList().removeIf(entry -> "force-xds".equals(entry.getKey()));
+    params.asList().removeIf(entry -> entry.getKey().isEmpty() && !entry.hasValue());
+    return params.toRawQuery();
   }
 
   private enum HttpConnectionFactory implements HttpConnectionProvider {

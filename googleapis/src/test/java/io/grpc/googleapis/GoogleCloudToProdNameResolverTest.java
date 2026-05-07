@@ -206,7 +206,7 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isNull();
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
@@ -230,7 +230,7 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isNull();
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
@@ -238,43 +238,6 @@ public class GoogleCloudToProdNameResolverTest {
     }
   }
 
-  @Test
-  public void notOnGcpButForceXds_KeyValueFalse_DelegateToDns() {
-    GoogleCloudToProdNameResolver.isOnGcp = false;
-    String target = TARGET_URI + "?force-xds=false";
-    resolver = enableRfc3986UrisParam
-        ? new GoogleCloudToProdNameResolver(
-            Uri.create(target), args, fakeExecutorResource, nsRegistry.asFactory())
-        : new GoogleCloudToProdNameResolver(
-            URI.create(target), args, fakeExecutorResource, nsRegistry.asFactory());
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("dns");
-  }
-
-  @Test
-  public void notOnGcpButForceXds_KeyValueOne_DelegateToXds() {
-    GoogleCloudToProdNameResolver.isOnGcp = false;
-    String target = TARGET_URI + "?force-xds=1";
-    resolver = enableRfc3986UrisParam
-        ? new GoogleCloudToProdNameResolver(
-            Uri.create(target), args, fakeExecutorResource, nsRegistry.asFactory())
-        : new GoogleCloudToProdNameResolver(
-            URI.create(target), args, fakeExecutorResource, nsRegistry.asFactory());
-    resolver.start(mockListener);
-    fakeExecutor.runDueTasks();
-    assertThat(delegatedResolver.keySet()).containsExactly("xds");
-
-    if (enableRfc3986UrisParam) {
-      Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
-      assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isNull();
-    } else {
-      URI delegatedUriValue = delegatedUri.get("xds");
-      assertThat(delegatedUriValue).isNotNull();
-      assertThat(delegatedUriValue.getQuery()).isNull();
-    }
-  }
 
   @Test
   public void notOnGcpButForceXds_WithMultipleParams_DelegateToXds() {
@@ -292,7 +255,7 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isEqualTo("foo=bar&baz=qux");
+      assertThat(delegatedRfcUriValue.getRawQuery()).isEqualTo("foo=bar&baz=qux");
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
@@ -340,7 +303,7 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isNull();
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
@@ -363,7 +326,7 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("dns");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getQuery()).isEqualTo("FORCE-XDS");
+      assertThat(delegatedRfcUriValue.getRawQuery()).isEqualTo("FORCE-XDS");
     } else {
       URI delegatedUriValue = delegatedUri.get("dns");
       assertThat(delegatedUriValue).isNotNull();
