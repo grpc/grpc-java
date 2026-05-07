@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import org.junit.Test;
@@ -50,7 +49,6 @@ public class AsyncServletOutputStreamWriterTest {
   public void writeBytes_alwaysReady_doesNotStall() throws IOException {
     AtomicBoolean isReady = new AtomicBoolean(true);
     List<byte[]> writtenData = new ArrayList<>();
-    AtomicInteger onWritePossibleCount = new AtomicInteger(0);
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
@@ -72,7 +70,6 @@ public class AsyncServletOutputStreamWriterTest {
     // Simulate the first onWritePossible call (container init)
     isReady.set(true);
     writer.onWritePossible();
-    onWritePossibleCount.incrementAndGet();
 
     // Write multiple times while isReady stays true
     // Before the fix, writes would stall because isReady returned true
