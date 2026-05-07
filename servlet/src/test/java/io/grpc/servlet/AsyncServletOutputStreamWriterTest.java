@@ -32,20 +32,23 @@ import org.junit.runners.JUnit4;
 
 /**
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
- * This tests the Tomcat scenario where isReady() returns true but write() still fails
- * because the previous write hasn't completed internally.
+ * Tests two scenarios: (1) writes with isReady always true, where onWritePossible()
+ * is called between writes; (2) writes with isReady becoming false, where buffered
+ * writes are only drained when onWritePossible() is called.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
 
   /**
-   * Test that multiple consecutive writes succeed when isReady() always returns true.
-   * The container calls onWritePossible() between writes to drain buffered actions.
-   * This reproduces the Tomcat fix: writeBytes sets readyAndDrained=false so
-   * subsequent writes are buffered, and onWritePossible drains them.
+   * Test that multiple consecutive writes succeed when isReady() always returns true
+   * and the container calls onWritePossible() between writes.
+   *
+   * <p>Each writeBytes() call is followed by onWritePossible() to drain any buffered
+   * writes. This validates that the writer can handle the Tomcat-style callback pattern
+   * where isReady() stays true but onWritePossible() fires between writes.
    */
   @Test
-  public void writeBytes_alwaysReady_doesNotStall() throws IOException {
+  public void writeBytes_onWritePossibleBetweenWrites_succeeds() throws IOException {
     AtomicBoolean isReady = new AtomicBoolean(true);
     List<byte[]> writtenData = new ArrayList<>();
 
@@ -63,17 +66,15 @@ public class AsyncServletOutputStreamWriterTest {
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
 
-    // Initial onWritePossible to start with readyAndDrained=true
+    // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
-    // Write 5 times. After the first write, readyAndDrained becomes false so subsequent
-    // writes are buffered. The container calls onWritePossible() after each write completes
-    // internally (isReady stays true), which drains the buffered writes.
+    // Write 5 times, calling onWritePossible after each write.
+    // With isReady staying true, each onWritePossible should set readyAndDrained back to true,
+    // allowing the next write to go direct again.
     for (int i = 0; i < 5; i++) {
       byte[] data = new byte[]{(byte) i};
       writer.writeBytes(data, 1);
-      // Simulate container calling onWritePossible after each write completes
-      // isReady stays true so onWritePossible drains buffered writes directly
       writer.onWritePossible();
     }
 
@@ -83,8 +84,7 @@ public class AsyncServletOutputStreamWriterTest {
 
   /**
    * Test that when isReady() returns false, writes are buffered and only drain
-   * when onWritePossible() is called. This models the container behavior where
-   * writes block until the container signals the stream is ready again.
+   * when onWritePossible() is called.
    */
   @Test
   public void writeBytes_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
@@ -124,8 +124,7 @@ public class AsyncServletOutputStreamWriterTest {
     // Only the first write should have executed
     assertEquals("First write should complete, second buffered", 1, actions.size());
 
-    // Container calls onWritePossible when ready to accept more data
-    // isReady is still false, but onWritePossible will drain anyway
+    // Container calls onWritePossible to signal readiness
     isReady.set(true);
     writer.onWritePossible();
 
