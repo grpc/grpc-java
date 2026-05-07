@@ -84,23 +84,23 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private static synchronized BootstrapInfo getBootstrapInfo(boolean isForcedXds)
       throws XdsInitializationException, IOException {
     if (bootstrapInfo != null) {
-        return bootstrapInfo;
-      }
-      BootstrapInfo newInfo;
-      if (isForcedXds) {
-        newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
-            generateBootstrap("", true));
-      } else {
-        newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
-            generateBootstrap(
-                queryZoneMetadata(METADATA_URL_ZONE),
-                queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6)));
-      }
-      // Avoid setting global when testing
-      if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
-        bootstrapInfo = newInfo;
-      }
-      return newInfo;
+      return bootstrapInfo;
+    }
+    BootstrapInfo newInfo;
+    if (isForcedXds) {
+      newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+          generateBootstrap("", true));
+    } else {
+      newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+          generateBootstrap(
+              queryZoneMetadata(METADATA_URL_ZONE),
+              queryIpv6SupportMetadata(METADATA_URL_SUPPORT_IPV6)));
+    }
+    // Avoid setting global when testing
+    if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
+      bootstrapInfo = newInfo;
+    }
+    return newInfo;
   }
 
   private final String authority;
@@ -404,13 +404,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     GoogleCloudToProdNameResolver.c2pId = c2pId;
   }
 
-  @VisibleForTesting
-  static void resetBootstrapInfo() {
-    synchronized (BOOTSTRAP_LOCK) {
-      bootstrapInfo = null;
-    }
-  }
-
   private static boolean checkForceXds(String query) {
     if (query == null) {
       return false;
@@ -430,7 +423,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     }
     QueryParams params = QueryParams.fromRawQuery(query);
     params.asList().removeIf(entry -> "force-xds".equals(entry.getKey()));
-    params.asList().removeIf(entry -> entry.getKey().isEmpty() && !entry.hasValue());
     return params.toRawQuery();
   }
 
