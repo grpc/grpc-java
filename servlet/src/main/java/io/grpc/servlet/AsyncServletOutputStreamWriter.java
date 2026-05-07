@@ -230,8 +230,7 @@ final class AsyncServletOutputStreamWriter {
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
         LockSupport.unpark(parkingThread);
         checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("the servlet output stream becomes not ready");
-      } else {
+        log.finest("direct write: cleared readyAndDrained, next writes buffered");
         // For flush, only set to false if isReady() returns false.
         // If isReady() is still true, keep readyAndDrained true so flush goes direct.
         if (!isReady.getAsBoolean()) {
