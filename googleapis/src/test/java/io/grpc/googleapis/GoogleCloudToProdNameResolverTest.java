@@ -155,6 +155,7 @@ public class GoogleCloudToProdNameResolverTest {
   public void tearDown() {
     GoogleCloudToProdNameResolver.isOnGcp = originalIsOnGcp;
     GoogleCloudToProdNameResolver.setHttpConnectionProvider(null);
+    GoogleCloudToProdNameResolver.resetBootstrapInfo();
     if (resolver != null) {
       resolver.shutdown();
       verify(Iterables.getOnlyElement(delegatedResolver.values())).shutdown();

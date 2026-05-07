@@ -77,43 +77,31 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       System.getenv("GRPC_TEST_ONLY_GOOGLE_C2P_RESOLVER_TRAFFIC_DIRECTOR_URI");
 
   private static final Object BOOTSTRAP_LOCK = new Object();
-  private static final Object FORCE_XDS_BOOTSTRAP_LOCK = new Object();
 
   @GuardedBy("BOOTSTRAP_LOCK")
-  private static BootstrapInfo bootstrapInfo;
-  @GuardedBy("FORCE_XDS_BOOTSTRAP_LOCK")
-  private static BootstrapInfo forceXdsBootstrapInfo;
+  static BootstrapInfo bootstrapInfo;
   private static HttpConnectionProvider httpConnectionProvider = HttpConnectionFactory.INSTANCE;
   private static int c2pId = new Random().nextInt();
 
   private static BootstrapInfo getBootstrapInfo(boolean isForcedXds)
       throws XdsInitializationException, IOException {
-    if (isForcedXds) {
-      synchronized (FORCE_XDS_BOOTSTRAP_LOCK) {
-        if (forceXdsBootstrapInfo != null) {
-          return forceXdsBootstrapInfo;
-        }
-        BootstrapInfo newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+    synchronized (BOOTSTRAP_LOCK) {
+      if (bootstrapInfo != null) {
+        return bootstrapInfo;
+      }
+      BootstrapInfo newInfo;
+      if (isForcedXds) {
+        newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
             generateBootstrap("", true, true));
-        // Avoid setting global when testing
-        if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
-          forceXdsBootstrapInfo = newInfo;
-        }
-        return newInfo;
-      }
-    } else {
-      synchronized (BOOTSTRAP_LOCK) {
-        if (bootstrapInfo != null) {
-          return bootstrapInfo;
-        }
-        BootstrapInfo newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
+      } else {
+        newInfo = InternalGrpcBootstrapperImpl.parseBootstrap(
             generateBootstrap());
-        // Avoid setting global when testing
-        if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
-          bootstrapInfo = newInfo;
-        }
-        return newInfo;
       }
+      // Avoid setting global when testing
+      if (httpConnectionProvider == HttpConnectionFactory.INSTANCE) {
+        bootstrapInfo = newInfo;
+      }
+      return newInfo;
     }
   }
 
@@ -423,6 +411,13 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   @VisibleForTesting
   static void setC2pId(int c2pId) {
     GoogleCloudToProdNameResolver.c2pId = c2pId;
+  }
+
+  @VisibleForTesting
+  static void resetBootstrapInfo() {
+    synchronized (BOOTSTRAP_LOCK) {
+      bootstrapInfo = null;
+    }
   }
 
   private static boolean checkForceXds(String query) {
