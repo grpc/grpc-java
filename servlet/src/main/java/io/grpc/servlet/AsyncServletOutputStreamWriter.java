@@ -222,17 +222,9 @@ final class AsyncServletOutputStreamWriter {
       if (actionItem == completeAction) {
         return;
       }
-      if (actionItem != flushAction) {
-        // This is a writeBytes action. Always set readyAndDrained to false even when
-        // isReady() returns true. Tomcat requires onWritePossible() to fire between
-        // writes, even if isReady() is still true.
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("direct write: cleared readyAndDrained, next writes buffered");
-        // For flush, only set to false if isReady() returns false.
-        // If isReady() is still true, keep readyAndDrained true so flush goes direct.
+      if (actionItem == flushAction) {
+        // flush path: only set readyAndDrained=false if isReady() returns false
+        // If isReady() is still true, keep readyAndDrained=true so flush goes direct
         if (!isReady.getAsBoolean()) {
           boolean successful =
               writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
@@ -240,6 +232,14 @@ final class AsyncServletOutputStreamWriter {
           checkState(successful, "Bug: curState is unexpectedly changed by another thread");
           log.finest("the servlet output stream becomes not ready");
         }
+      } else {
+        // writeBytes path: always set readyAndDrained=false even when isReady()
+        // returns true. Tomcat requires onWritePossible() to fire between writes.
+        boolean successful =
+            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+        LockSupport.unpark(parkingThread);
+        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        log.finest("direct write: cleared readyAndDrained, next writes buffered");
       }
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);

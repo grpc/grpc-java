@@ -82,11 +82,12 @@ public class AsyncServletOutputStreamWriterTest {
   }
 
   /**
-   * Test that writeBytes with isReady transitioning from true to false eventually
-   * drains via onWritePossible.
+   * Test that when isReady() returns false, writes are buffered and only drain
+   * when onWritePossible() is called. This models the container behavior where
+   * writes block until the container signals the stream is ready again.
    */
   @Test
-  public void writeBytes_isReadyBecomesFalse_triggersOnWritePossible() throws IOException {
+  public void writeBytes_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
     AtomicBoolean isReady = new AtomicBoolean(true);
     List<String> actions = new ArrayList<>();
 
@@ -106,22 +107,29 @@ public class AsyncServletOutputStreamWriterTest {
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
 
-    // Initial onWritePossible
+    // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
     // First write - isReady is true, goes direct, readyAndDrained=false
     byte[] data1 = new byte[]{1};
     writer.writeBytes(data1, 1);
 
-    // Container calls onWritePossible after first write completes internally
-    // isReady is still true but readyAndDrained is false, so buffered writes drain
-    writer.onWritePossible();
+    // Simulate isReady becoming false (container buffer full)
+    isReady.set(false);
 
-    // Second write after isReady returns to true
-    isReady.set(true);
+    // Second write - should be buffered since isReady=false
     byte[] data2 = new byte[]{2};
     writer.writeBytes(data2, 1);
 
-    assertEquals("Two writes should complete", 2, actions.size());
+    // Only the first write should have executed
+    assertEquals("First write should complete, second buffered", 1, actions.size());
+
+    // Container calls onWritePossible when ready to accept more data
+    // isReady is still false, but onWritePossible will drain anyway
+    isReady.set(true);
+    writer.onWritePossible();
+
+    // Now both writes should have completed
+    assertEquals("Both writes should complete after onWritePossible", 2, actions.size());
   }
 }
