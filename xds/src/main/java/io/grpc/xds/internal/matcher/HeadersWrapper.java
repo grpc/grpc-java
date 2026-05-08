@@ -32,6 +32,8 @@ final class HeadersWrapper extends AbstractMap<String, String> {
   private static final ImmutableSet<String> PSEUDO_HEADERS =
       ImmutableSet.of(":method", ":authority", ":path");
   private final MatchContext context;
+  @Nullable
+  private volatile Set<String> cachedKeySet;
 
   HeadersWrapper(MatchContext context) {
     this.context = context;
@@ -115,21 +117,45 @@ final class HeadersWrapper extends AbstractMap<String, String> {
     }
   }
 
+  private boolean isMetadataKeyResolvable(String headerName) {
+    try {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+      } else {
+        Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+      }
+      return true;
+    } catch (IllegalArgumentException e) {
+      return false;
+    }
+  }
+
   @Override
   public Set<String> keySet() {
-    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-    for (String key : context.getMetadata().keys()) {
-      String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
-      // Filter out any keys we provide specialized aliases/values for.
-      if (!lowerKey.equals("te") 
-          && !lowerKey.equals("host") 
-          && !PSEUDO_HEADERS.contains(lowerKey)) {
-        builder.add(key);
+    Set<String> result = cachedKeySet;
+    if (result == null) {
+      synchronized (this) {
+        result = cachedKeySet;
+        if (result == null) {
+          ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+          for (String key : context.getMetadata().keys()) {
+            String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
+            // Filter out any keys we provide specialized aliases/values for.
+            if (!lowerKey.equals("te") 
+                && !lowerKey.equals("host") 
+                && !PSEUDO_HEADERS.contains(lowerKey)
+                && isMetadataKeyResolvable(lowerKey)) {
+              builder.add(key);
+            }
+          }
+          builder.addAll(PSEUDO_HEADERS);
+          builder.add("host");
+          result = builder.build();
+          cachedKeySet = result;
+        }
       }
     }
-    builder.addAll(PSEUDO_HEADERS);
-    builder.add("host");
-    return builder.build();
+    return result;
   }
 
   @Override

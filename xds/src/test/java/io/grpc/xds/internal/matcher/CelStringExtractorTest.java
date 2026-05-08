@@ -152,8 +152,10 @@ public final class CelStringExtractorTest {
     try {
       CelMatcherTestHelper.compileStringExtractor("invalid syntax ???");
       fail("Should throw CelValidationException");
+    } catch (dev.cel.common.CelValidationException e) {
+      assertThat(e).hasMessageThat().contains("mismatched input");
     } catch (Exception e) {
-      // Expected
+      fail("Threw wrong exception type: " + e.getClass().getName());
     }
   }
 

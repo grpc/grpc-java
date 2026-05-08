@@ -291,20 +291,6 @@ public final class CelEnvironmentTest {
   }
 
   @Test
-  public void celEnvironment_method_fallback() {
-    MatchContext context = MatchContext.newBuilder()
-        .setPath("/").setHost("example.com").setMethod("POST").build();
-    
-    GrpcCelEnvironment env = new GrpcCelEnvironment(context);
-    
-    Optional<Object> result = env.find("request");
-    assertThat(result.isPresent()).isTrue();
-    @SuppressWarnings("unchecked")
-    Map<String, Object> requestMap = (Map<String, Object>) result.get();
-    assertThat(requestMap.get("method")).isEqualTo("POST");
-  }
-
-  @Test
   public void celEnvironment_resolvesLazyRequestMap() {
     MatchContext context = MatchContext.newBuilder()
         .setPath("/").setHost("example.com").setMethod("POST").build();
