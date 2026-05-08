@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import com.google.protobuf.Message;
 
 /**
@@ -62,13 +64,13 @@ final class RouterFilter implements Filter {
 
     @Override
     public ConfigOrError<? extends FilterConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return ConfigOrError.fromConfig(ROUTER_CONFIG);
     }
 
     @Override
     public ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return ConfigOrError.fromError("Router Filter should not have override config");
     }
   }

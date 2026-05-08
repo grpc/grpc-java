@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.github.udpa.udpa.type.v1.TypedStruct;
@@ -212,7 +214,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   static StructOrError<Map<String, FilterConfig>> parseOverrideFilterConfigs(
       Map<String, Any> rawFilterConfigMap, FilterRegistry filterRegistry,
       XdsResourceType.Args args) {
-    Filter.FilterContext context = Filter.FilterContext.builder()
+    FilterConfigParseContext context = FilterConfigParseContext.builder()
         .bootstrapInfo(args.getBootstrapInfo())
         .serverInfo(args.getServerInfo())
         .build();

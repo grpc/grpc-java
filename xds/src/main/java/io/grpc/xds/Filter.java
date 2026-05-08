@@ -98,14 +98,14 @@ interface Filter extends Closeable {
      * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
     ConfigOrError<? extends FilterConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context);
+        Message rawProtoMessage, FilterConfigParseContext context);
 
     /**
      * Parses the per-filter override filter config from raw proto message. The message may be
      * either a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
     ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context);
+        Message rawProtoMessage, FilterConfigParseContext context);
   }
 
   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */
@@ -133,13 +133,13 @@ interface Filter extends Closeable {
 
   /** Context carrying dynamic metadata for a filter. */
   @AutoValue
-  abstract static class FilterContext {
+  abstract static class FilterConfigParseContext {
     abstract BootstrapInfo bootstrapInfo();
 
     abstract ServerInfo serverInfo();
 
     static Builder builder() {
-      return new AutoValue_Filter_FilterContext.Builder();
+      return new AutoValue_Filter_FilterConfigParseContext.Builder();
     }
 
     @AutoValue.Builder
@@ -148,7 +148,7 @@ interface Filter extends Closeable {
 
       abstract Builder serverInfo(ServerInfo info);
 
-      abstract FilterContext build();
+      abstract FilterConfigParseContext build();
     }
   }
 

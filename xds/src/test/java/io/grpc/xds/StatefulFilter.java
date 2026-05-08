@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
@@ -128,13 +130,13 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<Config> parseFilterConfig(Message rawProtoMessage, FilterContext context) {
+    public ConfigOrError<Config> parseFilterConfig(Message rawProtoMessage, FilterConfigParseContext context) {
       return ConfigOrError.fromConfig(Config.fromProto(rawProtoMessage, typeUrl));
     }
 
     @Override
     public ConfigOrError<Config> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return ConfigOrError.fromConfig(Config.fromProto(rawProtoMessage, typeUrl));
     }
   }

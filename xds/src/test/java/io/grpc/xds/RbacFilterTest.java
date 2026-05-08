@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -469,8 +471,8 @@ public class RbacFilterTest {
     return FILTER_PROVIDER.parseFilterConfigOverride(proto, getFilterContext());
   }
 
-  private Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder()
+  private FilterConfigParseContext getFilterContext() {
+    return FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

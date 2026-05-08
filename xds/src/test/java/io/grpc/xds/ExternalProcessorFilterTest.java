@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -114,7 +116,7 @@ public class ExternalProcessorFilterTest {
   private final FakeClock fakeClock = new FakeClock();
   private ScheduledExecutorService scheduler;
   private ExternalProcessorFilter.Provider provider;
-  private Filter.FilterContext filterContext;
+  private FilterConfigParseContext filterContext;
   private Bootstrapper.BootstrapInfo bootstrapInfo;
   private Bootstrapper.ServerInfo serverInfo;
 
@@ -232,7 +234,7 @@ public class ExternalProcessorFilterTest {
         Bootstrapper.ServerInfo.create(
             "test_target", Collections.emptyMap(), false, true, false, false);
     
-    filterContext = Filter.FilterContext.builder()
+    filterContext = FilterConfigParseContext.builder()
         .bootstrapInfo(bootstrapInfo)
         .serverInfo(serverInfo)
         .build();

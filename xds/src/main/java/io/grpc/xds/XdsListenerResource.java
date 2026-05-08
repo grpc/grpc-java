@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsClusterResource.validateCommonTlsContext;
 import static io.grpc.xds.XdsRouteConfigureResource.extractVirtualHosts;
@@ -618,7 +620,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
               isForClient ? "client" : "server"));
     }
 
-    Filter.FilterContext filterContext = Filter.FilterContext.builder()
+    FilterConfigParseContext filterContext = FilterConfigParseContext.builder()
         .bootstrapInfo(args.getBootstrapInfo())
         .serverInfo(args.getServerInfo())
         .build();

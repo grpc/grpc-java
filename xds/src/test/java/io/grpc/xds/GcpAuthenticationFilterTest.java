@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
 import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
@@ -526,8 +528,8 @@ public class GcpAuthenticationFilterTest {
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
 
-  private static Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder()
+  private static FilterConfigParseContext getFilterContext() {
+    return FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

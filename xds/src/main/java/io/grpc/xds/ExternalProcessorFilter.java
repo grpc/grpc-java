@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Joiner;
@@ -140,7 +142,7 @@ public class ExternalProcessorFilter implements Filter {
 
     @Override
     public ConfigOrError<ExternalProcessorFilterConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }
@@ -156,7 +158,7 @@ public class ExternalProcessorFilter implements Filter {
 
     @Override
     public ConfigOrError<ExternalProcessorFilterOverrideConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
       }

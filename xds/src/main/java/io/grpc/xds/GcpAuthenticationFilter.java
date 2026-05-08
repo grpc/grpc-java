@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
 import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
@@ -87,7 +89,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public ConfigOrError<GcpAuthenticationConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       GcpAuthnFilterConfig gcpAuthnProto;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -122,7 +124,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public ConfigOrError<GcpAuthenticationConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return parseFilterConfig(rawProtoMessage, context);
     }
   }

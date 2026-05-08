@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterConfigParseContext;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
@@ -105,7 +107,7 @@ final class FaultFilter implements Filter {
 
     @Override
     public ConfigOrError<FaultConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       HTTPFault httpFaultProto;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -121,7 +123,7 @@ final class FaultFilter implements Filter {
 
     @Override
     public ConfigOrError<FaultConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return parseFilterConfig(rawProtoMessage, context);
     }
 
