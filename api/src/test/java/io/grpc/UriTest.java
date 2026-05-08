@@ -644,6 +644,46 @@ public final class UriTest {
   }
 
   @Test
+  public void builder_setRawFragment() {
+    Uri uri = Uri.newBuilder().setScheme("http").setHost("host").setRawFragment("a%20b").build();
+    assertThat(uri.getRawFragment()).isEqualTo("a%20b");
+    assertThat(uri.getFragment()).isEqualTo("a b");
+    assertThat(uri.toString()).isEqualTo("http://host#a%20b");
+  }
+
+  @Test
+  public void builder_setRawFragment_null() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setHost("host")
+            .setRawFragment("a%20b")
+            .setRawFragment(null)
+            .build();
+    assertThat(uri.getRawFragment()).isNull();
+    assertThat(uri.getFragment()).isNull();
+    assertThat(uri.toString()).isEqualTo("http://host");
+  }
+
+  @Test
+  public void builder_setRawFragment_invalidCharacters_throws() {
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Uri.newBuilder().setRawFragment("f[]rag"));
+    assertThat(e).hasMessageThat().contains("Invalid character in fragment");
+  }
+
+  @Test
+  public void builder_setRawFragment_invalidPercentEncoding_throws() {
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Uri.newBuilder().setRawFragment("f%XXragment"));
+    assertThat(e).hasMessageThat().contains("Invalid");
+  }
+
+  @Test
   public void builder_canClearAuthorityComponents() {
     Uri uri = Uri.create("s://user@host:80/path").toBuilder().setRawAuthority(null).build();
     assertThat(uri.toString()).isEqualTo("s:/path");

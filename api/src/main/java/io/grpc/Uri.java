@@ -821,6 +821,13 @@ public final class Uri {
      * <p>The fragment can contain any string of codepoints. Codepoints that can't be encoded
      * literally will be percent-encoded for you as UTF-8.
      *
+     * <p>NB: Choose carefully between this method and {@link #setRawFragment(String)}. Many URI
+     * schemes embed further structure in the fragment that isn't part of the RFC 3986 generic
+     * syntax. These schemes often use internal delimiters that must be carefully percent-encoded in
+     * ways that this method doesn't understand. See {@link #getFragment()} for an example. In that
+     * case, callers should percent-encode externally then call {@link #setRawFragment(String)}
+     * instead.
+     *
      * <p>This field is optional.
      *
      * @param fragment the new fragment component, or null to clear this field
@@ -832,9 +839,27 @@ public final class Uri {
       return this;
     }
 
+    /**
+     * Specifies the fragment component of the new URI, already percent-encoded, exactly as it will
+     * appear after the '#' delimiter in the string form of the built URI.
+     *
+     * <p>NB: Choose carefully between this method and {@link #setFragment(String)}. {@code
+     * fragment} must only contain codepoints from RFC 3986's "fragment" character class. Use
+     * percent-encoding and UTF-8 to represent anything else. In certain cases, you can use {@link
+     * #setFragment(String)} to have the fragment percent-encoded for you instead, but see that
+     * method's Javadoc for its limitations.
+     *
+     * <p>This field is optional.
+     *
+     * @param fragment the new fragment component, or null to clear this field
+     * @return this, for fluent building
+     * @throws IllegalArgumentException if 'fragment' contains forbidden characters
+     */
     @CanIgnoreReturnValue
-    Builder setRawFragment(String fragment) {
-      checkPercentEncodedArg(fragment, "fragment", fragmentChars);
+    public Builder setRawFragment(@Nullable String fragment) {
+      if (fragment != null) {
+        checkPercentEncodedArg(fragment, "fragment", fragmentChars);
+      }
       this.fragment = fragment;
       return this;
     }
