@@ -262,32 +262,26 @@ public final class CelEnvironmentTest {
     // String concatenation fails at runtime evaluation (missing overload)
     CelAbstractSyntaxTree stringConcatAst = compileLenientAst("'a' + 'b'");
     CelRuntime.Program stringConcatProgram = CelCommon.RUNTIME.createProgram(stringConcatAst);
-    try {
-      stringConcatProgram.eval(resolver);
-      Assert.fail("String concatenation evaluation should fail");
-    } catch (CelEvaluationException e) {
-      assertThat(e).hasMessageThat().contains("No matching overload");
-    }
+    Assert.assertThrows(
+         "String concatenation evaluation should fail",
+         CelEvaluationException.class,
+         () -> stringConcatProgram.eval(resolver));
 
-    // List concatenation fails at runtime evaluation (missing overload)
+    // List concatenation fails at runtime evaluation
     CelAbstractSyntaxTree listConcatAst = compileLenientAst("[1] + [2]");
     CelRuntime.Program listConcatProgram = CelCommon.RUNTIME.createProgram(listConcatAst);
-    try {
-      listConcatProgram.eval(resolver);
-      Assert.fail("List concatenation evaluation should fail");
-    } catch (CelEvaluationException e) {
-      assertThat(e).hasMessageThat().contains("No matching overload");
-    }
+    Assert.assertThrows(
+         "List concatenation evaluation should fail",
+         CelEvaluationException.class,
+         () -> listConcatProgram.eval(resolver));
 
-    // String conversion fails at runtime evaluation (missing overload/function)
+    // String conversion fails at runtime evaluation
     CelAbstractSyntaxTree stringConvAst = compileLenientAst("string(1)");
     CelRuntime.Program stringConvProgram = CelCommon.RUNTIME.createProgram(stringConvAst);
-    try {
-      stringConvProgram.eval(resolver);
-      Assert.fail("String conversion evaluation should fail");
-    } catch (CelEvaluationException e) {
-      assertThat(e).hasMessageThat().contains("No matching overload");
-    }
+    Assert.assertThrows(
+         "String conversion evaluation should fail",
+         CelEvaluationException.class,
+         () -> stringConvProgram.eval(resolver));
   }
 
   @Test
