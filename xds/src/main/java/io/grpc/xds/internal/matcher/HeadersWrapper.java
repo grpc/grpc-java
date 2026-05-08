@@ -44,7 +44,10 @@ final class HeadersWrapper extends AbstractMap<String, String> {
       return null;
     }
     String headerName = ((String) key).toLowerCase(java.util.Locale.ROOT);
-    if ("te".equals(headerName)) {
+    // The "te" header is a hop-by-hop header used for protocol signaling (trailers).
+    // Per gRFC A41, it must be treated as not present to prevent matching logic
+    // from depending on transport-level semantics.
+    if (headerName.equals("te")) {
       return null;
     }
     switch (headerName) {

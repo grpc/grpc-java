@@ -20,7 +20,13 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
 import com.google.common.io.BaseEncoding;
+import dev.cel.common.CelAbstractSyntaxTree;
 import dev.cel.common.CelValidationException;
+import dev.cel.common.types.SimpleType;
+import dev.cel.compiler.CelCompiler;
+import dev.cel.compiler.CelCompilerFactory;
+import dev.cel.runtime.CelEvaluationException;
+import dev.cel.runtime.CelRuntime;
 import io.grpc.Metadata;
 import java.util.Map;
 import java.util.Optional;
@@ -32,6 +38,16 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public final class CelEnvironmentTest {
+
+  private static final CelCompiler LENIENT_COMPILER = 
+        CelCompilerFactory.standardCelCompilerBuilder()
+          .addVar("request", SimpleType.DYN)
+          .build();
+
+  private static CelAbstractSyntaxTree compileLenientAst(String expression)
+      throws CelValidationException {
+    return LENIENT_COMPILER.compile(expression).getAst();
+  }
 
   @Test
   public void headersWrapper_resolvesPseudoHeaders() {
@@ -189,6 +205,42 @@ public final class CelEnvironmentTest {
       Assert.fail("Comprehensions should be disabled");
     } catch (CelValidationException e) {
       assertThat(e).hasMessageThat().contains("undeclared reference to 'all'");
+    }
+  }
+
+  @Test
+  public void celEnvironment_runtime_disabledFeatures_throwsException() throws Exception {
+    MatchContext context = MatchContext.newBuilder().build();
+    GrpcCelEnvironment resolver = new GrpcCelEnvironment(context);
+
+    // String concatenation fails at runtime evaluation (missing overload)
+    CelAbstractSyntaxTree stringConcatAst = compileLenientAst("'a' + 'b'");
+    CelRuntime.Program stringConcatProgram = CelCommon.RUNTIME.createProgram(stringConcatAst);
+    try {
+      stringConcatProgram.eval(resolver);
+      Assert.fail("String concatenation evaluation should fail");
+    } catch (CelEvaluationException e) {
+      assertThat(e).hasMessageThat().contains("No matching overload");
+    }
+
+    // List concatenation fails at runtime evaluation (missing overload)
+    CelAbstractSyntaxTree listConcatAst = compileLenientAst("[1] + [2]");
+    CelRuntime.Program listConcatProgram = CelCommon.RUNTIME.createProgram(listConcatAst);
+    try {
+      listConcatProgram.eval(resolver);
+      Assert.fail("List concatenation evaluation should fail");
+    } catch (CelEvaluationException e) {
+      assertThat(e).hasMessageThat().contains("No matching overload");
+    }
+
+    // String conversion fails at runtime evaluation (missing overload/function)
+    CelAbstractSyntaxTree stringConvAst = compileLenientAst("string(1)");
+    CelRuntime.Program stringConvProgram = CelCommon.RUNTIME.createProgram(stringConvAst);
+    try {
+      stringConvProgram.eval(resolver);
+      Assert.fail("String conversion evaluation should fail");
+    } catch (CelEvaluationException e) {
+      assertThat(e).hasMessageThat().contains("No matching overload");
     }
   }
 
