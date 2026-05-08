@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.Filter.FilterContext;
+
 import io.grpc.xds.Filter.FilterConfigParseContext;
 
 import com.google.protobuf.Message;

@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.util.concurrent.MoreExecutors;
@@ -106,6 +104,10 @@ import org.mockito.Mockito;
  */
 @RunWith(JUnit4.class)
 public class ExternalProcessorFilterTest {
+  static {
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
+  }
+
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
@@ -116,7 +118,9 @@ public class ExternalProcessorFilterTest {
   private final FakeClock fakeClock = new FakeClock();
   private ScheduledExecutorService scheduler;
   private ExternalProcessorFilter.Provider provider;
-  private FilterConfigParseContext filterContext;
+  private static final Filter.FilterContext FAKE_CONTEXT = Filter.FilterContext.create(
+      "test-filter", new io.grpc.MetricRecorder() {});
+  private Filter.FilterConfigParseContext filterContext;
   private Bootstrapper.BootstrapInfo bootstrapInfo;
   private Bootstrapper.ServerInfo serverInfo;
 
@@ -234,7 +238,7 @@ public class ExternalProcessorFilterTest {
         Bootstrapper.ServerInfo.create(
             "test_target", Collections.emptyMap(), false, true, false, false);
     
-    filterContext = FilterConfigParseContext.builder()
+    filterContext = Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(bootstrapInfo)
         .serverInfo(serverInfo)
         .build();
@@ -402,7 +406,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -449,7 +453,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -491,7 +495,7 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
     ExternalProcessor mergedProto = interceptor.getFilterConfig().getExternalProcessor();
@@ -528,7 +532,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -575,7 +579,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -610,7 +614,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -641,7 +645,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -673,7 +677,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -701,7 +705,7 @@ public class ExternalProcessorFilterTest {
     assertThat(overrideResult.errorDetail).isNull();
     ExternalProcessorFilterOverrideConfig overrideConfig = overrideResult.config;
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test");
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT);
     ExternalProcessorInterceptor interceptor = (ExternalProcessorInterceptor)
         filter.buildClientInterceptor(parentConfig, overrideConfig, scheduler);
 
@@ -781,7 +785,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -876,7 +880,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -977,7 +981,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -1067,8 +1071,8 @@ public class ExternalProcessorFilterTest {
       return grpcCleanup.register(
           InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -1201,7 +1205,7 @@ public class ExternalProcessorFilterTest {
           InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
     });
 
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test-filter", channelManager);
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT, channelManager);
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
@@ -1337,7 +1341,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicBoolean dataPlaneStarted = new AtomicBoolean(false);
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
@@ -1454,7 +1458,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
@@ -1509,7 +1513,7 @@ public class ExternalProcessorFilterTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenRequestHeaderModeSend_whenCallHasBinaryHeaders_thenBinaryHeadersAreForwardedToExtProc()
+  public void givenHeaderModeSend_whenCallHasBinaryHeaders_thenBinaryHeadersForwarded()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -1580,7 +1584,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -1619,7 +1623,8 @@ public class ExternalProcessorFilterTest {
     
     // Find x-bin-key-bin header in HeaderMap
     io.envoyproxy.envoy.config.core.v3.HeaderValue foundHeader = null;
-    for (io.envoyproxy.envoy.config.core.v3.HeaderValue hv : req.getRequestHeaders().getHeaders().getHeadersList()) {
+    for (io.envoyproxy.envoy.config.core.v3.HeaderValue hv
+        : req.getRequestHeaders().getHeaders().getHeadersList()) {
       if (hv.getKey().equals("x-bin-key-bin")) {
         foundHeader = hv;
         break;
@@ -1692,7 +1697,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
@@ -1833,7 +1838,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -1964,7 +1969,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicReference<String> receivedBody = new AtomicReference<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
@@ -2098,7 +2103,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicInteger dataPlaneMessages = new AtomicInteger(0);
     final CountDownLatch dataPlaneHalfCloseLatch = new CountDownLatch(1);
@@ -2204,7 +2209,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneHalfCloseLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -2339,7 +2344,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -2476,7 +2481,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -2621,7 +2626,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     // Data Plane Server
     MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
@@ -2769,7 +2774,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     // Data Plane Server
     MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
@@ -2922,7 +2927,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneServerLatch = new CountDownLatch(1);
     final AtomicReference<StreamObserver<String>> dataPlaneResponseObserver =
@@ -3055,7 +3060,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -3150,7 +3155,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -3260,7 +3265,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -3378,7 +3383,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -3540,7 +3545,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicReference<String> dataPlaneReceivedMessage = new AtomicReference<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
@@ -3700,7 +3705,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicInteger dataPlaneRequestCount = new AtomicInteger(0);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -3824,7 +3829,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -3943,7 +3948,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -4043,7 +4048,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -4141,7 +4146,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
@@ -4230,7 +4235,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -4338,7 +4343,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final AtomicBoolean dataPlaneStarted = new AtomicBoolean(false);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -4447,7 +4452,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(dataPlaneServerName)
@@ -4558,7 +4563,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(dataPlaneServerName)
@@ -4706,7 +4711,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
@@ -4868,7 +4873,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
@@ -5012,7 +5017,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -5161,8 +5166,8 @@ public class ExternalProcessorFilterTest {
               .build());
     });
 
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
     final io.grpc.Server dataPlaneServer =
@@ -5235,7 +5240,7 @@ public class ExternalProcessorFilterTest {
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
     CachedChannelManager mockChannelManager = Mockito.mock(CachedChannelManager.class);
     
-    ExternalProcessorFilter filter = new ExternalProcessorFilter("test", mockChannelManager);
+    ExternalProcessorFilter filter = new ExternalProcessorFilter(FAKE_CONTEXT, mockChannelManager);
     
     filter.close();
     
@@ -5305,7 +5310,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -5424,7 +5429,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -5567,7 +5572,7 @@ public class ExternalProcessorFilterTest {
     });
 
     ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
-        filterConfig, channelManager, scheduler);
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
@@ -5826,8 +5831,8 @@ public class ExternalProcessorFilterTest {
               .build());
     });
     ScheduledExecutorService sidecarRealScheduler = Executors.newSingleThreadScheduledExecutor();
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, sidecarRealScheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, sidecarRealScheduler, FAKE_CONTEXT);
 
     final CountDownLatch finishLatch = new CountDownLatch(1);
     final AtomicReference<Metadata> headersFromInterceptor = new AtomicReference<>();
@@ -6111,8 +6116,8 @@ public class ExternalProcessorFilterTest {
               .build());
     });
     ScheduledExecutorService bidiRealScheduler = Executors.newSingleThreadScheduledExecutor();
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, bidiRealScheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, bidiRealScheduler, FAKE_CONTEXT);
 
     final AtomicReference<String> clientReceivedBody = new AtomicReference<>();
     final CountDownLatch finishLatch = new CountDownLatch(1);
@@ -6284,8 +6289,8 @@ public class ExternalProcessorFilterTest {
               .executor(Executors.newSingleThreadExecutor())
               .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(
@@ -6430,8 +6435,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -6572,8 +6577,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -6729,8 +6734,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -6851,8 +6856,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -6869,8 +6874,10 @@ public class ExternalProcessorFilterTest {
     headers.put(Metadata.Key.of("referer", Metadata.ASCII_STRING_MARSHALLER), "http://google.com");
     headers.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "custom-ua");
     headers.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "req-123");
-    headers.put(Metadata.Key.of("custom-header", Metadata.ASCII_STRING_MARSHALLER), "val");
-    headers.put(Metadata.Key.of("x-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER), new byte[]{1, 2});
+    headers.put(
+        Metadata.Key.of("custom-header", Metadata.ASCII_STRING_MARSHALLER), "val");
+    headers.put(
+        Metadata.Key.of("x-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER), new byte[]{1, 2});
 
     ClientCall<String, String> proxyCall =
         interceptor.interceptCall(
@@ -6972,8 +6979,8 @@ public class ExternalProcessorFilterTest {
               .executor(Executors.newSingleThreadExecutor())
               .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     // Improved Data Plane Server with trailers
     MutableHandlerRegistry uniqueDataPlaneRegistry = new MutableHandlerRegistry();
@@ -7102,8 +7109,8 @@ public class ExternalProcessorFilterTest {
               .executor(Executors.newSingleThreadExecutor())
               .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     MutableHandlerRegistry uniqueDataPlaneRegistry = new MutableHandlerRegistry();
     uniqueDataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -7252,8 +7259,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     // Data plane server returns trailers-only (onError results in trailers-only)
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
@@ -7373,8 +7380,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -7465,8 +7472,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
@@ -7549,8 +7556,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -7662,8 +7669,8 @@ public class ExternalProcessorFilterTest {
           .executor(Executors.newSingleThreadExecutor())
           .build());
     });
-    ExternalProcessorInterceptor interceptor =
-        new ExternalProcessorInterceptor(filterConfig, channelManager, scheduler);
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
@@ -7707,4 +7714,5 @@ public class ExternalProcessorFilterTest {
 
     channelManager.close();
   }
+
 }
