@@ -33,9 +33,9 @@ import org.junit.runners.JUnit4;
 /**
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
  * Tests three scenarios:
- * (1) A write followed by another write without onWritePossible() is buffered.
+ * (1) A write without intervening onWritePossible() is buffered.
  * (2) Consecutive writes with onWritePossible() between them succeed.
- * (3) When isReady() becomes false, writes are buffered until onWritePossible() drains them.
+ * (3) Flush behavior: goes direct when isReady() is true, buffers when isReady() is false.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
@@ -124,11 +124,12 @@ public class AsyncServletOutputStreamWriterTest {
   }
 
   /**
-   * Test that when isReady() returns false after a direct write, subsequent writes
-   * are buffered and only drain when onWritePossible() is called.
+   * Test flush behavior: flush keeps readyAndDrained=true when isReady() stays true
+   * (goes direct), but transitions to buffering when isReady() becomes false.
+   * This covers the flush-specific path in runOrBuffer().
    */
   @Test
-  public void writeBytes_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
+  public void flush_isReadyTrue_goesDirect_isReadyFalse_buffers() throws IOException {
     AtomicBoolean isReady = new AtomicBoolean(true);
     List<String> actions = new ArrayList<>();
 
@@ -151,23 +152,24 @@ public class AsyncServletOutputStreamWriterTest {
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
-    // First write - goes direct, readyAndDrained becomes false
-    byte[] data1 = new byte[]{1};
-    writer.writeBytes(data1, 1);
+    // Flush with isReady=true - should go direct (readyAndDrained stays true)
+    writer.flush();
+    assertEquals("Flush should execute directly when isReady=true", 1, actions.size());
 
-    // After first write, readyAndDrained=false, so any subsequent write is buffered.
-    // This buffering happens regardless of isReady() state (the Tomcat fix).
-    // Second write - should be buffered since readyAndDrained=false
-    byte[] data2 = new byte[]{2};
-    writer.writeBytes(data2, 1);
+    // Simulate isReady becoming false (container buffer full)
+    isReady.set(false);
 
-    // Only the first write should have executed
-    assertEquals("First write should complete, second buffered", 1, actions.size());
+    // Next flush - should be buffered since isReady=false
+    writer.flush();
 
-    // Container calls onWritePossible to drain buffered writes
+    // Only the first flush should have executed
+    assertEquals("Second flush should be buffered when isReady=false", 1, actions.size());
+
+    // Container calls onWritePossible to drain buffered flush
+    isReady.set(true);
     writer.onWritePossible();
 
-    // Now both writes should have completed
-    assertEquals("Both writes should complete after onWritePossible", 2, actions.size());
+    // Now both flushes should have completed
+    assertEquals("Both flushes should complete after onWritePossible", 2, actions.size());
   }
 }
