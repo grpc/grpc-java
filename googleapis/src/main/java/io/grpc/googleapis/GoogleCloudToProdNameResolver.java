@@ -132,10 +132,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     this.executorResource = checkNotNull(executorResource, "executorResource");
     String targetPath = checkNotNull(checkNotNull(targetUri, "targetUri").getPath(), "targetPath");
     Uri grpcUri = Uri.create(targetUri.toString());
-    String query = grpcUri.getRawQuery();
-    this.forceXds = checkForceXds(query);
+    QueryParams queryParams = QueryParams.fromRawQuery(grpcUri.getRawQuery());
+    this.forceXds = checkForceXds(queryParams);
     this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
-    String newQuery = stripForceXds(query);
+    stripForceXds(queryParams);
+    String newQuery = queryParams.toRawQuery();
 
     Preconditions.checkArgument(
         targetPath.startsWith("/"),
@@ -180,10 +181,11 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
       Resource<Executor> executorResource,
       NameResolver.Factory nameResolverFactory) {
     this.executorResource = checkNotNull(executorResource, "executorResource");
-    String query = targetUri.getRawQuery();
-    this.forceXds = checkForceXds(query);
+    QueryParams queryParams = QueryParams.fromRawQuery(targetUri.getRawQuery());
+    this.forceXds = checkForceXds(queryParams);
     this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
-    String newQuery = stripForceXds(query);
+    stripForceXds(queryParams);
+    String newQuery = queryParams.toRawQuery();
 
     Preconditions.checkArgument(
         targetUri.isPathAbsolute(),
@@ -404,11 +406,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     GoogleCloudToProdNameResolver.c2pId = c2pId;
   }
 
-  private static boolean checkForceXds(String query) {
-    if (query == null) {
-      return false;
-    }
-    QueryParams params = QueryParams.fromRawQuery(query);
+  private static boolean checkForceXds(QueryParams params) {
     for (QueryParams.Entry entry : params.asList()) {
       if ("force-xds".equals(entry.getKey())) {
         return true;
@@ -417,13 +415,8 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     return false;
   }
 
-  private static String stripForceXds(String query) {
-    if (query == null) {
-      return null;
-    }
-    QueryParams params = QueryParams.fromRawQuery(query);
+  private static void stripForceXds(QueryParams params) {
     params.asList().removeIf(entry -> "force-xds".equals(entry.getKey()));
-    return params.toRawQuery();
   }
 
   private enum HttpConnectionFactory implements HttpConnectionProvider {
