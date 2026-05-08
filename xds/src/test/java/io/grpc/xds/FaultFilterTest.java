@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.protobuf.Any;
@@ -107,8 +105,8 @@ public class FaultFilterTest {
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 
-  private static FilterConfigParseContext getFilterContext() {
-    return FilterConfigParseContext.builder()
+  private static Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
 import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
@@ -1295,7 +1293,7 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public TestFilter newInstance(String name) {
+      public TestFilter newInstance(FilterContext context) {
         return new TestFilter();
       }
 

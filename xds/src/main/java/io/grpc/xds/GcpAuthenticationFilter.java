@@ -16,10 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterContext;
-
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.xds.XdsNameResolver.CLUSTER_SELECTION_KEY;
 import static io.grpc.xds.XdsNameResolver.XDS_CONFIG_CALL_OPTION_KEY;
@@ -45,6 +41,8 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.auth.MoreCallCredentials;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.GcpAuthenticationFilter.AudienceMetadataParser.AudienceWrapper;
 import io.grpc.xds.MetadataRegistry.MetadataValueParser;
 import io.grpc.xds.XdsConfig.XdsClusterConfig;
@@ -85,8 +83,8 @@ final class GcpAuthenticationFilter implements Filter {
     }
 
     @Override
-    public GcpAuthenticationFilter newInstance(String name) {
-      return new GcpAuthenticationFilter(name, cacheSize);
+    public GcpAuthenticationFilter newInstance(FilterContext context) {
+      return new GcpAuthenticationFilter(context.filterName(), cacheSize);
     }
 
     @Override

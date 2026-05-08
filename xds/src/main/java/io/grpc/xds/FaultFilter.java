@@ -16,10 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterContext;
-
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
@@ -49,6 +45,8 @@ import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.Locale;
 import java.util.concurrent.Executor;
@@ -103,7 +101,7 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public FaultFilter newInstance(String name) {
+    public FaultFilter newInstance(FilterContext context) {
       return INSTANCE;
     }
 

@@ -51,6 +51,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
@@ -121,7 +122,6 @@ final class XdsNameResolver extends NameResolver {
   private final ThreadSafeRandom random;
   private final FilterRegistry filterRegistry;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
-  // Clusters (with reference counts) to which new/existing requests can be/are routed.
   // put()/remove() must be called in SyncContext, and get() can be called in any thread.
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
@@ -137,6 +137,7 @@ final class XdsNameResolver extends NameResolver {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
+
 
   /**
    * Constructs a new instance.
@@ -742,7 +743,9 @@ final class XdsNameResolver extends NameResolver {
         Filter.Provider provider = filterRegistry.get(typeUrl);
         checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = activeFilters.computeIfAbsent(
-            filterKey, k -> provider.newInstance(namedFilter.name));
+            filterKey, k -> provider.newInstance(
+                FilterContext.create(
+                    namedFilter.name, nameResolverArgs.getMetricRecorder())));
         checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }

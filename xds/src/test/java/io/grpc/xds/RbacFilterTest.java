@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -266,7 +264,8 @@ public class RbacFilterTest {
             OrMatcher.create(AlwaysTrueMatcher.INSTANCE));
     AuthConfig authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.ALLOW);
-    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(Filter.FilterContext.create(name, new io.grpc.MetricRecorder() {}))
+        .buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler, never()).startCall(eq(mockServerCall), any(Metadata.class));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
@@ -275,10 +274,11 @@ public class RbacFilterTest {
     assertThat(captor.getValue().getDescription()).isEqualTo("Access Denied");
     verify(mockServerCall).getAttributes();
     verifyNoMoreInteractions(mockServerCall);
-
+  
     authconfig = AuthConfig.create(Collections.singletonList(policyMatcher),
             GrpcAuthorizationEngine.Action.DENY);
-    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(RbacConfig.create(authconfig), null)
+    FILTER_PROVIDER.newInstance(Filter.FilterContext.create(name, new io.grpc.MetricRecorder() {}))
+        .buildServerInterceptor(RbacConfig.create(authconfig), null)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
   }
@@ -330,7 +330,9 @@ public class RbacFilterTest {
                     getFilterContext()).config;
     assertThat(override).isEqualTo(RbacConfig.create(null));
     ServerInterceptor interceptor =
-        FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override);
+        FILTER_PROVIDER.newInstance(
+            Filter.FilterContext.create(name, new io.grpc.MetricRecorder() {}))
+            .buildServerInterceptor(original, override);
     assertThat(interceptor).isNull();
 
     policyMatcher = PolicyMatcher.create("policy-matcher-override",
@@ -340,7 +342,8 @@ public class RbacFilterTest {
             GrpcAuthorizationEngine.Action.ALLOW);
     override = RbacConfig.create(authconfig);
 
-    FILTER_PROVIDER.newInstance(name).buildServerInterceptor(original, override)
+    FILTER_PROVIDER.newInstance(Filter.FilterContext.create(name, new io.grpc.MetricRecorder() {}))
+        .buildServerInterceptor(original, override)
             .interceptCall(mockServerCall, new Metadata(), mockHandler);
     verify(mockHandler).startCall(eq(mockServerCall), any(Metadata.class));
     verify(mockServerCall).getAttributes();
@@ -471,8 +474,8 @@ public class RbacFilterTest {
     return FILTER_PROVIDER.parseFilterConfigOverride(proto, getFilterContext());
   }
 
-  private FilterConfigParseContext getFilterContext() {
-    return FilterConfigParseContext.builder()
+  private Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

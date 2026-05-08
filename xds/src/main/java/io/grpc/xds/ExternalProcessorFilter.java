@@ -16,15 +16,10 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterContext;
-
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.base.Joiner;
-
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.BaseEncoding;
@@ -63,16 +58,22 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
+import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricInstrumentRegistry;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.DelayedClientCall;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 import io.grpc.stub.MetadataUtils;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -111,13 +112,84 @@ public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = 
       "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
 
-  private final CachedChannelManager cachedChannelManager;
+  @VisibleForTesting
+  static final DoubleHistogramMetricInstrument clientHeadersDuration;
+  @VisibleForTesting
+  static final DoubleHistogramMetricInstrument clientHalfCloseDuration;
+  @VisibleForTesting
+  static final DoubleHistogramMetricInstrument serverHeadersDuration;
+  @VisibleForTesting
+  static final DoubleHistogramMetricInstrument serverTrailersDuration;
 
-  public ExternalProcessorFilter(String name) {
-    this(name, new CachedChannelManager());
+  // Copied from io.grpc.opentelemetry.internal.OpenTelemetryConstants.LATENCY_BUCKETS
+  private static final List<Double> LATENCY_BUCKETS = ImmutableList.of(
+      0d,     0.00001d, 0.00005d, 0.0001d, 0.0003d, 0.0006d, 0.0008d, 0.001d, 0.002d,
+      0.003d, 0.004d,   0.005d,   0.006d,  0.008d,  0.01d,   0.013d,  0.016d, 0.02d,
+      0.025d, 0.03d,    0.04d,    0.05d,   0.065d,  0.08d,   0.1d,    0.13d,  0.16d,
+      0.2d,   0.25d,    0.3d,     0.4d,    0.5d,    0.65d,   0.8d,    1d,     2d,
+      5d,     10d,      20d,      50d,     100d);
+
+  static {
+    if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+      MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
+
+      clientHeadersDuration = registry.registerDoubleHistogram(
+          "grpc.client_ext_proc.client_headers_duration",
+          "Time between when the ext_proc filter sees the client's headers and when "
+              + "it allows those headers to continue on to the next filter",
+          "s",
+          LATENCY_BUCKETS,
+          ImmutableList.of("grpc.target"),
+          ImmutableList.of("grpc.lb.backend_service"),
+          true);
+
+      clientHalfCloseDuration = registry.registerDoubleHistogram(
+          "grpc.client_ext_proc.client_half_close_duration",
+          "Time between when the ext_proc filter sees the client's half-close and when "
+              + "it allows that half-close to continue on to the next filter",
+          "s",
+          LATENCY_BUCKETS,
+          ImmutableList.of("grpc.target"),
+          ImmutableList.of("grpc.lb.backend_service"),
+          true);
+
+      serverHeadersDuration = registry.registerDoubleHistogram(
+          "grpc.client_ext_proc.server_headers_duration",
+          "Time between when the ext_proc filter sees the server's headers and when "
+              + "it allows those headers to continue on to the next filter",
+          "s",
+          LATENCY_BUCKETS,
+          ImmutableList.of("grpc.target"),
+          ImmutableList.of("grpc.lb.backend_service"),
+          true);
+
+      serverTrailersDuration = registry.registerDoubleHistogram(
+          "grpc.client_ext_proc.server_trailers_duration",
+          "Time between when the ext_proc filter sees the server's trailers and when "
+              + "it allows those trailers to continue on to the next filter",
+          "s",
+          LATENCY_BUCKETS,
+          ImmutableList.of("grpc.target"),
+          ImmutableList.of("grpc.lb.backend_service"),
+          true);
+    } else {
+      clientHeadersDuration = null;
+      clientHalfCloseDuration = null;
+      serverHeadersDuration = null;
+      serverTrailersDuration = null;
+    }
   }
 
-  ExternalProcessorFilter(String name, CachedChannelManager cachedChannelManager) {
+  private final CachedChannelManager cachedChannelManager;
+  private final FilterContext context;
+
+  public ExternalProcessorFilter(FilterContext context) {
+    this(context, new CachedChannelManager());
+  }
+
+  @VisibleForTesting
+  ExternalProcessorFilter(FilterContext context, CachedChannelManager cachedChannelManager) {
+    this.context = checkNotNull(context, "context");
     this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
   }
 
@@ -138,8 +210,8 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
-    public ExternalProcessorFilter newInstance(String name) {
-      return new ExternalProcessorFilter(name);
+    public ExternalProcessorFilter newInstance(FilterContext context) {
+      return new ExternalProcessorFilter(context);
     }
 
     @Override
@@ -186,7 +258,8 @@ public class ExternalProcessorFilter implements Filter {
       extProcFilterConfig = mergeConfigs(extProcFilterConfig,
           (ExternalProcessorFilterOverrideConfig) overrideConfig);
     }
-    return new ExternalProcessorInterceptor(extProcFilterConfig, cachedChannelManager, scheduler);
+    return new ExternalProcessorInterceptor(
+        extProcFilterConfig, cachedChannelManager, scheduler, context);
   }
 
   private static ExternalProcessorFilterConfig mergeConfigs(
@@ -228,7 +301,10 @@ public class ExternalProcessorFilter implements Filter {
   }
 
   private static ConfigOrError<Optional<GrpcServiceConfig>> parseAndValidate(
-      ProcessingMode mode, GrpcService grpcService, boolean isParent, FilterContext context) {
+      ProcessingMode mode,
+      GrpcService grpcService,
+      boolean isParent,
+      FilterConfigParseContext context) {
     if (mode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC
         && mode.getRequestBodyMode() != ProcessingMode.BodySendMode.NONE) {
       return ConfigOrError.fromError("Invalid request_body_mode: " + mode.getRequestBodyMode()
@@ -263,7 +339,7 @@ public class ExternalProcessorFilter implements Filter {
     private final Optional<HeaderForwardingRulesConfig> forwardRulesConfig;
 
     static ConfigOrError<ExternalProcessorFilterConfig> create(
-        ExternalProcessor externalProcessor, FilterContext context) {
+        ExternalProcessor externalProcessor, FilterConfigParseContext context) {
       ProcessingMode mode = externalProcessor.getProcessingMode();
       GrpcService grpcService = externalProcessor.getGrpcService();
       HeaderMutationRulesConfig mutationRulesConfig = null;
@@ -369,7 +445,7 @@ public class ExternalProcessorFilter implements Filter {
     private final GrpcServiceConfig grpcServiceConfig;
 
     static ConfigOrError<ExternalProcessorFilterOverrideConfig> create(
-        ExtProcOverrides overrides, FilterContext context) {
+        ExtProcOverrides overrides, FilterConfigParseContext context) {
       ConfigOrError<Optional<GrpcServiceConfig>> parsed =
           parseAndValidate(
               overrides.getProcessingMode(), overrides.getGrpcService(), false, context);
@@ -489,6 +565,7 @@ public class ExternalProcessorFilter implements Filter {
     private final CachedChannelManager cachedChannelManager;
     private final ExternalProcessorFilterConfig filterConfig;
     private final ScheduledExecutorService scheduler;
+    private final MetricRecorder metricsRecorder;
 
     private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
         new MethodDescriptor.Marshaller<InputStream>() {
@@ -503,12 +580,15 @@ public class ExternalProcessorFilter implements Filter {
           }
         };
 
+    @VisibleForTesting
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
         CachedChannelManager cachedChannelManager,
-        ScheduledExecutorService scheduler) {
+        ScheduledExecutorService scheduler,
+        FilterContext context) {
       this.filterConfig = filterConfig;
       this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
       this.scheduler = checkNotNull(scheduler, "scheduler");
+      this.metricsRecorder = checkNotNull(context.metricsRecorder(), "metricsRecorder");
     }
 
     @VisibleForTesting
@@ -534,7 +614,8 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      ImmutableList<HeaderValue> initialMetadata = filterConfig.getGrpcServiceConfig().initialMetadata();
+      ImmutableList<HeaderValue> initialMetadata =
+          filterConfig.getGrpcServiceConfig().initialMetadata();
       if (!initialMetadata.isEmpty()) {
         Metadata extraHeaders = new Metadata();
         for (HeaderValue headerValue : initialMetadata) {
@@ -553,7 +634,8 @@ public class ExternalProcessorFilter implements Filter {
             }
           }
         }
-        extProcStub = extProcStub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
+        extProcStub = extProcStub.withInterceptors(
+            MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
       }
 
       MethodDescriptor<InputStream, InputStream> rawMethod = 
@@ -567,7 +649,8 @@ public class ExternalProcessorFilter implements Filter {
 
       DataPlaneClientCall dataPlaneCall = new DataPlaneClientCall(
           delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
-          scheduler, method, next);
+          scheduler, method, next, metricsRecorder, next.authority(),
+          callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY));
 
       return new ClientCall<ReqT, RespT>() {
         @Override
@@ -805,6 +888,14 @@ public class ExternalProcessorFilter implements Filter {
       private final ProcessingMode currentProcessingMode;
       private final MethodDescriptor<?, ?> method;
       private final Channel channel;
+      private final MetricRecorder metricsRecorder;
+      private final String target;
+      private final String backendService;
+
+      private long clientHeadersStartNanos;
+      private long clientHalfCloseStartNanos;
+      private long serverHeadersStartNanos;
+      private long serverTrailersStartNanos;
 
       private volatile Metadata requestHeaders;
       final AtomicBoolean activated = new AtomicBoolean(false);
@@ -825,7 +916,10 @@ public class ExternalProcessorFilter implements Filter {
           Optional<HeaderMutationRulesConfig> mutationRulesConfig,
           ScheduledExecutorService scheduler,
           MethodDescriptor<?, ?> method,
-          Channel channel) {
+          Channel channel,
+          MetricRecorder metricsRecorder,
+          String target,
+          String backendService) {
         super(delayedCall);
         this.delayedCall = delayedCall;
         this.rawCall = rawCall;
@@ -836,11 +930,19 @@ public class ExternalProcessorFilter implements Filter {
         this.scheduler = scheduler;
         this.method = method;
         this.channel = channel;
+        this.metricsRecorder = checkNotNull(metricsRecorder, "metricsRecorder");
+        this.target = checkNotNull(target, "target");
+        this.backendService = checkNotNull(backendService, "backendService");
       }
 
       private void activateCall() {
         if (extProcStreamFailed.get() || !activated.compareAndSet(false, true)) {
           return;
+        }
+        if (clientHeadersStartNanos > 0) {
+          long durationNanos = System.nanoTime() - clientHeadersStartNanos;
+          recordDuration(clientHeadersDuration, durationNanos);
+          clientHeadersStartNanos = 0;
         }
         Runnable toRun = delayedCall.setCall(rawCall);
         if (toRun != null) {
@@ -848,6 +950,17 @@ public class ExternalProcessorFilter implements Filter {
         }
         drainPendingRequests();
         onReadyNotify();
+      }
+
+      private void recordDuration(DoubleHistogramMetricInstrument instrument, long durationNanos) {
+        if (instrument != null) {
+          double durationSecs = (double) durationNanos / 1_000_000_000.0;
+          metricsRecorder.recordDoubleHistogram(
+              instrument,
+              durationSecs,
+              ImmutableList.of(target),
+              ImmutableList.of(backendService));
+        }
       }
 
       private boolean checkCompressionSupport(BodyResponse bodyResponse) {
@@ -906,6 +1019,7 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void start(Listener<InputStream> responseListener, Metadata headers) {
+        clientHeadersStartNanos = System.nanoTime();
         this.requestHeaders = headers;
         this.wrappedListener = new DataPlaneListener(responseListener, rawCall, this);
 
@@ -1236,19 +1350,29 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
+      private void proceedWithHalfClose() {
+        if (clientHalfCloseStartNanos > 0) {
+          long durationNanos = System.nanoTime() - clientHalfCloseStartNanos;
+          recordDuration(clientHalfCloseDuration, durationNanos);
+          clientHalfCloseStartNanos = 0;
+        }
+        super.halfClose();
+      }
+
       @Override
       public void halfClose() {
+        clientHalfCloseStartNanos = System.nanoTime();
         halfClosed.set(true);
         if (passThroughMode.get() || extProcStreamCompleted.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
-            super.halfClose();
+            proceedWithHalfClose();
           }
           return;
         }
 
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
           if (requestSideClosed.compareAndSet(false, true)) {
-            super.halfClose();
+            proceedWithHalfClose();
           }
           return;
         }
@@ -1291,7 +1415,7 @@ public class ExternalProcessorFilter implements Filter {
         // the sidecar for the last part of the request body, we can now half-close the data plane.
         if (halfClosed.get()) {
           if (requestSideClosed.compareAndSet(false, true)) {
-            super.halfClose();
+            proceedWithHalfClose();
           }
         }
       }
@@ -1391,12 +1515,10 @@ public class ExternalProcessorFilter implements Filter {
         onReadyNotify();
       }
 
-      void onReadyNotify() {
-        delegate.onReady();
-      }
-
       @Override
       public void onHeaders(Metadata headers) {
+        System.out.println("=== CLIENT RECEIVED RESPONSE HEADERS: " + headers + " ===");
+        dataPlaneClientCall.serverHeadersStartNanos = System.nanoTime();
         responseHeadersSent.set(true);
         boolean sendResponseHeaders =
             dataPlaneClientCall.currentProcessingMode.getResponseHeaderMode()
@@ -1407,7 +1529,7 @@ public class ExternalProcessorFilter implements Filter {
         if (dataPlaneClientCall.passThroughMode.get() 
             || dataPlaneClientCall.extProcStreamCompleted.get() 
             || !sendResponseHeaders) {
-          delegate.onHeaders(headers);
+          proceedWithHeaders(headers);
           return;
         }
 
@@ -1421,21 +1543,6 @@ public class ExternalProcessorFilter implements Filter {
 
         if (dataPlaneClientCall.config.getObservabilityMode()) {
           proceedWithHeaders();
-        }
-      }
-
-      void proceedWithHeaders() {
-        if (savedHeaders != null) {
-          delegate.onHeaders(savedHeaders);
-          savedHeaders = null;
-          InputStream msg;
-          while ((msg = savedMessages.poll()) != null) {
-            onMessage(msg);
-          }
-          onReadyNotify();
-          if (savedStatus != null) {
-            triggerCloseHandshake();
-          }
         }
       }
 
@@ -1472,16 +1579,17 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void onClose(Status status, Metadata trailers) {
+        dataPlaneClientCall.serverTrailersStartNanos = System.nanoTime();
         if (dataPlaneClientCall.extProcStreamFailed.get()) {
           if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
-            delegate.onClose(Status.UNAVAILABLE.withDescription("External processor stream failed")
+            proceedWithClose(Status.UNAVAILABLE.withDescription("External processor stream failed")
                 .withCause(status.getCause()), new Metadata());
           }
           return;
         }
         if (dataPlaneClientCall.passThroughMode.get()) {
           if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
-            delegate.onClose(status, trailers);
+            proceedWithClose(status, trailers);
           }
           return;
         }
@@ -1512,6 +1620,63 @@ public class ExternalProcessorFilter implements Filter {
               dataPlaneClientCall.config.getDeferredCloseTimeoutNanos(),
               TimeUnit.NANOSECONDS);
         }
+      }
+
+      void onReadyNotify() {
+        delegate.onReady();
+      }
+
+      void proceedWithHeaders() {
+        if (savedHeaders != null) {
+          proceedWithHeaders(savedHeaders);
+          savedHeaders = null;
+          InputStream msg;
+          while ((msg = savedMessages.poll()) != null) {
+            onMessage(msg);
+          }
+          onReadyNotify();
+          if (savedStatus != null) {
+            triggerCloseHandshake();
+          }
+        }
+      }
+
+      private void proceedWithHeaders(Metadata headers) {
+        if (dataPlaneClientCall.serverHeadersStartNanos > 0) {
+          long durationNanos = System.nanoTime() - dataPlaneClientCall.serverHeadersStartNanos;
+          dataPlaneClientCall.recordDuration(serverHeadersDuration, durationNanos);
+          dataPlaneClientCall.serverHeadersStartNanos = 0;
+        }
+        delegate.onHeaders(headers);
+      }
+
+      void proceedWithClose() {
+        if (savedStatus != null) {
+          if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
+            proceedWithClose(savedStatus, savedTrailers);
+          }
+          savedStatus = null;
+          savedTrailers = null;
+        }
+      }
+
+      private void proceedWithClose(Status status, Metadata trailers) {
+        if (dataPlaneClientCall.serverTrailersStartNanos > 0) {
+          long durationNanos = System.nanoTime() - dataPlaneClientCall.serverTrailersStartNanos;
+          dataPlaneClientCall.recordDuration(serverTrailersDuration, durationNanos);
+          dataPlaneClientCall.serverTrailersStartNanos = 0;
+        }
+        delegate.onClose(status, trailers);
+      }
+
+      void onExternalBody(ByteString body) {
+        delegate.onMessage(body.newInput());
+      }
+
+      void unblockAfterStreamComplete() {
+        proceedWithHeaders();
+        dataPlaneClientCall.passThroughMode.set(true);
+        proceedWithClose();
       }
 
       private void triggerCloseHandshake() {
@@ -1579,26 +1744,6 @@ public class ExternalProcessorFilter implements Filter {
         dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
             .setResponseBody(bodyBuilder.build())
             .build());
-      }
-
-      void proceedWithClose() {
-        if (savedStatus != null) {
-          if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
-            delegate.onClose(savedStatus, savedTrailers);
-          }
-          savedStatus = null;
-          savedTrailers = null;
-        }
-      }
-
-      void onExternalBody(ByteString body) {
-        delegate.onMessage(body.newInput());
-      }
-
-      void unblockAfterStreamComplete() {
-        proceedWithHeaders();
-        dataPlaneClientCall.passThroughMode.set(true);
-        proceedWithClose();
       }
     }
   }

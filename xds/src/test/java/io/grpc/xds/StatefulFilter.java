@@ -16,14 +16,14 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.Filter.FilterConfigParseContext;
-
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Message;
 import io.grpc.ServerInterceptor;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import java.util.ConcurrentModificationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -110,7 +110,7 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public synchronized StatefulFilter newInstance(String name) {
+    public synchronized StatefulFilter newInstance(FilterContext context) {
       StatefulFilter filter = new StatefulFilter(counter++);
       instances.put(filter.idx, filter);
       return filter;
@@ -130,7 +130,8 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<Config> parseFilterConfig(Message rawProtoMessage, FilterConfigParseContext context) {
+    public ConfigOrError<Config> parseFilterConfig(
+        Message rawProtoMessage, FilterConfigParseContext context) {
       return ConfigOrError.fromConfig(Config.fromProto(rawProtoMessage, typeUrl));
     }
 
