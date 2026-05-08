@@ -18,51 +18,35 @@ package io.grpc.xds.internal.matcher;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
-import javax.annotation.Nullable;
 
 public final class MatchContext {
   private final Metadata metadata;
-  @Nullable 
   private final String path;
-  @Nullable 
   private final String host;
-  @Nullable 
   private final String method;
-  @Nullable 
-  private final String id;
 
-  public MatchContext(Metadata metadata, @Nullable String path,
-      @Nullable String host, @Nullable String method,
-      @Nullable String id) {
+  public MatchContext(Metadata metadata, String path,
+      String host, String method) {
     this.metadata = Preconditions.checkNotNull(metadata, "metadata");
-    this.path = path;
-    this.host = host;
-    this.method = method;
-    this.id = id;
+    this.path = Preconditions.checkNotNull(path, "path");
+    this.host = Preconditions.checkNotNull(host, "host");
+    this.method = Preconditions.checkNotNull(method, "method");
   }
 
   public Metadata getMetadata() {
     return metadata;
   }
   
-  @Nullable
   public String getPath() {
     return path;
   }
   
-  @Nullable
   public String getHost() {
     return host;
   }
   
-  @Nullable
   public String getMethod() {
     return method;
-  }
-  
-  @Nullable
-  public String getId() {
-    return id;
   }
 
   public static Builder newBuilder() {
@@ -74,7 +58,6 @@ public final class MatchContext {
     private String path;
     private String host;
     private String method;
-    private String id;
 
     public Builder setMetadata(Metadata metadata) {
       this.metadata = metadata;
@@ -96,13 +79,8 @@ public final class MatchContext {
       return this;
     }
 
-    public Builder setId(String id) {
-      this.id = id;
-      return this;
-    }
-
     public MatchContext build() {
-      return new MatchContext(metadata, path, host, method, id);
+      return new MatchContext(metadata, path, host, method);
     }
   }
 }

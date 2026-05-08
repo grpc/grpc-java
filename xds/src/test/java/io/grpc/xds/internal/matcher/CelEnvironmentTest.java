@@ -70,6 +70,9 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "custom-val");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
@@ -81,7 +84,8 @@ public final class CelEnvironmentTest {
   @Test
   @SuppressWarnings("DoNotCall")
   public void headersWrapper_entrySet_unsupported() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     Map<String, String> headers = new HeadersWrapper(context);
     
     try {
@@ -96,6 +100,8 @@ public final class CelEnvironmentTest {
   public void celEnvironment_resolvesRequestField() {
     MatchContext context = MatchContext.newBuilder()
         .setPath("/foo")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
@@ -115,6 +121,9 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("User-Agent", Metadata.ASCII_STRING_MARSHALLER), "grpc-java");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
     
     Map<String, String> headers = new HeadersWrapper(context);
@@ -132,6 +141,9 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("te", Metadata.ASCII_STRING_MARSHALLER), "trailers");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
@@ -142,18 +154,30 @@ public final class CelEnvironmentTest {
     // Case insensitive check for "TE" logic too
     assertThat(headers.get("TE")).isNull();
     assertThat(headers.containsKey("TE")).isFalse();
+
+    // Ensure "te" is also excluded from keySet() and size()
+    assertThat(headers.keySet()).doesNotContain("te");
+    assertThat(headers.keySet()).doesNotContain("TE");
+    assertThat(headers.size()).isEqualTo(4); // Pseudo (:method, :path, :authority) + "host" = 4
   }
 
   @Test
   public void headers_hostAliasing() {
     MatchContext context = MatchContext.newBuilder()
+        .setPath("/")
         .setHost("example.com")
+        .setMethod("POST")
         .build();
     Map<String, String> headers = new HeadersWrapper(context);
     
     assertThat(headers.get("host")).isEqualTo("example.com");
     assertThat(headers.get("HOST")).isEqualTo("example.com");
     assertThat(headers.get(":authority")).isEqualTo("example.com");
+
+    // Verify containsKey and keySet contract works correctly for host alias
+    assertThat(headers.containsKey("host")).isTrue();
+    assertThat(headers.containsKey("HOST")).isTrue();
+    assertThat(headers.keySet()).contains("host");
   }
 
   @Test
@@ -163,14 +187,35 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("test-bin", Metadata.BINARY_BYTE_MARSHALLER), bytes);
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
-    
-    // Expect Base64 encoded string
-    String expected = BaseEncoding.base64().encode(bytes);
+    // Expect Base64 encoded string without padding
+    String expected = BaseEncoding.base64().omitPadding().encode(bytes);
     assertThat(headers.get("test-bin")).isEqualTo(expected);
     assertThat(headers.containsKey("test-bin")).isTrue();
+  }
+
+  @Test
+  public void headersWrapper_invalidHeaderNames_returnsNullAndFalse() {
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
+        .build();
+
+    Map<String, String> headers = new HeadersWrapper(context);
+
+    // Invalid characters (spaces, special symbols) that gRPC Metadata.Key validations reject.
+    assertThat(headers.get("invalid header name")).isNull();
+    assertThat(headers.get("bad@key")).isNull();
+    assertThat(headers.containsKey("invalid header name")).isFalse();
+    assertThat(headers.containsKey("bad@key")).isFalse();
+    assertThat(headers.get("bad@key-bin")).isNull();
+    assertThat(headers.containsKey("bad@key-bin")).isFalse();
   }
 
   @Test
@@ -210,7 +255,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_runtime_disabledFeatures_throwsException() throws Exception {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment resolver = new GrpcCelEnvironment(context);
 
     // String concatenation fails at runtime evaluation (missing overload)
@@ -246,7 +292,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_method_fallback() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
@@ -259,7 +306,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_resolvesLazyRequestMap() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
@@ -281,7 +329,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_timeField_supportedButNull() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
     Optional<Object> result = env.find("request");
@@ -300,19 +349,25 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("k2", Metadata.ASCII_STRING_MARSHALLER), "v2");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     HeadersWrapper headers = new HeadersWrapper(context);
     
-    // 2 custom headers + 3 pseudo headers (:method, :authority, :path) = 5
-    assertThat(headers.size()).isEqualTo(5);
+    // 2 custom headers + 3 pseudo headers (:method, :authority, :path) + "host" alias = 6
+    assertThat(headers.size()).isEqualTo(6);
   }
 
   @Test
   public void celEnvironment_accessAllFields() {
+    Metadata metadata = new Metadata();
+    metadata.put(Metadata.Key.of("x-request-id", Metadata.ASCII_STRING_MARSHALLER), "id-value");
     MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadata)
+        .setPath("/")
         .setHost("host")
-        .setId("id")
         .setMethod("GET")
         .build();
 
@@ -323,7 +378,7 @@ public final class CelEnvironmentTest {
     Map<String, Object> requestMap = (Map<String, Object>) result.get();
 
     assertThat(requestMap.get("host")).isEqualTo("host");
-    assertThat(requestMap.get("id")).isEqualTo("id");
+    assertThat(requestMap.get("id")).isEqualTo("id-value");
     assertThat(requestMap.get("method")).isEqualTo("GET");
     assertThat(requestMap.get("scheme")).isEqualTo("");
     assertThat(requestMap.get("protocol")).isEqualTo("");
@@ -333,7 +388,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_find_unknownField() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     
     Optional<Object> result = env.find("request");
@@ -347,7 +403,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void lazyRequestMap_unknownKey_returnsNull() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     Map<?, ?> map = (Map<?, ?>) env.find("request").get();
     
@@ -358,7 +415,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void headersWrapper_get_nonStringKey_returnsNull() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     Map<String, String> headers = new HeadersWrapper(context);
     assertThat(headers.get(new Object())).isNull();
   }
@@ -373,24 +431,29 @@ public final class CelEnvironmentTest {
     metadata.put(key, val2);
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
-    String expected = com.google.common.io.BaseEncoding.base64().encode(val1) + ","
-        + com.google.common.io.BaseEncoding.base64().encode(val2);
+    String expected = com.google.common.io.BaseEncoding.base64().omitPadding().encode(val1) + ","
+        + com.google.common.io.BaseEncoding.base64().omitPadding().encode(val2);
     assertThat(headers.get("bin-header-bin")).isEqualTo(expected);
   }
 
   @Test
   public void headersWrapper_containsKey_nonStringKey_returnsFalse() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     Map<String, String> headers = new HeadersWrapper(context);
     assertThat(headers.containsKey(new Object())).isFalse();
   }
 
   @Test
   public void headersWrapper_containsKey_pseudoHeader_returnsTrue() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     Map<String, String> headers = new HeadersWrapper(context);
     assertThat(headers.containsKey(":method")).isTrue();
     assertThat(headers.containsKey(":path")).isTrue();
@@ -403,6 +466,9 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("custom-key", Metadata.ASCII_STRING_MARSHALLER), "val");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
 
     Map<String, String> headers = new HeadersWrapper(context);
@@ -413,7 +479,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void headersWrapper_getHeader_missingBinaryHeader_returnsNull() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     Map<String, String> headers = new HeadersWrapper(context);
     assertThat(headers.get("missing-bin")).isNull();
   }
@@ -425,6 +492,9 @@ public final class CelEnvironmentTest {
     metadata.put(Metadata.Key.of("user-agent", Metadata.ASCII_STRING_MARSHALLER), "grpc-test");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
@@ -444,6 +514,9 @@ public final class CelEnvironmentTest {
     metadata.put(key, "v2");
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadata)
+        .setPath("/")
+        .setHost("example.com")
+        .setMethod("POST")
         .build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
@@ -456,7 +529,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_find_invalidFormat() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     assertThat(env.find("other.path").isPresent()).isFalse();
@@ -470,7 +544,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void lazyRequestMap_additionalMethods() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
     Map<?, ?> map = (Map<?, ?>) env.find("request").get();
 
@@ -480,7 +555,8 @@ public final class CelEnvironmentTest {
 
   @Test
   public void celEnvironment_missingHeader_returnsEmptyString() {
-    MatchContext context = MatchContext.newBuilder().build();
+    MatchContext context = MatchContext.newBuilder()
+        .setPath("/").setHost("example.com").setMethod("POST").build();
     GrpcCelEnvironment env = new GrpcCelEnvironment(context);
 
     Optional<Object> result = env.find("request");

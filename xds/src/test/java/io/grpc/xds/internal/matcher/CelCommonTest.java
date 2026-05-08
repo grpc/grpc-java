@@ -93,7 +93,11 @@ public final class CelCommonTest {
     assertAllowed("int(1) == 1");
     assertAllowed("uint(1) == 1u");
     assertAllowed("double(1) == 1.0");
-    assertAllowed("string(1) == '1'");
+    
+    // Disallowed functions / overloads
+    assertDisallowed("string(1) == '1'");
+    assertDisallowed("'a' + 'b' == 'ab'");
+    assertDisallowed("[1] + [2] == [1, 2]");
   }
 
   @Test

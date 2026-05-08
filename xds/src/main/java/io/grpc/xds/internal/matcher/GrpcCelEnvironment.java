@@ -47,7 +47,7 @@ final class GrpcCelEnvironment implements CelVariableResolver {
     switch (requestField) {
       case "headers": return new HeadersWrapper(context);
       case "host": return orEmpty(context.getHost());
-      case "id": return orEmpty(context.getId());
+      case "id": return getHeader("x-request-id"); 
       case "method": return or(context.getMethod(), "POST");
       case "path":
       case "url_path":

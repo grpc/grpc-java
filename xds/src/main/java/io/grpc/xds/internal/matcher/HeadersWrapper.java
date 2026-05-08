@@ -61,30 +61,34 @@ final class HeadersWrapper extends AbstractMap<String, String> {
 
   @Nullable
   private String getHeader(String headerName) {
-    if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-      Iterable<byte[]> values = context.getMetadata().getAll(
-          Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
+    try {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        Iterable<byte[]> values = context.getMetadata().getAll(
+            Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
+        if (values == null) {
+          return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (byte[] value : values) {
+          if (!first) {
+            sb.append(",");
+          }
+          first = false;
+          sb.append(BaseEncoding.base64().omitPadding().encode(value));
+        }
+        return sb.toString();
+      }
+      Metadata metadata = context.getMetadata();
+      Iterable<String> values = metadata.getAll(
+          Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
       if (values == null) {
         return null;
       }
-      StringBuilder sb = new StringBuilder();
-      boolean first = true;
-      for (byte[] value : values) {
-        if (!first) {
-          sb.append(",");
-        }
-        first = false;
-        sb.append(BaseEncoding.base64().encode(value));
-      }
-      return sb.toString();
-    }
-    Metadata metadata = context.getMetadata();
-    Iterable<String> values = metadata.getAll(
-        Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
-    if (values == null) {
+      return String.join(",", values);
+    } catch (IllegalArgumentException e) {
       return null;
     }
-    return String.join(",", values);
   }
 
   @Override
@@ -93,34 +97,44 @@ final class HeadersWrapper extends AbstractMap<String, String> {
       return false;
     }
     String headerName = ((String) key).toLowerCase(java.util.Locale.ROOT);
-    if ("te".equals(headerName)) {
+    if (headerName.equals("te")) {
       return false;
     }
-    if (PSEUDO_HEADERS.contains(headerName)) {
+    if (PSEUDO_HEADERS.contains(headerName) || headerName.equals("host")) {
       return true;
     }
-    if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+    try {
+      if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        return context.getMetadata().containsKey(
+            Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
+      }
       return context.getMetadata().containsKey(
-          Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
+          Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
+    } catch (IllegalArgumentException e) {
+      return false;
     }
-    return context.getMetadata().containsKey(
-        Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
   }
 
   @Override
   public Set<String> keySet() {
-    return ImmutableSet.<String>builder()
-        .addAll(context.getMetadata().keys())
-        .addAll(PSEUDO_HEADERS)
-        .build();
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    for (String key : context.getMetadata().keys()) {
+      String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
+      // Filter out any keys we provide specialized aliases/values for.
+      if (!lowerKey.equals("te") 
+          && !lowerKey.equals("host") 
+          && !PSEUDO_HEADERS.contains(lowerKey)) {
+        builder.add(key);
+      }
+    }
+    builder.addAll(PSEUDO_HEADERS);
+    builder.add("host");
+    return builder.build();
   }
 
   @Override
   public int size() {
-    // Metadata.keys() returns a Set of unique keys, so we can just add the sizes.
-    // Note: This counts the number of unique header names, which is consistent with
-    // keySet().size().
-    return context.getMetadata().keys().size() + PSEUDO_HEADERS.size();
+    return keySet().size();
   }
 
   @Override

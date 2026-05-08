@@ -102,6 +102,10 @@ final class CelCommon {
         if (name.isEmpty()) {
           boolean allowed = false;
           for (String id : ref.overloadIds()) {
+            if (id.equals("add_string") || id.equals("add_list") || id.endsWith("_to_string")) {
+              allowed = false;
+              break;
+            }
             if (ALLOWED_EXACT_OVERLOAD_IDS.contains(id)
                 || ALLOWED_OVERLOAD_ID_PREFIX_PATTERN.matcher(id).matches()) {
               allowed = true;
@@ -114,6 +118,13 @@ final class CelCommon {
                     + ref.overloadIds());
           }
         } else {
+          // Standard conversion functions (like string(x)) are named in the AST.
+          // We must explicitly reject 'string' here since it's disabled in the environment.
+          if (name.equals("string")) {
+            throw new IllegalArgumentException(
+                "CEL expression references unknown function with overload IDs: "
+                    + ref.overloadIds());
+          }
           throw new IllegalArgumentException(
               "CEL expression references unsupported named function: " + name);
         }
