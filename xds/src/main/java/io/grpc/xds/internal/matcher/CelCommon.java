@@ -59,13 +59,11 @@ final class CelCommon {
   /**
    * Regular expression pattern to validate internal CEL overload IDs.
    *
-   * <p>
-   * Standard CEL operators and conversion functions often have empty names in the
+   * <p> Standard CEL operators and conversion functions often have empty names in the
    * AST and are identified solely by their overload IDs (e.g., {@code equals} for
    * {@code ==}, {@code divide_int64} for {@code /}).
    *
-   * <p>
-   * This pattern matches allowed overload IDs by their prefixes (e.g.,
+   * <p> This pattern matches allowed overload IDs by their prefixes (e.g.,
    * {@code divide}, {@code size}), optionally followed by numeric types 
    * (e.g., {@code int64}) and type-specific suffixes (e.g., {@code _string}, 
    * {@code _int64}).
