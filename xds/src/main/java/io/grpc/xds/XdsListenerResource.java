@@ -618,7 +618,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
               isForClient ? "client" : "server"));
     }
 
-    Filter.FilterContext filterContext = Filter.FilterContext.builder()
+    Filter.FilterConfigParseContext filterContext = Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(args.getBootstrapInfo())
         .serverInfo(args.getServerInfo())
         .build();

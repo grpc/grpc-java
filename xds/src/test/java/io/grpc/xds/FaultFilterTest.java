@@ -105,8 +105,8 @@ public class FaultFilterTest {
     assertThat(faultAbort.status().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
   }
 
-  private static Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder()
+  private static Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

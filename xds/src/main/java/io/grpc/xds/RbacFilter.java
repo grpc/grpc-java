@@ -95,7 +95,7 @@ final class RbacFilter implements Filter {
 
     @Override
     public ConfigOrError<RbacConfig> parseFilterConfig(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       RBAC rbacProto;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -111,7 +111,7 @@ final class RbacFilter implements Filter {
 
     @Override
     public ConfigOrError<RbacConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, FilterContext context) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       RBACPerRoute rbacPerRoute;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());

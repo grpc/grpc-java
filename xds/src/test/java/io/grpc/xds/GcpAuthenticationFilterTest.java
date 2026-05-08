@@ -526,8 +526,8 @@ public class GcpAuthenticationFilterTest {
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
 
-  private static Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder()
+  private static Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

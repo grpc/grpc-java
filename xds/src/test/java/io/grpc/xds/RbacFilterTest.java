@@ -469,8 +469,8 @@ public class RbacFilterTest {
     return FILTER_PROVIDER.parseFilterConfigOverride(proto, getFilterContext());
   }
 
-  private Filter.FilterContext getFilterContext() {
-    return Filter.FilterContext.builder()
+  private Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(BootstrapInfo.builder()
             .servers(Collections.singletonList(
                 ServerInfo.create(

@@ -1297,13 +1297,13 @@ public class GrpcXdsClientImplDataTest {
 
       @Override
       public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage,
-              FilterContext context) {
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
 
       @Override
       public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage,
-              FilterContext context) {
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
     }
