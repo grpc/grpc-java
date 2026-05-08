@@ -32,9 +32,10 @@ import org.junit.runners.JUnit4;
 
 /**
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
- * Tests two scenarios: (1) writes with isReady always true, where onWritePossible()
- * is called between writes; (2) writes with readyAndDrained=false (triggered by first
- * write), where subsequent writes are buffered until onWritePossible() drains them.
+ * Tests three scenarios:
+ * (1) A write followed by another write without onWritePossible() is buffered.
+ * (2) Consecutive writes with onWritePossible() between them succeed.
+ * (3) When isReady() becomes false, writes are buffered until onWritePossible() drains them.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
@@ -154,9 +155,8 @@ public class AsyncServletOutputStreamWriterTest {
     byte[] data1 = new byte[]{1};
     writer.writeBytes(data1, 1);
 
-    // After first write, readyAndDrained=false, so any subsequent write is buffered
-    isReady.set(false);
-
+    // After first write, readyAndDrained=false, so any subsequent write is buffered.
+    // This buffering happens regardless of isReady() state (the Tomcat fix).
     // Second write - should be buffered since readyAndDrained=false
     byte[] data2 = new byte[]{2};
     writer.writeBytes(data2, 1);
@@ -165,7 +165,6 @@ public class AsyncServletOutputStreamWriterTest {
     assertEquals("First write should complete, second buffered", 1, actions.size());
 
     // Container calls onWritePossible to drain buffered writes
-    isReady.set(true);
     writer.onWritePossible();
 
     // Now both writes should have completed

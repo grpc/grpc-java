@@ -223,8 +223,9 @@ final class AsyncServletOutputStreamWriter {
         return;
       }
       if (actionItem == flushAction) {
-        // flush path: only set readyAndDrained=false if isReady() returns false
-        // If isReady() is still true, keep readyAndDrained=true so flush goes direct
+        // flush path: only set readyAndDrained=false if isReady() returns false.
+        // If isReady() is still true, keep readyAndDrained=true so subsequent
+        // writes/flushes can go direct without unnecessary buffering.
         if (!isReady.getAsBoolean()) {
           boolean successful =
               writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
