@@ -573,6 +573,19 @@ public final class Uri {
    * <p>Decoding errors are indicated by a {@code '\u005CuFFFD'} unicode replacement character in
    * the output. Callers who want to detect and handle errors in some other way should call {@link
    * #getRawFragment()}, {@link #percentDecode(CharSequence)}, then decode the bytes for themselves.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getRawFragment()}. Many URI schemes
+   * embed further structure inside the fragment that isn't part of the RFC 3986 generic syntax. For
+   * example, Android uses the fragment to encode the many fields of an Intent, like {@code
+   * intent:#Intent;S.key=val;end;}. And the URI of a JSON resource may use RFC 6901 in its fragment
+   * to point at a particular node, e.g. {@code
+   * file:/etc/config/service.json#/methodConfig/0/retryPolicy/maxBackoff}.
+   *
+   * <p>When percent-encoding is used to escape internal delimiters, like a literal ';' and '=' in
+   * an `intent:`, call {@link #getRawFragment()} to preserve that percent-encoding, or risk
+   * corruption. Conversely, use *this* method when percent-decoding is needed *before* any further
+   * interpretation, like with a JSON pointer, which must be percent-encoded in a URI fragment but
+   * uses a completely different method of escaping literal '/' characters.
    */
   @Nullable
   public String getFragment() {
@@ -582,6 +595,9 @@ public final class Uri {
   /**
    * Returns the fragment component of this URI in its original, possibly percent-encoded form, and
    * without any leading '#' character.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getFragment()}. See that Javadoc for
+   * details.
    */
   @Nullable
   public String getRawFragment() {
