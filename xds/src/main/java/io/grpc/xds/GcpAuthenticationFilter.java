@@ -87,7 +87,7 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public ConfigOrError<GcpAuthenticationConfig> parseFilterConfig(
-        Message rawProtoMessage, int depth) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       GcpAuthnFilterConfig gcpAuthnProto;
       if (!(rawProtoMessage instanceof Any)) {
         return ConfigOrError.fromError("Invalid config type: " + rawProtoMessage.getClass());
@@ -122,8 +122,8 @@ final class GcpAuthenticationFilter implements Filter {
 
     @Override
     public ConfigOrError<GcpAuthenticationConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, int depth) {
-      return parseFilterConfig(rawProtoMessage, depth);
+        Message rawProtoMessage, FilterConfigParseContext context) {
+      return parseFilterConfig(rawProtoMessage, context);
     }
   }
 

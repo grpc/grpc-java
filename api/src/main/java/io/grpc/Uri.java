@@ -547,23 +547,17 @@ public final class Uri {
   }
 
   /**
-   * Returns the percent-decoded "query" component of this URI, or null if not present.
-   *
-   * <p>NB: This method assumes the query was encoded as UTF-8, although RFC 3986 doesn't specify an
-   * encoding.
-   *
-   * <p>Decoding errors are indicated by a {@code '\u005CuFFFD'} unicode replacement character in
-   * the output. Callers who want to detect and handle errors in some other way should call {@link
-   * #getRawQuery()}, {@link #percentDecode(CharSequence)}, then decode the bytes for themselves.
-   */
-  @Nullable
-  public String getQuery() {
-    return percentDecodeAssumedUtf8(query);
-  }
-
-  /**
    * Returns the query component of this URI in its originally parsed, possibly percent-encoded
-   * form, without any leading '?' character.
+   * form, without any leading '?' character, or null if not present.
+   *
+   * <p>The query component can only be read in its raw form. That’s because virtually everyone uses
+   * query as a container for structured data, with some additional layer of encoding not present in
+   * RFC-3986. Like 'application/x-www-form-urlencoded', which encodes key/value pairs like so:
+   * <code>?k1=v1&k2=v+2</code>. The encoding of these containers always has characters that take on
+   * a special delimiter meaning when not percent-encoded and a literal meaning when they are (like
+   * '&', '=' and '+' above). Since it matters whether a character was percent encoded or not,
+   * offering a '#getQuery()' method that percent-decodes everything like we do for other components
+   * would be error-prone.
    */
   @Nullable
   public String getRawQuery() {
@@ -579,6 +573,19 @@ public final class Uri {
    * <p>Decoding errors are indicated by a {@code '\u005CuFFFD'} unicode replacement character in
    * the output. Callers who want to detect and handle errors in some other way should call {@link
    * #getRawFragment()}, {@link #percentDecode(CharSequence)}, then decode the bytes for themselves.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getRawFragment()}. Many URI schemes
+   * embed further structure inside the fragment that isn't part of the RFC 3986 generic syntax. For
+   * example, Android uses the fragment to encode the many fields of an Intent, like {@code
+   * intent:#Intent;S.key=val;end;}. And the URI of a JSON resource may use RFC 6901 in its fragment
+   * to point at a particular node, e.g. {@code
+   * file:/etc/config/service.json#/methodConfig/0/retryPolicy/maxBackoff}.
+   *
+   * <p>When percent-encoding is used to escape internal delimiters, like a literal ';' and '=' in
+   * an `intent:`, call {@link #getRawFragment()} to preserve that percent-encoding, or risk
+   * corruption. Conversely, use *this* method when percent-decoding is needed *before* any further
+   * interpretation, like with a JSON pointer, which must be percent-encoded in a URI fragment but
+   * uses a completely different method of escaping literal '/' characters.
    */
   @Nullable
   public String getFragment() {
@@ -588,6 +595,9 @@ public final class Uri {
   /**
    * Returns the fragment component of this URI in its original, possibly percent-encoded form, and
    * without any leading '#' character.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getFragment()}. See that Javadoc for
+   * details.
    */
   @Nullable
   public String getRawFragment() {
@@ -776,10 +786,20 @@ public final class Uri {
     }
 
     /**
-     * Specifies the query component of the new URI (not including the leading '?').
+     * Specifies the query component of the new URI, possibly percent-encoded, exactly as it will
+     * appear in the string form of the built URI.
      *
-     * <p>Query can contain any string of codepoints. Codepoints that can't be encoded literally
-     * will be percent-encoded for you as UTF-8.
+     * <p>'query' must only contain codepoints from RFC 3986's "query" character class. Any other
+     * characters must be percent-encoded using UTF-8. Do not include the leading '?' delimiter.
+     *
+     * <p>The query component can only be provided in its raw form. That’s because virtually
+     * everyone uses query as a container for structured data, with some additional layer of
+     * encoding not present in RFC-3986. Like 'application/x-www-form-urlencoded', which encodes
+     * key/value pairs like so: <code>?k1=v1&k2=v+2</code>. The encoding of these containers always
+     * has characters that take on a special delimiter meaning when not percent-encoded and a
+     * literal meaning when they are (like '&', '=' and '+' above). Since 'query' must have already
+     * been carefully percent-encoded externally, a '#setQuery(String)' method that percent-encodes
+     * an assumed-cooked string would be error-prone.
      *
      * <p>This field is optional.
      *
@@ -787,14 +807,10 @@ public final class Uri {
      * @return this, for fluent building
      */
     @CanIgnoreReturnValue
-    public Builder setQuery(@Nullable String query) {
-      this.query = percentEncode(query, queryChars);
-      return this;
-    }
-
-    @CanIgnoreReturnValue
-    Builder setRawQuery(String query) {
-      checkPercentEncodedArg(query, "query", queryChars);
+    public Builder setRawQuery(@Nullable String query) {
+      if (query != null) {
+        checkPercentEncodedArg(query, "query", queryChars);
+      }
       this.query = query;
       return this;
     }
