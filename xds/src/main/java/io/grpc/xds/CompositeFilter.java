@@ -113,7 +113,7 @@ final class CompositeFilter implements Filter {
 
     @Override
     public ConfigOrError<CompositeFilterConfig> parseFilterConfig(
-        Message rawProtoMessage, int depth) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       if (!isSupported()) {
         return ConfigOrError.fromError("Composite Filter is experimental "
             + "and disabled by default.");
@@ -122,11 +122,15 @@ final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
+      int depth = context.recursionDepth() != null ? context.recursionDepth() : 0;
+      if (depth >= 8) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcher.class)) {
           ExtensionWithMatcher proto = any.unpack(ExtensionWithMatcher.class);
-          return parseMatcherConfig(proto.getXdsMatcher(), depth);
+          return parseMatcherConfig(proto.getXdsMatcher(), context);
         } else if (any.is(Composite.class)) {
           return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
         }
@@ -138,7 +142,7 @@ final class CompositeFilter implements Filter {
 
     @Override
     public ConfigOrError<CompositeFilterConfig> parseFilterConfigOverride(
-        Message rawProtoMessage, int depth) {
+        Message rawProtoMessage, FilterConfigParseContext context) {
       if (!isSupported()) {
         return ConfigOrError.fromError("Composite Filter is experimental and disabled"
             + " by default.");
@@ -147,11 +151,15 @@ final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
+      int depth = context.recursionDepth() != null ? context.recursionDepth() : 0;
+      if (depth >= 8) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcherPerRoute.class)) {
           ExtensionWithMatcherPerRoute proto = any.unpack(ExtensionWithMatcherPerRoute.class);
-          return parseMatcherConfig(proto.getXdsMatcher(), depth);
+          return parseMatcherConfig(proto.getXdsMatcher(), context);
         }
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
@@ -161,14 +169,14 @@ final class CompositeFilter implements Filter {
     }
 
     private ConfigOrError<CompositeFilterConfig> parseMatcherConfig(
-        @Nullable Matcher matcherProto, int depth) {
+        @Nullable Matcher matcherProto, FilterConfigParseContext context) {
       if (matcherProto == null) {
         return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
       }
 
       try {
         UnifiedMatcher<FilterDelegate> matcher = UnifiedMatcher.create(matcherProto,
-            config -> createFilterDelegate(config, depth));
+            config -> createFilterDelegate(config, context));
         return ConfigOrError.fromConfig(new CompositeFilterConfig(matcher));
       } catch (Exception e) {
         return ConfigOrError.fromError("Failed to create matcher: " + e.getMessage());
@@ -180,7 +188,7 @@ final class CompositeFilter implements Filter {
     }
 
     private static FilterDelegate createFilterDelegate(
-        com.github.xds.core.v3.TypedExtensionConfig config, int depth) {
+        com.github.xds.core.v3.TypedExtensionConfig config, FilterConfigParseContext context) {
       try {
         Any actionAny = config.getTypedConfig();
         if (actionAny.is(ExecuteFilterAction.class)) {
@@ -227,8 +235,12 @@ final class CompositeFilter implements Filter {
             if (provider == null) {
               throw new IllegalArgumentException("Action filter not found: " + typeUrl);
             }
-            ConfigOrError<? extends FilterConfig> parsed = Filter.Parser
-                .parseFilterConfig(provider, rawConfig, depth + 1);
+            int depth = context.recursionDepth() != null ? context.recursionDepth() : 0;
+            Filter.FilterConfigParseContext childContext = context.toBuilder()
+                .recursionDepth(depth + 1)
+                .build();
+            ConfigOrError<? extends FilterConfig> parsed = provider.parseFilterConfig(rawConfig,
+                childContext);
             if (parsed.errorDetail != null) {
               throw new IllegalArgumentException(
                   "Failed to parse child filter: " + parsed.errorDetail);

@@ -85,7 +85,7 @@ public class CompositeFilterTest {
 
     when(fakeProvider.typeUrls()).thenReturn(new String[]{FAKE_TYPE_URL});
     ConfigOrError<? extends FilterConfig> configRes = ConfigOrError.fromConfig(fakeConfig);
-    when(fakeProvider.parseFilterConfig(any(Any.class), org.mockito.ArgumentMatchers.anyInt()))
+    when(fakeProvider.parseFilterConfig(any(Any.class), any()))
         .thenReturn((ConfigOrError) configRes);
     when(fakeProvider.newInstance(any(String.class))).thenReturn(fakeFilter);
     when(fakeFilter.buildClientInterceptor(any(), any(), any())).thenReturn(fakeClientInterceptor);
@@ -104,6 +104,19 @@ public class CompositeFilterTest {
     System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
     CompositeFilter.Provider.registryLookup =
         typeUrl -> FilterRegistry.getDefaultRegistry().get(typeUrl);
+  }
+
+  private Filter.FilterConfigParseContext getFilterContext() {
+    return Filter.FilterConfigParseContext.builder()
+        .bootstrapInfo(io.grpc.xds.client.Bootstrapper.BootstrapInfo.builder()
+            .servers(Collections.singletonList(
+                io.grpc.xds.client.Bootstrapper.ServerInfo.create(
+                    "test_target", Collections.emptyMap())))
+            .node(io.grpc.xds.client.EnvoyProtoData.Node.newBuilder().build())
+            .build())
+        .serverInfo(io.grpc.xds.client.Bootstrapper.ServerInfo.create(
+            "test_target", Collections.emptyMap(), false, true, false, false))
+        .build();
   }
 
   @Test
@@ -167,7 +180,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isNotNull();
@@ -236,7 +249,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isNotNull();
@@ -282,7 +295,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
@@ -383,7 +396,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
@@ -504,7 +517,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
 
@@ -617,7 +630,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
 
@@ -710,7 +723,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(overrideProto), 0);
+        .parseFilterConfig(Any.pack(overrideProto), getFilterContext());
 
     assertThat(result.errorDetail).contains("Unsupported message type in parseFilterConfig");
   }
@@ -722,7 +735,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfigOverride(Any.pack(configProto), 0);
+        .parseFilterConfigOverride(Any.pack(configProto), getFilterContext());
 
     assertThat(result.errorDetail).contains("Unsupported message type in"
         + " parseFilterConfigOverride");
@@ -733,7 +746,7 @@ public class CompositeFilterTest {
     System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
     try {
       ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-          .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), 0);
+          .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), getFilterContext());
       assertThat(result.errorDetail).contains("Composite Filter is experimental");
     } finally {
       System.setProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", "true");
@@ -743,7 +756,7 @@ public class CompositeFilterTest {
   @Test
   public void parseFilterConfigWithEmptyConfig() {
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), 0);
+        .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config.matcher).isNull();
@@ -794,7 +807,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> baseResult = provider
-        .parseFilterConfig(Any.pack(baseProto), 0);
+        .parseFilterConfig(Any.pack(baseProto), getFilterContext());
 
     // Override matcher that is empty (skips everything)
     Matcher overrideMatcherProto = Matcher.newBuilder().build();
@@ -803,7 +816,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> overrideResult = provider
-        .parseFilterConfigOverride(Any.pack(overrideProto), 0);
+        .parseFilterConfigOverride(Any.pack(overrideProto), getFilterContext());
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(
@@ -880,7 +893,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ServerInterceptor interceptor = filter.buildServerInterceptor(result.config, null);
@@ -945,7 +958,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
@@ -1020,18 +1033,22 @@ public class CompositeFilterTest {
     final Any configAny = Any.pack(configProto);
 
     // Mock fakeProvider to call provider.parseFilterConfig recursively
-    when(fakeProvider.parseFilterConfig(any(), org.mockito.ArgumentMatchers.anyInt()))
+    when(fakeProvider.parseFilterConfig(any(), any()))
         .thenAnswer(new org.mockito.stubbing.Answer<ConfigOrError>() {
           @Override
           public ConfigOrError answer(
               org.mockito.invocation.InvocationOnMock invocation) throws Throwable {
-            int passedDepth = invocation.getArgument(1);
-            return Filter.Parser.parseFilterConfig(provider, configAny, passedDepth + 1);
+            Filter.FilterConfigParseContext context = invocation.getArgument(1);
+            int depth = context.recursionDepth() != null ? context.recursionDepth() : 0;
+            Filter.FilterConfigParseContext childContext = context.toBuilder()
+                .recursionDepth(depth + 1)
+                .build();
+            return provider.parseFilterConfig(configAny, childContext);
           }
         });
 
-    ConfigOrError<? extends Filter.FilterConfig> result = Filter.Parser
-        .parseFilterConfig(provider, configAny, 0);
+    ConfigOrError<? extends Filter.FilterConfig> result = provider
+        .parseFilterConfig(configAny, getFilterContext());
 
     assertThat(result.errorDetail).contains("Maximum recursion depth of 8 exceeded");
   }
@@ -1079,7 +1096,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto), 0);
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
 
     assertThat(result.errorDetail).isNull();
 
@@ -1235,7 +1252,7 @@ public class CompositeFilterTest {
   @Test
   public void parseFilterConfigInvalidMessageType() {
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(com.google.protobuf.Empty.getDefaultInstance(), 0);
+        .parseFilterConfig(com.google.protobuf.Empty.getDefaultInstance(), getFilterContext());
         
     assertThat(result.errorDetail).contains("Invalid message type");
   }
@@ -1243,7 +1260,8 @@ public class CompositeFilterTest {
   @Test
   public void parseFilterConfigOverrideInvalidMessageType() {
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfigOverride(com.google.protobuf.Empty.getDefaultInstance(), 0);
+        .parseFilterConfigOverride(
+            com.google.protobuf.Empty.getDefaultInstance(), getFilterContext());
         
     assertThat(result.errorDetail).contains("Invalid message type");
   }
@@ -1254,7 +1272,7 @@ public class CompositeFilterTest {
     try {
       ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
           .parseFilterConfigOverride(
-              Any.pack(ExtensionWithMatcherPerRoute.getDefaultInstance()), 0);
+              Any.pack(ExtensionWithMatcherPerRoute.getDefaultInstance()), getFilterContext());
       assertThat(result.errorDetail).contains("Composite Filter is experimental");
     } finally {
       System.setProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", "true");
@@ -1269,7 +1287,7 @@ public class CompositeFilterTest {
             new byte[]{(byte) 0x80})) // Invalid proto bytes
         .build();
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(invalidAny, 0);
+        .parseFilterConfig(invalidAny, getFilterContext());
     assertThat(result.errorDetail).contains("Invalid proto:");
   }
 
@@ -1281,7 +1299,7 @@ public class CompositeFilterTest {
             new byte[]{(byte) 0x80})) // Invalid proto bytes
         .build();
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfigOverride(invalidAny, 0);
+        .parseFilterConfigOverride(invalidAny, getFilterContext());
     assertThat(result.errorDetail).contains("Invalid proto:");
   }
 }
