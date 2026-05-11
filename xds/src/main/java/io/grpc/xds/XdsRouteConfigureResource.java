@@ -36,7 +36,6 @@ import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin;
 import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
@@ -198,7 +197,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
       routes.add(route.getStruct());
     }
     StructOrError<Map<String, Filter.FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry, args);
     if (overrideConfigs.getErrorDetail() != null) {
       return StructOrError.fromError(
           "VirtualHost [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -210,7 +209,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
   @VisibleForTesting
   static StructOrError<Map<String, FilterConfig>> parseOverrideFilterConfigs(
-      Map<String, Any> rawFilterConfigMap, FilterRegistry filterRegistry) {
+      Map<String, Any> rawFilterConfigMap, FilterRegistry filterRegistry,
+      XdsResourceType.Args args) {
+    Filter.FilterConfigParseContext context = Filter.FilterConfigParseContext.builder()
+        .bootstrapInfo(args.getBootstrapInfo())
+        .serverInfo(args.getServerInfo())
+        .build();
     Map<String, FilterConfig> overrideConfigs = new HashMap<>();
     for (String name : rawFilterConfigMap.keySet()) {
       Any anyConfig = rawFilterConfigMap.get(name);
@@ -254,7 +258,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
       }
       ConfigOrError<? extends Filter.FilterConfig> filterConfig =
-          provider.parseFilterConfigOverride(rawConfig);
+          provider.parseFilterConfigOverride(rawConfig, context);
       if (filterConfig.errorDetail != null) {
         return StructOrError.fromError(
             "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);
@@ -281,7 +285,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     }
 
     StructOrError<Map<String, FilterConfig>> overrideConfigsOrError =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry, args);
     if (overrideConfigsOrError.getErrorDetail() != null) {
       return StructOrError.fromError(
           "Route [" + proto.getName() + "] contains invalid HttpFilter config: "
@@ -331,12 +335,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
     FractionMatcher fractionMatch = null;
     if (proto.hasRuntimeFraction()) {
-      StructOrError<FractionMatcher> parsedFraction =
-          parseFractionMatcher(proto.getRuntimeFraction().getDefaultValue());
-      if (parsedFraction.getErrorDetail() != null) {
-        return StructOrError.fromError(parsedFraction.getErrorDetail());
+      try {
+        fractionMatch =
+            MatcherParser.parseFractionMatcher(proto.getRuntimeFraction().getDefaultValue());
+      } catch (IllegalArgumentException e) {
+        return StructOrError.fromError(e.getMessage());
       }
-      fractionMatch = parsedFraction.getStruct();
     }
 
     List<HeaderMatcher> headerMatchers = new ArrayList<>();
@@ -377,26 +381,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     }
   }
 
-  private static StructOrError<FractionMatcher> parseFractionMatcher(FractionalPercent proto) {
-    int numerator = proto.getNumerator();
-    int denominator = 0;
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        denominator = 100;
-        break;
-      case TEN_THOUSAND:
-        denominator = 10_000;
-        break;
-      case MILLION:
-        denominator = 1_000_000;
-        break;
-      case UNRECOGNIZED:
-      default:
-        return StructOrError.fromError(
-            "Unrecognized fractional percent denominator: " + proto.getDenominator());
-    }
-    return StructOrError.fromStruct(FractionMatcher.create(numerator, denominator));
-  }
+
 
   @VisibleForTesting
   static StructOrError<HeaderMatcher> parseHeaderMatcher(
@@ -490,7 +475,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
         for (io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight clusterWeight
             : clusterWeights) {
           StructOrError<ClusterWeight> clusterWeightOrError =
-              parseClusterWeight(clusterWeight, filterRegistry);
+              parseClusterWeight(clusterWeight, filterRegistry, args);
           if (clusterWeightOrError.getErrorDetail() != null) {
             return StructOrError.fromError("RouteAction contains invalid ClusterWeight: "
                 + clusterWeightOrError.getErrorDetail());
@@ -599,9 +584,9 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
   @VisibleForTesting
   static StructOrError<VirtualHost.Route.RouteAction.ClusterWeight> parseClusterWeight(
       io.envoyproxy.envoy.config.route.v3.WeightedCluster.ClusterWeight proto,
-      FilterRegistry filterRegistry) {
+      FilterRegistry filterRegistry, XdsResourceType.Args args) {
     StructOrError<Map<String, Filter.FilterConfig>> overrideConfigs =
-        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry);
+        parseOverrideFilterConfigs(proto.getTypedPerFilterConfigMap(), filterRegistry, args);
     if (overrideConfigs.getErrorDetail() != null) {
       return StructOrError.fromError(
           "ClusterWeight [" + proto.getName() + "] contains invalid HttpFilter config: "
