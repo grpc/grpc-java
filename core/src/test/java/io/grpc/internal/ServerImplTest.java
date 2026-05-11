@@ -129,6 +129,10 @@ public class ServerImplTest {
           .setRequestMarshaller(STRING_MARSHALLER)
           .setResponseMarshaller(INTEGER_MARSHALLER)
           .build();
+  private static final MethodDescriptor<String, Integer> GENERATED_METHOD =
+      METHOD.toBuilder()
+          .setSampledToLocalTracing(true)
+          .build();
   private static final Context.Key<String> SERVER_ONLY = Context.key("serverOnly");
   private static final Context.Key<String> SERVER_TRACER_ADDED_KEY = Context.key("tracer-added");
   private static final Context.CancellableContext SERVER_CONTEXT =
@@ -141,6 +145,60 @@ public class ServerImplTest {
         }
       };
   private static final String AUTHORITY = "some_authority";
+
+  private static final class MethodNameCapturingTracer extends ServerStreamTracer
+      implements StatsTraceContext.ServerCallMethodListener {
+    @Nullable private ServerCallInfo<?, ?> serverCallInfo;
+    @Nullable private String recordedMethodName;
+    @Nullable private String resolvedMethodName;
+    private boolean streamClosed;
+
+    @Override
+    public synchronized void serverCallMethodResolved(MethodDescriptor<?, ?> method) {
+      resolvedMethodName =
+          recordMethodName(method.isSampledToLocalTracing(), method.getFullMethodName());
+    }
+
+    @Override
+    public synchronized void streamClosed(Status status) {
+      streamClosed = true;
+      if (serverCallInfo != null) {
+        recordedMethodName =
+            recordMethodName(
+                serverCallInfo.getMethodDescriptor().isSampledToLocalTracing(),
+                serverCallInfo.getMethodDescriptor().getFullMethodName());
+      } else if (resolvedMethodName != null) {
+        recordedMethodName = resolvedMethodName;
+      } else {
+        recordedMethodName = "other";
+      }
+    }
+
+    @Override
+    public synchronized void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
+      serverCallInfo = callInfo;
+      if (streamClosed) {
+        recordedMethodName =
+            recordMethodName(
+                callInfo.getMethodDescriptor().isSampledToLocalTracing(),
+                callInfo.getMethodDescriptor().getFullMethodName());
+      }
+    }
+
+    @Nullable
+    synchronized ServerCallInfo<?, ?> getServerCallInfo() {
+      return serverCallInfo;
+    }
+
+    @Nullable
+    synchronized String getRecordedMethodName() {
+      return recordedMethodName;
+    }
+
+    private static String recordMethodName(boolean generatedMethod, String fullMethodName) {
+      return generatedMethod ? fullMethodName : "other";
+    }
+  }
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -460,6 +518,172 @@ public class ServerImplTest {
     verify(streamTracerFactory).newServerStreamTracer(eq("Waiter/nonexist"), same(requestHeaders));
     assertNull(streamTracer.getServerCallInfo());
     assertEquals(Status.Code.UNIMPLEMENTED, statusCaptor.getValue().getCode());
+  }
+
+  @Test
+  public void primaryRegistryGeneratedMethod_streamClosedBeforeStart_preservesMethodName()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    builder.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", GENERATED_METHOD))
+            .addMethod(
+                GENERATED_METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(GENERATED_METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+  }
+
+  @Test
+  public void primaryRegistryNonGeneratedMethod_streamClosedBeforeStart_recordsOther()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    builder.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
+            .addMethod(
+                METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+  }
+
+  @Test
+  public void fallbackRegistryGeneratedMethod_streamClosedBeforeStart_resolvesOnAsyncLookup()
+      throws Exception {
+    MethodNameCapturingTracer methodNameTracer = new MethodNameCapturingTracer();
+    streamTracerFactories =
+        Collections.singletonList(
+            new ServerStreamTracer.Factory() {
+              @Override
+              public ServerStreamTracer newServerStreamTracer(
+                  String fullMethodName, Metadata headers) {
+                return methodNameTracer;
+              }
+            });
+    mutableFallbackRegistry.addService(
+        ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", GENERATED_METHOD))
+            .addMethod(
+                GENERATED_METHOD,
+                new ServerCallHandler<String, Integer>() {
+                  @Override
+                  public ServerCall.Listener<String> startCall(
+                      ServerCall<String, Integer> call, Metadata headers) {
+                    return callListener;
+                  }
+                })
+            .build());
+
+    createAndStartServer();
+    ServerTransportListener transportListener
+        = transportServer.registerNewServerTransport(new SimpleServerTransport());
+    transportListener.transportReady(Attributes.EMPTY);
+    Metadata requestHeaders = new Metadata();
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(
+            streamTracerFactories, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    when(stream.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
+
+    transportListener.streamCreated(stream, GENERATED_METHOD.getFullMethodName(), requestHeaders);
+    verify(stream).setListener(isA(ServerStreamListener.class));
+    verify(stream, atLeast(1)).statsTraceContext();
+
+    statsTraceCtx.streamClosed(Status.CANCELLED);
+    assertNull(methodNameTracer.getServerCallInfo());
+    assertEquals("other", methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry, never()).lookupMethod(anyString(), any());
+
+    assertEquals(1, executor.runDueTasks());
+
+    assertNotNull(methodNameTracer.getServerCallInfo());
+    assertSame(GENERATED_METHOD, methodNameTracer.getServerCallInfo().getMethodDescriptor());
+    assertEquals(
+        GENERATED_METHOD.getFullMethodName(),
+        methodNameTracer.getRecordedMethodName());
+    verify(fallbackRegistry).lookupMethod(GENERATED_METHOD.getFullMethodName(), AUTHORITY);
   }
 
 

@@ -57,6 +57,7 @@ import io.grpc.Status.Code;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.StatsTraceContext.ServerCallMethodListener;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.grpc.opentelemetry.OpenTelemetryMetricsModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
@@ -1734,6 +1735,129 @@ public class OpenTelemetryMetricsModuleTest {
 
   }
 
+  @Test
+  public void serverMetrics_methodResolvedBeforeStreamClosed_generatedMethodRecordsName() {
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
+
+    ((ServerCallMethodListener) tracer).serverCallMethodResolved(method);
+    fakeClock.forwardTime(10, MILLISECONDS);
+    tracer.streamClosed(Status.CANCELLED);
+
+    io.opentelemetry.api.common.Attributes serverAttributes =
+        io.opentelemetry.api.common.Attributes.of(
+            METHOD_KEY, method.getFullMethodName(),
+            STATUS_KEY, Code.CANCELLED.toString());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasName(SERVER_CALL_DURATION)
+                    .hasUnit("s")
+                    .hasHistogramSatisfying(
+                        histogram ->
+                            histogram.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasCount(1)
+                                        .hasSum(0.01)
+                                        .hasAttributes(serverAttributes))));
+  }
+
+  @Test
+  public void serverMetrics_methodResolvedBeforeStreamClosed_nonGeneratedMethodRecordsOther() {
+    MethodDescriptor<String, String> nonGeneratedMethod =
+        method.toBuilder().setSampledToLocalTracing(false).build();
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(nonGeneratedMethod.getFullMethodName(), new Metadata());
+
+    ((ServerCallMethodListener) tracer).serverCallMethodResolved(nonGeneratedMethod);
+    fakeClock.forwardTime(10, MILLISECONDS);
+    tracer.streamClosed(Status.CANCELLED);
+
+    io.opentelemetry.api.common.Attributes serverAttributes =
+        io.opentelemetry.api.common.Attributes.of(
+            METHOD_KEY, "other",
+            STATUS_KEY, Code.CANCELLED.toString());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasName(SERVER_CALL_DURATION)
+                    .hasUnit("s")
+                    .hasHistogramSatisfying(
+                        histogram ->
+                            histogram.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasCount(1)
+                                        .hasSum(0.01)
+                                        .hasAttributes(serverAttributes))));
+  }
+
+  @Test
+  public void serverMetrics_serverCallStarted_nonGeneratedMethodRecordsOther() {
+    MethodDescriptor<String, String> nonGeneratedMethod =
+        method.toBuilder().setSampledToLocalTracing(false).build();
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    ServerStreamTracer.Factory tracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer tracer =
+        tracerFactory.newServerStreamTracer(nonGeneratedMethod.getFullMethodName(), new Metadata());
+    tracer.serverCallStarted(
+        new CallInfo<>(nonGeneratedMethod, Attributes.EMPTY, null));
+
+    io.opentelemetry.api.common.Attributes startedAttributes =
+        io.opentelemetry.api.common.Attributes.of(METHOD_KEY, "other");
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasName(SERVER_CALL_COUNT)
+                    .hasUnit("{call}")
+                    .hasLongSumSatisfying(
+                        longSum ->
+                            longSum.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasAttributes(startedAttributes)
+                                        .hasValue(1))));
+
+    fakeClock.forwardTime(10, MILLISECONDS);
+    tracer.streamClosed(Status.CANCELLED);
+
+    io.opentelemetry.api.common.Attributes closedAttributes =
+        io.opentelemetry.api.common.Attributes.of(
+            METHOD_KEY, "other",
+            STATUS_KEY, Code.CANCELLED.toString());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasName(SERVER_CALL_DURATION)
+                    .hasUnit("s")
+                    .hasHistogramSatisfying(
+                        histogram ->
+                            histogram.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasCount(1)
+                                        .hasSum(0.01)
+                                        .hasAttributes(closedAttributes))));
+  }
 
   @Test
   public void targetAttributeFilter_notSet_usesOriginalTarget() {

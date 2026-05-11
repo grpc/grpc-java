@@ -18,6 +18,7 @@ package io.grpc.binder.internal;
 import android.os.RemoteException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /** A collection of {@link OneWayBinderProxy}-related test helpers. */
@@ -40,6 +41,18 @@ public final class OneWayBinderProxies {
      */
     public OneWayBinderProxy takeNextRequest() throws InterruptedException {
       return requests.take();
+    }
+
+    /**
+     * Returns the next {@link OneWayBinderProxy} that needs decorating, blocking for up to the
+     * specified timeout if it hasn't yet been provided to {@link #decorate}.
+     *
+     * <p>Follow this with a call to {@link #putNextResult(OneWayBinderProxy)} to provide the result
+     * of {@link #decorate} and unblock the waiting caller.
+     */
+    public OneWayBinderProxy takeNextRequest(long timeout, TimeUnit unit)
+        throws InterruptedException {
+      return requests.poll(timeout, unit);
     }
 
     /** Provides the next value to return from {@link #decorate}. */
@@ -116,6 +129,49 @@ public final class OneWayBinderProxies {
       if (!dropAllTransactions) {
         wrapped.transact(code, data);
       }
+    }
+  }
+
+  /** A {@link OneWayBinderProxy} that queues transactions for a test to deliver manually later. */
+  public static final class QueueingOneWayBinderProxy extends OneWayBinderProxy {
+    public static final class Transaction {
+      public final int code;
+      private final ParcelHolder parcel;
+
+      public Transaction(int code, ParcelHolder parcel) {
+        this.code = code;
+        this.parcel = parcel;
+      }
+    }
+
+    private final BlockingQueue<Transaction> queue = new LinkedBlockingQueue<>();
+    private final OneWayBinderProxy wrapped;
+
+    public QueueingOneWayBinderProxy(OneWayBinderProxy wrapped) {
+      super(wrapped.getDelegate());
+      this.wrapped = wrapped;
+    }
+
+    @Override
+    public void transact(int code, ParcelHolder data) throws RemoteException {
+      queue.add(new Transaction(code, new ParcelHolder(data.release())));
+    }
+
+    /**
+     * Returns the next transaction that was queued in order, waiting up to the specified timeout.
+     */
+    public Transaction pollNextTransaction(long timeout, TimeUnit unit)
+        throws InterruptedException {
+      return queue.poll(timeout, unit);
+    }
+
+    /**
+     * Delivers a previously queued transaction to its original destination.
+     *
+     * @throws IllegalStateException if transaction was already delivered once before
+     */
+    public void deliver(Transaction transaction) throws RemoteException {
+      wrapped.transact(transaction.code, transaction.parcel);
     }
   }
 

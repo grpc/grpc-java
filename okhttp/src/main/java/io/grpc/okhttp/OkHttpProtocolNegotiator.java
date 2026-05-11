@@ -122,7 +122,6 @@ class OkHttpProtocolNegotiator {
     return platform.getSelectedProtocol(socket);
   }
 
-  @VisibleForTesting
   static final class AndroidNegotiator extends OkHttpProtocolNegotiator {
     // setUseSessionTickets(boolean)
     private static final OptionalMethod<Socket> SET_USE_SESSION_TICKETS =
