@@ -93,13 +93,34 @@ interface Filter extends Closeable {
      * Parses the top-level filter config from raw proto message. The message may be either a {@link
      * com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
-    ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage);
+    ConfigOrError<? extends FilterConfig> parseFilterConfig(Message rawProtoMessage, int depth);
 
     /**
      * Parses the per-filter override filter config from raw proto message. The message may be
      * either a {@link com.google.protobuf.Any} or a {@link com.google.protobuf.Struct}.
      */
-    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(Message rawProtoMessage);
+    ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+        Message rawProtoMessage, int depth);
+  }
+
+  class Parser {
+    private static final int MAX_RECURSION_DEPTH = 8;
+
+    static ConfigOrError<? extends FilterConfig> parseFilterConfig(
+        Provider provider, Message rawProtoMessage, int depth) {
+      if (depth >= MAX_RECURSION_DEPTH) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
+      return provider.parseFilterConfig(rawProtoMessage, depth);
+    }
+
+    static ConfigOrError<? extends FilterConfig> parseFilterConfigOverride(
+        Provider provider, Message rawProtoMessage, int depth) {
+      if (depth >= MAX_RECURSION_DEPTH) {
+        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
+      }
+      return provider.parseFilterConfigOverride(rawProtoMessage, depth);
+    }
   }
 
   /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */

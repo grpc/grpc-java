@@ -255,7 +255,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
             "HttpFilter [" + name + "](" + typeUrl + ") is required but unsupported");
       }
       ConfigOrError<? extends Filter.FilterConfig> filterConfig =
-          provider.parseFilterConfigOverride(rawConfig);
+          Filter.Parser.parseFilterConfigOverride(provider, rawConfig, 0);
       if (filterConfig.errorDetail != null) {
         return StructOrError.fromError(
             "Invalid filter config for HttpFilter [" + name + "]: " + filterConfig.errorDetail);

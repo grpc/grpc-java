@@ -45,11 +45,12 @@ public class FaultFilterTest {
   public void parseFaultAbort_convertHttpStatus() {
     Any rawConfig = Any.pack(
         HTTPFault.newBuilder().setAbort(FaultAbort.newBuilder().setHttpStatus(404)).build());
-    FaultConfig faultConfig = FILTER_PROVIDER.parseFilterConfig(rawConfig).config;
+    FaultConfig faultConfig = FILTER_PROVIDER.parseFilterConfig(rawConfig, 0).config;
     assertThat(faultConfig.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
 
-    FaultConfig faultConfigOverride = FILTER_PROVIDER.parseFilterConfigOverride(rawConfig).config;
+    FaultConfig faultConfigOverride =
+        FILTER_PROVIDER.parseFilterConfigOverride(rawConfig, 0).config;
     assertThat(faultConfigOverride.faultAbort().status().getCode())
         .isEqualTo(GrpcUtil.httpStatusToGrpcStatus(404).getCode());
   }

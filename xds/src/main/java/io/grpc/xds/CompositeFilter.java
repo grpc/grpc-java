@@ -48,7 +48,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -57,7 +57,7 @@ import javax.net.ssl.SNIServerName;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.StandardConstants;
 
-public final class CompositeFilter implements Filter {
+final class CompositeFilter implements Filter {
 
   static final String TYPE_URL_EXTENSION_WITH_MATCHER =
       "type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher";
@@ -83,7 +83,9 @@ public final class CompositeFilter implements Filter {
   }
 
   static final class Provider implements Filter.Provider {
-    private static final ThreadLocal<Integer> recursionDepth = ThreadLocal.withInitial(() -> 0);
+
+    static Function<String, Filter.Provider> registryLookup =
+        typeUrl -> FilterRegistry.getDefaultRegistry().get(typeUrl);
 
     @Override
     public String[] typeUrls() {
@@ -110,7 +112,8 @@ public final class CompositeFilter implements Filter {
     }
 
     @Override
-    public ConfigOrError<CompositeFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+    public ConfigOrError<CompositeFilterConfig> parseFilterConfig(
+        Message rawProtoMessage, int depth) {
       if (!isSupported()) {
         return ConfigOrError.fromError("Composite Filter is experimental "
             + "and disabled by default.");
@@ -119,29 +122,23 @@ public final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
-      int currentDepth = recursionDepth.get();
-      if (currentDepth > 8) {
-        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
-      }
-      recursionDepth.set(currentDepth + 1);
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcher.class)) {
           ExtensionWithMatcher proto = any.unpack(ExtensionWithMatcher.class);
-          return parseMatcherConfig(proto.getXdsMatcher());
+          return parseMatcherConfig(proto.getXdsMatcher(), depth);
         } else if (any.is(Composite.class)) {
           return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
         }
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
-      } finally {
-        recursionDepth.set(currentDepth);
       }
       return ConfigOrError.fromError("Unsupported message type in parseFilterConfig");
     }
 
     @Override
-    public ConfigOrError<CompositeFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+    public ConfigOrError<CompositeFilterConfig> parseFilterConfigOverride(
+        Message rawProtoMessage, int depth) {
       if (!isSupported()) {
         return ConfigOrError.fromError("Composite Filter is experimental and disabled"
             + " by default.");
@@ -150,35 +147,28 @@ public final class CompositeFilter implements Filter {
         return ConfigOrError.fromError("Invalid message type: "
             + rawProtoMessage.getClass().getName());
       }
-      int currentDepth = recursionDepth.get();
-      if (currentDepth > 8) {
-        return ConfigOrError.fromError("Maximum recursion depth of 8 exceeded");
-      }
-      recursionDepth.set(currentDepth + 1);
       try {
         Any any = (Any) rawProtoMessage;
         if (any.is(ExtensionWithMatcherPerRoute.class)) {
           ExtensionWithMatcherPerRoute proto = any.unpack(ExtensionWithMatcherPerRoute.class);
-          return parseMatcherConfig(proto.getXdsMatcher());
+          return parseMatcherConfig(proto.getXdsMatcher(), depth);
         }
       } catch (InvalidProtocolBufferException e) {
         return ConfigOrError.fromError("Invalid proto: " + e);
-      } finally {
-        recursionDepth.set(currentDepth);
       }
       return ConfigOrError.fromError("Unsupported message type in "
           + "parseFilterConfigOverride");
     }
 
     private ConfigOrError<CompositeFilterConfig> parseMatcherConfig(
-        @Nullable Matcher matcherProto) {
+        @Nullable Matcher matcherProto, int depth) {
       if (matcherProto == null) {
         return ConfigOrError.fromConfig(new CompositeFilterConfig(null));
       }
 
       try {
         UnifiedMatcher<FilterDelegate> matcher = UnifiedMatcher.create(matcherProto,
-            Provider::createFilterDelegate);
+            config -> createFilterDelegate(config, depth));
         return ConfigOrError.fromConfig(new CompositeFilterConfig(matcher));
       } catch (Exception e) {
         return ConfigOrError.fromError("Failed to create matcher: " + e.getMessage());
@@ -190,7 +180,7 @@ public final class CompositeFilter implements Filter {
     }
 
     private static FilterDelegate createFilterDelegate(
-        com.github.xds.core.v3.TypedExtensionConfig config) {
+        com.github.xds.core.v3.TypedExtensionConfig config, int depth) {
       try {
         Any actionAny = config.getTypedConfig();
         if (actionAny.is(ExecuteFilterAction.class)) {
@@ -233,12 +223,12 @@ public final class CompositeFilter implements Filter {
               throw new IllegalArgumentException("Failed to unpack TypedStruct", e);
             }
 
-            Filter.Provider provider = FilterRegistry.getDefaultRegistry().get(typeUrl);
+            Filter.Provider provider = registryLookup.apply(typeUrl);
             if (provider == null) {
               throw new IllegalArgumentException("Action filter not found: " + typeUrl);
             }
-            ConfigOrError<? extends FilterConfig> parsed = provider
-                .parseFilterConfig(rawConfig);
+            ConfigOrError<? extends FilterConfig> parsed = Filter.Parser
+                .parseFilterConfig(provider, rawConfig, depth + 1);
             if (parsed.errorDetail != null) {
               throw new IllegalArgumentException(
                   "Failed to parse child filter: " + parsed.errorDetail);
@@ -274,10 +264,17 @@ public final class CompositeFilter implements Filter {
   static final class FilterDelegate {
     final List<DelegateEntry> delegates;
     private final double threshold;
+    private final ThreadSafeRandom random;
 
     FilterDelegate(List<DelegateEntry> delegates, @Nullable FractionalPercent samplePercent) {
+      this(delegates, samplePercent, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
+    }
+
+    FilterDelegate(List<DelegateEntry> delegates, @Nullable FractionalPercent samplePercent,
+        ThreadSafeRandom random) {
       this.delegates = Collections.unmodifiableList(delegates);
       this.threshold = calculateThreshold(samplePercent);
+      this.random = random;
     }
 
     private static double calculateThreshold(@Nullable FractionalPercent samplePercent) {
@@ -309,7 +306,7 @@ public final class CompositeFilter implements Filter {
       if (threshold <= 0.0) {
         return false;
       }
-      return ThreadLocalRandom.current().nextDouble() < threshold;
+      return random.nextDouble() < threshold;
     }
   }
 
@@ -380,9 +377,7 @@ public final class CompositeFilter implements Filter {
               }
             }
           } catch (Throwable t) {
-            for (Filter f : filters) {
-              f.close();
-            }
+            closeAll(filters);
             throw t;
           }
 
@@ -449,7 +444,7 @@ public final class CompositeFilter implements Filter {
     return effective.matcher;
   }
 
-  private static class MatchingDataImpl implements UnifiedMatcher.MatchingData {
+  static class MatchingDataImpl implements UnifiedMatcher.MatchingData {
     private final Metadata headers;
     private final io.grpc.CallOptions callOptions;
     private final io.grpc.Attributes attributes;
@@ -519,6 +514,12 @@ public final class CompositeFilter implements Filter {
     }
   }
 
+  private static void closeAll(Iterable<Filter> filters) {
+    for (Filter f : filters) {
+      f.close();
+    }
+  }
+
   private static class CompositeClientCall<ReqT, RespT> extends io.grpc.ClientCall<ReqT, RespT> {
     private final MethodDescriptor<ReqT, RespT> method;
     private final io.grpc.CallOptions callOptions;
@@ -568,9 +569,7 @@ public final class CompositeFilter implements Filter {
             }
           }
         } catch (Throwable t) {
-          for (Filter f : filters) {
-            f.close();
-          }
+          closeAll(filters);
           throw t;
         }
 

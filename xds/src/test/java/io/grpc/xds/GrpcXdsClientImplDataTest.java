@@ -1293,12 +1293,14 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(
+          Message rawProtoMessage, int depth) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(
+          Message rawProtoMessage, int depth) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
     }

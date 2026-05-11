@@ -112,7 +112,8 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
+    ConfigOrError<GcpAuthenticationConfig> result =
+        FILTER_PROVIDER.parseFilterConfig(anyMessage, 0);
 
     assertNotNull(result.config);
     assertNull(result.errorDetail);
@@ -126,7 +127,8 @@ public class GcpAuthenticationFilterTest {
         .build();
     Any anyMessage = Any.pack(config);
 
-    ConfigOrError<GcpAuthenticationConfig> result = FILTER_PROVIDER.parseFilterConfig(anyMessage);
+    ConfigOrError<GcpAuthenticationConfig> result =
+        FILTER_PROVIDER.parseFilterConfig(anyMessage, 0);
 
     assertNull(result.config);
     assertNotNull(result.errorDetail);
@@ -137,7 +139,7 @@ public class GcpAuthenticationFilterTest {
   public void testParseFilterConfig_withInvalidMessageType() {
     Message invalidMessage = Empty.getDefaultInstance();
     ConfigOrError<GcpAuthenticationConfig> result =
-        FILTER_PROVIDER.parseFilterConfig(invalidMessage);
+        FILTER_PROVIDER.parseFilterConfig(invalidMessage, 0);
 
     assertNull(result.config);
     assertThat(result.errorDetail).contains("Invalid config type");

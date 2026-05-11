@@ -32,6 +32,7 @@ import io.envoyproxy.envoy.extensions.common.matching.v3.ExtensionWithMatcherPer
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.Composite;
 import io.envoyproxy.envoy.extensions.filters.http.composite.v3.ExecuteFilterAction;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
+import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -44,6 +45,9 @@ import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.internal.UnifiedMatcher;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.Collections;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.After;
 import org.junit.Before;
@@ -81,19 +85,25 @@ public class CompositeFilterTest {
 
     when(fakeProvider.typeUrls()).thenReturn(new String[]{FAKE_TYPE_URL});
     ConfigOrError<? extends FilterConfig> configRes = ConfigOrError.fromConfig(fakeConfig);
-    when(fakeProvider.parseFilterConfig(any(Any.class)))
+    when(fakeProvider.parseFilterConfig(any(Any.class), org.mockito.ArgumentMatchers.anyInt()))
         .thenReturn((ConfigOrError) configRes);
     when(fakeProvider.newInstance(any(String.class))).thenReturn(fakeFilter);
     when(fakeFilter.buildClientInterceptor(any(), any(), any())).thenReturn(fakeClientInterceptor);
     when(fakeFilter.buildServerInterceptor(any(), any())).thenReturn(fakeServerInterceptor);
 
-    FilterRegistry.getDefaultRegistry().register(fakeProvider);
+    CompositeFilter.Provider.registryLookup = typeUrl -> {
+      if (FAKE_TYPE_URL.equals(typeUrl)) {
+        return fakeProvider;
+      }
+      return FilterRegistry.getDefaultRegistry().get(typeUrl);
+    };
   }
 
   @After
   public void tearDown() {
     System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
-    FilterRegistry.getDefaultRegistry().deregister(fakeProvider);
+    CompositeFilter.Provider.registryLookup =
+        typeUrl -> FilterRegistry.getDefaultRegistry().get(typeUrl);
   }
 
   @Test
@@ -157,7 +167,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isNotNull();
@@ -226,7 +236,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config).isNotNull();
@@ -272,7 +282,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
@@ -373,7 +383,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
@@ -494,7 +504,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
 
@@ -607,7 +617,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
 
@@ -700,7 +710,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(overrideProto));
+        .parseFilterConfig(Any.pack(overrideProto), 0);
 
     assertThat(result.errorDetail).contains("Unsupported message type in parseFilterConfig");
   }
@@ -712,7 +722,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfigOverride(Any.pack(configProto));
+        .parseFilterConfigOverride(Any.pack(configProto), 0);
 
     assertThat(result.errorDetail).contains("Unsupported message type in"
         + " parseFilterConfigOverride");
@@ -723,7 +733,7 @@ public class CompositeFilterTest {
     System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
     try {
       ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-          .parseFilterConfig(Any.pack(Composite.getDefaultInstance()));
+          .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), 0);
       assertThat(result.errorDetail).contains("Composite Filter is experimental");
     } finally {
       System.setProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", "true");
@@ -733,7 +743,7 @@ public class CompositeFilterTest {
   @Test
   public void parseFilterConfigWithEmptyConfig() {
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(Composite.getDefaultInstance()));
+        .parseFilterConfig(Any.pack(Composite.getDefaultInstance()), 0);
 
     assertThat(result.errorDetail).isNull();
     assertThat(result.config.matcher).isNull();
@@ -784,7 +794,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> baseResult = provider
-        .parseFilterConfig(Any.pack(baseProto));
+        .parseFilterConfig(Any.pack(baseProto), 0);
 
     // Override matcher that is empty (skips everything)
     Matcher overrideMatcherProto = Matcher.newBuilder().build();
@@ -793,7 +803,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> overrideResult = provider
-        .parseFilterConfigOverride(Any.pack(overrideProto));
+        .parseFilterConfigOverride(Any.pack(overrideProto), 0);
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(
@@ -870,7 +880,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ServerInterceptor interceptor = filter.buildServerInterceptor(result.config, null);
@@ -935,7 +945,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     CompositeFilter filter = (CompositeFilter) provider.newInstance("composite");
     ClientInterceptor interceptor = filter.buildClientInterceptor(result.config, null,
@@ -1010,22 +1020,18 @@ public class CompositeFilterTest {
     final Any configAny = Any.pack(configProto);
 
     // Mock fakeProvider to call provider.parseFilterConfig recursively
-    when(fakeProvider.parseFilterConfig(any()))
+    when(fakeProvider.parseFilterConfig(any(), org.mockito.ArgumentMatchers.anyInt()))
         .thenAnswer(new org.mockito.stubbing.Answer<ConfigOrError>() {
-          private int depth = 0;
           @Override
           public ConfigOrError answer(
               org.mockito.invocation.InvocationOnMock invocation) throws Throwable {
-            depth++;
-            if (depth > 15) { // Safety break
-              return ConfigOrError.fromError("Infinite recursion safety break");
-            }
-            return provider.parseFilterConfig(configAny);
+            int passedDepth = invocation.getArgument(1);
+            return Filter.Parser.parseFilterConfig(provider, configAny, passedDepth + 1);
           }
         });
 
-    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(configAny);
+    ConfigOrError<? extends Filter.FilterConfig> result = Filter.Parser
+        .parseFilterConfig(provider, configAny, 0);
 
     assertThat(result.errorDetail).contains("Maximum recursion depth of 8 exceeded");
   }
@@ -1073,7 +1079,7 @@ public class CompositeFilterTest {
         .build();
 
     ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
-        .parseFilterConfig(Any.pack(proto));
+        .parseFilterConfig(Any.pack(proto), 0);
 
     assertThat(result.errorDetail).isNull();
 
@@ -1104,5 +1110,178 @@ public class CompositeFilterTest {
     verify(fakeClientInterceptor, org.mockito.Mockito.never()).interceptCall(any(), any(), any());
     verify(next).newCall(any(), any());
     verify(nextCall).start(any(), eq(headers));
+  }
+
+  @Test
+  public void samplePercentDeterministic() {
+    FractionalPercent percent = FractionalPercent.newBuilder()
+        .setNumerator(50)
+        .setDenominator(FractionalPercent.DenominatorType.HUNDRED)
+        .build();
+        
+    ThreadSafeRandom mockRandom = mock(ThreadSafeRandom.class);
+    
+    CompositeFilter.FilterDelegate delegate = new CompositeFilter.FilterDelegate(
+        Collections.emptyList(), percent, mockRandom);
+        
+    // Test value < threshold (0.5)
+    when(mockRandom.nextDouble()).thenReturn(0.4);
+    assertThat(delegate.shouldExecute()).isTrue();
+    
+    // Test value > threshold (0.5)
+    when(mockRandom.nextDouble()).thenReturn(0.6);
+    assertThat(delegate.shouldExecute()).isFalse();
+  }
+
+  @Test
+  public void matchingDataInputSourceIp() {
+    Metadata headers = new Metadata();
+    InetSocketAddress addr = new InetSocketAddress("192.168.1.1", 1234);
+    io.grpc.Attributes attributes = io.grpc.Attributes.newBuilder()
+        .set(io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR, addr)
+        .build();
+        
+    CompositeFilter.MatchingDataImpl data =
+        new CompositeFilter.MatchingDataImpl(headers, null, attributes);
+    
+    com.github.xds.core.v3.TypedExtensionConfig inputConfig =
+        com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.extensions.matching.common_inputs.network"
+                + ".v3.SourceIPInput")
+            .build())
+        .build();
+        
+    assertThat(data.getRelayedInput(inputConfig)).isEqualTo("192.168.1.1");
+  }
+
+  @Test
+  public void matchingDataInputSourcePort() {
+    Metadata headers = new Metadata();
+    InetSocketAddress addr = new InetSocketAddress("192.168.1.1", 1234);
+    io.grpc.Attributes attributes = io.grpc.Attributes.newBuilder()
+        .set(io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR, addr)
+        .build();
+        
+    CompositeFilter.MatchingDataImpl data =
+        new CompositeFilter.MatchingDataImpl(headers, null, attributes);
+    
+    com.github.xds.core.v3.TypedExtensionConfig inputConfig =
+        com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.extensions.matching.common_inputs.network"
+                + ".v3.SourcePortInput")
+            .build())
+        .build();
+        
+    assertThat(data.getRelayedInput(inputConfig)).isEqualTo("1234");
+  }
+
+  @Test
+  public void matchingDataInputDirectSourceIp() {
+    Metadata headers = new Metadata();
+    InetSocketAddress addr = new InetSocketAddress("192.168.1.1", 1234);
+    io.grpc.Attributes attributes = io.grpc.Attributes.newBuilder()
+        .set(io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR, addr)
+        .build();
+        
+    CompositeFilter.MatchingDataImpl data =
+        new CompositeFilter.MatchingDataImpl(headers, null, attributes);
+    
+    com.github.xds.core.v3.TypedExtensionConfig inputConfig =
+        com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.extensions.matching.common_inputs.network"
+                + ".v3.DirectSourceIPInput")
+            .build())
+        .build();
+        
+    assertThat(data.getRelayedInput(inputConfig)).isEqualTo("192.168.1.1");
+  }
+
+  @Test
+  public void matchingDataInputSourceIpNonInet() {
+    Metadata headers = new Metadata();
+    SocketAddress addr = new SocketAddress() {};
+    io.grpc.Attributes attributes = io.grpc.Attributes.newBuilder()
+        .set(io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR, addr)
+        .build();
+        
+    CompositeFilter.MatchingDataImpl data =
+        new CompositeFilter.MatchingDataImpl(headers, null, attributes);
+    
+    com.github.xds.core.v3.TypedExtensionConfig inputConfig =
+        com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.extensions.matching.common_inputs.network"
+                + ".v3.SourceIPInput")
+            .build())
+        .build();
+        
+    assertThat(data.getRelayedInput(inputConfig)).isNull();
+  }
+
+  @Test
+  public void providerMethodsCovered() {
+    assertThat(provider.typeUrls()).asList().containsExactly(
+        "type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcher",
+        "type.googleapis.com/envoy.extensions.filters.http.composite.v3.Composite",
+        "type.googleapis.com/envoy.extensions.common.matching.v3.ExtensionWithMatcherPerRoute"
+    );
+    assertThat(provider.isClientFilter()).isTrue();
+    assertThat(provider.isServerFilter()).isTrue();
+  }
+
+  @Test
+  public void parseFilterConfigInvalidMessageType() {
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(com.google.protobuf.Empty.getDefaultInstance(), 0);
+        
+    assertThat(result.errorDetail).contains("Invalid message type");
+  }
+
+  @Test
+  public void parseFilterConfigOverrideInvalidMessageType() {
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfigOverride(com.google.protobuf.Empty.getDefaultInstance(), 0);
+        
+    assertThat(result.errorDetail).contains("Invalid message type");
+  }
+
+  @Test
+  public void parseFilterConfigOverrideFailsWhenDisabled() {
+    System.clearProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER");
+    try {
+      ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+          .parseFilterConfigOverride(
+              Any.pack(ExtensionWithMatcherPerRoute.getDefaultInstance()), 0);
+      assertThat(result.errorDetail).contains("Composite Filter is experimental");
+    } finally {
+      System.setProperty("GRPC_EXPERIMENTAL_XDS_COMPOSITE_FILTER", "true");
+    }
+  }
+
+  @Test
+  public void parseFilterConfigInvalidProtoBytes() {
+    com.google.protobuf.Any invalidAny = com.google.protobuf.Any.newBuilder()
+        .setTypeUrl(CompositeFilter.TYPE_URL_EXTENSION_WITH_MATCHER)
+        .setValue(com.google.protobuf.ByteString.copyFrom(
+            new byte[]{(byte) 0x80})) // Invalid proto bytes
+        .build();
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(invalidAny, 0);
+    assertThat(result.errorDetail).contains("Invalid proto:");
+  }
+
+  @Test
+  public void parseFilterConfigOverrideInvalidProtoBytes() {
+    com.google.protobuf.Any invalidAny = com.google.protobuf.Any.newBuilder()
+        .setTypeUrl(CompositeFilter.TYPE_URL_EXTENSION_WITH_MATCHER_PER_ROUTE)
+        .setValue(com.google.protobuf.ByteString.copyFrom(
+            new byte[]{(byte) 0x80})) // Invalid proto bytes
+        .build();
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfigOverride(invalidAny, 0);
+    assertThat(result.errorDetail).contains("Invalid proto:");
   }
 }

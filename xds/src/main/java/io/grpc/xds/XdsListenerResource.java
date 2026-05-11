@@ -616,7 +616,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
               isForClient ? "client" : "server"));
     }
-    ConfigOrError<? extends FilterConfig> filterConfig = provider.parseFilterConfig(rawConfig);
+    ConfigOrError<? extends FilterConfig> filterConfig =
+        Filter.Parser.parseFilterConfig(provider, rawConfig, 0);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);
