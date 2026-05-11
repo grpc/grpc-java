@@ -1043,7 +1043,7 @@ public class ExternalProcessorFilter implements Filter {
             try {
               if (response.hasImmediateResponse()) {
                 if (config.getDisableImmediateResponse()) {
-                  onError(Status.UNAVAILABLE
+                  internalOnError(Status.UNAVAILABLE
                       .withDescription(
                           "Immediate response is disabled but received from external processor")
                       .asRuntimeException());
@@ -1073,7 +1073,7 @@ public class ExternalProcessorFilter implements Filter {
 
               if (received != null) {
                 if (expected == null || expected != received) {
-                  onError(Status.UNAVAILABLE
+                  internalOnError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
                           + expected + ", Received: " + received)
                       .asRuntimeException());
@@ -1093,7 +1093,7 @@ public class ExternalProcessorFilter implements Filter {
                 if (response.getRequestHeaders().hasResponse()) {
                   if (response.getRequestHeaders().getResponse().getStatus()
                       == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
-                    onError(Status.UNAVAILABLE
+                    internalOnError(Status.UNAVAILABLE
                         .withDescription("CONTINUE_AND_REPLACE is not supported")
                         .asRuntimeException());
                     return;
@@ -1110,16 +1110,12 @@ public class ExternalProcessorFilter implements Filter {
                   handleRequestBodyResponse(response.getRequestBody());
                 }
               }
-              // 3. Client Trailers
-              else if (response.hasRequestTrailers()) {
-                wrappedListener.proceedWithClose();
-              }
               // 4. Server Headers
               else if (response.hasResponseHeaders()) {
                 if (response.getResponseHeaders().hasResponse()) {
                   if (response.getResponseHeaders().getResponse().getStatus()
                       == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
-                    onError(Status.UNAVAILABLE
+                    internalOnError(Status.UNAVAILABLE
                         .withDescription("CONTINUE_AND_REPLACE is not supported")
                         .asRuntimeException());
                     return;
@@ -1153,7 +1149,7 @@ public class ExternalProcessorFilter implements Filter {
 
               checkEndOfStream(response);
             } catch (Throwable t) {
-              onError(t);
+              internalOnError(t);
             }
           }
 
@@ -1161,10 +1157,7 @@ public class ExternalProcessorFilter implements Filter {
           public void onError(Throwable t) {
             if (extProcStreamCompleted.compareAndSet(false, true)) {
               synchronized (streamLock) {
-                if (extProcClientCallRequestObserver != null) {
-                  extProcClientCallRequestObserver.onError(t);
-                  extProcClientCallRequestObserver = null;
-                }
+                extProcClientCallRequestObserver = null;
               }
               if (config.getFailureModeAllow()) {
                 handleFailOpen(wrappedListener);
@@ -1255,6 +1248,29 @@ public class ExternalProcessorFilter implements Filter {
             if (extProcClientCallRequestObserver != null) {
               extProcClientCallRequestObserver.onCompleted();
             }
+          }
+        }
+      }
+
+      private void internalOnError(Throwable t) {
+        if (extProcStreamCompleted.compareAndSet(false, true)) {
+          synchronized (streamLock) {
+            if (extProcClientCallRequestObserver != null) {
+              try {
+                extProcClientCallRequestObserver.onError(t);
+              } catch (Throwable ignored) {
+                // Ignore exceptions during cancel/onError propagation
+              }
+              extProcClientCallRequestObserver = null;
+            }
+          }
+          if (config.getFailureModeAllow()) {
+            handleFailOpen(wrappedListener);
+          } else {
+            extProcStreamFailed.set(true);
+            String message = "External processor stream failed";
+            delayedCall.cancel(message, t);
+            wrappedListener.proceedWithClose();
           }
         }
       }
