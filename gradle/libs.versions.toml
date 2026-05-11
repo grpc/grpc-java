@@ -101,17 +101,17 @@ mockito-android = "org.mockito:mockito-android:4.4.0"
 mockito-core = "org.mockito:mockito-core:4.4.0"
 # Need to decide when we require users to absorb the breaking changes in 4.2
 # checkForUpdates: netty-codec-http2:4.1.+
-netty-codec-http2 = "io.netty:netty-codec-http2:4.1.132.Final"
+netty-codec-http2 = "io.netty:netty-codec-http2:4.1.133.Final"
 # checkForUpdates: netty-handler-proxy:4.1.+
-netty-handler-proxy = "io.netty:netty-handler-proxy:4.1.132.Final"
+netty-handler-proxy = "io.netty:netty-handler-proxy:4.1.133.Final"
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
 netty-tcnative = "io.netty:netty-tcnative-boringssl-static:2.0.75.Final"
 netty-tcnative-classes = "io.netty:netty-tcnative-classes:2.0.75.Final"
 # checkForUpdates: netty-transport-epoll:4.1.+
-netty-transport-epoll = "io.netty:netty-transport-native-epoll:4.1.132.Final"
+netty-transport-epoll = "io.netty:netty-transport-native-epoll:4.1.133.Final"
 # checkForUpdates: netty-unix-common:4.1.+
-netty-unix-common = "io.netty:netty-transport-native-unix-common:4.1.132.Final"
+netty-unix-common = "io.netty:netty-transport-native-unix-common:4.1.133.Final"
 okhttp = "com.squareup.okhttp:okhttp:2.7.5"
 # okio 3.5+ uses Kotlin 1.9+ which requires Android Gradle Plugin 9+
 # checkForUpdates: okio:3.4.+
