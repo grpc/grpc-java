@@ -47,6 +47,7 @@ public class HeaderMutationFilterTest {
   @Test
   public void filter_validationRules_dropsInvalidHeaders() throws Exception {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
+    @SuppressWarnings("InlineMeInliner")
     String longString = Strings.repeat("a", MAX_HEADER_LENGTH + 1);
     ByteString longBytes = ByteString.copyFrom(new byte[MAX_HEADER_LENGTH + 1]);
 
@@ -76,6 +77,7 @@ public class HeaderMutationFilterTest {
     HeaderMutationRulesConfig rules =
         HeaderMutationRulesConfig.builder().disallowIsError(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
+    @SuppressWarnings("InlineMeInliner")
     String longString = Strings.repeat("a", MAX_HEADER_LENGTH + 1);
 
     // Test system headers modification
