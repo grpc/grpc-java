@@ -103,6 +103,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -111,6 +112,19 @@ import javax.annotation.Nullable;
 public class ExternalProcessorFilter implements Filter {
   static final String TYPE_URL = 
       "type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor";
+
+  enum ExtProcStreamState {
+    ACTIVE,
+    DRAINING,
+    COMPLETED,
+    FAILED
+  }
+
+  enum DataPlaneCallState {
+    IDLE,
+    ACTIVE,
+    CLOSED
+  }
 
   @VisibleForTesting
   static final DoubleHistogramMetricInstrument clientHeadersDuration;
@@ -898,12 +912,11 @@ public class ExternalProcessorFilter implements Filter {
       private long serverTrailersStartNanos;
 
       private volatile Metadata requestHeaders;
-      final AtomicBoolean activated = new AtomicBoolean(false);
-      final AtomicBoolean extProcStreamFailed = new AtomicBoolean(false);
-      final AtomicBoolean extProcStreamCompleted = new AtomicBoolean(false);
+      final AtomicReference<DataPlaneCallState> dataPlaneCallState =
+          new AtomicReference<>(DataPlaneCallState.IDLE);
+      final AtomicReference<ExtProcStreamState> extProcStreamState =
+          new AtomicReference<>(ExtProcStreamState.ACTIVE);
       final AtomicBoolean passThroughMode = new AtomicBoolean(false);
-      final AtomicBoolean notifiedApp = new AtomicBoolean(false);
-      final AtomicBoolean drainingExtProcStream = new AtomicBoolean(false);
       final AtomicBoolean halfClosed = new AtomicBoolean(false);
       final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
       final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
@@ -935,8 +948,59 @@ public class ExternalProcessorFilter implements Filter {
         this.backendService = checkNotNull(backendService, "backendService");
       }
 
+      boolean isExtProcStreamCompleted() {
+        ExtProcStreamState s = extProcStreamState.get();
+        return s == ExtProcStreamState.COMPLETED || s == ExtProcStreamState.FAILED;
+      }
+
+      boolean isExtProcStreamFailed() {
+        return extProcStreamState.get() == ExtProcStreamState.FAILED;
+      }
+
+      boolean isExtProcStreamDraining() {
+        return extProcStreamState.get() == ExtProcStreamState.DRAINING;
+      }
+
+      boolean markExtProcStreamCompleted() {
+        while (true) {
+          ExtProcStreamState current = extProcStreamState.get();
+          if (current == ExtProcStreamState.COMPLETED || current == ExtProcStreamState.FAILED) {
+            return false;
+          }
+          if (extProcStreamState.compareAndSet(current, ExtProcStreamState.COMPLETED)) {
+            return true;
+          }
+        }
+      }
+
+      boolean markExtProcStreamFailed() {
+        while (true) {
+          ExtProcStreamState current = extProcStreamState.get();
+          if (current == ExtProcStreamState.COMPLETED || current == ExtProcStreamState.FAILED) {
+            return false;
+          }
+          if (extProcStreamState.compareAndSet(current, ExtProcStreamState.FAILED)) {
+            return true;
+          }
+        }
+      }
+
+      boolean markDataPlaneCallClosed() {
+        while (true) {
+          DataPlaneCallState current = dataPlaneCallState.get();
+          if (current == DataPlaneCallState.CLOSED) {
+            return false;
+          }
+          if (dataPlaneCallState.compareAndSet(current, DataPlaneCallState.CLOSED)) {
+            return true;
+          }
+        }
+      }
+
       private void activateCall() {
-        if (extProcStreamFailed.get() || !activated.compareAndSet(false, true)) {
+        if ((extProcStreamState.get() == ExtProcStreamState.FAILED && !config.getFailureModeAllow())
+            || !dataPlaneCallState.compareAndSet(
+                DataPlaneCallState.IDLE, DataPlaneCallState.ACTIVE)) {
           return;
         }
         if (clientHeadersStartNanos > 0) {
@@ -972,11 +1036,11 @@ public class ExternalProcessorFilter implements Filter {
             StatusRuntimeException ex = Status.UNAVAILABLE
                 .withDescription("gRPC message compression not supported in ext_proc")
                 .asRuntimeException();
-            if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
+            if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
               extProcClientCallRequestObserver.onError(ex);
             }
             activateCall();
-            extProcStreamFailed.set(true);
+            markExtProcStreamFailed();
             delayedCall.cancel("gRPC message compression not supported in ext_proc", ex);
             closeExtProcStream();
             return false;
@@ -1083,7 +1147,7 @@ public class ExternalProcessorFilter implements Filter {
               }
 
               if (response.getRequestDrain()) {
-                drainingExtProcStream.set(true);
+                extProcStreamState.set(ExtProcStreamState.DRAINING);
                 halfCloseExtProcStream();
                 activateCall();
               }
@@ -1155,14 +1219,13 @@ public class ExternalProcessorFilter implements Filter {
 
           @Override
           public void onError(Throwable t) {
-            if (extProcStreamCompleted.compareAndSet(false, true)) {
+            if (markExtProcStreamFailed()) {
               synchronized (streamLock) {
                 extProcClientCallRequestObserver = null;
               }
               if (config.getFailureModeAllow()) {
                 handleFailOpen(wrappedListener);
               } else {
-                extProcStreamFailed.set(true);
                 String message = "External processor stream failed";
                 delayedCall.cancel(message, t);
                 wrappedListener.proceedWithClose();
@@ -1172,8 +1235,7 @@ public class ExternalProcessorFilter implements Filter {
 
           @Override
           public void onCompleted() {
-            if (extProcStreamCompleted.compareAndSet(false, true)) {
-              drainingExtProcStream.set(false);
+            if (markExtProcStreamCompleted()) {
               handleFailOpen(wrappedListener);
             }
           }
@@ -1206,7 +1268,7 @@ public class ExternalProcessorFilter implements Filter {
 
       private void sendToExtProc(ProcessingRequest request) {
         synchronized (streamLock) {
-          if (extProcStreamCompleted.get()) {
+          if (isExtProcStreamCompleted()) {
             return;
           }
           
@@ -1244,7 +1306,7 @@ public class ExternalProcessorFilter implements Filter {
 
       private void closeExtProcStream() {
         synchronized (streamLock) {
-          if (extProcStreamCompleted.compareAndSet(false, true)) {
+          if (markExtProcStreamCompleted()) {
             if (extProcClientCallRequestObserver != null) {
               extProcClientCallRequestObserver.onCompleted();
             }
@@ -1253,7 +1315,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void internalOnError(Throwable t) {
-        if (extProcStreamCompleted.compareAndSet(false, true)) {
+        if (markExtProcStreamFailed()) {
           synchronized (streamLock) {
             if (extProcClientCallRequestObserver != null) {
               try {
@@ -1267,7 +1329,6 @@ public class ExternalProcessorFilter implements Filter {
           if (config.getFailureModeAllow()) {
             handleFailOpen(wrappedListener);
           } else {
-            extProcStreamFailed.set(true);
             String message = "External processor stream failed";
             delayedCall.cancel(message, t);
             wrappedListener.proceedWithClose();
@@ -1277,7 +1338,7 @@ public class ExternalProcessorFilter implements Filter {
 
       private void halfCloseExtProcStream() {
         synchronized (streamLock) {
-          if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
+          if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onCompleted();
           }
         }
@@ -1288,10 +1349,10 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private boolean isSidecarReady() {
-        if (extProcStreamCompleted.get()) {
+        if (isExtProcStreamCompleted()) {
           return true;
         }
-        if (drainingExtProcStream.get()) {
+        if (isExtProcStreamDraining()) {
           return false;
         }
         synchronized (streamLock) {
@@ -1305,10 +1366,10 @@ public class ExternalProcessorFilter implements Filter {
         if (passThroughMode.get()) {
           return super.isReady();
         }
-        if (extProcStreamCompleted.get()) {
+        if (isExtProcStreamCompleted()) {
           return super.isReady();
         }
-        if (!activated.get() && !config.getObservabilityMode()) {
+        if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
           return false;
         }
         boolean sidecarReady = isSidecarReady();
@@ -1320,7 +1381,7 @@ public class ExternalProcessorFilter implements Filter {
 
       @Override
       public void request(int numMessages) {
-        if (passThroughMode.get() || extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || isExtProcStreamCompleted()) {
           super.request(numMessages);
           return;
         }
@@ -1338,7 +1399,7 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (passThroughMode.get() || extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || isExtProcStreamCompleted()) {
           super.sendMessage(message);
           return;
         }
@@ -1379,7 +1440,7 @@ public class ExternalProcessorFilter implements Filter {
       public void halfClose() {
         clientHalfCloseStartNanos = System.nanoTime();
         halfClosed.set(true);
-        if (passThroughMode.get() || extProcStreamCompleted.get()) {
+        if (passThroughMode.get() || isExtProcStreamCompleted()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
           }
@@ -1406,7 +1467,7 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void cancel(@Nullable String message, @Nullable Throwable cause) {
         synchronized (streamLock) {
-          if (!extProcStreamCompleted.get() && extProcClientCallRequestObserver != null) {
+          if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
             extProcClientCallRequestObserver.onError(
                 Status.CANCELLED
                     .withDescription(message)
@@ -1543,7 +1604,7 @@ public class ExternalProcessorFilter implements Filter {
                 == ProcessingMode.HeaderSendMode.DEFAULT;
 
         if (dataPlaneClientCall.passThroughMode.get() 
-            || dataPlaneClientCall.extProcStreamCompleted.get() 
+            || dataPlaneClientCall.isExtProcStreamCompleted() 
             || !sendResponseHeaders) {
           proceedWithHeaders(headers);
           return;
@@ -1574,7 +1635,7 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (dataPlaneClientCall.extProcStreamCompleted.get()
+        if (dataPlaneClientCall.isExtProcStreamCompleted()
             || dataPlaneClientCall.currentProcessingMode.getResponseBodyMode()
                 != ProcessingMode.BodySendMode.GRPC) {
           delegate.onMessage(message);
@@ -1596,15 +1657,16 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void onClose(Status status, Metadata trailers) {
         dataPlaneClientCall.serverTrailersStartNanos = System.nanoTime();
-        if (dataPlaneClientCall.extProcStreamFailed.get()) {
-          if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
+        if (dataPlaneClientCall.isExtProcStreamFailed()
+            && !dataPlaneClientCall.config.getFailureModeAllow()) {
+          if (dataPlaneClientCall.markDataPlaneCallClosed()) {
             proceedWithClose(Status.UNAVAILABLE.withDescription("External processor stream failed")
                 .withCause(status.getCause()), new Metadata());
           }
           return;
         }
         if (dataPlaneClientCall.passThroughMode.get()) {
-          if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
+          if (dataPlaneClientCall.markDataPlaneCallClosed()) {
             proceedWithClose(status, trailers);
           }
           return;
@@ -1613,7 +1675,7 @@ public class ExternalProcessorFilter implements Filter {
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
-        if (dataPlaneClientCall.extProcStreamCompleted.get()) {
+        if (dataPlaneClientCall.isExtProcStreamCompleted()) {
           proceedWithClose();
           return;
         }
@@ -1668,7 +1730,7 @@ public class ExternalProcessorFilter implements Filter {
 
       void proceedWithClose() {
         if (savedStatus != null) {
-          if (dataPlaneClientCall.notifiedApp.compareAndSet(false, true)) {
+          if (dataPlaneClientCall.markDataPlaneCallClosed()) {
             proceedWithClose(savedStatus, savedTrailers);
           }
           savedStatus = null;
@@ -1696,7 +1758,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void triggerCloseHandshake() {
-        if (dataPlaneClientCall.extProcStreamCompleted.get()
+        if (dataPlaneClientCall.isExtProcStreamCompleted()
             || !terminationTriggered.compareAndSet(false, true)) {
           return;
         }
@@ -1744,7 +1806,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void sendResponseBodyToExtProc(@Nullable byte[] bodyBytes, boolean endOfStream) {
-        if (dataPlaneClientCall.extProcStreamCompleted.get()
+        if (dataPlaneClientCall.isExtProcStreamCompleted()
             || dataPlaneClientCall.currentProcessingMode.getResponseBodyMode()
                 != ProcessingMode.BodySendMode.GRPC) {
           return;
