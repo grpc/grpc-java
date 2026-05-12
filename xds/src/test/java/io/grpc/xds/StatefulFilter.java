@@ -108,7 +108,7 @@ class StatefulFilter implements Filter {
     }
 
     @Override
-    public synchronized StatefulFilter newInstance(String name) {
+    public synchronized StatefulFilter newInstance(FilterContext context) {
       StatefulFilter filter = new StatefulFilter(counter++);
       instances.put(filter.idx, filter);
       return filter;
