@@ -2941,7 +2941,8 @@ public class GrpcXdsClientImplDataTest {
             filterChain, "filter-chain-foo", null, filterRegistry, null, null,
             getXdsResourceTypeArgs(true)));
     assertThat(e).hasMessageThat().isEqualTo(
-        "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
+        "FilterChain filter-chain-foo should contain exactly"
+            + " one HttpConnectionManager filter");
   }
 
   @Test
@@ -2960,7 +2961,8 @@ public class GrpcXdsClientImplDataTest {
             filterChain, "filter-chain-foo", null, filterRegistry, null, null,
             getXdsResourceTypeArgs(true)));
     assertThat(e).hasMessageThat().isEqualTo(
-        "FilterChain filter-chain-foo should contain exact one HttpConnectionManager filter");
+        "FilterChain filter-chain-foo should contain exactly"
+            + " one HttpConnectionManager filter");
   }
 
   @Test
