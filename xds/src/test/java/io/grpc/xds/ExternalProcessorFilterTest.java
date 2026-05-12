@@ -3624,6 +3624,164 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenDrainingStream_whenAppSends_thenBufferedAndDelivered()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server
+    final CountDownLatch sidecarFinishLatch = new CountDownLatch(1);
+    final CountDownLatch drainCompletedLatch = new CountDownLatch(1);
+    final AtomicInteger extProcReceivedBodyCount = new AtomicInteger(0);
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
+    extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(
+          final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              new Thread(() -> {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestDrain(true)
+                    .build());
+                try {
+                  if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                    responseObserver.onCompleted();
+                  }
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+              }).start();
+            } else if (request.hasRequestBody()) {
+              extProcReceivedBodyCount.incrementAndGet();
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {
+          }
+
+          @Override
+          public void onCompleted() {
+            drainCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<String> dataPlaneReceivedMessage = new AtomicReference<>();
+    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+    final CountDownLatch dataPlaneFinishLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              dataPlaneReceivedMessage.set(request);
+              new Thread(() -> {
+                try {
+                  if (dataPlaneFinishLatch.await(5, TimeUnit.SECONDS)) {
+                    responseObserver.onNext("Direct Response");
+                    responseObserver.onCompleted();
+                    dataPlaneLatch.countDown();
+                  }
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+              }).start();
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final AtomicReference<String> appReceivedMessage = new AtomicReference<>();
+    final CountDownLatch appLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        appReceivedMessage.set(message);
+        appLatch.countDown();
+      }
+    };
+    
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+
+    // Wait for drain to be processed
+    assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(proxyCall.isReady()).isFalse();
+
+    // Send message during drain state
+    proxyCall.sendMessage("Direct Message During Drain");
+
+    // Assert that it was NOT received by extProc
+    assertThat(extProcReceivedBodyCount.get()).isEqualTo(0);
+
+    // Now let sidecar complete
+    sidecarFinishLatch.countDown();
+
+    // Wait for it to become ready again
+    long startTime = System.currentTimeMillis();
+    while (!proxyCall.isReady() && System.currentTimeMillis() - startTime < 5000) {
+      Thread.sleep(10);
+    }
+    assertThat(proxyCall.isReady()).isTrue();
+
+    // Request messages from server
+    proxyCall.request(1);
+
+    proxyCall.halfClose();
+
+    // Let data plane finish
+    dataPlaneFinishLatch.countDown();
+
+    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    // Assert that the message sent during drain is received by the data plane receiver
+    assertThat(dataPlaneReceivedMessage.get()).isEqualTo("Direct Message During Drain");
+    
+    assertThat(appLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appReceivedMessage.get()).isEqualTo("Direct Response");
+    
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
   // --- Category 8: Inbound Backpressure (request(n) / pendingRequests) ---
 
   @Test

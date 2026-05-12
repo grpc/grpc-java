@@ -895,6 +895,8 @@ public class ExternalProcessorFilter implements Filter {
       private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private final Queue<ProcessingRequest> pendingProcessingRequests =
           new ConcurrentLinkedQueue<>();
+      private final Queue<InputStream> pendingDrainingMessages =
+          new ConcurrentLinkedQueue<>();
       private volatile DataPlaneListener wrappedListener;
       private final HeaderMutationFilter mutationFilter;
       private final HeaderMutator mutator = HeaderMutator.create();
@@ -1415,6 +1417,11 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
+        if (isExtProcStreamDraining()) {
+          pendingDrainingMessages.add(message);
+          return;
+        }
+
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
           super.sendMessage(message);
           return;
@@ -1555,8 +1562,16 @@ public class ExternalProcessorFilter implements Filter {
         closeExtProcStream();
       }
 
+      private void drainPendingDrainingMessages() {
+        InputStream msg;
+        while ((msg = pendingDrainingMessages.poll()) != null) {
+          super.sendMessage(msg);
+        }
+      }
+
       private void handleFailOpen(DataPlaneListener listener) {
         activateCall();
+        drainPendingDrainingMessages();
         listener.unblockAfterStreamComplete();
         closeExtProcStream();
       }
