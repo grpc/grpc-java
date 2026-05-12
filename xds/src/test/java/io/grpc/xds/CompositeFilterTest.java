@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.github.udpa.udpa.type.v1.TypedStruct;
 import com.github.xds.type.matcher.v3.Matcher;
 import com.github.xds.type.matcher.v3.StringMatcher;
 import com.google.protobuf.Any;
@@ -49,6 +50,8 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.net.ssl.ExtendedSSLSession;
+import javax.net.ssl.SNIHostName;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -763,6 +766,107 @@ public class CompositeFilterTest {
   }
 
   @Test
+  public void parseFilterConfigWithUdpaTypedStruct() throws Exception {
+    com.google.protobuf.Struct struct = com.google.protobuf.Struct.newBuilder()
+        .putFields("foo", com.google.protobuf.Value.newBuilder().setStringValue("bar").build())
+        .build();
+        
+    TypedStruct udpaTypedStruct = TypedStruct.newBuilder()
+        .setTypeUrl(FAKE_TYPE_URL)
+        .setValue(struct)
+        .build();
+        
+    ExecuteFilterAction action = ExecuteFilterAction.newBuilder()
+        .setTypedConfig(TypedExtensionConfig.newBuilder()
+            .setName("child")
+            .setTypedConfig(Any.pack(udpaTypedStruct))
+            .build())
+        .build();
+        
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.pack(action))
+            .build())
+        .build();
+
+    Matcher matcher = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcher)
+        .build();
+
+    ConfigOrError<? extends FilterConfig> configRes =
+        ConfigOrError.fromConfig(mock(Filter.FilterConfig.class));
+    when(fakeProvider.parseFilterConfig(any(com.google.protobuf.Message.class), any()))
+        .thenReturn((ConfigOrError) configRes);
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
+
+    assertThat(result.errorDetail).isNull();
+    verify(fakeProvider).parseFilterConfig(eq(struct), any());
+  }
+
+  @Test
+  public void parseFilterConfigWithXdsTypedStruct() throws Exception {
+    com.google.protobuf.Struct struct = com.google.protobuf.Struct.newBuilder()
+        .putFields("foo", com.google.protobuf.Value.newBuilder().setStringValue("bar").build())
+        .build();
+        
+    com.github.xds.type.v3.TypedStruct xdsTypedStruct =
+        com.github.xds.type.v3.TypedStruct.newBuilder()
+        .setTypeUrl(FAKE_TYPE_URL)
+        .setValue(struct)
+        .build();
+        
+    ExecuteFilterAction action = ExecuteFilterAction.newBuilder()
+        .setTypedConfig(TypedExtensionConfig.newBuilder()
+            .setName("child")
+            .setTypedConfig(Any.pack(xdsTypedStruct))
+            .build())
+        .build();
+        
+    Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
+        .setAction(com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+            .setName("action")
+            .setTypedConfig(Any.pack(action))
+            .build())
+        .build();
+
+    Matcher matcher = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder()
+            .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                .setOnMatch(matchAction)
+                .build())
+            .build())
+        .build();
+
+    ExtensionWithMatcher proto = ExtensionWithMatcher.newBuilder()
+        .setExtensionConfig(TypedExtensionConfig.newBuilder().setName("composite").build())
+        .setXdsMatcher(matcher)
+        .build();
+
+    ConfigOrError<? extends FilterConfig> configRes =
+        ConfigOrError.fromConfig(mock(Filter.FilterConfig.class));
+    when(fakeProvider.parseFilterConfig(any(com.google.protobuf.Message.class), any()))
+        .thenReturn((ConfigOrError) configRes);
+
+    ConfigOrError<CompositeFilter.CompositeFilterConfig> result = provider
+        .parseFilterConfig(Any.pack(proto), getFilterContext());
+
+    assertThat(result.errorDetail).isNull();
+    verify(fakeProvider).parseFilterConfig(eq(struct), any());
+  }
+
+  @Test
   public void clientInterceptorUsesOverrideMatcher() {
     // Base matcher that matches "foo=bar"
     Matcher.OnMatch matchAction = Matcher.OnMatch.newBuilder()
@@ -1151,6 +1255,46 @@ public class CompositeFilterTest {
   }
 
   @Test
+  public void samplePercentTenThousand() {
+    FractionalPercent percent = FractionalPercent.newBuilder()
+        .setNumerator(5000)
+        .setDenominator(FractionalPercent.DenominatorType.TEN_THOUSAND)
+        .build();
+        
+    ThreadSafeRandom mockRandom = mock(ThreadSafeRandom.class);
+    
+    CompositeFilter.FilterDelegate delegate = new CompositeFilter.FilterDelegate(
+        Collections.emptyList(), percent, mockRandom);
+        
+    // Threshold is 5000/10000 = 0.5
+    when(mockRandom.nextDouble()).thenReturn(0.4);
+    assertThat(delegate.shouldExecute()).isTrue();
+    
+    when(mockRandom.nextDouble()).thenReturn(0.6);
+    assertThat(delegate.shouldExecute()).isFalse();
+  }
+
+  @Test
+  public void samplePercentMillion() {
+    FractionalPercent percent = FractionalPercent.newBuilder()
+        .setNumerator(500000)
+        .setDenominator(FractionalPercent.DenominatorType.MILLION)
+        .build();
+        
+    ThreadSafeRandom mockRandom = mock(ThreadSafeRandom.class);
+    
+    CompositeFilter.FilterDelegate delegate = new CompositeFilter.FilterDelegate(
+        Collections.emptyList(), percent, mockRandom);
+        
+    // Threshold is 500000/1000000 = 0.5
+    when(mockRandom.nextDouble()).thenReturn(0.4);
+    assertThat(delegate.shouldExecute()).isTrue();
+    
+    when(mockRandom.nextDouble()).thenReturn(0.6);
+    assertThat(delegate.shouldExecute()).isFalse();
+  }
+
+  @Test
   public void matchingDataInputSourceIp() {
     Metadata headers = new Metadata();
     InetSocketAddress addr = new InetSocketAddress("192.168.1.1", 1234);
@@ -1236,6 +1380,32 @@ public class CompositeFilterTest {
         .build();
         
     assertThat(data.getRelayedInput(inputConfig)).isNull();
+  }
+
+  @Test
+  public void matchingDataInputServerNameSni() throws Exception {
+    Metadata headers = new Metadata();
+    
+    ExtendedSSLSession mockSession = mock(ExtendedSSLSession.class);
+    SNIHostName sniHostName = new SNIHostName("bar.com");
+    when(mockSession.getRequestedServerNames()).thenReturn(Collections.singletonList(sniHostName));
+    
+    io.grpc.Attributes attributes = io.grpc.Attributes.newBuilder()
+        .set(io.grpc.Grpc.TRANSPORT_ATTR_SSL_SESSION, mockSession)
+        .build();
+        
+    CompositeFilter.MatchingDataImpl data =
+        new CompositeFilter.MatchingDataImpl(headers, null, attributes);
+        
+    com.github.xds.core.v3.TypedExtensionConfig inputConfig =
+        com.github.xds.core.v3.TypedExtensionConfig.newBuilder()
+        .setTypedConfig(Any.newBuilder()
+            .setTypeUrl("type.googleapis.com/envoy.extensions.matching.common_inputs.network"
+                + ".v3.ServerNameInput")
+            .build())
+        .build();
+        
+    assertThat(data.getRelayedInput(inputConfig)).isEqualTo("bar.com");
   }
 
   @Test
