@@ -1027,7 +1027,16 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      private boolean checkCompressionSupport(BodyResponse bodyResponse) {
+      /**
+       * Validates whether the body response uses unsupported gRPC message compression.
+       * If compression is unsupported, this method will cancel the call, transition the
+       * stream to a failed state, send an error to the external processor, and return false.
+       *
+       * @param bodyResponse the response to validate
+       * @return true if validation passes (compression is supported or not used),
+       *     false if validation fails
+       */
+      private boolean validateCompressionSupport(BodyResponse bodyResponse) {
         if (bodyResponse.hasResponse() && bodyResponse.getResponse().hasBodyMutation()) {
           BodyMutation mutation = 
               bodyResponse.getResponse().getBodyMutation();
@@ -1036,8 +1045,10 @@ public class ExternalProcessorFilter implements Filter {
             StatusRuntimeException ex = Status.UNAVAILABLE
                 .withDescription("gRPC message compression not supported in ext_proc")
                 .asRuntimeException();
-            if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
-              extProcClientCallRequestObserver.onError(ex);
+            synchronized (streamLock) {
+              if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
+                extProcClientCallRequestObserver.onError(ex);
+              }
             }
             activateCall();
             markExtProcStreamFailed();
@@ -1170,7 +1181,7 @@ public class ExternalProcessorFilter implements Filter {
               }
               // 2. Client Message (Request Body)
               else if (response.hasRequestBody()) {
-                if (checkCompressionSupport(response.getRequestBody())) {
+                if (validateCompressionSupport(response.getRequestBody())) {
                   handleRequestBodyResponse(response.getRequestBody());
                 }
               }
@@ -1184,12 +1195,12 @@ public class ExternalProcessorFilter implements Filter {
                         .asRuntimeException());
                     return;
                   }
-                  Metadata target = wrappedListener.trailersOnly.get()
-                      ? wrappedListener.savedTrailers : wrappedListener.savedHeaders;
+                  Metadata target = wrappedListener.isTrailersOnly()
+                      ? wrappedListener.getSavedTrailers() : wrappedListener.getSavedHeaders();
                   applyHeaderMutations(
                       target, response.getResponseHeaders().getResponse().getHeaderMutation());
                 }
-                if (wrappedListener.trailersOnly.get()) {
+                if (wrappedListener.isTrailersOnly()) {
                   wrappedListener.proceedWithClose();
                 } else {
                   wrappedListener.proceedWithHeaders();
@@ -1197,7 +1208,7 @@ public class ExternalProcessorFilter implements Filter {
               }
               // 5. Server Message (Response Body)
               else if (response.hasResponseBody()) {
-                if (checkCompressionSupport(response.getResponseBody())) {
+                if (validateCompressionSupport(response.getResponseBody())) {
                   handleResponseBodyResponse(response.getResponseBody(), wrappedListener);
                 }
               }
@@ -1205,7 +1216,7 @@ public class ExternalProcessorFilter implements Filter {
               else if (response.hasResponseTrailers()) {
                 if (response.getResponseTrailers().hasHeaderMutation()) {
                   applyHeaderMutations(
-                      wrappedListener.savedTrailers,
+                      wrappedListener.getSavedTrailers(),
                       response.getResponseTrailers().getHeaderMutation()
                   );
                 }
@@ -1554,7 +1565,7 @@ public class ExternalProcessorFilter implements Filter {
         boolean terminal = false;
         if (response.hasResponseTrailers()) {
           terminal = true;
-        } else if (response.hasResponseHeaders() && wrappedListener.trailersOnly.get()) {
+        } else if (response.hasResponseHeaders() && wrappedListener.isTrailersOnly()) {
           terminal = true;
         }
 
@@ -1584,6 +1595,18 @@ public class ExternalProcessorFilter implements Filter {
         this.delegate = checkNotNull(delegate, "delegate");
         this.rawCall = rawCall;
         this.dataPlaneClientCall = dataPlaneClientCall;
+      }
+
+      boolean isTrailersOnly() {
+        return trailersOnly.get();
+      }
+
+      Metadata getSavedHeaders() {
+        return savedHeaders;
+      }
+
+      Metadata getSavedTrailers() {
+        return savedTrailers;
       }
 
       @Override
