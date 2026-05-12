@@ -32,8 +32,6 @@ final class HeadersWrapper extends AbstractMap<String, String> {
   private static final ImmutableSet<String> PSEUDO_HEADERS =
       ImmutableSet.of(":method", ":authority", ":path");
   private final MatchContext context;
-  @Nullable
-  private volatile Set<String> cachedKeySet;
 
   HeadersWrapper(MatchContext context) {
     this.context = context;
@@ -89,6 +87,8 @@ final class HeadersWrapper extends AbstractMap<String, String> {
       }
       return String.join(",", values);
     } catch (IllegalArgumentException e) {
+      // Catching IllegalArgumentException and returning null matches Envoy's behavior
+      // (returning an empty optional for invalid header names).
       return null;
     }
   }
@@ -132,30 +132,20 @@ final class HeadersWrapper extends AbstractMap<String, String> {
 
   @Override
   public Set<String> keySet() {
-    Set<String> result = cachedKeySet;
-    if (result == null) {
-      synchronized (this) {
-        result = cachedKeySet;
-        if (result == null) {
-          ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-          for (String key : context.getMetadata().keys()) {
-            String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
-            // Filter out any keys we provide specialized aliases/values for.
-            if (!lowerKey.equals("te") 
-                && !lowerKey.equals("host") 
-                && !PSEUDO_HEADERS.contains(lowerKey)
-                && isMetadataKeyResolvable(lowerKey)) {
-              builder.add(key);
-            }
-          }
-          builder.addAll(PSEUDO_HEADERS);
-          builder.add("host");
-          result = builder.build();
-          cachedKeySet = result;
-        }
+    ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+    for (String key : context.getMetadata().keys()) {
+      String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
+      // Filter out any keys we provide specialized aliases/values for.
+      if (!lowerKey.equals("te") 
+          && !lowerKey.equals("host") 
+          && !PSEUDO_HEADERS.contains(lowerKey)
+          && isMetadataKeyResolvable(lowerKey)) {
+        builder.add(key);
       }
     }
-    return result;
+    builder.addAll(PSEUDO_HEADERS);
+    builder.add("host");
+    return builder.build();
   }
 
   @Override
