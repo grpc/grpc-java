@@ -1,4 +1,7 @@
-FROM ubuntu:18.04
+FROM ubuntu:24.04
+
+# Redirect to the internal mirror to bypass the Kokoro network block
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirror.bazel.build/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
 
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -9,8 +12,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         curl \
         g++-aarch64-linux-gnu \
         g++-powerpc64le-linux-gnu \
-        openjdk-8-jdk \
-        pkg-config \
+        openjdk-11-jdk \
+        pkgconf \
         && \
     rm -rf /var/lib/apt/lists/*
     

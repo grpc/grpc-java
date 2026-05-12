@@ -21,7 +21,6 @@ import com.google.auto.value.AutoValue;
 import com.google.common.base.MoreObjects;
 import com.google.protobuf.Message;
 import io.grpc.ClientInterceptor;
-import io.grpc.MetricRecorder;
 import io.grpc.ServerInterceptor;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -92,7 +91,7 @@ interface Filter extends Closeable {
      *   <li>Filter name+typeUrl in FilterChain's HCM.http_filters.</li>
      * </ol>
      */
-    Filter newInstance(FilterContext context);
+    Filter newInstance(String name);
 
     /**
      * Parses the top-level filter config from raw proto message. The message may be either a {@link
@@ -150,18 +149,6 @@ interface Filter extends Closeable {
       abstract Builder serverInfo(ServerInfo info);
 
       abstract FilterConfigParseContext build();
-    }
-  }
-
-  /** Context containing naming and metrics reporting objects for a filter instance. */
-  @AutoValue
-  abstract static class FilterContext {
-    abstract String filterName();
-
-    abstract MetricRecorder metricsRecorder();
-
-    static FilterContext create(String filterName, MetricRecorder metricsRecorder) {
-      return new AutoValue_Filter_FilterContext(filterName, metricsRecorder);
     }
   }
 

@@ -36,7 +36,6 @@ import io.envoyproxy.envoy.config.core.v3.TypedExtensionConfig;
 import io.envoyproxy.envoy.config.route.v3.ClusterSpecifierPlugin;
 import io.envoyproxy.envoy.config.route.v3.RetryPolicy.RetryBackOff;
 import io.envoyproxy.envoy.config.route.v3.RouteConfiguration;
-import io.envoyproxy.envoy.type.v3.FractionalPercent;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
@@ -336,12 +335,12 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
 
     FractionMatcher fractionMatch = null;
     if (proto.hasRuntimeFraction()) {
-      StructOrError<FractionMatcher> parsedFraction =
-          parseFractionMatcher(proto.getRuntimeFraction().getDefaultValue());
-      if (parsedFraction.getErrorDetail() != null) {
-        return StructOrError.fromError(parsedFraction.getErrorDetail());
+      try {
+        fractionMatch =
+            MatcherParser.parseFractionMatcher(proto.getRuntimeFraction().getDefaultValue());
+      } catch (IllegalArgumentException e) {
+        return StructOrError.fromError(e.getMessage());
       }
-      fractionMatch = parsedFraction.getStruct();
     }
 
     List<HeaderMatcher> headerMatchers = new ArrayList<>();
@@ -382,26 +381,7 @@ class XdsRouteConfigureResource extends XdsResourceType<RdsUpdate> {
     }
   }
 
-  private static StructOrError<FractionMatcher> parseFractionMatcher(FractionalPercent proto) {
-    int numerator = proto.getNumerator();
-    int denominator = 0;
-    switch (proto.getDenominator()) {
-      case HUNDRED:
-        denominator = 100;
-        break;
-      case TEN_THOUSAND:
-        denominator = 10_000;
-        break;
-      case MILLION:
-        denominator = 1_000_000;
-        break;
-      case UNRECOGNIZED:
-      default:
-        return StructOrError.fromError(
-            "Unrecognized fractional percent denominator: " + proto.getDenominator());
-    }
-    return StructOrError.fromStruct(FractionMatcher.create(numerator, denominator));
-  }
+
 
   @VisibleForTesting
   static StructOrError<HeaderMatcher> parseHeaderMatcher(

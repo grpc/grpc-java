@@ -42,7 +42,7 @@ public final class UriTest {
     assertThat(uri.getPort()).isEqualTo(443);
     assertThat(uri.getRawPort()).isEqualTo("0443");
     assertThat(uri.getPath()).isEqualTo("/path");
-    assertThat(uri.getQuery()).isEqualTo("query");
+    assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme://user@host:0443/path?query#fragment");
     assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
@@ -56,7 +56,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("scheme");
     assertThat(uri.getAuthority()).isNull();
     assertThat(uri.getPath()).isEqualTo("/path");
-    assertThat(uri.getQuery()).isEqualTo("query");
+    assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme:/path?query#fragment");
     assertThat(uri.isAbsolute()).isFalse(); // Has a fragment.
@@ -102,7 +102,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("scheme");
     assertThat(uri.getAuthority()).isEqualTo("authority");
     assertThat(uri.getPath()).isEqualTo("/path");
-    assertThat(uri.getQuery()).isNull();
+    assertThat(uri.getRawQuery()).isNull();
     assertThat(uri.getFragment()).isEqualTo("fragment");
     assertThat(uri.toString()).isEqualTo("scheme://authority/path#fragment");
   }
@@ -113,7 +113,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("scheme");
     assertThat(uri.getAuthority()).isEqualTo("authority");
     assertThat(uri.getPath()).isEqualTo("/path");
-    assertThat(uri.getQuery()).isEqualTo("query");
+    assertThat(uri.getRawQuery()).isEqualTo("query");
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority/path?query");
     assertThat(uri.isAbsolute()).isTrue();
@@ -125,7 +125,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("scheme");
     assertThat(uri.getAuthority()).isEqualTo("authority");
     assertThat(uri.getPath()).isEmpty();
-    assertThat(uri.getQuery()).isNull();
+    assertThat(uri.getRawQuery()).isNull();
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme://authority");
     assertThat(uri.isAbsolute()).isTrue();
@@ -139,7 +139,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("mailto");
     assertThat(uri.getAuthority()).isNull();
     assertThat(uri.getPath()).isEqualTo("ceo@company.com");
-    assertThat(uri.getQuery()).isEqualTo("subject=raise");
+    assertThat(uri.getRawQuery()).isEqualTo("subject=raise");
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("mailto:ceo@company.com?subject=raise");
     assertThat(uri.isAbsolute()).isTrue();
@@ -153,7 +153,7 @@ public final class UriTest {
     assertThat(uri.getScheme()).isEqualTo("scheme");
     assertThat(uri.getAuthority()).isNull();
     assertThat(uri.getPath()).isEmpty();
-    assertThat(uri.getQuery()).isNull();
+    assertThat(uri.getRawQuery()).isNull();
     assertThat(uri.getFragment()).isNull();
     assertThat(uri.toString()).isEqualTo("scheme:");
     assertThat(uri.isAbsolute()).isTrue();
@@ -165,7 +165,7 @@ public final class UriTest {
   public void parse_emptyQuery() {
     Uri uri = Uri.create("scheme:?");
     assertThat(uri.getScheme()).isEqualTo("scheme");
-    assertThat(uri.getQuery()).isEmpty();
+    assertThat(uri.getRawQuery()).isEmpty();
   }
 
   @Test
@@ -322,7 +322,6 @@ public final class UriTest {
     assertThat(uri.getPort()).isEqualTo(1234);
     assertThat(uri.getPath()).isEqualTo("/p ath");
     assertThat(uri.getRawPath()).isEqualTo("/p%20ath");
-    assertThat(uri.getQuery()).isEqualTo("q uery");
     assertThat(uri.getRawQuery()).isEqualTo("q%20uery");
     assertThat(uri.getFragment()).isEqualTo("f ragment");
     assertThat(uri.getRawFragment()).isEqualTo("f%20ragment");
@@ -336,9 +335,8 @@ public final class UriTest {
 
   @Test
   public void parse_decodingPercent() throws URISyntaxException {
-    Uri uri = Uri.parse("s://a/p%2520ath?q%25uery#f%25ragment");
+    Uri uri = Uri.parse("s://a/p%2520ath#f%25ragment");
     assertThat(uri.getPath()).isEqualTo("/p%20ath");
-    assertThat(uri.getQuery()).isEqualTo("q%uery");
     assertThat(uri.getFragment()).isEqualTo("f%ragment");
   }
 
@@ -420,7 +418,7 @@ public final class UriTest {
             .setScheme("s")
             .setHost("a b")
             .setPath("/p ath")
-            .setQuery("q uery")
+            .setRawQuery("q%20uery")
             .setFragment("f ragment")
             .build();
     assertThat(uri.toString()).isEqualTo("s://a%20b/p%20ath?q%20uery#f%20ragment");
@@ -440,7 +438,6 @@ public final class UriTest {
     assertThat(uri.getRawPath()).isEqualTo("/%4a%4B%2f%2F");
     assertThat(uri.getPathSegments()).containsExactly("JK//");
     assertThat(uri.getRawQuery()).isEqualTo("%4c%4D");
-    assertThat(uri.getQuery()).isEqualTo("LM");
     assertThat(uri.getRawFragment()).isEqualTo("%4e%4F");
     assertThat(uri.getFragment()).isEqualTo("NO");
   }
@@ -459,7 +456,6 @@ public final class UriTest {
     assertThat(uri.getRawPath()).isEqualTo("/%4a%4B%2f%2F");
     assertThat(uri.getPathSegments()).containsExactly("JK//");
     assertThat(uri.getRawQuery()).isEqualTo("%4c%4D");
-    assertThat(uri.getQuery()).isEqualTo("LM");
     assertThat(uri.getRawFragment()).isEqualTo("%4e%4F");
     assertThat(uri.getFragment()).isEqualTo("NO");
   }
@@ -529,7 +525,7 @@ public final class UriTest {
             .setUserInfo("u@")
             .setHost("a[]")
             .setPath("/p:/@")
-            .setQuery("q/?")
+            .setRawQuery("q/?")
             .setFragment("f/?")
             .build();
     assertThat(uri.toString()).isEqualTo("s://u%40@a%5B%5D/p:/@?q/?#f/?");
@@ -600,7 +596,7 @@ public final class UriTest {
             .setScheme("hTtP") // #section-3.1 says producers (Builder) should normalize to lower.
             .setHost("aBc") // #section-3.2.2 says producers (Builder) should normalize to lower.
             .setPath("/CdE") // #section-6.2.2.1 says the rest are assumed to be case-sensitive
-            .setQuery("fGh")
+            .setRawQuery("fGh")
             .setFragment("IjK")
             .build();
     assertThat(uri.toString()).isEqualTo("http://abc/CdE?fGh#IjK");
@@ -621,10 +617,70 @@ public final class UriTest {
             .setPath("")
             .setUserInfo(null)
             .setPort(-1)
-            .setQuery(null)
+            .setRawQuery(null)
             .setFragment(null)
             .build();
     assertThat(uri.toString()).isEqualTo("http:");
+  }
+
+  @Test
+  public void builder_setRawQuery() {
+    Uri uri = Uri.newBuilder().setScheme("http").setHost("host").setRawQuery("%61=b&c=%64").build();
+    assertThat(uri.getRawQuery()).isEqualTo("%61=b&c=%64");
+    assertThat(uri.toString()).isEqualTo("http://host?%61=b&c=%64");
+  }
+
+  @Test
+  public void builder_setRawQuery_null() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setHost("host")
+            .setRawQuery("a=b")
+            .setRawQuery(null)
+            .build();
+    assertThat(uri.getRawQuery()).isNull();
+    assertThat(uri.toString()).isEqualTo("http://host");
+  }
+
+  @Test
+  public void builder_setRawFragment() {
+    Uri uri = Uri.newBuilder().setScheme("http").setHost("host").setRawFragment("a%20b").build();
+    assertThat(uri.getRawFragment()).isEqualTo("a%20b");
+    assertThat(uri.getFragment()).isEqualTo("a b");
+    assertThat(uri.toString()).isEqualTo("http://host#a%20b");
+  }
+
+  @Test
+  public void builder_setRawFragment_null() {
+    Uri uri =
+        Uri.newBuilder()
+            .setScheme("http")
+            .setHost("host")
+            .setRawFragment("a%20b")
+            .setRawFragment(null)
+            .build();
+    assertThat(uri.getRawFragment()).isNull();
+    assertThat(uri.getFragment()).isNull();
+    assertThat(uri.toString()).isEqualTo("http://host");
+  }
+
+  @Test
+  public void builder_setRawFragment_invalidCharacters_throws() {
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Uri.newBuilder().setRawFragment("f[]rag"));
+    assertThat(e).hasMessageThat().contains("Invalid character in fragment");
+  }
+
+  @Test
+  public void builder_setRawFragment_invalidPercentEncoding_throws() {
+    IllegalArgumentException e =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> Uri.newBuilder().setRawFragment("f%XXragment"));
+    assertThat(e).hasMessageThat().contains("Invalid");
   }
 
   @Test
@@ -692,7 +748,7 @@ public final class UriTest {
             .setScheme("s")
             .setHost("a")
             .setPath("/p%20ath")
-            .setQuery("q%uery")
+            .setRawQuery("q%25uery")
             .setFragment("f%ragment")
             .build();
     assertThat(uri.toString()).isEqualTo("s://a/p%2520ath?q%25uery#f%25ragment");
