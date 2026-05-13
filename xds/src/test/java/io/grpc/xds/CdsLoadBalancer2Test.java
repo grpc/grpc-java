@@ -344,6 +344,28 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
+  public void discoverDynamicCluster_pending_emitsToken() {
+    String clusterName = "cluster2";
+    CdsConfig cdsConfig = new CdsConfig(clusterName, /*dynamic=*/ true);
+    
+    XdsConfig mockXdsConfig = mock(XdsConfig.class);
+    when(mockXdsConfig.getClusters()).thenReturn(ImmutableMap.of());
+    
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Collections.emptyList())
+        .setAttributes(Attributes.newBuilder()
+          .set(XdsAttributes.XDS_CONFIG, mockXdsConfig)
+          .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+          .build())
+        .setLoadBalancingPolicyConfig(cdsConfig)
+        .build());
+        
+    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayReasonToken()).isEqualTo("cds:discovery_pending");
+  }
+
+  @Test
   public void discoverAggregateCluster_createsPriorityLbPolicy() {
     CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
     lbRegistry.register(cdsLoadBalancerProvider);

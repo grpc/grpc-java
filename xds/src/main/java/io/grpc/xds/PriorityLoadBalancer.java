@@ -322,7 +322,17 @@ final class PriorityLoadBalancer extends LoadBalancer {
         }
         ConnectivityState oldState = connectivityState;
         connectivityState = newState;
-        picker = newPicker;
+        picker = new SubchannelPicker() {
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            PickResult childResult = newPicker.pickSubchannel(args);
+            if (!childResult.hasResult() && childResult.getDelayReasonToken() != null) {
+              return PickResult.withNoResult(
+                  "priority_" + priority + ":" + childResult.getDelayReasonToken());
+            }
+            return childResult;
+          }
+        };
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
