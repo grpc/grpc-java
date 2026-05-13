@@ -1344,14 +1344,21 @@ public class ExternalProcessorFilter implements Filter {
           return;
         }
 
-        if (passThroughMode.get() || isExtProcStreamCompleted()) {
+        if (passThroughMode.get()) {
           super.sendMessage(message);
           return;
         }
 
-        if (isExtProcStreamDraining()) {
-          pendingDrainingMessages.add(message);
-          return;
+        synchronized (streamLock) {
+          if (passThroughMode.get()) {
+            super.sendMessage(message);
+            return;
+          }
+
+          if (isExtProcStreamDraining() || isExtProcStreamCompleted()) {
+            pendingDrainingMessages.add(message);
+            return;
+          }
         }
 
         if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
@@ -1495,9 +1502,12 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       private void drainPendingDrainingMessages() {
-        InputStream msg;
-        while ((msg = pendingDrainingMessages.poll()) != null) {
-          super.sendMessage(msg);
+        synchronized (streamLock) {
+          passThroughMode.set(true);
+          InputStream msg;
+          while ((msg = pendingDrainingMessages.poll()) != null) {
+            super.sendMessage(msg);
+          }
         }
       }
 
@@ -1722,7 +1732,7 @@ public class ExternalProcessorFilter implements Filter {
 
       void unblockAfterStreamComplete() {
         proceedWithHeaders();
-        dataPlaneClientCall.passThroughMode.set(true);
+        dataPlaneClientCall.drainPendingDrainingMessages();
         proceedWithClose();
       }
 
