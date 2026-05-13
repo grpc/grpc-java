@@ -52,7 +52,6 @@ import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse;
 import io.envoyproxy.envoy.service.ext_proc.v3.ProtocolConfiguration;
 import io.envoyproxy.envoy.service.ext_proc.v3.StreamedBodyResponse;
-import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -60,6 +59,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
 import io.grpc.DoubleHistogramMetricInstrument;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricInstrumentRegistry;
@@ -581,19 +581,6 @@ public class ExternalProcessorFilter implements Filter {
     private final ScheduledExecutorService scheduler;
     private final MetricRecorder metricsRecorder;
 
-    private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
-        new MethodDescriptor.Marshaller<InputStream>() {
-          @Override
-          public InputStream stream(InputStream value) {
-            return value;
-          }
-
-          @Override
-          public InputStream parse(InputStream stream) {
-            return stream;
-          }
-        };
-
     @VisibleForTesting
     ExternalProcessorInterceptor(ExternalProcessorFilterConfig filterConfig,
         CachedChannelManager cachedChannelManager,
@@ -611,6 +598,7 @@ public class ExternalProcessorFilter implements Filter {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions,
@@ -652,9 +640,13 @@ public class ExternalProcessorFilter implements Filter {
             MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
       }
 
-      MethodDescriptor<InputStream, InputStream> rawMethod = 
-          method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
-      ClientCall<InputStream, InputStream> rawCall = next.newCall(rawMethod, callOptions);
+      // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
+      // InputStream.
+      MethodDescriptor<InputStream, InputStream> rawMethod =
+          (MethodDescriptor<InputStream, InputStream>) (MethodDescriptor<?, ?>) method;
+      ClientCall<InputStream, InputStream> rawCall =
+          (ClientCall<InputStream, InputStream>) (ClientCall<?, ?>)
+              next.newCall(method, callOptions);
 
       // Create a local subclass instance to buffer outbound actions
       DataPlaneDelayedCall<InputStream, InputStream> delayedCall =
@@ -663,70 +655,10 @@ public class ExternalProcessorFilter implements Filter {
 
       DataPlaneClientCall dataPlaneCall = new DataPlaneClientCall(
           delayedCall, rawCall, extProcStub, filterConfig, filterConfig.getMutationRulesConfig(),
-          scheduler, method, next, metricsRecorder, next.authority(),
+          scheduler, rawMethod, next, metricsRecorder, next.authority(),
           callOptions.getOption(XdsNameResolver.CLUSTER_SELECTION_KEY));
 
-      return new ClientCall<ReqT, RespT>() {
-        @Override
-        public void start(Listener<RespT> responseListener, Metadata headers) {
-          dataPlaneCall.start(new Listener<InputStream>() {
-            @Override
-            public void onHeaders(Metadata headers) {
-              responseListener.onHeaders(headers);
-            }
-
-            @Override
-            public void onMessage(InputStream message) {
-              responseListener.onMessage(method.getResponseMarshaller().parse(message));
-            }
-
-            @Override
-            public void onClose(Status status, Metadata trailers) {
-              responseListener.onClose(status, trailers);
-            }
-
-            @Override
-            public void onReady() {
-              responseListener.onReady();
-            }
-          }, headers);
-        }
-
-        @Override
-        public void request(int numMessages) {
-          dataPlaneCall.request(numMessages);
-        }
-
-        @Override
-        public void cancel(@Nullable String message, @Nullable Throwable cause) {
-          dataPlaneCall.cancel(message, cause);
-        }
-
-        @Override
-        public void halfClose() {
-          dataPlaneCall.halfClose();
-        }
-
-        @Override
-        public void sendMessage(ReqT message) {
-          dataPlaneCall.sendMessage(method.getRequestMarshaller().stream(message));
-        }
-
-        @Override
-        public boolean isReady() {
-          return dataPlaneCall.isReady();
-        }
-
-        @Override
-        public void setMessageCompression(boolean enabled) {
-          dataPlaneCall.setMessageCompression(enabled);
-        }
-
-        @Override
-        public Attributes getAttributes() {
-          return dataPlaneCall.getAttributes();
-        }
-      };
+      return (ClientCall<ReqT, RespT>) (ClientCall<?, ?>) dataPlaneCall;
     }
 
     // --- SHARED UTILITY METHODS ---
@@ -1591,8 +1523,7 @@ public class ExternalProcessorFilter implements Filter {
       }
     }
 
-    private static class DataPlaneListener extends ClientCall.Listener<InputStream> {
-      private final ClientCall.Listener<InputStream> delegate;
+    private static class DataPlaneListener extends SimpleForwardingClientCallListener<InputStream> {
       private final ClientCall<?, ?> rawCall;
       private final DataPlaneClientCall dataPlaneClientCall;
       private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
@@ -1607,7 +1538,7 @@ public class ExternalProcessorFilter implements Filter {
           ClientCall.Listener<InputStream> delegate,
           ClientCall<?, ?> rawCall,
           DataPlaneClientCall dataPlaneClientCall) {
-        this.delegate = checkNotNull(delegate, "delegate");
+        super(delegate);
         this.rawCall = rawCall;
         this.dataPlaneClientCall = dataPlaneClientCall;
       }
@@ -1664,7 +1595,7 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void onMessage(InputStream message) {
         if (dataPlaneClientCall.passThroughMode.get()) {
-          delegate.onMessage(message);
+          delegate().onMessage(message);
           return;
         }
 
@@ -1676,7 +1607,7 @@ public class ExternalProcessorFilter implements Filter {
         if (dataPlaneClientCall.isExtProcStreamCompleted()
             || dataPlaneClientCall.currentProcessingMode.getResponseBodyMode()
                 != ProcessingMode.BodySendMode.GRPC) {
-          delegate.onMessage(message);
+          delegate().onMessage(message);
           return;
         }
 
@@ -1685,7 +1616,7 @@ public class ExternalProcessorFilter implements Filter {
           sendResponseBodyToExtProc(bodyBytes, false);
 
           if (dataPlaneClientCall.config.getObservabilityMode()) {
-            delegate.onMessage(new ByteArrayInputStream(bodyBytes));
+            delegate().onMessage(new ByteArrayInputStream(bodyBytes));
           }
         } catch (IOException e) {
           rawCall.cancel("Failed to read server response", e);
@@ -1739,7 +1670,7 @@ public class ExternalProcessorFilter implements Filter {
       }
 
       void onReadyNotify() {
-        delegate.onReady();
+        delegate().onReady();
       }
 
       void proceedWithHeaders() {
@@ -1763,7 +1694,7 @@ public class ExternalProcessorFilter implements Filter {
           dataPlaneClientCall.recordDuration(serverHeadersDuration, durationNanos);
           dataPlaneClientCall.serverHeadersStartNanos = 0;
         }
-        delegate.onHeaders(headers);
+        delegate().onHeaders(headers);
       }
 
       void proceedWithClose() {
@@ -1782,11 +1713,11 @@ public class ExternalProcessorFilter implements Filter {
           dataPlaneClientCall.recordDuration(serverTrailersDuration, durationNanos);
           dataPlaneClientCall.serverTrailersStartNanos = 0;
         }
-        delegate.onClose(status, trailers);
+        delegate().onClose(status, trailers);
       }
 
       void onExternalBody(ByteString body) {
-        delegate.onMessage(body.newInput());
+        delegate().onMessage(body.newInput());
       }
 
       void unblockAfterStreamComplete() {

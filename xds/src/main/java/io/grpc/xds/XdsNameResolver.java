@@ -68,6 +68,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -738,6 +739,10 @@ final class XdsNameResolver extends NameResolver {
       Set<String> filtersToShutdown = new HashSet<>(activeFilters.keySet());
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String typeUrl = namedFilter.filterConfig.typeUrl();
+        if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)
+            && !GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+          continue;
+        }
         String filterKey = namedFilter.filterStateKey();
 
         Filter.Provider provider = filterRegistry.get(typeUrl);
@@ -887,7 +892,15 @@ final class XdsNameResolver extends NameResolver {
       }
 
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
+      boolean hasExtProc = false;
       for (NamedFilterConfig namedFilter : filterConfigs) {
+        String typeUrl = namedFilter.filterConfig.typeUrl();
+        if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)) {
+          if (!GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+            continue;
+          }
+          hasExtProc = true;
+        }
         String name = namedFilter.name;
         FilterConfig config = namedFilter.filterConfig;
         FilterConfig overrideConfig = selectedOverrideConfigs.get(name);
@@ -901,6 +914,13 @@ final class XdsNameResolver extends NameResolver {
         if (interceptor != null) {
           filterInterceptors.add(interceptor);
         }
+      }
+
+      if (hasExtProc) {
+        ImmutableList.Builder<ClientInterceptor> withRawMessage = ImmutableList.builder();
+        withRawMessage.add(new RawMessageClientInterceptor());
+        withRawMessage.addAll(filterInterceptors.build());
+        return combineInterceptors(withRawMessage.build());
       }
 
       // Combine interceptors produced by different filters into a single one that executes
@@ -1115,6 +1135,90 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public XdsClient returnObject(XdsClient xdsClient) {
       return null;
+    }
+  }
+
+  static final class RawMessageClientInterceptor implements ClientInterceptor {
+    private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
+        new MethodDescriptor.Marshaller<InputStream>() {
+          @Override
+          public InputStream stream(InputStream value) {
+            return value;
+          }
+
+          @Override
+          public InputStream parse(InputStream stream) {
+            return stream;
+          }
+        };
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      MethodDescriptor<InputStream, InputStream> rawMethod =
+          method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
+      final ClientCall<InputStream, InputStream> rawCall = next.newCall(rawMethod, callOptions);
+      return new ClientCall<ReqT, RespT>() {
+        @Override
+        public void start(final Listener<RespT> responseListener, Metadata headers) {
+          rawCall.start(new Listener<InputStream>() {
+            @Override
+            public void onHeaders(Metadata headers) {
+              responseListener.onHeaders(headers);
+            }
+
+            @Override
+            public void onMessage(InputStream message) {
+              responseListener.onMessage(method.getResponseMarshaller().parse(message));
+            }
+
+            @Override
+            public void onClose(Status status, Metadata trailers) {
+              responseListener.onClose(status, trailers);
+            }
+
+            @Override
+            public void onReady() {
+              responseListener.onReady();
+            }
+          }, headers);
+        }
+
+        @Override
+        public void request(int numMessages) {
+          rawCall.request(numMessages);
+        }
+
+        @Override
+        public void cancel(@Nullable String message, @Nullable Throwable cause) {
+          rawCall.cancel(message, cause);
+        }
+
+        @Override
+        public void halfClose() {
+          rawCall.halfClose();
+        }
+
+        @Override
+        public void sendMessage(ReqT message) {
+          rawCall.sendMessage(method.getRequestMarshaller().stream(message));
+        }
+
+        @Override
+        public boolean isReady() {
+          return rawCall.isReady();
+        }
+
+        @Override
+        public void setMessageCompression(boolean enabled) {
+          rawCall.setMessageCompression(enabled);
+        }
+
+        @Override
+        public Attributes getAttributes() {
+          return rawCall.getAttributes();
+        }
+      };
     }
   }
 }

@@ -42,6 +42,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
@@ -801,7 +802,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     assertThat(capturedExecutor.get()).isNotNull();
@@ -896,7 +897,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     assertThat(capturedDeadline.get()).isNotNull();
@@ -997,7 +998,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     assertThat(capturedHeaders.get()).isNotNull();
@@ -1086,7 +1087,7 @@ public class ExternalProcessorFilterTest {
             InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -1243,7 +1244,9 @@ public class ExternalProcessorFilterTest {
     ManagedChannel channel =
         grpcCleanup.register(
             InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
-    Channel interceptedChannel = io.grpc.ClientInterceptors.intercept(channel, interceptor);
+    Channel interceptedChannel = io.grpc.ClientInterceptors.interceptForward(
+        channel,
+        Arrays.asList(new XdsNameResolver.RawMessageClientInterceptor(), interceptor));
 
     ClientCall<String, String> call =
         interceptedChannel.newCall(
@@ -1366,7 +1369,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     assertThat(requestSentLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -1492,7 +1495,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     Metadata headers = new Metadata();
     proxyCall.start(new ClientCall.Listener<String>() {}, headers);
@@ -1606,7 +1609,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     Metadata headers = new Metadata();
     headers.put(
@@ -1721,7 +1724,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     
     Metadata headers = new Metadata();
     proxyCall.start(new ClientCall.Listener<String>() {}, headers);
@@ -1861,7 +1864,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
 
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
     proxyCall.request(1);
@@ -1994,7 +1997,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     proxyCall.request(1);
@@ -2128,7 +2131,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     proxyCall.request(1);
@@ -2227,7 +2230,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     proxyCall.halfClose();
@@ -2382,7 +2385,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     proxyCall.request(1);
@@ -2519,7 +2522,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     proxyCall.request(1);
@@ -2651,7 +2654,7 @@ public class ExternalProcessorFilterTest {
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(scheduler);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {
       @Override
       public void onMessage(String message) {
@@ -2803,7 +2806,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(scheduler);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {
       @Override
       public void onMessage(String message) {
@@ -2952,7 +2955,7 @@ public class ExternalProcessorFilterTest {
     final AtomicReference<Status> capturedStatus = new AtomicReference<>();
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {
       @Override
       public void onClose(Status status, Metadata trailers) {
@@ -3075,7 +3078,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for activation (sidecar needs to respond to headers)
@@ -3175,7 +3178,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     assertThat(drainLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -3287,7 +3290,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Wait for sidecar call to start and listener to be captured
@@ -3420,7 +3423,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
     for (int i = 0; i < 10; i++) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -3583,7 +3586,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Wait for drain to be processed
@@ -3740,7 +3743,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Wait for drain to be processed
@@ -3895,7 +3898,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for sidecar call to start
@@ -4002,7 +4005,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for drain to be processed
@@ -4121,7 +4124,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for sidecar call to start
@@ -4221,7 +4224,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for sidecar stream completion
@@ -4321,7 +4324,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Verify application receives UNAVAILABLE due to sidecar failure
@@ -4418,7 +4421,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Send message and half-close to trigger unary call reaching server
@@ -4528,7 +4531,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Verify app listener notified with the correct status and details
@@ -4630,7 +4633,7 @@ public class ExternalProcessorFilterTest {
       CallOptions callOptions =
           DEFAULT_CALL_OPTIONS.withExecutor(fakeClock.getScheduledExecutorService());
       ClientCall<String, String> proxyCall =
-          interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+          interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
       proxyCall.start(appListener, new Metadata());
 
       for (int i = 0; i < 1000 && closedLatch.getCount() > 0; i++) {
@@ -4739,7 +4742,7 @@ public class ExternalProcessorFilterTest {
       CallOptions callOptions =
           DEFAULT_CALL_OPTIONS.withExecutor(fakeClock.getScheduledExecutorService());
       ClientCall<String, String> proxyCall =
-          interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+          interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
       proxyCall.start(appListener, new Metadata());
 
       // Data plane closes immediately
@@ -4912,7 +4915,7 @@ public class ExternalProcessorFilterTest {
     CallOptions callOptions =
         DEFAULT_CALL_OPTIONS.withExecutor(fakeClock.getScheduledExecutorService());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Wait for sidecar to receive headers and filter to activate call
@@ -5061,7 +5064,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     proxyCall.request(1);
@@ -5201,7 +5204,7 @@ public class ExternalProcessorFilterTest {
     
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
     // Request message to allow the call to complete
@@ -5353,7 +5356,7 @@ public class ExternalProcessorFilterTest {
       CallOptions callOptions =
           DEFAULT_CALL_OPTIONS.withExecutor(fakeClock.getScheduledExecutorService());
       ClientCall<String, String> proxyCall =
-          interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+          interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
       proxyCall.start(new ClientCall.Listener<String>() {
         @Override public void onClose(Status status, Metadata trailers) {
           finishLatch.countDown();
@@ -5483,7 +5486,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for activation
@@ -5617,7 +5620,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions2 = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions2, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions2, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for activation
@@ -5762,7 +5765,7 @@ public class ExternalProcessorFilterTest {
 
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
     // Wait for activation
@@ -6021,7 +6024,7 @@ public class ExternalProcessorFilterTest {
 
     final AtomicReference<String> clientReceivedBody = new AtomicReference<>();
     StreamObserver<String> requestObserver = ClientCalls.asyncClientStreamingCall(
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_CLIENT_STREAMING,
             DEFAULT_CALL_OPTIONS.withExecutor(testExecutor),
             interceptingChannel),
@@ -6307,7 +6310,7 @@ public class ExternalProcessorFilterTest {
             });
 
     StreamObserver<String> bidiRequestObserver = ClientCalls.asyncBidiStreamingCall(
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_BIDI_STREAMING,
             DEFAULT_CALL_OPTIONS.withExecutor(bidiTestExecutor),
             bidiInterceptingChannel),
@@ -6475,7 +6478,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -6614,7 +6617,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -6756,7 +6759,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -6907,7 +6910,7 @@ public class ExternalProcessorFilterTest {
             .build());
 
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7038,7 +7041,7 @@ public class ExternalProcessorFilterTest {
         Metadata.Key.of("x-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER), new byte[]{1, 2});
 
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(Executors.newSingleThreadExecutor()),
             dataPlaneChannel);
@@ -7177,7 +7180,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch callLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7290,7 +7293,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7438,7 +7441,7 @@ public class ExternalProcessorFilterTest {
     final AtomicReference<Metadata> capturedAppTrailers = new AtomicReference<>();
     final CountDownLatch callLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(Executors.newSingleThreadExecutor()),
             dataPlaneChannel);
@@ -7555,7 +7558,7 @@ public class ExternalProcessorFilterTest {
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     final AtomicReference<Status> appStatus = new AtomicReference<>();
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7637,7 +7640,7 @@ public class ExternalProcessorFilterTest {
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
 
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7731,7 +7734,7 @@ public class ExternalProcessorFilterTest {
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     final AtomicReference<Status> appStatus = new AtomicReference<>();
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7844,7 +7847,7 @@ public class ExternalProcessorFilterTest {
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     final AtomicReference<Status> appStatus = new AtomicReference<>();
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
             dataPlaneChannel);
@@ -7986,7 +7989,7 @@ public class ExternalProcessorFilterTest {
 
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     ClientCall<String, String> proxyCall =
-        interceptor.interceptCall(
+        interceptCall(interceptor, 
             METHOD_SAY_HELLO,
             DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor())
                 .withOption(XdsNameResolver.CLUSTER_SELECTION_KEY, "backend-service-metric"),
@@ -8042,5 +8045,16 @@ public class ExternalProcessorFilterTest {
 
     channelManager.close();
     realScheduler.shutdown();
+  }
+
+  private static <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+      ExternalProcessorInterceptor interceptor,
+      MethodDescriptor<ReqT, RespT> method,
+      CallOptions callOptions,
+      Channel next) {
+    Channel intercepted = ClientInterceptors.interceptForward(
+        next,
+        Arrays.asList(new XdsNameResolver.RawMessageClientInterceptor(), interceptor));
+    return intercepted.newCall(method, callOptions);
   }
 }
