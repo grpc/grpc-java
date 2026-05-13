@@ -35,7 +35,7 @@ import org.junit.runners.JUnit4;
  * Tests three scenarios:
  * (1) A write without intervening onWritePossible() is buffered.
  * (2) Consecutive writes with onWritePossible() between them succeed.
- * (3) Flush behavior: goes direct when isReady() is true, buffers when isReady() is false.
+ * (3) Flush goes direct when readyAndDrained=true, buffers when readyAndDrained=false.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
@@ -124,12 +124,12 @@ public class AsyncServletOutputStreamWriterTest {
   }
 
   /**
-   * Test flush behavior: flush keeps readyAndDrained=true when isReady() stays true
-   * (goes direct), but transitions to buffering when isReady() becomes false.
+   * Test flush behavior: flush goes direct when readyAndDrained is true,
+   * but is buffered when readyAndDrained is false (regardless of isReady state).
    * This covers the flush-specific path in runOrBuffer().
    */
   @Test
-  public void flush_isReadyTrue_goesDirect_isReadyFalse_buffers() throws IOException {
+  public void flush_withReadyAndDrainedFalse_isBuffered() throws IOException {
     AtomicBoolean isReady = new AtomicBoolean(true);
     List<String> actions = new ArrayList<>();
 
@@ -152,24 +152,25 @@ public class AsyncServletOutputStreamWriterTest {
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
-    // Flush with isReady=true - should go direct (readyAndDrained stays true)
+    // First flush - readyAndDrained=true, isReady=true -> goes direct
     writer.flush();
-    assertEquals("Flush should execute directly when isReady=true", 1, actions.size());
+    assertEquals("First flush should execute directly", 1, actions.size());
 
-    // Simulate isReady becoming false (container buffer full)
-    isReady.set(false);
+    // Write a byte to set readyAndDrained=false (writeBytes always clears it)
+    writer.writeBytes(new byte[]{1}, 1);
+    // The write goes direct (readyAndDrained was true) and readyAndDrained becomes false.
+    // Now readyAndDrained=false.
 
-    // Next flush - should be buffered since isReady=false
+    // Flush with readyAndDrained=false -> should be buffered (isReady doesn't matter)
     writer.flush();
 
     // Only the first flush should have executed
-    assertEquals("Second flush should be buffered when isReady=false", 1, actions.size());
+    assertEquals("Second flush should be buffered", 1, actions.size());
 
     // Container calls onWritePossible to drain buffered flush
-    isReady.set(true);
     writer.onWritePossible();
 
-    // Now both flushes should have completed
+    // Both flushes should have completed
     assertEquals("Both flushes should complete after onWritePossible", 2, actions.size());
   }
 }
