@@ -81,7 +81,7 @@ jobs:
       matrix:
         bzlmod: [true, false]
     env:
-      USE_BAZEL_VERSION: 7.7.1
+      USE_BAZEL_VERSION: 8.7.0
 
     steps:
     - uses: actions/checkout@v4
@@ -100,11 +100,11 @@ jobs:
         key: ${{ runner.os }}-bazel-${{ env.USE_BAZEL_VERSION }}-${{ hashFiles('WORKSPACE', 'repositories.bzl') }}
 
     - name: Run bazel build
-      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
+      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }} --enable_workspace=${{ !matrix.bzlmod }}
 
     - name: Run bazel test
-      run: bazelisk test //... --enable_bzlmod=${{ matrix.bzlmod }}
+      run: bazelisk test //... --enable_bzlmod=${{ matrix.bzlmod }} --enable_workspace=${{ !matrix.bzlmod }}
 
     - name: Run example bazel build
-      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }}
+      run: bazelisk build //... --enable_bzlmod=${{ matrix.bzlmod }} --enable_workspace=${{ !matrix.bzlmod }}
       working-directory: ./examples
