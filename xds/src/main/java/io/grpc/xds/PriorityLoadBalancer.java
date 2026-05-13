@@ -74,7 +74,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private SubchannelPicker currentPicker;
   // Set to true if currently in the process of handling resolved addresses.
   private boolean handlingResolvedAddresses;
-  private boolean isPriorityLbChildPolicyCacheEnabled =
+  static boolean enablePriorityLbChildPolicyCache =
       GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE", false);
 
   PriorityLoadBalancer(Helper helper) {
@@ -101,7 +101,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
       if (!prioritySet.contains(priority)) {
         ChildLbState childLbState = children.get(priority);
         if (childLbState != null) {
-          if (isPriorityLbChildPolicyCacheEnabled) {
+          if (enablePriorityLbChildPolicyCache) {
             childLbState.deactivate();
           } else {
             children.remove(priority);

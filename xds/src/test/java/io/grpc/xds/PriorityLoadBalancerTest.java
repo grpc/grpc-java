@@ -149,9 +149,9 @@ public class PriorityLoadBalancerTest {
 
   @Test
   public void acceptResolvedAddresses() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE", "true");
+    boolean originalFlagVal = PriorityLoadBalancer.enablePriorityLbChildPolicyCache;
+    PriorityLoadBalancer.enablePriorityLbChildPolicyCache = true;
     try {
-      priorityLb = new PriorityLoadBalancer(helper);
       SocketAddress socketAddress = new InetSocketAddress(8080);
       EquivalentAddressGroup eag = new EquivalentAddressGroup(socketAddress);
       eag = AddressFilter.setPathFilter(eag, ImmutableList.of("p1"));
@@ -243,7 +243,7 @@ public class PriorityLoadBalancerTest {
       verify(fooBalancer1).shutdown();
       verify(barBalancer0, never()).shutdown();
     } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE");
+      PriorityLoadBalancer.enablePriorityLbChildPolicyCache = originalFlagVal;
     }
   }
 
@@ -394,9 +394,9 @@ public class PriorityLoadBalancerTest {
 
   @Test
   public void handleNameResolutionError() {
-    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE", "true");
+    boolean originalFlagVal = PriorityLoadBalancer.enablePriorityLbChildPolicyCache;
+    PriorityLoadBalancer.enablePriorityLbChildPolicyCache = true;
     try {
-      priorityLb = new PriorityLoadBalancer(helper);
       Object fooConfig0 = new Object();
       PriorityChildConfig priorityChildConfig0 =
           new PriorityChildConfig(newChildConfig(fooLbProvider, fooConfig0), true);
@@ -433,7 +433,7 @@ public class PriorityLoadBalancerTest {
       verify(fooLb0, never()).handleNameResolutionError(status);
       verify(fooLb1).handleNameResolutionError(status);
     } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE");
+      PriorityLoadBalancer.enablePriorityLbChildPolicyCache = originalFlagVal;
     }
   }
 
