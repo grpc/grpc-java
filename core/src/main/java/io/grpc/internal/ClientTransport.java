@@ -24,15 +24,15 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import java.util.concurrent.Executor;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * The client-side transport typically encapsulating a single connection to a remote
  * server. However, streams created before the client has discovered any server address may
  * eventually be issued on different connections.  All methods on the transport and its callbacks
  * are expected to execute quickly.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ClientTransport extends InternalInstrumented<SocketStats> {
 
   /**

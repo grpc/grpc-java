@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A virtual connection to a conceptual endpoint, to perform RPCs. A channel is free to have zero or
@@ -29,8 +28,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * implementations using {@link ClientInterceptor}. It is expected that most application
  * code will not use this class directly but rather work with stubs that have been bound to a
  * Channel that was decorated during application initialization.
+ *
+ * <p>This class is thread-safe.
  */
-@ThreadSafe
 public abstract class Channel {
   /**
    * Create a {@link ClientCall} to the remote operation specified by the given

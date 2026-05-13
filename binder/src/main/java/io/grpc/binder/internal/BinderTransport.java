@@ -54,7 +54,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Base class for binder-based gRPC transport.
@@ -76,8 +75,9 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p><b>IMPORTANT</b>: This implementation must comply with this published wire format.
  * https://github.com/grpc/proposal/blob/master/L73-java-binderchannel/wireformat.md
+ *
+ * <p>This class is thread-safe.
  */
-@ThreadSafe
 public abstract class BinderTransport implements IBinder.DeathRecipient {
 
   private static final Logger logger = Logger.getLogger(BinderTransport.class.getName());
