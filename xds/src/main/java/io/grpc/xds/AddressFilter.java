@@ -24,11 +24,12 @@ import io.grpc.NameResolver.ResolutionResultAttr;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.ListIterator;
 import javax.annotation.Nullable;
 
 final class AddressFilter {
   @ResolutionResultAttr
-  private static final Attributes.Key<PathChain> PATH_CHAIN_KEY =
+  static final Attributes.Key<PathChain> PATH_CHAIN_KEY =
       Attributes.Key.create("io.grpc.xds.AddressFilter.PATH_CHAIN_KEY");
 
   // Prevent instantiation.
@@ -41,17 +42,23 @@ final class AddressFilter {
   static EquivalentAddressGroup setPathFilter(EquivalentAddressGroup address, List<String> names) {
     checkNotNull(address, "address");
     checkNotNull(names, "names");
-    Attributes.Builder attrBuilder = address.getAttributes().toBuilder().discard(PATH_CHAIN_KEY);
-    PathChain pathChain = null;
-    for (String name : names) {
-      if (pathChain == null) {
-        pathChain = new PathChain(name);
-        attrBuilder.set(PATH_CHAIN_KEY, pathChain);
-      } else {
-        pathChain.next = new PathChain(name);
-      }
-    }
+    Attributes.Builder attrBuilder = address.getAttributes().toBuilder()
+        .set(PATH_CHAIN_KEY, createPathChain(names));
     return new EquivalentAddressGroup(address.getAddresses(), attrBuilder.build());
+  }
+
+  /**
+   * Creates a PathChain that can be set in an EquivalentAddressGroup's Attributes as a value of
+   * PATH_CHAIN_KEY.
+   */
+  @Nullable static PathChain createPathChain(List<String> names) {
+    checkNotNull(names, "names");
+    PathChain current = null;
+    ListIterator<String> iter = names.listIterator(names.size());
+    while (iter.hasPrevious()) {
+      current = new PathChain(iter.previous(), current);
+    }
+    return current;
   }
 
   /**
@@ -75,12 +82,13 @@ final class AddressFilter {
     return Collections.unmodifiableList(filteredAddresses);
   }
 
-  private static final class PathChain {
+  static final class PathChain {
     final String name;
-    @Nullable PathChain next;
+    @Nullable final PathChain next;
 
-    PathChain(String name) {
+    PathChain(String name, @Nullable PathChain next) {
       this.name = checkNotNull(name, "name");
+      this.next = next;
     }
 
     @Override
