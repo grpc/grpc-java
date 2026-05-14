@@ -28,6 +28,23 @@ project, run:
 $ ./gradlew publishToMavenLocal
 ```
 
+### Building with Bazel
+
+grpc-java can also be built using Bazel, like so:
+
+```sh
+$ bazelisk build //...
+```
+
+Some parts of grpc-java depend on Android. Bazel can build these parts too but,
+for size, licensing and maintenance reasons, it requires a locally installed
+Android SDK. If you don't have the SDK and/or don't care about Android, use the
+`skip_android` configuration to skip building the Android parts:
+
+```sh
+$ bazelisk build //... --config=skip_android
+```
+
 ### Notes for IntelliJ
 Building in IntelliJ works best when you import the project as a Gradle project and delegate IDE
 build/run actions to Gradle.

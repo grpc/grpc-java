@@ -1,0 +1,27 @@
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
+licenses(["notice"])
+
+android_library(
+    name = "binder",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    manifest = "src/main/AndroidManifest.xml",
+    custom_package = "io.grpc.binder",
+    visibility = ["//visibility:public"],
+    exports = ["@grpc_android_maven//:androidx_annotation_annotation"],
+    deps = [
+        "//api",
+        "//core:internal",
+        # Resolve android deps from the isolated grpc_android_maven repository.
+        "@grpc_android_maven//:androidx_annotation_annotation",
+        "@grpc_android_maven//:androidx_annotation_annotation_jvm",
+        "@grpc_android_maven//:androidx_core_core",
+        "@grpc_android_maven//:androidx_lifecycle_lifecycle_common",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+    ],
+)

@@ -46,15 +46,30 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 ]
 # GRPC_DEPS_END
 
+ANDROID_ARTIFACTS = [
+    "androidx.annotation:annotation:1.6.0",
+    "androidx.annotation:annotation-jvm:1.6.0",
+    "androidx.core:core:1.13.1",
+    "androidx.lifecycle:lifecycle-common:2.6.2",
+]
+
 bazel_dep(name = "abseil-cpp", version = "20250512.1")
 bazel_dep(name = "bazel_jar_jar", version = "0.1.11.bcr.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", version = "0.0.0-20240326-1c8d509c5", repo_name = "com_google_googleapis")
 bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58.bcr.1", repo_name = "io_grpc_grpc_proto")
 bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
+bazel_dep(name = "rules_android", version = "0.7.2")
 bazel_dep(name = "rules_cc", version = "0.0.9")
 bazel_dep(name = "rules_java", version = "9.1.0")
 bazel_dep(name = "rules_jvm_external", version = "6.0")
+
+android_sdk_repository_extension = use_extension(
+    "@rules_android//rules/android_sdk_repository:rule.bzl",
+    "android_sdk_repository_extension",
+)
+use_repo(android_sdk_repository_extension, "androidsdk")
+register_toolchains("@androidsdk//:sdk-toolchain", "@androidsdk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
@@ -64,7 +79,32 @@ maven.install(
     ],
     strict_visibility = True,
 )
-use_repo(maven, "maven")
+
+# We isolate Android-specific deps in this separate repo ('grpc_android_maven') instead of the one
+# above (having default name 'maven').
+#
+# Under bzlmod, rules_jvm_external merges all contributions to the same named repository (like the
+# default 'maven' repo) across the entire dependency graph. If we put Android dependencies there,
+# then *every* downstream consumer's merged 'maven' repository would include these Android
+# artifacts.
+#
+# Because merged repositories are resolved using only the root module's (the consumer's)
+# repository list, any consumer without 'maven.google.com' configured in their root module
+# would fail to resolve these artifacts, breaking their build even if they don't use Android.
+#
+# By using a distinct name ('grpc_android_maven'), we prevent merging. This repository is resolved
+# independently, allowing it to use grpc-java's own repository config (which includes
+# maven.google.com) without affecting downstream consumers' default 'maven' repo.
+maven.install(
+    name = "grpc_android_maven",
+    artifacts = ANDROID_ARTIFACTS,
+    repositories = [
+        "https://repo.maven.apache.org/maven2/",
+        "https://maven.google.com", # for androidx.*
+    ],
+    strict_visibility = True,
+)
+use_repo(maven, "maven", "grpc_android_maven")
 
 maven.override(
     coordinates = "com.google.protobuf:protobuf-java",
@@ -157,4 +197,8 @@ maven.override(
 maven.override(
     coordinates = "io.grpc:grpc-util",
     target = "@io_grpc_grpc_java//util",
+)
+maven.override(
+    coordinates = "io.grpc:grpc-binder",
+    target = "@io_grpc_grpc_java//binder",
 )
