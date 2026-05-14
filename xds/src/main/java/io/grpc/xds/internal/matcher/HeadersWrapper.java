@@ -150,7 +150,17 @@ final class HeadersWrapper extends AbstractMap<String, String> {
 
   @Override
   public int size() {
-    return keySet().size();
+    int count = 0;
+    for (String key : context.getMetadata().keys()) {
+      String lowerKey = key.toLowerCase(java.util.Locale.ROOT);
+      if (!lowerKey.equals("te") 
+          && !lowerKey.equals("host") 
+          && !PSEUDO_HEADERS.contains(lowerKey)
+          && isMetadataKeyResolvable(lowerKey)) {
+        count++;
+      }
+    }
+    return count + PSEUDO_HEADERS.size() + 1; // +1 for "host" alias
   }
 
   @Override
