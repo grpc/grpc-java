@@ -19,6 +19,8 @@ package io.grpc.xds.internal.matcher;
 import static org.junit.Assert.fail;
 
 import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelFunctionDecl;
+import dev.cel.common.CelOverloadDecl;
 import dev.cel.common.types.SimpleType;
 import dev.cel.compiler.CelCompiler;
 import dev.cel.compiler.CelCompilerFactory;
@@ -36,6 +38,11 @@ public final class CelCommonTest {
     COMPILER = CelCompilerFactory.standardCelCompilerBuilder()
         .addVar("request", SimpleType.DYN)
         .addVar("unknown_var", SimpleType.STRING)
+        .addFunctionDeclarations(
+            CelFunctionDecl.newFunctionDeclaration(
+                "my_custom_func",
+                CelOverloadDecl.newGlobalOverload(
+                    "my_custom_func_overload", SimpleType.BOOL, SimpleType.STRING)))
         .build();
   }
 
@@ -98,6 +105,7 @@ public final class CelCommonTest {
     assertDisallowed("string(1) == '1'");
     assertDisallowed("'a' + 'b' == 'ab'");
     assertDisallowed("[1] + [2] == [1, 2]");
+    assertDisallowed("my_custom_func('foo')");
   }
 
   @Test
