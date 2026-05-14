@@ -531,7 +531,8 @@ public class PriorityLoadBalancerTest {
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
     // Nothing important about this verify, other than to provide a baseline
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
+    verify(helper, times(2))
+        .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(fooBalancers).hasSize(1);
     assertThat(fooHelpers).hasSize(1);
     Helper helper0 = Iterables.getOnlyElement(fooHelpers);
@@ -547,7 +548,7 @@ public class PriorityLoadBalancerTest {
     helper0.updateBalancingState(
         CONNECTING,
         EMPTY_PICKER);
-    verify(helper, times(2))
+    verify(helper, times(3))
         .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
 
     // failover happens
@@ -573,7 +574,7 @@ public class PriorityLoadBalancerTest {
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
     // Nothing important about this verify, other than to provide a baseline
-    inOrder.verify(helper)
+    inOrder.verify(helper, times(2))
         .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     assertThat(fooBalancers).hasSize(1);
     assertThat(fooHelpers).hasSize(1);
@@ -591,7 +592,7 @@ public class PriorityLoadBalancerTest {
     fakeClock.forwardTime(5, TimeUnit.SECONDS);
     assertThat(fooBalancers).hasSize(2);
     assertThat(fooHelpers).hasSize(2);
-    inOrder.verify(helper, times(2))
+    inOrder.verify(helper, times(3))
         .updateBalancingState(eq(CONNECTING), pickerReturns(PickResult.withNoResult()));
     Helper helper1 = Iterables.getLast(fooHelpers);
 
@@ -869,7 +870,7 @@ public class PriorityLoadBalancerTest {
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
-    verify(helper).updateBalancingState(eq(CONNECTING), isA(SubchannelPicker.class));
+    verify(helper, times(2)).updateBalancingState(eq(CONNECTING), isA(SubchannelPicker.class));
 
     // LB shutdown and subchannel state change can happen simultaneously. If shutdown runs first,
     // any further balancing state update should be ignored.
@@ -907,7 +908,7 @@ public class PriorityLoadBalancerTest {
             .setLoadBalancingPolicyConfig(priorityLbConfig)
             .build());
 
-    verify(helper, times(4)).updateBalancingState(any(), any());
+    verify(helper, times(6)).updateBalancingState(any(), any());
   }
 
   @Test

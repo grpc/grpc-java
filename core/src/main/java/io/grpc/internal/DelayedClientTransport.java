@@ -367,7 +367,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private volatile Status lastPickStatus;
     @Nullable private String delayReasonToken;
 
-    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers, @Nullable String initialToken) {
+    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
+        @Nullable String initialToken) {
       super("connecting_and_lb");
       this.args = args;
       this.tracers = tracers;

@@ -38,7 +38,8 @@ import javax.annotation.Nullable;
  * list and sticking to the first that works.
  */
 final class PickFirstLoadBalancer extends LoadBalancer {
-  private static final PickResult CONNECTING_RESULT = PickResult.withNoResult("pick_first:connecting");
+  private static final PickResult CONNECTING_RESULT = 
+      PickResult.withNoResult("pick_first:connecting");
   private final Helper helper;
   private Subchannel subchannel;
   private ConnectivityState currentState = IDLE;

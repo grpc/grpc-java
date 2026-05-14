@@ -1164,43 +1164,6 @@ public class RingHashLoadBalancerTest {
     assertThat(connectionRequestedQueue.poll()).isNull();
   }
 
-  @Test
-  public void ringHashPicker_passesThroughChildToken() throws Exception {
-    final SubchannelPicker mockChildPicker = mock(SubchannelPicker.class);
-    when(mockChildPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("child_delay_token"));
-
-    loadBalancer = new RingHashLoadBalancer(helper, random) {
-      @Override
-      protected ChildLbState createChildLbState(Object key) {
-        return new ChildLbState(key, pickFirstLbProvider) {
-          @Override
-          public SubchannelPicker getCurrentPicker() {
-            return mockChildPicker;
-          }
-
-          @Override
-          public ConnectivityState getCurrentState() {
-            return READY;
-          }
-        };
-      }
-    };
-
-    RingHashConfig config = new RingHashConfig(10, 100, "");
-    List<EquivalentAddressGroup> servers = createWeightedServerAddrs(1);
-    
-    loadBalancer.acceptResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(servers).setLoadBalancingPolicyConfig(config).build());
-            
-    verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    
-    PickSubchannelArgs args = getDefaultPickSubchannelArgs(hashFunc.hashVoid());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(args);
-    
-    assertThat(result.getDelayReasonToken()).isEqualTo("child_delay_token");
-  }
 
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
       List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {

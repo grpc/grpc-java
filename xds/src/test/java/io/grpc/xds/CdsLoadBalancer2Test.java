@@ -348,19 +348,25 @@ public class CdsLoadBalancer2Test {
     String clusterName = "cluster2";
     CdsConfig cdsConfig = new CdsConfig(clusterName, /*dynamic=*/ true);
     
-    XdsConfig mockXdsConfig = mock(XdsConfig.class);
-    when(mockXdsConfig.getClusters()).thenReturn(ImmutableMap.of());
+    XdsConfig xdsConfig = new XdsConfig(null, null, null, ImmutableMap.of());
     
     loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
         .setAddresses(Collections.emptyList())
         .setAttributes(Attributes.newBuilder()
-          .set(XdsAttributes.XDS_CONFIG, mockXdsConfig)
-          .set(XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY, xdsDepManager)
+          .set(XdsAttributes.XDS_CONFIG, xdsConfig)
+          .set(
+              XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY,
+              new XdsConfig.XdsClusterSubscriptionRegistry() {
+                @Override
+                public XdsConfig.Subscription subscribeToCluster(String clusterName) {
+                  return mock(XdsConfig.Subscription.class);
+                }
+              })
           .build())
         .setLoadBalancingPolicyConfig(cdsConfig)
         .build());
         
-    verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    verify(helper).updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
     assertThat(result.getDelayReasonToken()).isEqualTo("cds:discovery_pending");
   }

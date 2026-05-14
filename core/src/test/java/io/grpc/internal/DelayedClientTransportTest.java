@@ -782,7 +782,7 @@ public class DelayedClientTransportTest {
         .thenReturn(PickResult.withNoResult("pick_first:connecting"));
         
     delayedTransport.reprocess(connectingPicker);
-    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
     
     InOrder inOrder = inOrder(mockTracer);
     inOrder.verify(mockTracer).delayStarted("pick_first:connecting");
@@ -812,6 +812,7 @@ public class DelayedClientTransportTest {
         
     delayedTransport.reprocess(connectingPicker);
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
     
     verify(mockTracer).delayStarted("pick_first:connecting");
     

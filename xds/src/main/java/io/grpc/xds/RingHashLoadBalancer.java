@@ -465,7 +465,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
               }
             });
 
-            return RING_HASH_CONNECTING_RESULT; // Indicates that this should be retried after backoff
+            // Indicates that this should be retried after backoff
+            return RING_HASH_CONNECTING_RESULT;
           }
         }
       } else {
