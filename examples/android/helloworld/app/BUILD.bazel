@@ -1,0 +1,42 @@
+load("@rules_android//rules:rules.bzl", "android_binary")
+load("@io_grpc_grpc_java//:java_grpc_library.bzl", "java_grpc_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@rules_java//java:defs.bzl", "java_lite_proto_library")
+
+proto_library(
+    name = "helloworld_proto",
+    srcs = ["src/main/proto/helloworld.proto"],
+)
+
+java_lite_proto_library(
+    name = "helloworld_java_proto_lite",
+    deps = [":helloworld_proto"],
+)
+
+java_grpc_library(
+    name = "helloworld_java_grpc_lite",
+    srcs = [":helloworld_proto"],
+    flavor = "lite",
+    deps = [":helloworld_java_proto_lite"],
+)
+
+android_binary(
+    name = "app",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    custom_package = "io.grpc.helloworldexample",
+    manifest = "src/main/AndroidManifest.xml",
+    resource_files = glob(["src/main/res/**"]),
+    visibility = ["//visibility:public"],
+    deps = [
+        ":helloworld_java_grpc_lite",
+        ":helloworld_java_proto_lite",
+        "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//android",
+        "@io_grpc_grpc_java//okhttp",
+        "@io_grpc_grpc_java//protobuf-lite",
+        "@io_grpc_grpc_java//stub",
+        "@maven//:androidx_appcompat_appcompat",
+    ],
+)
