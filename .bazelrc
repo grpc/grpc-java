@@ -1,1 +1,7 @@
 build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+
+# Enforce stable JDK 17 compilation globally (aligns with rules_android defaults)
+common --java_language_version=17
+common --java_runtime_version=17
+common --tool_java_language_version=17
+common --tool_java_runtime_version=17

@@ -110,6 +110,13 @@ def grpc_java_repositories():
             strip_prefix = "bazel_jar_jar-0.1.6",
             url = "https://github.com/bazeltools/bazel_jar_jar/releases/download/v0.1.6/bazel_jar_jar-v0.1.6.tar.gz",
         )
+    if not native.existing_rule("rules_android"):
+        http_archive(
+            name = "rules_android",
+            sha256 = "af84b69ab3d16dd1a41056286e6511f147a94ccea995603e13e934c915c1631c",
+            strip_prefix = "rules_android-0.6.0",
+            urls = ["https://github.com/bazelbuild/rules_android/releases/download/v0.6.0/rules_android-v0.6.0.tar.gz"],
+        )
 
 def com_google_protobuf():
     # proto_library rules implicitly depend on @com_google_protobuf//:protoc,

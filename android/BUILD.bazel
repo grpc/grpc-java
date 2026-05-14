@@ -1,0 +1,19 @@
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
+android_library(
+    name = "android",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    custom_package = "io.grpc.android",
+    manifest = "src/main/AndroidManifest.xml",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//api",
+        "//core:internal",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+    ],
+)
