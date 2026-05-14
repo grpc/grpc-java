@@ -851,7 +851,6 @@ public class ExternalProcessorFilter implements Filter {
       final AtomicReference<ExtProcStreamState> extProcStreamState =
           new AtomicReference<>(ExtProcStreamState.ACTIVE);
       final AtomicBoolean passThroughMode = new AtomicBoolean(false);
-      final AtomicBoolean halfClosed = new AtomicBoolean(false);
       final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
       final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
 
@@ -1067,28 +1066,47 @@ public class ExternalProcessorFilter implements Filter {
               }
 
               EventType expected = expectedResponses.peek();
-              EventType received = null;
               if (response.hasRequestHeaders()) {
-                received = EventType.REQUEST_HEADERS;
-              } else if (response.hasRequestBody()) {
-                received = EventType.REQUEST_BODY;
-              } else if (response.hasResponseHeaders()) {
-                received = EventType.RESPONSE_HEADERS;
-              } else if (response.hasResponseBody()) {
-                received = EventType.RESPONSE_BODY;
-              } else if (response.hasResponseTrailers()) {
-                received = EventType.RESPONSE_TRAILERS;
-              }
-
-              if (received != null) {
-                if (expected == null || expected != received) {
+                if (expected == null || expected != EventType.REQUEST_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
-                          + expected + ", Received: " + received)
+                          + expected + ", Received: REQUEST_HEADERS")
                       .asRuntimeException());
                   return;
                 }
                 expectedResponses.poll();
+              } else if (response.hasResponseHeaders()) {
+                if (expected == null || expected != EventType.RESPONSE_HEADERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("Protocol error: received response out of order. Expected: " 
+                          + expected + ", Received: RESPONSE_HEADERS")
+                      .asRuntimeException());
+                  return;
+                }
+                expectedResponses.poll();
+              } else if (response.hasResponseTrailers()) {
+                if (expected == null || expected != EventType.RESPONSE_TRAILERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("Protocol error: received response out of order. Expected: " 
+                          + expected + ", Received: RESPONSE_TRAILERS")
+                      .asRuntimeException());
+                  return;
+                }
+                expectedResponses.poll();
+              } else if (response.hasRequestBody()) {
+                if (expected == EventType.REQUEST_HEADERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("Protocol error: received request_body before request_headers response.")
+                      .asRuntimeException());
+                  return;
+                }
+              } else if (response.hasResponseBody()) {
+                if (expected == EventType.REQUEST_HEADERS || expected == EventType.RESPONSE_HEADERS) {
+                  internalOnError(Status.UNAVAILABLE
+                      .withDescription("Protocol error: received response_body before headers response.")
+                      .asRuntimeException());
+                  return;
+                }
               }
 
               if (response.getRequestDrain()) {
@@ -1154,6 +1172,7 @@ public class ExternalProcessorFilter implements Filter {
                       response.getResponseTrailers().getHeaderMutation()
                   );
                 }
+                wrappedListener.proceedWithClose();
               }
 
               checkEndOfStream(response);
@@ -1219,12 +1238,8 @@ public class ExternalProcessorFilter implements Filter {
           
           if (request.hasRequestHeaders()) {
             expectedResponses.add(EventType.REQUEST_HEADERS);
-          } else if (request.hasRequestBody()) {
-            expectedResponses.add(EventType.REQUEST_BODY);
           } else if (request.hasResponseHeaders()) {
             expectedResponses.add(EventType.RESPONSE_HEADERS);
-          } else if (request.hasResponseBody()) {
-            expectedResponses.add(EventType.RESPONSE_BODY);
           } else if (request.hasResponseTrailers()) {
             expectedResponses.add(EventType.RESPONSE_TRAILERS);
           }
@@ -1396,7 +1411,6 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void halfClose() {
         clientHalfCloseStartNanos = System.nanoTime();
-        halfClosed.set(true);
         if (passThroughMode.get() || isExtProcStreamCompleted()) {
           if (requestSideClosed.compareAndSet(false, true)) {
             proceedWithHalfClose();
@@ -1443,13 +1457,11 @@ public class ExternalProcessorFilter implements Filter {
             if (!streamed.getBody().isEmpty()) {
               super.sendMessage(streamed.getBody().newInput());
             }
-          }
-        }
-        // If the application already half-closed, and we just received a response from
-        // the sidecar for the last part of the request body, we can now half-close the data plane.
-        if (halfClosed.get()) {
-          if (requestSideClosed.compareAndSet(false, true)) {
-            proceedWithHalfClose();
+            if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
+              if (requestSideClosed.compareAndSet(false, true)) {
+                proceedWithHalfClose();
+              }
+            }
           }
         }
       }
@@ -1462,9 +1474,6 @@ public class ExternalProcessorFilter implements Filter {
             StreamedBodyResponse streamed = mutation.getStreamedResponse();
             if (!streamed.getBody().isEmpty()) {
               listener.onExternalBody(streamed.getBody());
-            }
-            if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-              listener.proceedWithClose();
             }
           }
         }
@@ -1777,10 +1786,7 @@ public class ExternalProcessorFilter implements Filter {
                   .build())
               .build());
           
-          if (dataPlaneClientCall.config.getObservabilityMode()) {
-            // In observability mode we don't wait for handshake response
-            proceedWithClose();
-          }
+          proceedWithClose();
         }
       }
 
