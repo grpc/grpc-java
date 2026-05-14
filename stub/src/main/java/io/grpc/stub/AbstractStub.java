@@ -32,7 +32,6 @@ import java.time.Duration;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
@@ -46,10 +45,11 @@ import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
  * <p>DO NOT MOCK: Customizing options doesn't work properly in mocks. Use InProcessChannelBuilder
  * to create a real channel suitable for testing. It is also possible to mock Channel instead.
  *
+ * <p>This class is thread-safe.
+ *
  * @since 1.0.0
  * @param <S> the concrete type of this stub.
  */
-@ThreadSafe
 @CheckReturnValue
 public abstract class AbstractStub<S extends AbstractStub<S>> {
   private final Channel channel;

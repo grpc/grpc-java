@@ -32,7 +32,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that receives resolved addresses from {@link NameResolver} and provides the
@@ -64,7 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * allows implementations to schedule tasks to be run in the same Synchronization Context, with or
  * without a delay, thus those tasks don't need to worry about synchronizing with the balancer
  * methods.
- * 
+ *
  * <p>However, the actual running thread may be the network thread, thus the following rules must be
  * followed to prevent blocking or even dead-locking in a network:
  *
@@ -417,7 +416,7 @@ public abstract class LoadBalancer {
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
-   * 
+   *
    * <p>Note that this method is only called when implementing {@code handleResolvedAddresses()}
    * instead of {@code acceptResolvedAddresses()}.
    *
@@ -450,7 +449,6 @@ public abstract class LoadBalancer {
    *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class SubchannelPicker {
     /**
@@ -640,7 +638,7 @@ public abstract class LoadBalancer {
      *                            stream is created at all in some cases.
      * @since 1.3.0
      */
-    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones, 
+    // TODO(shivaspeaks): Need to deprecate old APIs and create new ones,
     // per https://github.com/grpc/grpc-java/issues/12662.
     public static PickResult withSubchannel(
         Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory) {
@@ -1030,9 +1028,10 @@ public abstract class LoadBalancer {
   /**
    * Provides essentials for LoadBalancer implementations.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
     /**
@@ -1332,7 +1331,7 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * A logical connection to a server, or a group of equivalent servers represented by an {@link 
+   * A logical connection to a server, or a group of equivalent servers represented by an {@link
    * EquivalentAddressGroup}.
    *
    * <p>It maintains at most one physical connection (aka transport) for sending new RPCs, while
@@ -1551,9 +1550,10 @@ public abstract class LoadBalancer {
   /**
    * Factory to create {@link LoadBalancer} instance.
    *
+   * <p>This class is thread-safe.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
     /**

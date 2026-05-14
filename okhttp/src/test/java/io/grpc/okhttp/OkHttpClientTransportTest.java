@@ -192,7 +192,13 @@ public class OkHttpClientTransportTest {
 
   @After
   public void tearDown() {
-    executor.shutdownNow();
+    try {
+      executor.shutdownNow();
+      executor.awaitTermination(10, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      // Ignore in a test and continue on as normal.
+      Thread.currentThread().interrupt();
+    }
   }
 
   private void initTransport() throws Exception {
