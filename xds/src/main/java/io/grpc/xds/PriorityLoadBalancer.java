@@ -104,8 +104,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
           if (enablePriorityLbChildPolicyCache) {
             childLbState.deactivate();
           } else {
-            children.remove(priority);
             childLbState.tearDown();
+            children.remove(priority);
           }
         }
       }
