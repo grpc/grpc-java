@@ -157,7 +157,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {
-            return createPendingStream(args, tracers, pickResult);
+            String token = pickResult != null ? pickResult.getDelayReasonToken() : null;
+            return createPendingStream(args, tracers, pickResult, token);
           }
           state = newerState;
         }
@@ -173,8 +174,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @GuardedBy("lock")
   private PendingStream createPendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
-      PickResult pickResult) {
-    PendingStream pendingStream = new PendingStream(args, tracers);
+      PickResult pickResult, @Nullable String delayReasonToken) {
+    PendingStream pendingStream = new PendingStream(args, tracers, delayReasonToken);
     if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
       pendingStream.lastPickStatus = pickResult.getStatus();
     }
@@ -303,6 +304,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       final ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
           callOptions.isWaitForReady());
       if (transport != null) {
+        stream.endDelay();
         Executor executor = defaultAppExecutor;
         // createRealStream may be expensive. It will start real streams on the transport. If
         // there are pending requests, they will be serialized too, which may be expensive. Since
@@ -315,7 +317,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
           executor.execute(runnable);
         }
         toRemove.add(stream);
-      }  // else: stay pending
+      } else { // stay pending
+        stream.updateDelayReason(pickResult.getDelayReasonToken());
+      }
     }
 
     synchronized (lock) {
@@ -361,11 +365,44 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
     private volatile Status lastPickStatus;
+    @Nullable private String delayReasonToken;
 
-    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers) {
+    private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
+        @Nullable String initialToken) {
       super("connecting_and_lb");
       this.args = args;
       this.tracers = tracers;
+      this.delayReasonToken = initialToken;
+      if (initialToken != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.delayStarted(initialToken);
+        }
+      }
+    }
+
+    void updateDelayReason(String newToken) {
+      if (!java.util.Objects.equals(delayReasonToken, newToken)) {
+        if (delayReasonToken != null) {
+          for (ClientStreamTracer tracer : tracers) {
+            tracer.delayEnded();
+          }
+        }
+        delayReasonToken = newToken;
+        if (newToken != null) {
+          for (ClientStreamTracer tracer : tracers) {
+            tracer.delayStarted(newToken);
+          }
+        }
+      }
+    }
+
+    void endDelay() {
+      if (delayReasonToken != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.delayEnded();
+        }
+        delayReasonToken = null;
+      }
     }
 
     /** Runnable may be null. */
@@ -391,6 +428,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     @Override
     public void cancel(Status reason) {
+      endDelay();
       super.cancel(reason);
       synchronized (lock) {
         if (reportTransportTerminated != null) {

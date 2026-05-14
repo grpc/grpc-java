@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
@@ -119,6 +120,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             errorPrefix() + "Unable to find non-dynamic cluster"));
       }
       // The dynamic cluster must not have loaded yet
+      helper.updateBalancingState(
+          CONNECTING, new FixedResultPicker(PickResult.withNoResult("cds:discovery_pending")));
       return Status.OK;
     }
     if (!clusterConfigOr.hasValue()) {

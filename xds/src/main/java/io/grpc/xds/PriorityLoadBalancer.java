@@ -322,7 +322,11 @@ final class PriorityLoadBalancer extends LoadBalancer {
         }
         ConnectivityState oldState = connectivityState;
         connectivityState = newState;
-        picker = newPicker;
+        if (newState == CONNECTING || newState == IDLE) {
+          picker = new PriorityPicker(newPicker, priority);
+        } else {
+          picker = newPicker;
+        }
 
         if (deletionTimer != null && deletionTimer.isPending()) {
           return;
@@ -355,6 +359,43 @@ final class PriorityLoadBalancer extends LoadBalancer {
       protected Helper delegate() {
         return helper;
       }
+    }
+  }
+
+  private static final class PriorityPicker extends SubchannelPicker {
+    private final SubchannelPicker delegate;
+    private final String priority;
+
+    PriorityPicker(SubchannelPicker delegate, String priority) {
+      this.delegate = com.google.common.base.Preconditions.checkNotNull(delegate, "delegate");
+      this.priority = com.google.common.base.Preconditions.checkNotNull(priority, "priority");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      PickResult childResult = delegate.pickSubchannel(args);
+      if (!childResult.hasResult() && childResult.getDelayReasonToken() != null) {
+        return PickResult.withNoResult(
+            "priority_" + priority + ":" + childResult.getDelayReasonToken());
+      }
+      return childResult;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PriorityPicker that = (PriorityPicker) o;
+      return delegate.equals(that.delegate) && priority.equals(that.priority);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(delegate, priority);
     }
   }
 }

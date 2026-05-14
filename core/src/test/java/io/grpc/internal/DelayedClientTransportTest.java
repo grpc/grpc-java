@@ -772,6 +772,55 @@ public class DelayedClientTransportTest {
             + " connecting_and_lb_delay=[0-9]+ns, was_still_waiting]");
   }
 
+  @Test
+  public void streamDelayMetrics() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+    
+    SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
+    when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+        
+    delayedTransport.reprocess(connectingPicker);
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+    
+    InOrder inOrder = inOrder(mockTracer);
+    inOrder.verify(mockTracer).delayStarted("pick_first:connecting");
+    
+    SubchannelPicker customDelayPicker = mock(SubchannelPicker.class);
+    when(customDelayPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("rls:lookup_pending"));
+        
+    delayedTransport.reprocess(customDelayPicker);
+    
+    inOrder.verify(mockTracer).delayEnded();
+    inOrder.verify(mockTracer).delayStarted("rls:lookup_pending");
+    
+    delayedTransport.reprocess(mockPicker);
+    
+    inOrder.verify(mockTracer).delayEnded();
+  }
+
+  @Test
+  public void streamDelayMetrics_cancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+    
+    SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
+    when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+        
+    delayedTransport.reprocess(connectingPicker);
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+    
+    verify(mockTracer).delayStarted("pick_first:connecting");
+    
+    stream.cancel(Status.CANCELLED);
+    
+    verify(mockTracer).delayEnded();
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

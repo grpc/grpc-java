@@ -160,6 +160,7 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
                             && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
@@ -524,6 +525,7 @@ public class RingHashLoadBalancerTest {
     PickResult result = picker.pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
+    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
     verifyConnection(0);
   }
 
@@ -546,6 +548,7 @@ public class RingHashLoadBalancerTest {
     PickResult result = picker.pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
+    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
     verifyConnection(1);
   }
 
@@ -1160,6 +1163,7 @@ public class RingHashLoadBalancerTest {
 
     assertThat(connectionRequestedQueue.poll()).isNull();
   }
+
 
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
       List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {

@@ -549,25 +549,30 @@ public abstract class LoadBalancer {
     // True if the result is created by withDrop()
     private final boolean drop;
     @Nullable private final String authorityOverride;
+    @Nullable private final String delayReasonToken;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop) {
-      this.subchannel = subchannel;
-      this.streamTracerFactory = streamTracerFactory;
-      this.status = checkNotNull(status, "status");
-      this.drop = drop;
-      this.authorityOverride = null;
+      this(subchannel, streamTracerFactory, status, drop, null, null);
     }
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop, @Nullable String authorityOverride) {
+      this(subchannel, streamTracerFactory, status, drop, authorityOverride, null);
+    }
+
+    private PickResult(
+        @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
+        Status status, boolean drop, @Nullable String authorityOverride,
+        @Nullable String delayReasonToken) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
       this.authorityOverride = authorityOverride;
+      this.delayReasonToken = delayReasonToken;
     }
 
     /**
@@ -725,6 +730,22 @@ public abstract class LoadBalancer {
      */
     public static PickResult withNoResult() {
       return NO_RESULT;
+    }
+
+    /**
+     * No decision could be made.  The RPC will stay buffered with a specific reason.
+     *
+     * @since 1.82.0
+     */
+    public static PickResult withNoResult(String delayReasonToken) {
+      Preconditions.checkNotNull(delayReasonToken, "delayReasonToken");
+      return new PickResult(null, null, Status.OK, false, null, delayReasonToken);
+    }
+
+    /** Returns the delay reason token if any. */
+    @Nullable
+    public String getDelayReasonToken() {
+      return delayReasonToken;
     }
 
     /** Returns the authority override if any. */

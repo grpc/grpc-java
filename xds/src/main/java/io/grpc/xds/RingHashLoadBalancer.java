@@ -356,6 +356,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private static final class RingHashPicker extends SubchannelPicker {
+    private static final PickResult RING_HASH_CONNECTING_RESULT = 
+        PickResult.withNoResult("ring_hash:connecting");
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,
@@ -453,7 +455,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           // RPCs can be buffered if the next subchannel is pending (per A62). Otherwise, RPCs
           // are failed unless there is a READY connection.
           if (subchannelView.connectivityState == CONNECTING) {
-            return PickResult.withNoResult();
+            return RING_HASH_CONNECTING_RESULT;
           }
 
           if (subchannelView.connectivityState == IDLE) {
@@ -463,7 +465,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
               }
             });
 
-            return PickResult.withNoResult(); // Indicates that this should be retried after backoff
+            // Indicates that this should be retried after backoff
+            return RING_HASH_CONNECTING_RESULT;
           }
         }
       } else {
@@ -487,7 +490,7 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
           }
         }
         if (requestedConnection) {
-          return PickResult.withNoResult();
+          return RING_HASH_CONNECTING_RESULT;
         }
       }
 
