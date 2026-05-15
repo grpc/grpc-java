@@ -1512,17 +1512,16 @@ public class ExternalProcessorFilter implements Filter {
 
       private void drainPendingDrainingMessages() {
         synchronized (streamLock) {
-          passThroughMode.set(true);
           InputStream msg;
           while ((msg = pendingDrainingMessages.poll()) != null) {
             super.sendMessage(msg);
           }
+          passThroughMode.set(true);
         }
       }
 
       private void handleFailOpen(DataPlaneListener listener) {
         activateCall();
-        drainPendingDrainingMessages();
         listener.unblockAfterStreamComplete();
         closeExtProcStream();
       }
