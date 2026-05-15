@@ -825,8 +825,6 @@ public class ExternalProcessorFilter implements Filter {
       private final Object streamLock = new Object();
       private final Queue<EventType> expectedResponses = new ConcurrentLinkedQueue<>();
       private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
-      private final Queue<ProcessingRequest> pendingProcessingRequests =
-          new ConcurrentLinkedQueue<>();
       private final Queue<InputStream> pendingDrainingMessages =
           new ConcurrentLinkedQueue<>();
       private volatile DataPlaneListener wrappedListener;
@@ -1039,9 +1037,6 @@ public class ExternalProcessorFilter implements Filter {
           public void beforeStart(ClientCallStreamObserver<ProcessingRequest> requestStream) {
             synchronized (streamLock) {
               extProcClientCallRequestObserver = requestStream;
-              while (!pendingProcessingRequests.isEmpty()) {
-                requestStream.onNext(pendingProcessingRequests.poll());
-              }
             }
             requestStream.setOnReadyHandler(DataPlaneClientCall.this::onExtProcStreamReady);
           }
@@ -1244,11 +1239,7 @@ public class ExternalProcessorFilter implements Filter {
             expectedResponses.add(EventType.RESPONSE_TRAILERS);
           }
 
-          if (extProcClientCallRequestObserver != null) {
-            extProcClientCallRequestObserver.onNext(request);
-          } else {
-            pendingProcessingRequests.add(request);
-          }
+          extProcClientCallRequestObserver.onNext(request);
         }
       }
 
