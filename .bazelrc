@@ -1,1 +1,3 @@
 build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+
+common:skip_android --deleted_packages=binder
