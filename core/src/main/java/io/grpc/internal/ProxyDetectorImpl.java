@@ -207,6 +207,10 @@ class ProxyDetectorImpl implements ProxyDetector {
     }
 
     List<Proxy> proxies = proxySelector.select(uri);
+    if (proxies == null || proxies.isEmpty()) {
+      log.log(Level.FINE, "No proxies returned, proceeding without proxy");
+      return null;
+    }
     if (proxies.size() > 1) {
       log.warning("More than 1 proxy detected, gRPC will select the first one");
     }
