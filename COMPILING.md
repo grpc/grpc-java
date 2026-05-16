@@ -150,3 +150,19 @@ $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
 
 # Add 'export ANDROID_HOME=$HOME/Android/Sdk' to your .bashrc or equivalent
 ```
+
+Building with Bazel
+===================
+
+grpc-java can also be built using [Bazel](https://bazel.build/).
+
+First [install bazelisk](https://github.com/bazelbuild/bazelisk#installation)
+(unlike Gradle, Bazel's wrapper isn't checked-in to the grpc-java repository).
+
+To build the grpc-java library:
+```
+$ bazelisk build //...
+```
+
+You cannot run the tests from Bazel at this time.
+
