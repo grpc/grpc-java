@@ -977,7 +977,8 @@ public class ExternalProcessorFilter implements Filter {
                 .withDescription("gRPC message compression not supported in ext_proc")
                 .asRuntimeException();
             synchronized (streamLock) {
-              if (!extProcStreamState.get().isCompleted() && extProcClientCallRequestObserver != null) {
+              if (!extProcStreamState.get().isCompleted()
+                  && extProcClientCallRequestObserver != null) {
                 extProcClientCallRequestObserver.onError(ex);
               }
             }
@@ -1091,14 +1092,17 @@ public class ExternalProcessorFilter implements Filter {
               } else if (response.hasRequestBody()) {
                 if (expected == EventType.REQUEST_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
-                      .withDescription("Protocol error: received request_body before request_headers response.")
+                      .withDescription(
+                          "Protocol error: received request_body before request_headers response.")
                       .asRuntimeException());
                   return;
                 }
               } else if (response.hasResponseBody()) {
-                if (expected == EventType.REQUEST_HEADERS || expected == EventType.RESPONSE_HEADERS) {
+                if (expected == EventType.REQUEST_HEADERS
+                    || expected == EventType.RESPONSE_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
-                      .withDescription("Protocol error: received response_body before headers response.")
+                      .withDescription(
+                          "Protocol error: received response_body before headers response.")
                       .asRuntimeException());
                   return;
                 }

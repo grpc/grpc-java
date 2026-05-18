@@ -2395,7 +2395,7 @@ public class ExternalProcessorFilterTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenDeferredHalfClose_whenExtProcRespondsWithEndOfStreamWithoutMessage_thenSuperHalfCloseCalled()
+  public void deferredHalfClose_whenExtProcRespondsWithEosWithoutMessage_thenSuperHalfCloseCalled()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -2717,7 +2717,7 @@ public class ExternalProcessorFilterTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenExtProcRespondsWithEndOfStreamWithoutMessage_whenAppHasNotHalfClosed_thenSuperHalfCloseCalled()
+  public void extProcRespondsWithEosWithoutMessage_whenAppNotHalfClosed_thenSuperHalfCloseCalled()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -3640,7 +3640,8 @@ public class ExternalProcessorFilterTest {
     assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    final List<ProcessingRequest> extProcRequests = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final List<ProcessingRequest> extProcRequests =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -6168,7 +6169,8 @@ public class ExternalProcessorFilterTest {
     assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    final List<ProcessingRequest> extProcRequests = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final List<ProcessingRequest> extProcRequests =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     // Sidecar server
     final CountDownLatch sidecarActionLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
