@@ -1239,7 +1239,14 @@ public class ExternalProcessorFilter implements Filter {
             expectedResponses.add(EventType.RESPONSE_TRAILERS);
           }
 
-          extProcClientCallRequestObserver.onNext(request);
+          ProcessingRequest requestToSend = request;
+          if (config.getObservabilityMode()) {
+            requestToSend = ProcessingRequest.newBuilder(request)
+                .setObservabilityMode(true)
+                .build();
+          }
+
+          extProcClientCallRequestObserver.onNext(requestToSend);
         }
       }
 
@@ -1445,7 +1452,7 @@ public class ExternalProcessorFilter implements Filter {
           BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasStreamedResponse()) {
             StreamedBodyResponse streamed = mutation.getStreamedResponse();
-            if (!streamed.getBody().isEmpty()) {
+            if (!streamed.getEndOfStreamWithoutMessage()) {
               super.sendMessage(streamed.getBody().newInput());
             }
             if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
@@ -1463,9 +1470,7 @@ public class ExternalProcessorFilter implements Filter {
           BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
           if (mutation.hasStreamedResponse()) {
             StreamedBodyResponse streamed = mutation.getStreamedResponse();
-            if (!streamed.getBody().isEmpty()) {
-              listener.onExternalBody(streamed.getBody());
-            }
+            listener.onExternalBody(streamed.getBody());
           }
         }
       }
@@ -1513,6 +1518,7 @@ public class ExternalProcessorFilter implements Filter {
 
       private void handleFailOpen(DataPlaneListener listener) {
         activateCall();
+        drainPendingRequests();
         listener.unblockAfterStreamComplete();
         closeExtProcStream();
       }
