@@ -98,10 +98,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
-            sha256 = "49930468563dd48283e8301e8d4e71436bf6d27ac27c235224cc1a098710835d",
-            strip_prefix = "googleapis-ca1372c6d7bcb199638ebfdb40d2b2660bab7b88",
+            sha256 = "397fd8eb8a1a62dcf144216d9775816fad7a3fcff0ced1614bee529003c30d9e",
+            strip_prefix = "googleapis-1dbb1a14e079f78d9214f8e48bf083f32e3ddb96",
             urls = [
-                "https://github.com/googleapis/googleapis/archive/ca1372c6d7bcb199638ebfdb40d2b2660bab7b88.tar.gz",
+                "https://github.com/googleapis/googleapis/archive/1dbb1a14e079f78d9214f8e48bf083f32e3ddb96.tar.gz",
             ],
         )
     if not native.existing_rule("io_grpc_grpc_proto"):
