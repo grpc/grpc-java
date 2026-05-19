@@ -147,11 +147,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
 
     Uri.Builder modifiedTargetBuilder = grpcUri.toBuilder().setScheme(schemeOverride);
-    if (newQuery != null) {
-      modifiedTargetBuilder.setRawQuery(newQuery);
-    } else {
-      modifiedTargetBuilder.setRawQuery(null);
-    }
+    modifiedTargetBuilder.setRawQuery(newQuery);
     if (schemeOverride.equals("xds")) {
       modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
     }
