@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -381,7 +382,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     void updateDelayReason(String newToken) {
-      if (!java.util.Objects.equals(delayReasonToken, newToken)) {
+      if (!Objects.equals(delayReasonToken, newToken)) {
         if (delayReasonToken != null) {
           for (ClientStreamTracer tracer : tracers) {
             tracer.delayEnded();

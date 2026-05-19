@@ -1164,7 +1164,6 @@ public class RingHashLoadBalancerTest {
     assertThat(connectionRequestedQueue.poll()).isNull();
   }
 
-
   private List<Subchannel> initializeLbSubchannels(RingHashConfig config,
       List<EquivalentAddressGroup> servers, InitializationFlags... initFlags) {
 

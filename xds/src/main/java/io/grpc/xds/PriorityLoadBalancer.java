@@ -367,8 +367,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     private final String priority;
 
     PriorityPicker(SubchannelPicker delegate, String priority) {
-      this.delegate = com.google.common.base.Preconditions.checkNotNull(delegate, "delegate");
-      this.priority = com.google.common.base.Preconditions.checkNotNull(priority, "priority");
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.priority = checkNotNull(priority, "priority");
     }
 
     @Override
@@ -395,7 +395,7 @@ final class PriorityLoadBalancer extends LoadBalancer {
 
     @Override
     public int hashCode() {
-      return java.util.Objects.hash(delegate, priority);
+      return Objects.hash(delegate, priority);
     }
   }
 }
