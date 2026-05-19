@@ -80,8 +80,12 @@ jobs:
     strategy:
       matrix:
         bzlmod: [true, false]
+        bazel_version: [8.7.0, 9.1.0]
+        exclude:
+          - bazel_version: 9.1.0
+            bzlmod: false
     env:
-      USE_BAZEL_VERSION: 8.7.0
+      USE_BAZEL_VERSION: ${{ matrix.bazel_version }}
 
     steps:
     - uses: actions/checkout@v4
