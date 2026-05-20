@@ -163,4 +163,13 @@ to ensure you're always building using the latest supported version, then try:
 $ bazelisk build //...
 ```
 
+Some parts of grpc-java depend on Android. Bazel can build these parts too but,
+for size, licensing and maintenance reasons, it requires a locally installed
+Android SDK. If you don't have the SDK and/or don't care about Android, use the
+`skip_android` configuration to skip building the Android parts:
+
+```sh
+$ bazelisk build //... --config=skip_android
+```
+
 You cannot run the tests from Bazel at this time.
