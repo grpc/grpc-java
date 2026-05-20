@@ -1406,6 +1406,8 @@ public class ExternalProcessorFilterTest {
     assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
+    final CountDownLatch appFinishedLatch = new CountDownLatch(1);
+
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -1419,6 +1421,11 @@ public class ExternalProcessorFilterTest {
           public void onNext(ProcessingRequest request) {
             new Thread(() -> {
               if (request.hasRequestHeaders()) {
+                try {
+                  appFinishedLatch.await();
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
                 responseObserver.onNext(ProcessingResponse.newBuilder()
                     .setRequestHeaders(HeadersResponse.newBuilder()
                         .setResponse(CommonResponse.newBuilder()
@@ -1500,10 +1507,13 @@ public class ExternalProcessorFilterTest {
     Metadata headers = new Metadata();
     proxyCall.start(new ClientCall.Listener<String>() {}, headers);
 
-    // Send message and half-close to trigger unary call
+    // Send message and half-close to trigger unary call while the call is buffered (since ext-proc is waiting)
     proxyCall.request(1);
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
+
+    // Release the ext-proc response now that all app events are buffered
+    appFinishedLatch.countDown();
 
     // Verify main call started with mutated headers
     assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -5182,6 +5192,117 @@ public class ExternalProcessorFilterTest {
     
     // Data plane call should NOT have been started as sidecar rejected immediately on headers
     assertThat(dataPlaneStarted.get()).isFalse();
+    
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenImmediateResponseAndObservabilityTrue_whenReceived_thenImmediateResponseIgnored()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setObservabilityMode(true)
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server sends ImmediateResponse
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
+    extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(
+          final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setImmediateResponse(ImmediateResponse.newBuilder()
+                      .setGrpcStatus(
+                          io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
+                              .setStatus(Status.UNAUTHENTICATED.getCode().value())
+                              .build())
+                      .setDetails("Custom security rejection")
+                      .build())
+                  .build());
+              responseObserver.onCompleted();
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {}
+
+          @Override
+          public void onCompleted() {}
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName)
+              .directExecutor()
+              .build());
+    });
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              responseObserver.onNext("Hello " + request);
+              responseObserver.onCompleted();
+              dataPlaneLatch.countDown();
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final CountDownLatch closedLatch = new CountDownLatch(1);
+    final AtomicReference<Status> closedStatus = new AtomicReference<>();
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        closedStatus.set(status);
+        closedLatch.countDown();
+      }
+    };
+    
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+
+    proxyCall.request(1);
+    proxyCall.sendMessage("test");
+    proxyCall.halfClose();
+
+    // In observability mode, the call should NOT be cancelled by the immediate response.
+    // It should proceed normally to the data plane and finish successfully (Status.OK).
+    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(closedStatus.get().isOk()).isTrue();
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();

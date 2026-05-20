@@ -1051,6 +1051,10 @@ public class ExternalProcessorFilter implements Filter {
           @Override
           public void onNext(ProcessingResponse response) {
             try {
+              if (config.getObservabilityMode()) {
+                return;
+              }
+
               if (response.hasImmediateResponse()) {
                 if (config.getDisableImmediateResponse()) {
                   internalOnError(Status.UNAVAILABLE
@@ -1060,10 +1064,6 @@ public class ExternalProcessorFilter implements Filter {
                   return;
                 }
                 handleImmediateResponse(response.getImmediateResponse(), wrappedListener);
-                return;
-              }
-
-              if (config.getObservabilityMode()) {
                 return;
               }
 
@@ -1653,8 +1653,8 @@ public class ExternalProcessorFilter implements Filter {
       @Override
       public void onClose(Status status, Metadata trailers) {
         dataPlaneClientCall.serverTrailersStartNanos = System.nanoTime();
-        ExtProcStreamState state = dataPlaneClientCall.extProcStreamState.get();
-        if (state.isFailed()
+        ExtProcStreamState extProcStreamState = dataPlaneClientCall.extProcStreamState.get();
+        if (extProcStreamState.isFailed()
             && !dataPlaneClientCall.config.getFailureModeAllow()) {
           if (dataPlaneClientCall.markDataPlaneCallClosed()) {
             proceedWithClose(Status.UNAVAILABLE.withDescription("External processor stream failed")
@@ -1671,11 +1671,6 @@ public class ExternalProcessorFilter implements Filter {
 
         this.savedStatus = status;
         this.savedTrailers = trailers;
-
-        if (state.isCompleted()) {
-          proceedWithClose();
-          return;
-        }
 
         if (savedHeaders != null) {
           return;
