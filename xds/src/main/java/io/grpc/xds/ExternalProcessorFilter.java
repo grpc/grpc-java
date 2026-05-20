@@ -841,7 +841,8 @@ public class ExternalProcessorFilter implements Filter {
       private final DataPlaneDelayedCall<InputStream, InputStream> delayedCall;
       private final ScheduledExecutorService scheduler;
       private final Object streamLock = new Object();
-      private final Queue<EventType> expectedResponses = new ConcurrentLinkedQueue<>();
+      private final Queue<EventType> expectedRequestResponses = new ConcurrentLinkedQueue<>();
+      private final Queue<EventType> expectedResponseResponses = new ConcurrentLinkedQueue<>();
       private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
       private final Queue<InputStream> pendingDrainingMessages =
           new ConcurrentLinkedQueue<>();
@@ -1067,8 +1068,8 @@ public class ExternalProcessorFilter implements Filter {
                 return;
               }
 
-              EventType expected = expectedResponses.peek();
               if (response.hasRequestHeaders()) {
+                EventType expected = expectedRequestResponses.peek();
                 if (expected == null || expected != EventType.REQUEST_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
@@ -1076,8 +1077,9 @@ public class ExternalProcessorFilter implements Filter {
                       .asRuntimeException());
                   return;
                 }
-                expectedResponses.poll();
+                expectedRequestResponses.poll();
               } else if (response.hasResponseHeaders()) {
+                EventType expected = expectedResponseResponses.peek();
                 if (expected == null || expected != EventType.RESPONSE_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
@@ -1085,8 +1087,9 @@ public class ExternalProcessorFilter implements Filter {
                       .asRuntimeException());
                   return;
                 }
-                expectedResponses.poll();
+                expectedResponseResponses.poll();
               } else if (response.hasResponseTrailers()) {
+                EventType expected = expectedResponseResponses.peek();
                 if (expected == null || expected != EventType.RESPONSE_TRAILERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription("Protocol error: received response out of order. Expected: " 
@@ -1094,8 +1097,9 @@ public class ExternalProcessorFilter implements Filter {
                       .asRuntimeException());
                   return;
                 }
-                expectedResponses.poll();
+                expectedResponseResponses.poll();
               } else if (response.hasRequestBody()) {
+                EventType expected = expectedRequestResponses.peek();
                 if (expected == EventType.REQUEST_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription(
@@ -1104,8 +1108,8 @@ public class ExternalProcessorFilter implements Filter {
                   return;
                 }
               } else if (response.hasResponseBody()) {
-                if (expected == EventType.REQUEST_HEADERS
-                    || expected == EventType.RESPONSE_HEADERS) {
+                EventType expected = expectedResponseResponses.peek();
+                if (expected == EventType.RESPONSE_HEADERS) {
                   internalOnError(Status.UNAVAILABLE
                       .withDescription(
                           "Protocol error: received response_body before headers response.")
@@ -1242,11 +1246,11 @@ public class ExternalProcessorFilter implements Filter {
           }
           
           if (request.hasRequestHeaders()) {
-            expectedResponses.add(EventType.REQUEST_HEADERS);
+            expectedRequestResponses.add(EventType.REQUEST_HEADERS);
           } else if (request.hasResponseHeaders()) {
-            expectedResponses.add(EventType.RESPONSE_HEADERS);
+            expectedResponseResponses.add(EventType.RESPONSE_HEADERS);
           } else if (request.hasResponseTrailers()) {
-            expectedResponses.add(EventType.RESPONSE_TRAILERS);
+            expectedResponseResponses.add(EventType.RESPONSE_TRAILERS);
           }
 
           ProcessingRequest requestToSend = request;

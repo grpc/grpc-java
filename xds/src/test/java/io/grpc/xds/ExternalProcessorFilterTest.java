@@ -8428,6 +8428,184 @@ public class ExternalProcessorFilterTest {
     channelManager.close();
   }
 
+  @Test
+  public void givenBidiStreamInterleavedEvents_whenExtProcRespondsOutOfLockstep_thenSucceeds()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+    ExecutorService bidiTestExecutor = Executors.newCachedThreadPool();
+
+    final CountDownLatch sidecarRequestBodyLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarResponseHeadersLatch = new CountDownLatch(1);
+    final CountDownLatch allDoneLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            final AtomicReference<StreamObserver<ProcessingResponse>> observerRef =
+                new AtomicReference<>(responseObserver);
+            return new StreamObserver<ProcessingRequest>() {
+              private ProcessingRequest savedRequestBody;
+
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestBody()) {
+                  if (request.getRequestBody().getEndOfStream()
+                      || request.getRequestBody().getEndOfStreamWithoutMessage()) {
+                    // This is the half-close request!
+                    observerRef.get().onNext(ProcessingResponse.newBuilder()
+                        .setRequestBody(BodyResponse.newBuilder()
+                            .setResponse(CommonResponse.newBuilder()
+                                .setBodyMutation(BodyMutation.newBuilder()
+                                    .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                        .setEndOfStream(true)
+                                        .build())
+                                    .build())
+                                .build())
+                            .build())
+                        .build());
+                  } else {
+                    savedRequestBody = request;
+                    sidecarRequestBodyLatch.countDown();
+                  }
+                } else if (request.hasResponseHeaders()) {
+                  // When RESPONSE_HEADERS is received, we respond to it first!
+                  // This is out-of-lockstep because REQUEST_BODY response is still outstanding.
+                  observerRef.get().onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                  sidecarResponseHeadersLatch.countDown();
+
+                  // Now send response to REQUEST_BODY with streamed response containing the body
+                  if (savedRequestBody != null) {
+                    observerRef.get().onNext(ProcessingResponse.newBuilder()
+                        .setRequestBody(BodyResponse.newBuilder()
+                            .setResponse(CommonResponse.newBuilder()
+                                .setBodyMutation(BodyMutation.newBuilder()
+                                    .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                        .setBody(savedRequestBody.getRequestBody().getBody())
+                                        .build())
+                                    .build())
+                                .build())
+                            .build())
+                        .build());
+                  }
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                observerRef.get().onCompleted();
+              }
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .executor(bidiTestExecutor)
+        .build().start());
+
+    MutableHandlerRegistry uniqueBidiRegistry = new MutableHandlerRegistry();
+    uniqueBidiRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<String, String>() {
+              @Override
+              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                // Send headers immediately by sending a message when stream starts
+                responseObserver.onNext("Welcome");
+                return new StreamObserver<String>() {
+                  @Override
+                  public void onNext(String value) {}
+
+                  @Override
+                  public void onError(Throwable t) {}
+
+                  @Override
+                  public void onCompleted() {
+                    responseObserver.onCompleted();
+                  }
+                };
+              }
+            }))
+        .build());
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueBidiRegistry)
+        .executor(bidiTestExecutor)
+        .build().start());
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            // SKIP so data plane call starts immediately
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            // GRPC body mode to trigger REQUEST_BODY
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            // SEND to trigger RESPONSE_HEADERS
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ExternalProcessorFilterConfig filterConfig =
+        provider.parseFilterConfig(Any.pack(proto), filterContext).config;
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName)
+          .executor(bidiTestExecutor)
+          .build());
+    });
+
+    ExternalProcessorInterceptor interceptor = new ExternalProcessorInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .executor(bidiTestExecutor)
+            .build());
+
+    ClientCall<String, String> clientCall = interceptCall(interceptor,
+        METHOD_BIDI_STREAMING,
+        DEFAULT_CALL_OPTIONS.withExecutor(bidiTestExecutor),
+        dataPlaneChannel);
+
+    StreamObserver<String> bidiRequestObserver = ClientCalls.asyncBidiStreamingCall(
+        clientCall,
+        new StreamObserver<String>() {
+          @Override
+          public void onNext(String value) {}
+
+          @Override
+          public void onError(Throwable t) {}
+
+          @Override
+          public void onCompleted() {
+            allDoneLatch.countDown();
+          }
+        });
+
+    // Send client message to trigger REQUEST_BODY to ext_proc
+    bidiRequestObserver.onNext("ClientMsg");
+
+    // Wait for ext_proc to process out-of-lockstep events
+    assertThat(sidecarRequestBodyLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(sidecarResponseHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+    // Complete the bidi stream
+    bidiRequestObserver.onCompleted();
+    assertThat(allDoneLatch.await(10, TimeUnit.SECONDS)).isTrue();
+
+    // Clean up by cancelling the call explicitly
+    clientCall.cancel("Test finished", null);
+
+    channelManager.close();
+    bidiTestExecutor.shutdown();
+  }
+
   // --- Category 19: Header Response Status Checks ---
 
   @Test
