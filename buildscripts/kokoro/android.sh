@@ -47,7 +47,8 @@ export PATH=/tmp/bazelisk:$PATH
 
 export USE_BAZEL_VERSION=9.1.0
 bazelisk build \
-  //android
+  //android \
+  //binder
 
 curl -Ls https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.tar.gz | \
     tar xz -C /tmp
