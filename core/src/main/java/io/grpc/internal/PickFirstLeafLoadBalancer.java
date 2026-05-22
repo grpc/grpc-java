@@ -333,6 +333,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
+        // If we get a newly resolved address list via acceptResolvedAddresses,
+        // as we are in CONNECTING, we will try to .updateAddresses the currently
+        // connecting subchannel if it exists in the new list.
+        // As such, We need to make sure that with transitioning to CONNECTING the subchannel for
+        // the current address of a valid index exists.
+        if ((!enableHappyEyeballs && !addressIndex.isValid())
+            || (addressIndex.isValid() && !subchannels.containsKey(
+            addressIndex.getCurrentAddress()))) {
+          addressIndex.seekTo(getAddress(subchannelData.subchannel));
+        }
         updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         break;
 
@@ -634,6 +644,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   ConnectivityState getConcludedConnectivityState() {
     return this.concludedState;
+  }
+
+  @VisibleForTesting
+  ConnectivityState getRawConnectivityState() {
+    return this.rawConnectivityState;
   }
 
   /**
