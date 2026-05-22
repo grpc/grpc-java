@@ -34,7 +34,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MirroringInterceptor;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -79,7 +78,9 @@ public class MirroringInterceptorTest {
                       if (key != null && expectedValue.equals(headers.get(key))) {
                         headerVerified.set(true);
                       }
-                      if (latch != null) latch.countDown();
+                      if (latch != null) {
+                        latch.countDown();
+                      }
                       call.sendHeaders(new Metadata());
                       call.close(Status.OK, new Metadata());
                       return new ServerCall.Listener<String>() {};
