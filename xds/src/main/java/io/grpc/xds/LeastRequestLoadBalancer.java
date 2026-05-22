@@ -300,6 +300,20 @@ final class LeastRequestLoadBalancer extends MultiChildLoadBalancer {
     }
 
     @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof LeastRequestConfig)) {
+        return false;
+      }
+      LeastRequestConfig that = (LeastRequestConfig) o;
+      return this.choiceCount == that.choiceCount;
+    }
+
+    @Override
+    public int hashCode() {
+      return choiceCount;
+    }
+
+    @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("choiceCount", choiceCount)
