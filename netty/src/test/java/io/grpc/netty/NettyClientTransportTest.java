@@ -299,6 +299,30 @@ public class NettyClientTransportTest {
     }
   }
 
+@Test
+  public void networkErrorOverridesGracefulShutdownStatus() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    callMeMaybe(transport.start(clientTransportListener));
+    
+    // 1. Trigger graceful shutdown (Has NO cause)
+    Status gracefulStatus = Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+    transport.shutdown(gracefulStatus);
+    
+    // 2. Simulate hard network error by dropping the channel
+    // Netty will automatically generate a Status with a ClosedChannelException
+    transport.channel().pipeline().fireChannelInactive();
+
+    // 3. Verify the listener receives the network error (Has Cause), not the graceful status
+    verify(clientTransportListener, timeout(5000)).transportShutdown(
+        org.mockito.ArgumentMatchers.argThat(status -> 
+            status != null && status.getCause() instanceof java.nio.channels.ClosedChannelException
+        ), 
+        org.mockito.ArgumentMatchers.any()
+    );
+  }
+
+
   /**
    * Verifies that we can create multiple TLS client transports from the same builder.
    */

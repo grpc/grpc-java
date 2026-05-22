@@ -69,6 +69,11 @@ final class ClientTransportLifecycleManager {
   public boolean notifyShutdown(Status s, DisconnectError disconnectError) {
     notifyGracefulShutdown(s, disconnectError);
     if (shutdownStatus != null) {
+      // Status Upgrade: Overwrite graceful shutdown if a hard network error occurs
+      if (shutdownStatus.getCause() == null && s.getCause() != null) {
+        shutdownStatus = s;
+        return true;
+      }
       return false;
     }
     shutdownStatus = s;
