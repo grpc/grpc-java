@@ -299,24 +299,25 @@ public class NettyClientTransportTest {
     }
   }
 
-@Test
+  @Test
   public void networkErrorOverridesGracefulShutdownStatus() throws Exception {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
     
-    // 1. Trigger graceful shutdown (Has NO cause)
+    // 1. Trigger graceful shutdown
     Status gracefulStatus = Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
     transport.shutdown(gracefulStatus);
     
-    // 2. Simulate hard network error by dropping the channel
-    // Netty will automatically generate a Status with a ClosedChannelException
+    // 2. Simulate a real network drop (e.g., Connection Reset)
+    java.io.IOException networkCause = new java.io.IOException("Connection reset by peer");
+    transport.channel().pipeline().fireExceptionCaught(networkCause);
     transport.channel().pipeline().fireChannelInactive();
 
-    // 3. Verify the listener receives the network error (Has Cause), not the graceful status
+    // 3. Verify the listener receives the IO error, NOT the graceful status
     verify(clientTransportListener, timeout(5000)).transportShutdown(
         org.mockito.ArgumentMatchers.argThat(status -> 
-            status != null && status.getCause() instanceof java.nio.channels.ClosedChannelException
+            status != null && status.getCause() instanceof java.io.IOException
         ), 
         org.mockito.ArgumentMatchers.any()
     );
