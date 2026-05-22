@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.gcp.csm.observability.CsmObservability;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.BindableService;
 import io.grpc.Grpc;
@@ -46,6 +47,13 @@ public class TestServiceServer {
   public static void main(String[] args) throws Exception {
     final TestServiceServer server = new TestServiceServer();
     server.parseArgs(args);
+    if (server.enableOpentelemetryTracing) {
+        io.opentelemetry.api.OpenTelemetry otel = io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk.initialize().getOpenTelemetrySdk();
+        io.grpc.opentelemetry.GrpcOpenTelemetry gotel = io.grpc.opentelemetry.GrpcOpenTelemetry.newBuilder()
+            .sdk(otel)
+            .build();
+        gotel.registerGlobal();
+    }
     if (server.useTls) {
       System.out.println(
           "\nUsing fake CA for TLS certificate. Test clients should expect host\n"
@@ -75,6 +83,7 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
+  private boolean enableOpentelemetryTracing = false;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -106,6 +115,8 @@ public class TestServiceServer {
         port = Integer.parseInt(value);
       } else if ("use_tls".equals(key)) {
         useTls = Boolean.parseBoolean(value);
+      } else if ("enable_opentelemetry_tracing".equals(key)) {
+        enableOpentelemetryTracing = Boolean.parseBoolean(value);
       } else if ("use_alts".equals(key)) {
         useAlts = Boolean.parseBoolean(value);
       } else if ("local_handshaker_port".equals(key)) {

@@ -42,6 +42,7 @@ dependencies {
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
             libraries.opentelemetry.exporter.prometheus, // For xds interop client
+            libraries.opentelemetry.exporter.otlp,
             project(':grpc-googleapis'),
             project(':grpc-grpclb'),
             project(':grpc-rls')

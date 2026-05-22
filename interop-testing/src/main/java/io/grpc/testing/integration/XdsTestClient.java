@@ -39,6 +39,7 @@ import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
@@ -60,6 +61,7 @@ import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsChannelCredentials;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -104,6 +106,7 @@ public final class XdsTestClient {
   private long currentRequestId;
   private ListeningScheduledExecutorService exec;
   private CsmObservability csmObservability;
+  private OpenTelemetrySdk openTelemetrySdk;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -265,14 +268,23 @@ public final class XdsTestClient {
   @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   private void run() {
     if (enableCsmObservability) {
+      Map<String, String> props = new HashMap<>();
+      props.put("otel.logs.exporter", "none");
+      props.put("otel.metrics.exporter", "otlp");
+      String tracesExporter = System.getenv("OTEL_TRACES_EXPORTER");
+      if (tracesExporter != null) {
+        props.put("otel.traces.exporter", tracesExporter);
+      } else {
+        props.put("otel.traces.exporter", "none");
+      }
+      
+      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
+          .addPropertiesSupplier(() -> props)
+          .build();
+      openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
       csmObservability = CsmObservability.newBuilder()
-          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
-              .addPropertiesSupplier(() -> ImmutableMap.of(
-                  "otel.logs.exporter", "none",
-                  "otel.metrics.exporter", "prometheus",
-                  "otel.traces.exporter", "none"))
-              .build()
-              .getOpenTelemetrySdk())
+          .sdk(openTelemetrySdk)
+          .enableTracing(!"none".equals(props.get("otel.traces.exporter")))
           .build();
       csmObservability.registerGlobal();
     }
@@ -289,14 +301,16 @@ public final class XdsTestClient {
     try {
       statsServer.start();
       for (int i = 0; i < numChannels; i++) {
-        channels.add(
-            Grpc.newChannelBuilder(
+        ManagedChannelBuilder<?> builder = Grpc.newChannelBuilder(
                     server,
                     secureMode
                         ? XdsChannelCredentials.create(InsecureChannelCredentials.create())
                         : InsecureChannelCredentials.create())
-                .enableRetry()
-                .build());
+                .enableRetry();
+        if (enableCsmObservability) {
+          csmObservability.configureChannelBuilder(builder);
+        }
+        channels.add(builder.build());
       }
       exec = MoreExecutors.listeningDecorator(Executors.newSingleThreadScheduledExecutor());
       Payload requestPayload = Payload.newBuilder()
@@ -324,6 +338,9 @@ public final class XdsTestClient {
     }
     if (csmObservability != null) {
       csmObservability.close();
+    }
+    if (openTelemetrySdk != null) {
+      openTelemetrySdk.close();
     }
   }
 
@@ -373,6 +390,13 @@ public final class XdsTestClient {
                                   @Override
                                   public void onHeaders(Metadata headers) {
                                     hostnameRef.set(headers.get(XdsTestServer.HOSTNAME_KEY));
+                                    io.opentelemetry.api.trace.Span currentSpan = io.opentelemetry.api.trace.Span.current();
+                                    for (String key : config.metadata.keys()) {
+                                      String value = config.metadata.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+                                      if (value != null) {
+                                        currentSpan.setAttribute("custom.metadata." + key, value);
+                                      }
+                                    }
                                     super.onHeaders(headers);
                                   }
                                 },
@@ -406,44 +430,56 @@ public final class XdsTestClient {
               .setPayload(requestPayload)
               .setResponseSize(responseSize)
               .build();
-          stub.unaryCall(
-              request,
-              new StreamObserver<SimpleResponse>() {
-                @Override
-                public void onCompleted() {
-                  handleRpcCompleted(requestId, config.rpcType, hostnameRef.get(), savedWatchers);
-                }
 
-                @Override
-                public void onError(Throwable t) {
-                  if (printResponse) {
-                    logger.log(Level.WARNING, "Rpc failed", t);
-                  }
-                  handleRpcError(requestId, config.rpcType, Status.fromThrowable(t),
-                      savedWatchers);
-                }
+          io.opentelemetry.api.baggage.BaggageBuilder baggageBuilder = io.opentelemetry.api.baggage.Baggage.builder();
+          for (String key : config.metadata.keys()) {
+            String value = config.metadata.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+            if (value != null) {
+              baggageBuilder.put(key, value);
+            }
+          }
+          io.opentelemetry.api.baggage.Baggage baggage = baggageBuilder.build();
 
-                @Override
-                public void onNext(SimpleResponse response) {
-                  // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
-                  // service and rely on parsing stdout.
-                  if (printResponse) {
-                    System.out.println(
-                        "Greeting: Hello world, this is "
-                            + response.getHostname()
-                            + ", from "
-                            + clientCallRef
-                                .get()
-                                .getAttributes()
-                                .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+          try (io.opentelemetry.context.Scope scope = io.opentelemetry.context.Context.current().with(baggage).makeCurrent()) {
+            stub.unaryCall(
+                request,
+                new StreamObserver<SimpleResponse>() {
+                  @Override
+                  public void onCompleted() {
+                    handleRpcCompleted(requestId, config.rpcType, hostnameRef.get(), savedWatchers);
                   }
-                  // Use the hostname from the response if not present in the metadata.
-                  // TODO(ericgribkoff) Delete when server is deployed that sets metadata value.
-                  if (hostnameRef.get() == null) {
-                    hostnameRef.set(response.getHostname());
+
+                  @Override
+                  public void onError(Throwable t) {
+                    if (printResponse) {
+                      logger.log(Level.WARNING, "Rpc failed", t);
+                    }
+                    handleRpcError(requestId, config.rpcType, Status.fromThrowable(t),
+                        savedWatchers);
                   }
-                }
-              });
+
+                  @Override
+                  public void onNext(SimpleResponse response) {
+                    // TODO(ericgribkoff) Currently some test environments cannot access the stats RPC
+                    // service and rely on parsing stdout.
+                    if (printResponse) {
+                      System.out.println(
+                          "Greeting: Hello world, this is "
+                              + response.getHostname()
+                              + ", from "
+                              + clientCallRef
+                                  .get()
+                                  .getAttributes()
+                                  .get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+                    }
+                    // Use the hostname from the response if not present in the metadata.
+                    // TODO(ericgribkoff) Delete when server is deployed that sets metadata value.
+                    if (hostnameRef.get() == null) {
+                      hostnameRef.set(response.getHostname());
+                    }
+                  }
+                });
+          }
         } else {
           throw new AssertionError("Unknown RPC type: " + config.rpcType);
         }

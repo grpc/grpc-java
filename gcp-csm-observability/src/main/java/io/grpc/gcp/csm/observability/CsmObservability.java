@@ -74,7 +74,7 @@ public final class CsmObservability implements Closeable {
   }
 
   @VisibleForTesting
-  void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+  public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
     delegate.configureChannelBuilder(builder);
   }
 
@@ -112,6 +112,14 @@ public final class CsmObservability implements Closeable {
      */
     public Builder sdk(OpenTelemetry sdk) {
       delegate.sdk(sdk);
+      return this;
+    }
+
+    /**
+     * Enables or disables tracing.
+     */
+    public Builder enableTracing(boolean enable) {
+      InternalGrpcOpenTelemetry.enableTracing(delegate, enable);
       return this;
     }
 

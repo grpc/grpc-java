@@ -46,13 +46,16 @@ import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.xds.XdsServerBuilder;
 import io.grpc.xds.XdsServerCredentials;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -92,6 +95,7 @@ public final class XdsTestServer {
   private String host;
   private Util.AddressType addressType = Util.AddressType.IPV4_IPV6;
   private CsmObservability csmObservability;
+  private OpenTelemetrySdk openTelemetrySdk;
 
   /**
    * The main application allowing this client to be launched from the command line.
@@ -197,14 +201,23 @@ public final class XdsTestServer {
   @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void start() throws Exception {
     if (enableCsmObservability) {
+      Map<String, String> props = new HashMap<>();
+      props.put("otel.logs.exporter", "none");
+      props.put("otel.metrics.exporter", "otlp");
+      String tracesExporter = System.getenv("OTEL_TRACES_EXPORTER");
+      if (tracesExporter != null) {
+        props.put("otel.traces.exporter", tracesExporter);
+      } else {
+        props.put("otel.traces.exporter", "none");
+      }
+      
+      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
+          .addPropertiesSupplier(() -> props)
+          .build();
+      openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
       csmObservability = CsmObservability.newBuilder()
-          .sdk(AutoConfiguredOpenTelemetrySdk.builder()
-              .addPropertiesSupplier(() -> ImmutableMap.of(
-                  "otel.logs.exporter", "none",
-                  "otel.metrics.exporter", "prometheus",
-                  "otel.traces.exporter", "none"))
-              .build()
-              .getOpenTelemetrySdk())
+          .sdk(openTelemetrySdk)
+          .enableTracing(!"none".equals(props.get("otel.traces.exporter")))
           .build();
       csmObservability.registerGlobal();
     }
@@ -300,6 +313,9 @@ public final class XdsTestServer {
     }
     if (csmObservability != null) {
       csmObservability.close();
+    }
+    if (openTelemetrySdk != null) {
+      openTelemetrySdk.close();
     }
   }
 

@@ -79,6 +79,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import io.grpc.gcp.csm.observability.CsmObservability;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -99,6 +100,13 @@ public class TestServiceClient {
   public static void main(String[] args) throws Exception {
     final TestServiceClient client = new TestServiceClient();
     client.parseArgs(args);
+    if (client.enableOpentelemetryTracing) {
+        io.opentelemetry.api.OpenTelemetry otel = io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk.initialize().getOpenTelemetrySdk();
+        io.grpc.opentelemetry.GrpcOpenTelemetry gotel = io.grpc.opentelemetry.GrpcOpenTelemetry.newBuilder()
+            .sdk(otel)
+            .build();
+        gotel.registerGlobal();
+    }
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
     LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
     client.setUp();
@@ -107,6 +115,10 @@ public class TestServiceClient {
       client.run();
     } finally {
       client.tearDown();
+      if (client.enableOpentelemetryTracing) {
+          System.out.println("Sleeping to flush spans...");
+          Thread.sleep(2000);
+      }
     }
   }
 
@@ -136,6 +148,7 @@ public class TestServiceClient {
   private int soakResponseSize = 314159;
   private int numThreads = 1;
   private String additionalMetadata = "";
+  private boolean enableOpentelemetryTracing = false;
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -167,6 +180,8 @@ public class TestServiceClient {
         serverHostOverride = value;
       } else if ("server_port".equals(key)) {
         serverPort = Integer.parseInt(value);
+      } else if ("enable_opentelemetry_tracing".equals(key)) {
+        enableOpentelemetryTracing = Boolean.parseBoolean(value);
       } else if ("test_case".equals(key)) {
         testCase = value;
       } else if ("num_times".equals(key)) {
@@ -599,6 +614,9 @@ public class TestServiceClient {
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       boolean useGeneric = false;
+      if (enableOpentelemetryTracing) {
+        useGeneric = true;
+      }
       ChannelCredentials channelCredentials;
       if (customCredentialsType != null) {
         useGeneric = true; // Retain old behavior; avoids erroring if incompatible
