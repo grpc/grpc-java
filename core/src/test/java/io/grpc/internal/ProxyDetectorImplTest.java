@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -33,6 +34,7 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
@@ -40,6 +42,7 @@ import java.net.Proxy;
 import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -190,5 +193,25 @@ public class ProxyDetectorImplTest {
         },
         authenticator);
     assertNull(proxyDetector.proxyFor(destination));
+  }
+
+  @Test
+  public void throwsWhenProxySelectorReturnsEmptyList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(Collections.<Proxy>emptyList());
+
+    IOException e =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+    assertTrue(e.getMessage(), e.getMessage().contains("empty list"));
+    assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
+  }
+
+  @Test
+  public void throwsWhenProxySelectorReturnsNullList() throws Exception {
+    when(proxySelector.select(any(URI.class))).thenReturn(null);
+
+    IOException e =
+        assertThrows(IOException.class, () -> proxyDetector.proxyFor(destination));
+    assertTrue(e.getMessage(), e.getMessage().contains("null"));
+    assertTrue(e.getMessage(), e.getMessage().contains(proxySelector.getClass().getName()));
   }
 }
