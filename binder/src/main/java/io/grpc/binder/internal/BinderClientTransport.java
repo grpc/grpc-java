@@ -112,6 +112,7 @@ public final class BinderClientTransport extends BinderTransport
             targetAddress,
             factory.inboundParcelablePolicy),
         factory.binderDecorator,
+        factory.inboundBinderDecorator,
         buildLogId(factory.sourceContext, targetAddress));
     this.offloadExecutorPool = factory.offloadExecutorPool;
     this.securityPolicy = factory.securityPolicy;

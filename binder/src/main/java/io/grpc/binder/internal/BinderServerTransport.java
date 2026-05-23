@@ -49,8 +49,14 @@ public final class BinderServerTransport extends BinderTransport implements Serv
       ObjectPool<ScheduledExecutorService> executorServicePool,
       Attributes attributes,
       List<ServerStreamTracer.Factory> streamTracerFactories,
-      OneWayBinderProxy.Decorator binderDecorator) {
-    super(executorServicePool, attributes, binderDecorator, buildLogId(attributes));
+      OneWayBinderProxy.Decorator binderDecorator,
+      LeakSafeOneWayBinder.Decorator inboundBinderDecorator) {
+    super(
+        executorServicePool,
+        attributes,
+        binderDecorator,
+        inboundBinderDecorator,
+        buildLogId(attributes));
     this.streamTracerFactories = streamTracerFactories;
   }
 
@@ -65,7 +71,8 @@ public final class BinderServerTransport extends BinderTransport implements Serv
             checkNotNull(builder.executorServicePool, "executorServicePool"),
             builder.attributes,
             builder.streamTracerFactories,
-            builder.binderDecorator);
+            builder.binderDecorator,
+            builder.inboundBinderDecorator);
     // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
     // No need to handle failure here because if 'callbackBinder' is already dead, we'll notice it
     // again in start() when we send the first transaction.
@@ -164,6 +171,7 @@ public final class BinderServerTransport extends BinderTransport implements Serv
     private Attributes attributes = Attributes.EMPTY;
     private List<ServerStreamTracer.Factory> streamTracerFactories = ImmutableList.of();
     private OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    private LeakSafeOneWayBinder.Decorator inboundBinderDecorator = LeakSafeOneWayBinder.IDENTITY_DECORATOR;
     private IBinder callbackBinder;
 
     public Builder() {}
@@ -185,6 +193,11 @@ public final class BinderServerTransport extends BinderTransport implements Serv
 
     public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
       this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
+      return this;
+    }
+
+    public Builder setInboundBinderDecorator(LeakSafeOneWayBinder.Decorator inboundBinderDecorator) {
+      this.inboundBinderDecorator = checkNotNull(inboundBinderDecorator, "inboundBinderDecorator");
       return this;
     }
 
