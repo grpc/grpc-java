@@ -15,7 +15,10 @@
  */
 package io.grpc.binder.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import android.os.IBinder;
+import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
@@ -56,21 +59,21 @@ public final class BinderServerTransport extends BinderTransport implements Serv
    *
    * @param binderDecorator used to decorate 'callbackBinder', for fault injection.
    */
-  public static BinderServerTransport create(
-      ObjectPool<ScheduledExecutorService> executorServicePool,
-      Attributes attributes,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
-      OneWayBinderProxy.Decorator binderDecorator,
-      IBinder callbackBinder) {
+  private static BinderServerTransport create(Builder builder) {
     BinderServerTransport transport =
         new BinderServerTransport(
-            executorServicePool, attributes, streamTracerFactories, binderDecorator);
+            checkNotNull(builder.executorServicePool, "executorServicePool"),
+            builder.attributes,
+            builder.streamTracerFactories,
+            builder.binderDecorator);
     // TODO(jdcormie): Plumb in the Server's executor() and use it here instead.
     // No need to handle failure here because if 'callbackBinder' is already dead, we'll notice it
     // again in start() when we send the first transaction.
     synchronized (transport) {
       transport.setOutgoingBinder(
-          OneWayBinderProxy.wrap(callbackBinder, transport.getScheduledExecutorService()));
+          OneWayBinderProxy.wrap(
+              checkNotNull(builder.callbackBinder, "callbackBinder"),
+              transport.getScheduledExecutorService()));
     }
     return transport;
   }
@@ -153,5 +156,45 @@ public final class BinderServerTransport extends BinderTransport implements Serv
   private static InternalLogId buildLogId(Attributes attributes) {
     return InternalLogId.allocate(
         BinderServerTransport.class, "from " + attributes.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+  }
+
+  /** Builder for {@link BinderServerTransport} instances. */
+  public static final class Builder {
+    private ObjectPool<ScheduledExecutorService> executorServicePool;
+    private Attributes attributes = Attributes.EMPTY;
+    private List<ServerStreamTracer.Factory> streamTracerFactories = ImmutableList.of();
+    private OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    private IBinder callbackBinder;
+
+    public Builder() {}
+
+    public Builder setExecutorServicePool(ObjectPool<ScheduledExecutorService> executorServicePool) {
+      this.executorServicePool = checkNotNull(executorServicePool, "executorServicePool");
+      return this;
+    }
+
+    public Builder setAttributes(Attributes attributes) {
+      this.attributes = checkNotNull(attributes, "attributes");
+      return this;
+    }
+
+    public Builder setStreamTracerFactories(List<ServerStreamTracer.Factory> streamTracerFactories) {
+      this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
+      return this;
+    }
+
+    public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
+      this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
+      return this;
+    }
+
+    public Builder setCallbackBinder(IBinder callbackBinder) {
+      this.callbackBinder = checkNotNull(callbackBinder, "callbackBinder");
+      return this;
+    }
+
+    public BinderServerTransport build() {
+      return BinderServerTransport.create(this);
+    }
   }
 }
