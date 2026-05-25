@@ -19,6 +19,8 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -157,6 +159,72 @@ public class JsonUtilTest {
     } catch (RuntimeException e) {
       assertThat(e).hasMessageThat().isEqualTo(
           "value true for key 'key_string_boolean' is not a float");
+    }
+  }
+
+  @Test
+  public void getNumber_precision() {
+    Map<String, Object> map = new HashMap<>();
+    long largeLong = (1L << 60) + 1;
+    map.put("large_long", (double) largeLong); // This is 2^60
+    map.put("large_long_actual", largeLong);
+    map.put("big_int", new BigInteger(String.valueOf(largeLong)));
+    map.put("big_decimal", new BigDecimal(String.valueOf(largeLong)));
+    map.put("big_int_too_large", new BigInteger(String.valueOf(largeLong)).multiply(BigInteger.valueOf(100)));
+    map.put("double_fractional", 1.5D);
+    map.put("double_nan", Double.NaN);
+    map.put("double_inf", Double.POSITIVE_INFINITY);
+
+    // Large long represented as double is 2^60, which is a valid long
+    assertThat(JsonUtil.getNumberAsLong(map, "large_long")).isEqualTo(1L << 60);
+
+    // Large long actual should pass
+    assertThat(JsonUtil.getNumberAsLong(map, "large_long_actual")).isEqualTo(largeLong);
+
+    // BigInteger and BigDecimal should pass
+    assertThat(JsonUtil.getNumberAsLong(map, "big_int")).isEqualTo(largeLong);
+    assertThat(JsonUtil.getNumberAsLong(map, "big_decimal")).isEqualTo(largeLong);
+
+    // Too large BigInteger should fail
+    try {
+      JsonUtil.getNumberAsLong(map, "big_int_too_large");
+      fail("Should have failed");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat().startsWith("Number expected to be long:");
+    }
+
+    // Integer specific tests
+    map.put("int_actual", 123);
+    map.put("long_as_int", 123L);
+    map.put("long_too_large_for_int", (long) Integer.MAX_VALUE + 1);
+
+    assertThat(JsonUtil.getNumberAsInteger(map, "int_actual")).isEqualTo(123);
+    assertThat(JsonUtil.getNumberAsInteger(map, "long_as_int")).isEqualTo(123);
+    try {
+      JsonUtil.getNumberAsInteger(map, "long_too_large_for_int");
+      fail("Should have failed");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat().startsWith("Number expected to be integer:");
+    }
+
+    // Fractional and special doubles
+    try {
+      JsonUtil.getNumberAsLong(map, "double_fractional");
+      fail("Should have failed");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat().startsWith("Number expected to be long:");
+    }
+    try {
+      JsonUtil.getNumberAsLong(map, "double_nan");
+      fail("Should have failed");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat().startsWith("Number expected to be long:");
+    }
+    try {
+      JsonUtil.getNumberAsLong(map, "double_inf");
+      fail("Should have failed");
+    } catch (ClassCastException e) {
+      assertThat(e).hasMessageThat().startsWith("Number expected to be long:");
     }
   }
 

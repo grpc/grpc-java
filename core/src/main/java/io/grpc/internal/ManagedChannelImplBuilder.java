@@ -582,7 +582,7 @@ public final class ManagedChannelImplBuilder
         parsedMap.put(key, checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedMap.put(key, value);
-      } else if (value instanceof Double) {
+      } else if (value instanceof Number) {
         parsedMap.put(key, value);
       } else if (value instanceof Boolean) {
         parsedMap.put(key, value);
@@ -606,7 +606,7 @@ public final class ManagedChannelImplBuilder
         parsedList.add(checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedList.add(value);
-      } else if (value instanceof Double) {
+      } else if (value instanceof Number) {
         parsedList.add(value);
       } else if (value instanceof Boolean) {
         parsedList.add(value);

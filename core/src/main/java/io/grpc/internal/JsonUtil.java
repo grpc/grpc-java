@@ -18,6 +18,8 @@ package io.grpc.internal;
 
 import static com.google.common.math.LongMath.checkedAdd;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.text.ParseException;
 import java.util.List;
 import java.util.Locale;
@@ -106,8 +108,8 @@ public class JsonUtil {
       return null;
     }
     Object value = obj.get(key);
-    if (value instanceof Double) {
-      return (Double) value;
+    if (value instanceof Number) {
+      return ((Number) value).doubleValue();
     }
     if (value instanceof String) {
       try {
@@ -132,8 +134,8 @@ public class JsonUtil {
       return null;
     }
     Object value = obj.get(key);
-    if (value instanceof Float) {
-      return (Float) value;
+    if (value instanceof Number) {
+      return ((Number) value).floatValue();
     }
     if (value instanceof String) {
       try {
@@ -159,13 +161,29 @@ public class JsonUtil {
       return null;
     }
     Object value = obj.get(key);
-    if (value instanceof Double) {
-      Double d = (Double) value;
-      int i = d.intValue();
-      if (i != d) {
-        throw new ClassCastException("Number expected to be integer: " + d);
+    if (value instanceof Number) {
+      Number n = (Number) value;
+      if (n instanceof Integer || n instanceof Short || n instanceof Byte) {
+        return n.intValue();
       }
-      return i;
+      try {
+        if (n instanceof Long) {
+          return Math.toIntExact(n.longValue());
+        }
+        if (n instanceof BigInteger) {
+          return ((BigInteger) n).intValueExact();
+        }
+        if (n instanceof BigDecimal) {
+          return ((BigDecimal) n).intValueExact();
+        }
+      } catch (ArithmeticException e) {
+        throw new ClassCastException("Number expected to be integer: " + n);
+      }
+      double d = n.doubleValue();
+      if (Math.rint(d) == d && d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+        return n.intValue();
+      }
+      throw new ClassCastException("Number expected to be integer: " + n);
     }
     if (value instanceof String) {
       try {
@@ -190,13 +208,26 @@ public class JsonUtil {
       return null;
     }
     Object value = obj.get(key);
-    if (value instanceof Double) {
-      Double d = (Double) value;
-      long l = d.longValue();
-      if (l != d) {
-        throw new ClassCastException("Number expected to be long: " + d);
+    if (value instanceof Number) {
+      Number n = (Number) value;
+      if (n instanceof Long || n instanceof Integer || n instanceof Short || n instanceof Byte) {
+        return n.longValue();
       }
-      return l;
+      try {
+        if (n instanceof BigInteger) {
+          return ((BigInteger) n).longValueExact();
+        }
+        if (n instanceof BigDecimal) {
+          return ((BigDecimal) n).longValueExact();
+        }
+      } catch (ArithmeticException e) {
+        throw new ClassCastException("Number expected to be long: " + n);
+      }
+      double d = n.doubleValue();
+      if (Math.rint(d) == d && d >= (double) Long.MIN_VALUE && d < Math.scalb(1.0, 63)) {
+        return n.longValue();
+      }
+      throw new ClassCastException("Number expected to be long: " + n);
     }
     if (value instanceof String) {
       try {

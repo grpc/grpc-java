@@ -737,7 +737,39 @@ public class ManagedChannelImplBuilderTest {
     Map<String, Object> config = new HashMap<>();
     config.put("key", 3);
 
-    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsExactlyEntriesIn(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_longValue() {
+    Map<String, Object> config = new HashMap<>();
+    config.put("key", 3L);
+
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsExactlyEntriesIn(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_list_intValue() {
+    Map<String, Object> config = new HashMap<>();
+    config.put("key", Collections.singletonList(3));
+
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsExactlyEntriesIn(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_list_longValue() {
+    Map<String, Object> config = new HashMap<>();
+    config.put("key", Collections.singletonList(3L));
+
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsExactlyEntriesIn(config);
   }
 
   @Test
