@@ -333,6 +333,42 @@ public class ExternalProcessorFilterTest {
     assertThat(result.errorDetail).contains("deferred_close_timeout must be positive");
   }
 
+  @Test
+  public void givenResponseBodyModeGrpcWithResponseHeaderModeNotSend_whenParsed_thenReturnsError()
+      throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains(
+        "response_header_mode must be SEND if response_body_mode is GRPC");
+  }
+
+  @Test
+  public void givenOverrideConfigWithResponseBodyModeGrpcAndHeaderModeNotSend_whenParsed_thenError()
+      throws Exception {
+    ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
+        .setOverrides(ExtProcOverrides.newBuilder()
+            .setProcessingMode(ProcessingMode.newBuilder()
+                .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+                .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> result =
+        provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
+
+    assertThat(result.errorDetail).contains(
+        "response_header_mode must be SEND if response_body_mode is GRPC");
+  }
+
 
   @Test
   public void provider_registeredInFilterRegistry_basedOnFlag() {
@@ -516,7 +552,7 @@ public class ExternalProcessorFilterTest {
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
             .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
@@ -957,6 +993,7 @@ public class ExternalProcessorFilterTest {
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .build())
         .build();
     ExternalProcessorFilterConfig filterConfig =
@@ -1399,7 +1436,8 @@ public class ExternalProcessorFilterTest {
     Metadata headers = new Metadata();
     proxyCall.start(new ClientCall.Listener<String>() {}, headers);
 
-    // Send message and half-close to trigger unary call while the call is buffered (since ext-proc is waiting)
+    // Send message and half-close to trigger unary call while the call is buffered
+    // (since ext-proc is waiting)
     proxyCall.request(1);
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
@@ -3094,7 +3132,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -3245,7 +3283,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ExternalProcessorFilterConfig filterConfig =
@@ -3398,7 +3436,7 @@ public class ExternalProcessorFilterTest {
             .build())
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ExternalProcessorFilterConfig filterConfig =
@@ -4034,6 +4072,7 @@ public class ExternalProcessorFilterTest {
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -4187,6 +4226,7 @@ public class ExternalProcessorFilterTest {
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
@@ -5614,6 +5654,7 @@ public class ExternalProcessorFilterTest {
                 .build())
             .build())
         .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC).build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =

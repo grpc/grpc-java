@@ -347,6 +347,12 @@ public class ExternalProcessorFilter implements Filter {
           + ". Only GRPC and NONE are supported.");
     }
 
+    if (mode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
+        && mode.getResponseHeaderMode() != ProcessingMode.HeaderSendMode.SEND) {
+      return ConfigOrError.fromError("Invalid response_header_mode: " + mode.getResponseHeaderMode()
+          + ". response_header_mode must be SEND if response_body_mode is GRPC.");
+    }
+
     try {
       if (grpcService != null && grpcService.hasGoogleGrpc()) {
         GrpcServiceConfig grpcServiceConfig = GrpcServiceConfigParser.parse(
