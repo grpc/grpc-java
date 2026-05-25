@@ -23,7 +23,6 @@ import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import org.junit.Test;
@@ -34,8 +33,9 @@ import org.junit.runners.JUnit4;
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
  * Tests three scenarios:
  * (1) A write without intervening onWritePossible() is buffered.
- * (2) Consecutive writes with onWritePossible() between them succeed.
- * (3) Flush goes direct when readyAndDrained=true, buffers when readyAndDrained=false.
+ * (2) Consecutive writes succeed with onWritePossible() between them.
+ * (3) Flush behavior: goes direct when readyAndDrained=true, buffers when readyAndDrained=false.
+ * (4) Consecutive flushes go direct when isReady() stays true.
  */
 @RunWith(JUnit4.class)
 public class AsyncServletOutputStreamWriterTest {
@@ -47,7 +47,6 @@ public class AsyncServletOutputStreamWriterTest {
    */
   @Test
   public void writeBytes_withoutOnWritePossible_isBuffered() throws IOException {
-    AtomicBoolean isReady = new AtomicBoolean(true);
     List<String> actions = new ArrayList<>();
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
@@ -59,7 +58,7 @@ public class AsyncServletOutputStreamWriterTest {
 
     ActionItem completeAction = () -> {};
 
-    BooleanSupplier isReadySupplier = () -> isReady.get();
+    BooleanSupplier isReadySupplier = () -> true;
 
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
@@ -91,7 +90,6 @@ public class AsyncServletOutputStreamWriterTest {
    */
   @Test
   public void writeBytes_onWritePossibleBetweenWrites_succeeds() throws IOException {
-    AtomicBoolean isReady = new AtomicBoolean(true);
     List<byte[]> writtenData = new ArrayList<>();
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
@@ -103,7 +101,7 @@ public class AsyncServletOutputStreamWriterTest {
 
     ActionItem completeAction = () -> {};
 
-    BooleanSupplier isReadySupplier = () -> isReady.get();
+    BooleanSupplier isReadySupplier = () -> true;
 
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
@@ -113,8 +111,8 @@ public class AsyncServletOutputStreamWriterTest {
     writer.onWritePossible();
 
     // Write 5 times, calling onWritePossible after each write.
-    // With isReady staying true, each onWritePossible should set readyAndDrained
-    // back to true, allowing the next write to go direct again.
+    // With isReady staying true, each onWritePossible sets readyAndDrained
+    // back to true so the next write goes direct again.
     for (int i = 0; i < 5; i++) {
       byte[] data = new byte[]{(byte) i};
       writer.writeBytes(data, 1);
@@ -132,7 +130,6 @@ public class AsyncServletOutputStreamWriterTest {
    */
   @Test
   public void flush_withReadyAndDrainedFalse_isBuffered() throws IOException {
-    AtomicBoolean isReady = new AtomicBoolean(true);
     List<String> actions = new ArrayList<>();
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
@@ -146,7 +143,7 @@ public class AsyncServletOutputStreamWriterTest {
 
     ActionItem completeAction = () -> {};
 
-    BooleanSupplier isReadySupplier = () -> isReady.get();
+    BooleanSupplier isReadySupplier = () -> true;
 
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
@@ -175,5 +172,42 @@ public class AsyncServletOutputStreamWriterTest {
 
     // Both flushes should have completed (3 total: write + 2 flushes)
     assertEquals("Both flushes should complete after onWritePossible", 3, actions.size());
+  }
+
+  /**
+   * Test that two consecutive flushes both go direct when isReady() stays true.
+   * This validates the new flush behavior: flush keeps readyAndDrained=true when
+   * isReady() is still true, allowing subsequent flushes to go direct without buffering.
+   */
+  @Test
+  public void flush_consecutiveWithIsReadyTrue_bothGoDirect() throws IOException {
+    List<String> actions = new ArrayList<>();
+
+    BiFunction<byte[], Integer, ActionItem> writeAction =
+        (bytes, numBytes) -> () -> {
+          actions.add("write");
+        };
+
+    ActionItem flushAction = () -> {
+      actions.add("flush");
+    };
+
+    ActionItem completeAction = () -> {};
+
+    BooleanSupplier isReadySupplier = () -> true;
+
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
+
+    // Initial onWritePossible to set readyAndDrained=true
+    writer.onWritePossible();
+
+    // Two consecutive flushes when isReady stays true - both should go direct
+    writer.flush();
+    writer.flush();
+
+    // Both flushes should execute directly (no buffering)
+    assertEquals("Both flushes should execute directly", 2, actions.size());
   }
 }
