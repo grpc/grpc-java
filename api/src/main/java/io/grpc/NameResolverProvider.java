@@ -65,7 +65,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    *
    * @since 1.40.0
    * */
-  protected String getScheme() {
+  public String getScheme() {
     return getDefaultScheme();
   }
 

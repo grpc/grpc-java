@@ -136,7 +136,7 @@ public class ManagedChannelImplGetNameResolverRfc3986Test {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     try {
       ManagedChannelImplBuilder.getNameResolverProviderRfc3986(
-          "foo.googleapis.com:8080", nameResolverRegistry);
+          "foo.googleapis.com:8080", nameResolverRegistry, null);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       // expected
@@ -148,7 +148,7 @@ public class ManagedChannelImplGetNameResolverRfc3986Test {
     NameResolverRegistry nameResolverRegistry = getTestRegistry("testscheme");
     try {
       ManagedChannelImplBuilder.getNameResolverProviderRfc3986(
-              "testscheme:///foo.googleapis.com:8080", nameResolverRegistry)
+              "testscheme:///foo.googleapis.com:8080", nameResolverRegistry, null)
           .checkAddressTypes(Collections.singleton(CustomSocketAddress.class));
       fail("Should fail");
     } catch (IllegalArgumentException e) {
@@ -163,7 +163,8 @@ public class ManagedChannelImplGetNameResolverRfc3986Test {
   private void testValidTarget(String target, String expectedUriString, Uri expectedUri) {
     NameResolverRegistry nameResolverRegistry = getTestRegistry(expectedUri.getScheme());
     ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-        ManagedChannelImplBuilder.getNameResolverProviderRfc3986(target, nameResolverRegistry);
+        ManagedChannelImplBuilder.getNameResolverProviderRfc3986(target, nameResolverRegistry,
+            null);
     assertThat(resolved.provider).isInstanceOf(FakeNameResolverProvider.class);
     assertThat(resolved.targetUri).isEqualTo(wrap(expectedUri));
     assertThat(resolved.targetUri.toString()).isEqualTo(expectedUriString);
@@ -174,7 +175,8 @@ public class ManagedChannelImplGetNameResolverRfc3986Test {
 
     try {
       ManagedChannelImplBuilder.ResolvedNameResolver resolved =
-          ManagedChannelImplBuilder.getNameResolverProviderRfc3986(target, nameResolverRegistry);
+          ManagedChannelImplBuilder.getNameResolverProviderRfc3986(target, nameResolverRegistry,
+              null);
       FakeNameResolverProvider nameResolverProvider = (FakeNameResolverProvider) resolved.provider;
       fail("Should have failed, but got resolver provider " + nameResolverProvider);
     } catch (IllegalArgumentException e) {

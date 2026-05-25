@@ -85,4 +85,13 @@ public class OkHttpChannelProviderTest {
         TlsChannelCredentials.newBuilder().requireFakeFeature().build());
     assertThat(result.getError()).contains("FAKE");
   }
+
+  @Test
+  public void newChannelBuilder_withRegistry_success() {
+    NewChannelBuilderResult result = provider.newChannelBuilder("localhost:443",
+        TlsChannelCredentials.create(),
+        io.grpc.NameResolverRegistry.getDefaultRegistry(),
+        new io.grpc.internal.DnsNameResolverProvider());
+    assertThat(result.getChannelBuilder()).isInstanceOf(OkHttpChannelBuilder.class);
+  }
 }

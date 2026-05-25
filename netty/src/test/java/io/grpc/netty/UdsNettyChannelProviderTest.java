@@ -109,6 +109,16 @@ public class UdsNettyChannelProviderTest {
   }
 
   @Test
+  public void newChannelBuilder_withRegistry_success() {
+    Assume.assumeTrue(Utils.isEpollAvailable());
+    NewChannelBuilderResult result = provider.newChannelBuilder("unix:sock.sock",
+        TlsChannelCredentials.create(),
+        io.grpc.NameResolverRegistry.getDefaultRegistry(),
+        new io.grpc.internal.DnsNameResolverProvider());
+    assertThat(result.getChannelBuilder()).isInstanceOf(NettyChannelBuilder.class);
+  }
+
+  @Test
   public void managedChannelRegistry_newChannelBuilder() {
     Assume.assumeTrue(Utils.isEpollAvailable());
     ManagedChannelBuilder<?> managedChannelBuilder
