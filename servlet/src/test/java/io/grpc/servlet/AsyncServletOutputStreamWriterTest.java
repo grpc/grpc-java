@@ -62,7 +62,8 @@ public class AsyncServletOutputStreamWriterTest {
     BooleanSupplier isReadySupplier = () -> isReady.get();
 
     AsyncServletOutputStreamWriter writer =
-        new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
+        new AsyncServletOutputStreamWriter(
+            writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
 
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
@@ -105,14 +106,15 @@ public class AsyncServletOutputStreamWriterTest {
     BooleanSupplier isReadySupplier = () -> isReady.get();
 
     AsyncServletOutputStreamWriter writer =
-        new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
+        new AsyncServletOutputStreamWriter(
+            writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
 
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
 
     // Write 5 times, calling onWritePossible after each write.
-    // With isReady staying true, each onWritePossible should set readyAndDrained back to true,
-    // allowing the next write to go direct again.
+    // With isReady staying true, each onWritePossible should set readyAndDrained
+    // back to true, allowing the next write to go direct again.
     for (int i = 0; i < 5; i++) {
       byte[] data = new byte[]{(byte) i};
       writer.writeBytes(data, 1);
@@ -147,7 +149,8 @@ public class AsyncServletOutputStreamWriterTest {
     BooleanSupplier isReadySupplier = () -> isReady.get();
 
     AsyncServletOutputStreamWriter writer =
-        new AsyncServletOutputStreamWriter(writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
+        new AsyncServletOutputStreamWriter(
+            writeAction, flushAction, completeAction, isReadySupplier, new Log() {});
 
     // Initial onWritePossible to set readyAndDrained=true
     writer.onWritePossible();
@@ -164,13 +167,13 @@ public class AsyncServletOutputStreamWriterTest {
     // Flush with readyAndDrained=false -> should be buffered (isReady doesn't matter)
     writer.flush();
 
-    // Only the first flush should have executed
-    assertEquals("Second flush should be buffered", 1, actions.size());
+    // Only the first flush should have executed (the write was also executed, making it 2)
+    assertEquals("Second flush should be buffered", 2, actions.size());
 
     // Container calls onWritePossible to drain buffered flush
     writer.onWritePossible();
 
-    // Both flushes should have completed
-    assertEquals("Both flushes should complete after onWritePossible", 2, actions.size());
+    // Both flushes should have completed (3 total: write + 2 flushes)
+    assertEquals("Both flushes should complete after onWritePossible", 3, actions.size());
   }
 }
