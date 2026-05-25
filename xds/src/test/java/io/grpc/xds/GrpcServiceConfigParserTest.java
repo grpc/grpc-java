@@ -108,15 +108,9 @@ public class GrpcServiceConfigParserTest {
     GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder().setTargetUri("test_uri")
         .addChannelCredentialsPlugin(insecureCreds).addCallCredentialsPlugin(accessTokenCreds)
         .build();
-    HeaderValue asciiHeader =
-        HeaderValue.newBuilder().setKey("test_key").setValue("test_value").build();
-    HeaderValue binaryHeader =
-        HeaderValue.newBuilder().setKey("test_key-bin").setRawValue(ByteString
-            .copyFrom("test_value_binary".getBytes(StandardCharsets.UTF_8))).build();
     Duration timeout = Duration.newBuilder().setSeconds(10).build();
     GrpcService grpcService =
-        GrpcService.newBuilder().setGoogleGrpc(googleGrpc).addInitialMetadata(asciiHeader)
-            .addInitialMetadata(binaryHeader).setTimeout(timeout).build();
+        GrpcService.newBuilder().setGoogleGrpc(googleGrpc).setTimeout(timeout).build();
 
     GrpcServiceConfig config = parse(grpcService,
             dummyBootstrapInfo(),
@@ -138,14 +132,6 @@ public class GrpcServiceConfigParserTest {
     assertThat(config.googleGrpc().callCredentials().get().getClass().getName())
         .isEqualTo(CALL_CREDENTIALS_CLASS_NAME);
 
-    // Assert initial metadata
-    assertThat(config.initialMetadata()).isNotEmpty();
-    assertThat(config.initialMetadata().get(0).key()).isEqualTo("test_key");
-    assertThat(config.initialMetadata().get(0).value().get()).isEqualTo("test_value");
-    assertThat(config.initialMetadata().get(1).key()).isEqualTo("test_key-bin");
-    assertThat(config.initialMetadata().get(1).rawValue().get().toByteArray())
-        .isEqualTo("test_value_binary".getBytes(StandardCharsets.UTF_8));
-
     // Assert timeout
     assertThat(config.timeout().isPresent()).isTrue();
     assertThat(config.timeout().get()).isEqualTo(java.time.Duration.ofSeconds(10));
@@ -166,7 +152,6 @@ public class GrpcServiceConfigParserTest {
             dummyServerInfo());
 
     assertThat(config.googleGrpc().target()).isEqualTo("test_uri");
-    assertThat(config.initialMetadata()).isEmpty();
     assertThat(config.timeout().isPresent()).isFalse();
   }
 
@@ -463,20 +448,6 @@ public class GrpcServiceConfigParserTest {
         .contains("Target URI scheme is not resolvable");
   }
 
-  @Test
-  public void parse_disallowedInitialMetadata() {
-    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
-    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder().setTargetUri("test_uri")
-        .addChannelCredentialsPlugin(insecureCreds).build();
-    HeaderValue disallowedHeader =
-        HeaderValue.newBuilder().setKey("host").setValue("test_value").build();
-    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc)
-        .addInitialMetadata(disallowedHeader).build();
-
-    GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
-        () -> parse(grpcService, dummyBootstrapInfo(), dummyServerInfo()));
-    assertThat(exception).hasMessageThat().contains("Invalid initial metadata header: host");
-  }
 
   @Test
   public void parse_invalidDuration() {

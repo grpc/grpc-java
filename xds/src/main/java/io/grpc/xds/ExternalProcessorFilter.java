@@ -76,7 +76,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
-import io.grpc.stub.MetadataUtils;
 import io.grpc.xds.Filter.FilterConfigParseContext;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.MatcherParser;
@@ -634,29 +633,7 @@ public class ExternalProcessorFilter implements Filter {
         }
       }
 
-      ImmutableList<HeaderValue> initialMetadata =
-          filterConfig.getGrpcServiceConfig().initialMetadata();
-      if (!initialMetadata.isEmpty()) {
-        Metadata extraHeaders = new Metadata();
-        for (HeaderValue headerValue : initialMetadata) {
-          String key = headerValue.key();
-          if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-            if (headerValue.rawValue().isPresent()) {
-              Metadata.Key<byte[]> metadataKey = 
-                  Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
-              extraHeaders.put(metadataKey, headerValue.rawValue().get().toByteArray());
-            }
-          } else {
-            if (headerValue.value().isPresent()) {
-              Metadata.Key<String> metadataKey = 
-                  Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
-              extraHeaders.put(metadataKey, headerValue.value().get());
-            }
-          }
-        }
-        extProcStub = extProcStub.withInterceptors(
-            MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
-      }
+
 
       // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
       // InputStream.
