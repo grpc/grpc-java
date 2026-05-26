@@ -230,8 +230,8 @@ final class AsyncServletOutputStreamWriter {
         if (!isReady.getAsBoolean()) {
           boolean successful =
               writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
           LockSupport.unpark(parkingThread);
+          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
           log.finest("the servlet output stream becomes not ready");
         }
       } else {
@@ -239,9 +239,9 @@ final class AsyncServletOutputStreamWriter {
         // returns true. Tomcat requires onWritePossible() to fire between writes.
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
         LockSupport.unpark(parkingThread);
-        log.finest("direct action: cleared readyAndDrained, next writes buffered");
+        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        log.finest("writeBytes path: cleared readyAndDrained, next writes buffered");
       }
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
