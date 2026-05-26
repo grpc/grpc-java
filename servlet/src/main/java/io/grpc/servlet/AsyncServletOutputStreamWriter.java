@@ -241,7 +241,7 @@ final class AsyncServletOutputStreamWriter {
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
         LockSupport.unpark(parkingThread);
         checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("direct write: cleared readyAndDrained, next writes buffered");
+        log.finest("direct action: cleared readyAndDrained, next writes buffered");
       }
     } else { // buffer to the writeChain
       writeChain.offer(actionItem);
