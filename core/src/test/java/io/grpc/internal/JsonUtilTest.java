@@ -170,7 +170,9 @@ public class JsonUtilTest {
     map.put("large_long_actual", largeLong);
     map.put("big_int", new BigInteger(String.valueOf(largeLong)));
     map.put("big_decimal", new BigDecimal(String.valueOf(largeLong)));
-    map.put("big_int_too_large", new BigInteger(String.valueOf(largeLong)).multiply(BigInteger.valueOf(100)));
+    map.put(
+        "big_int_too_large",
+        new BigInteger(String.valueOf(largeLong)).multiply(BigInteger.valueOf(100)));
     map.put("double_fractional", 1.5D);
     map.put("double_nan", Double.NaN);
     map.put("double_inf", Double.POSITIVE_INFINITY);
