@@ -47,6 +47,7 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.Detachable;
 import io.grpc.DoubleHistogramMetricInstrument;
@@ -434,6 +435,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final MetricRecorder metricsRecorder;
     private final String target;
     private final String backendService;
+    private volatile Context callContext = Context.ROOT;
 
     private long clientHeadersStartNanos;
     private long clientHalfCloseStartNanos;
@@ -526,7 +528,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
       Runnable toRun = delayedCall.setCall(rawCall);
       if (toRun != null) {
-        toRun.run();
+        callContext.run(toRun);
       }
       drainPendingRequests();
       onReadyNotify();
@@ -611,6 +613,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void start(Listener<InputStream> responseListener, Metadata headers) {
+      this.callContext = Context.current();
       clientHeadersStartNanos = System.nanoTime();
       this.requestHeaders = headers;
       this.wrappedListener = new DataPlaneListener(responseListener, rawCall, this);
@@ -1204,7 +1207,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void onMessage(InputStream message) {
       if (dataPlaneClientCall.passThroughMode.get()) {
-        delegate().onMessage(message);
+        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(message));
         return;
       }
 
@@ -1216,7 +1219,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (dataPlaneClientCall.extProcStreamState.get().isCompleted()
           || dataPlaneClientCall.currentProcessingMode.getResponseBodyMode()
               != ProcessingMode.BodySendMode.GRPC) {
-        delegate().onMessage(message);
+        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(message));
         return;
       }
 
@@ -1225,7 +1228,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         sendResponseBodyToExtProc(bodyByteString, false);
 
         if (dataPlaneClientCall.config.getObservabilityMode()) {
-          delegate().onMessage(new InboundZeroCopyInputStream(bodyByteString));
+          dataPlaneClientCall.callContext.run(
+              () -> delegate().onMessage(new InboundZeroCopyInputStream(bodyByteString)));
         }
       } catch (IOException e) {
         rawCall.cancel("Failed to read server response", e);
@@ -1275,7 +1279,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void onReadyNotify() {
-      delegate().onReady();
+      dataPlaneClientCall.callContext.run(() -> delegate().onReady());
     }
 
     void proceedWithHeaders() {
@@ -1299,7 +1303,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         dataPlaneClientCall.recordDuration(serverHeadersDuration, durationNanos);
         dataPlaneClientCall.serverHeadersStartNanos = 0;
       }
-      delegate().onHeaders(headers);
+      dataPlaneClientCall.callContext.run(() -> delegate().onHeaders(headers));
     }
 
     void proceedWithClose() {
@@ -1318,11 +1322,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         dataPlaneClientCall.recordDuration(serverTrailersDuration, durationNanos);
         dataPlaneClientCall.serverTrailersStartNanos = 0;
       }
-      delegate().onClose(status, trailers);
+      dataPlaneClientCall.callContext.run(() -> delegate().onClose(status, trailers));
     }
 
     void onExternalBody(ByteString body) {
-      delegate().onMessage(new InboundZeroCopyInputStream(body));
+      dataPlaneClientCall.callContext.run(
+          () -> delegate().onMessage(new InboundZeroCopyInputStream(body)));
     }
 
     void unblockAfterStreamComplete() {
