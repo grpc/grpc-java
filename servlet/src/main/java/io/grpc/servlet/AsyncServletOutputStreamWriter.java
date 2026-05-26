@@ -239,8 +239,8 @@ final class AsyncServletOutputStreamWriter {
         // returns true. Tomcat requires onWritePossible() to fire between writes.
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
         checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        LockSupport.unpark(parkingThread);
         log.finest("direct action: cleared readyAndDrained, next writes buffered");
       }
     } else { // buffer to the writeChain

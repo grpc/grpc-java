@@ -55,9 +55,9 @@ public class AsyncServletOutputStreamWriterTest {
           actions.add("write");
         };
 
-    ActionItem flushAction = () -> {};
+    ActionItem flushAction = () -> { };
 
-    ActionItem completeAction = () -> {};
+    ActionItem completeAction = () -> { };
 
     BooleanSupplier isReadySupplier = () -> true;
 
@@ -98,9 +98,9 @@ public class AsyncServletOutputStreamWriterTest {
           writtenData.add(Arrays.copyOf(bytes, numBytes));
         };
 
-    ActionItem flushAction = () -> {};
+    ActionItem flushAction = () -> { };
 
-    ActionItem completeAction = () -> {};
+    ActionItem completeAction = () -> { };
 
     BooleanSupplier isReadySupplier = () -> true;
 
@@ -142,7 +142,7 @@ public class AsyncServletOutputStreamWriterTest {
       actions.add("flush");
     };
 
-    ActionItem completeAction = () -> {};
+    ActionItem completeAction = () -> { };
 
     BooleanSupplier isReadySupplier = () -> true;
 
@@ -193,7 +193,7 @@ public class AsyncServletOutputStreamWriterTest {
       actions.add("flush");
     };
 
-    ActionItem completeAction = () -> {};
+    ActionItem completeAction = () -> { };
 
     BooleanSupplier isReadySupplier = () -> true;
 
