@@ -31,7 +31,7 @@ import org.junit.runners.JUnit4;
 
 /**
  * Unit test for {@link AsyncServletOutputStreamWriter} with a mock isReady supplier.
- * Tests three scenarios:
+ * Tests four scenarios:
  * (1) A write without intervening onWritePossible() is buffered.
  * (2) Consecutive writes succeed with onWritePossible() between them.
  * (3) Flush behavior: goes direct when readyAndDrained=true, buffers when readyAndDrained=false.
@@ -94,7 +94,7 @@ public class AsyncServletOutputStreamWriterTest {
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
-          writtenData.add(bytes);
+          writtenData.add(Arrays.copyOf(bytes, numBytes));
         };
 
     ActionItem flushAction = () -> {};

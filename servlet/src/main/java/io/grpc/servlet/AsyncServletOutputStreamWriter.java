@@ -230,8 +230,8 @@ final class AsyncServletOutputStreamWriter {
         if (!isReady.getAsBoolean()) {
           boolean successful =
               writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-          LockSupport.unpark(parkingThread);
           checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+          LockSupport.unpark(parkingThread);
           log.finest("the servlet output stream becomes not ready");
         }
       } else {
