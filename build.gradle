@@ -43,6 +43,7 @@ subprojects {
                 ignoreGradleMetadataRedirection()
             }
         }
+        maven { url 'https://central.sonatype.com/repository/maven-snapshots/' }
     }
 
     tasks.withType(JavaCompile).configureEach {
