@@ -142,7 +142,43 @@ public class ExternalProcessorFilterTest {
             .build());
   }
 
-  // --- Category 1: Configuration Parsing & Provider ---
+  // --- Category 1: Filter Provider registration based on flag ---
+  @Test
+  public void provider_registeredInFilterRegistry_basedOnFlag() {
+    // Test with flag true
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
+    try {
+      FilterRegistry registry = FilterRegistry.newRegistry().register(
+          new FaultFilter.Provider(),
+          new RouterFilter.Provider(),
+          new RbacFilter.Provider(),
+          new GcpAuthenticationFilter.Provider());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+        registry.register(new ExternalProcessorFilter.Provider());
+      }
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    }
+
+    // Test with flag false
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
+    try {
+      FilterRegistry registry = FilterRegistry.newRegistry().register(
+          new FaultFilter.Provider(),
+          new RouterFilter.Provider(),
+          new RbacFilter.Provider(),
+          new GcpAuthenticationFilter.Provider());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+        registry.register(new ExternalProcessorFilter.Provider());
+      }
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNull();
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
+    }
+  }
+
+  // --- Category 2: Configuration Parsing & Provider ---
 
   @Test
   public void givenValidConfig_whenParsed_thenReturnsFilterConfig() throws Exception {
@@ -242,41 +278,5 @@ public class ExternalProcessorFilterTest {
 
     assertThat(result.errorDetail).contains(
         "response_header_mode must be SEND if response_body_mode is GRPC");
-  }
-
-
-  @Test
-  public void provider_registeredInFilterRegistry_basedOnFlag() {
-    // Test with flag true
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
-    try {
-      FilterRegistry registry = FilterRegistry.newRegistry().register(
-          new FaultFilter.Provider(),
-          new RouterFilter.Provider(),
-          new RbacFilter.Provider(),
-          new GcpAuthenticationFilter.Provider());
-      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-        registry.register(new ExternalProcessorFilter.Provider());
-      }
-      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    }
-
-    // Test with flag false
-    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
-    try {
-      FilterRegistry registry = FilterRegistry.newRegistry().register(
-          new FaultFilter.Provider(),
-          new RouterFilter.Provider(),
-          new RbacFilter.Provider(),
-          new GcpAuthenticationFilter.Provider());
-      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-        registry.register(new ExternalProcessorFilter.Provider());
-      }
-      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNull();
-    } finally {
-      System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
-    }
   }
 }
