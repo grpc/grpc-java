@@ -919,7 +919,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     void updateConfigSelector(@Nullable InternalConfigSelector config) {
       InternalConfigSelector prevConfig = configSelector.get();
       configSelector.set(config);
-      if (prevConfig == INITIAL_PENDING_SELECTOR && pendingCalls != null) {
+      if (prevConfig == INITIAL_PENDING_SELECTOR
+          && config != INITIAL_PENDING_SELECTOR && pendingCalls != null) {
         for (RealChannel.PendingCall<?, ?> pendingCall : pendingCalls) {
           pendingCall.reprocess();
         }
