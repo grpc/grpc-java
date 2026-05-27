@@ -424,6 +424,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
+    realChannel.updateConfigSelector(INITIAL_PENDING_SELECTOR);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     // If the inUseStateAggregator still considers pending calls to be queued up or the delayed
