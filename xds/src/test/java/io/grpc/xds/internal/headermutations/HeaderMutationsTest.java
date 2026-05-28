@@ -22,7 +22,10 @@ import com.google.common.collect.ImmutableList;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class HeaderMutationsTest {
   @Test
   public void testCreate() {

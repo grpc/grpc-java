@@ -29,6 +29,7 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
+import io.grpc.xds.internal.MetricReportUtils.ParsedMetricName;
 import java.io.IOException;
 import java.util.Map;
 import org.junit.Test;
@@ -112,16 +113,19 @@ public class WeightedRoundRobinLoadBalancerProviderTest {
   }
 
   @Test
-  public void parseLoadBalancingConfigCustomMetrics() throws IOException {
+  public void parseLoadBalancingConfigCustomMetricsIgnoresInvalid() throws IOException {
     System.setProperty("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS", "true");
     try {
-      String lbConfig = "{\"metricNamesForComputingUtilization\" : [\"foo\", \"bar\"]}";
+      String lbConfig =
+          "{\"metricNamesForComputingUtilization\" : "
+          + "[\"utilization.foo\", \"invalid_name\", \"named_metrics.bar\"]}";
       ConfigOrError configOrError = provider.parseLoadBalancingPolicyConfig(
           parseJsonObject(lbConfig));
       assertThat(configOrError.getConfig()).isNotNull();
       WeightedRoundRobinLoadBalancerConfig config =
           (WeightedRoundRobinLoadBalancerConfig) configOrError.getConfig();
-      assertThat(config.metricNamesForComputingUtilization).containsExactly("foo", "bar");
+      assertThat(config.parsedMetricNamesForComputingUtilization).containsExactly(
+          ParsedMetricName.parse("utilization.foo"), ParsedMetricName.parse("named_metrics.bar"));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS");
     }

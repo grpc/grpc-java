@@ -1,7 +1,6 @@
 module(
     name = "grpc-java",
     version = "1.82.0-SNAPSHOT",  # CURRENT_GRPC_VERSION
-    compatibility_level = 0,
     repo_name = "io_grpc_grpc_java",
 )
 
@@ -21,22 +20,25 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.re2j:re2j:1.8",
     "com.google.s2a.proto.v2:s2a-proto:0.1.3",
     "com.google.truth:truth:1.4.5",
+    "dev.cel:runtime:0.12.0",
+    "dev.cel:protobuf:0.12.0",
+    "dev.cel:common:0.12.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.132.Final",
-    "io.netty:netty-codec-http2:4.1.132.Final",
-    "io.netty:netty-codec-http:4.1.132.Final",
-    "io.netty:netty-codec-socks:4.1.132.Final",
-    "io.netty:netty-codec:4.1.132.Final",
-    "io.netty:netty-common:4.1.132.Final",
-    "io.netty:netty-handler-proxy:4.1.132.Final",
-    "io.netty:netty-handler:4.1.132.Final",
-    "io.netty:netty-resolver:4.1.132.Final",
+    "io.netty:netty-buffer:4.1.133.Final",
+    "io.netty:netty-codec-http2:4.1.133.Final",
+    "io.netty:netty-codec-http:4.1.133.Final",
+    "io.netty:netty-codec-socks:4.1.133.Final",
+    "io.netty:netty-codec:4.1.133.Final",
+    "io.netty:netty-common:4.1.133.Final",
+    "io.netty:netty-handler-proxy:4.1.133.Final",
+    "io.netty:netty-handler:4.1.133.Final",
+    "io.netty:netty-resolver:4.1.133.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.75.Final",
     "io.netty:netty-tcnative-classes:2.0.75.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.132.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.132.Final",
-    "io.netty:netty-transport:4.1.132.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.133.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.133.Final",
+    "io.netty:netty-transport:4.1.133.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -47,9 +49,10 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
 ]
 # GRPC_DEPS_END
 
+bazel_dep(name = "abseil-cpp", version = "20250512.1")
 bazel_dep(name = "bazel_jar_jar", version = "0.1.11.bcr.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
-bazel_dep(name = "googleapis", version = "0.0.0-20240326-1c8d509c5", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis", version = "0.0.0-20260514-1dbb1a14", repo_name = "com_google_googleapis")
 bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58.bcr.1", repo_name = "io_grpc_grpc_proto")
 bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_cc", version = "0.0.9")

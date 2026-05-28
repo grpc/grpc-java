@@ -30,7 +30,7 @@ import java.security.cert.X509Certificate;
  * Contains certificate utility method(s).
  */
 public final class CertificateUtils {
-  public static boolean useChannelAuthorityIfNoSniApplicable
+  public static volatile boolean useChannelAuthorityIfNoSniApplicable
       = GrpcUtil.getFlag("GRPC_USE_CHANNEL_AUTHORITY_IF_NO_SNI_APPLICABLE", false);
 
   /**

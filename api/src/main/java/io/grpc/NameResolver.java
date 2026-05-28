@@ -35,7 +35,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * A pluggable component that resolves a target {@link URI} and return addresses to the caller.
@@ -78,7 +77,7 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener#onError}.
-   * 
+   *
    * <p>An instance may not be started more than once, by any overload of this method, even after
    * an intervening call to {@link #shutdown}.
    *
@@ -114,7 +113,7 @@ public abstract class NameResolver {
    * Starts the resolution. The method is not supposed to throw any exceptions. That might cause the
    * Channel that the name resolver is serving to crash. Errors should be propagated
    * through {@link Listener2#onError}.
-   * 
+   *
    * <p>An instance may not be started more than once, by any overload of this method, even after
    * an intervening call to {@link #shutdown}.
    *
@@ -215,10 +214,11 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
+   * <p>This interface is thread-safe.
+   *
    * @since 1.0.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  @ThreadSafe
   public interface Listener {
     /**
      * Handles updates on resolved addresses and attributes.

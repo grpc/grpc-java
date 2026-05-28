@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -113,7 +114,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
-  private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private long permitKeepAliveTimeInNanos = DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
   private int maxRstCount;
   private long maxRstPeriodNanos;
   private Attributes eagAttributes = Attributes.EMPTY;

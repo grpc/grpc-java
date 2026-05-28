@@ -1048,7 +1048,9 @@ public class GrpcXdsClientImplDataTest {
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
     ClusterWeight clusterWeight =
-        XdsRouteConfigureResource.parseClusterWeight(proto, filterRegistry).getStruct();
+            XdsRouteConfigureResource
+                    .parseClusterWeight(proto, filterRegistry, getXdsResourceTypeArgs(true))
+                    .getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
   }
@@ -1254,7 +1256,8 @@ public class GrpcXdsClientImplDataTest {
         .setIsOptional(true)
         .setTypedConfig(Any.pack(StringValue.of("unsupported")))
         .build();
-    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
+    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true,
+            getXdsResourceTypeArgs(true))).isNull();
   }
 
   private static class SimpleFilterConfig implements FilterConfig {
@@ -1293,12 +1296,14 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage,
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage,
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
     }
@@ -1318,7 +1323,7 @@ public class GrpcXdsClientImplDataTest {
                 .setValue(rawStruct)
         .build())).build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry,
-        true).getStruct();
+            true, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
 
     HttpFilter httpFilterNewTypeStruct = HttpFilter.newBuilder()
@@ -1329,7 +1334,7 @@ public class GrpcXdsClientImplDataTest {
                 .setValue(rawStruct)
                 .build())).build();
     config = XdsListenerResource.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry,
-        true).getStruct();
+            true, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
   }
 
@@ -1355,7 +1360,7 @@ public class GrpcXdsClientImplDataTest {
                   .build())
     );
     Map<String, FilterConfig> map = XdsRouteConfigureResource.parseOverrideFilterConfigs(
-        rawFilterMap, filterRegistry).getStruct();
+            rawFilterMap, filterRegistry, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)map.get("struct-0")).getConfig()).isEqualTo(rawStruct0);
     assertThat(((SimpleFilterConfig)map.get("struct-1")).getConfig()).isEqualTo(rawStruct1);
   }
@@ -1367,7 +1372,8 @@ public class GrpcXdsClientImplDataTest {
         .setName("unsupported.filter")
         .setTypedConfig(Any.pack(StringValue.of("string value")))
         .build();
-    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true)
+    assertThat(XdsListenerResource
+            .parseHttpFilter(httpFilter, filterRegistry, true, getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported "
@@ -1384,7 +1390,8 @@ public class GrpcXdsClientImplDataTest {
             .setTypedConfig(Any.pack(Router.getDefaultInstance()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, true /* isForClient */).getStruct();
+            httpFilter, filterRegistry, true /* isForClient */, getXdsResourceTypeArgs(true))
+            .getStruct();
     assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
   }
 
@@ -1398,7 +1405,8 @@ public class GrpcXdsClientImplDataTest {
             .setTypedConfig(Any.pack(Router.getDefaultInstance()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+            httpFilter, filterRegistry, false /* isForClient */, getXdsResourceTypeArgs(false))
+            .getStruct();
     assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
   }
 
@@ -1425,7 +1433,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, true /* isForClient */).getStruct();
+            httpFilter, filterRegistry, true /* isForClient */, getXdsResourceTypeArgs(true))
+            .getStruct();
     assertThat(config).isInstanceOf(FaultConfig.class);
   }
 
@@ -1452,7 +1461,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     StructOrError<FilterConfig> config =
-        XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, false /* isForClient */);
+            XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, false /* isForClient */,
+                    getXdsResourceTypeArgs(false));
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.fault](" + FaultFilter.TYPE_URL + ") is required but "
             + "unsupported for server");
@@ -1481,7 +1491,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+            httpFilter, filterRegistry, false /* isForClient */, getXdsResourceTypeArgs(false))
+            .getStruct();
     assertThat(config).isInstanceOf(RbacConfig.class);
   }
 
@@ -1508,7 +1519,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     StructOrError<FilterConfig> config =
-        XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true /* isForClient */);
+            XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true /* isForClient */,
+                    getXdsResourceTypeArgs(true));
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.auth](" + RbacFilter.TYPE_URL + ") is required but "
             + "unsupported for client");
@@ -1533,7 +1545,8 @@ public class GrpcXdsClientImplDataTest {
             .build();
     Map<String, Any> configOverrides = ImmutableMap.of("envoy.auth", Any.pack(rbacPerRoute));
     Map<String, FilterConfig> parsedConfigs =
-        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
             .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.auth");
@@ -1554,7 +1567,8 @@ public class GrpcXdsClientImplDataTest {
             .setIsOptional(true).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
     Map<String, FilterConfig> parsedConfigs =
-        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
             .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.fault");
@@ -1573,7 +1587,9 @@ public class GrpcXdsClientImplDataTest {
         Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
             .setIsOptional(false).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
-    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource
+            .parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -1583,7 +1599,9 @@ public class GrpcXdsClientImplDataTest {
         Any.pack(httpFault),
         "unsupported.filter",
         Any.pack(StringValue.of("string value")));
-    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource
+            .parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -3613,7 +3631,7 @@ public class GrpcXdsClientImplDataTest {
 
   private XdsResourceType.Args getXdsResourceTypeArgs(boolean isTrustedServer) {
     return new XdsResourceType.Args(
-        ServerInfo.create("http://td", "", false, isTrustedServer, false, false), "1.0", null, null, null, null
+        ServerInfo.create("http://td", "", false, isTrustedServer, false, false), "1.0", null, XdsTestUtils.EMPTY_BOOTSTRAP, null, null
     );
   }
 }
