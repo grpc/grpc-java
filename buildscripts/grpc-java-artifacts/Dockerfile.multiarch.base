@@ -1,7 +1,4 @@
-FROM ubuntu:24.04
-
-# Redirect to the internal mirror to bypass the Kokoro network block
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirror.bazel.build/archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list
+FROM ubuntu:20.04
 
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -12,8 +9,9 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         curl \
         g++-aarch64-linux-gnu \
         g++-powerpc64le-linux-gnu \
+        g++-s390x-linux-gnu \
         openjdk-11-jdk \
-        pkgconf \
+        pkg-config \
         && \
     rm -rf /var/lib/apt/lists/*
     
