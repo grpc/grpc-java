@@ -104,6 +104,9 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.XdsEndpointResource.EdsUpdate;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
+import io.grpc.xds.XdsNameResolver.RefCountedRoute;
+import io.grpc.xds.XdsNameResolver.RefCountedRouteInterceptor;
+import io.grpc.xds.XdsNameResolver.RouteData;
 import io.grpc.xds.XdsRouteConfigureResource.RdsUpdate;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -127,6 +130,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -2454,6 +2458,407 @@ public class XdsNameResolverTest {
         observer, Status.UNKNOWN.withDescription("RPC terminated due to fault injection"));
   }
 
+  @Test
+  public void updateRoutes_withInFlightStream_delaysCleanupUntilStreamClose() {
+    // 1. Create a test filter that registers a mocked cleanup Runnable
+    Runnable mockCleanup = mock(Runnable.class);
+    Filter mockFilter = new Filter() {
+      @Override
+      public ClientInterceptor buildClientInterceptor(
+          FilterConfig config,
+          FilterConfig overrideConfig,
+          ScheduledExecutorService scheduler,
+          Filter.ResourceCleanupRegistry cleanupRegistry) {
+        cleanupRegistry.addCleanupTask(mockCleanup);
+        return new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+            return next.newCall(method, callOptions);
+          }
+        };
+      }
+    };
+    Filter.Provider mockProvider = mock(Filter.Provider.class);
+    when(mockProvider.typeUrls()).thenReturn(new String[]{"type.googleapis.com/dummy"});
+    when(mockProvider.newInstance(any())).thenReturn(mockFilter);
+    FilterRegistry customRegistry = FilterRegistry.newRegistry().register(mockProvider);
+
+    XdsNameResolver customResolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, customRegistry, rawBootstrap, metricRecorder,
+        nameResolverArgs);
+    customResolver.start(mockListener);
+
+    FakeXdsClient fakeXdsClient = (FakeXdsClient) xdsClientPoolFactory.xdsClient;
+
+    // Deliver initial LDS update
+    VirtualHost vhost = VirtualHost.create(
+        "virtual-host", Collections.singletonList(expectedLdsResourceName),
+        Collections.singletonList(Route.forAction(
+            RouteMatch.create(PathMatcher.fromPrefix("/", false), Collections.emptyList(), null),
+            RouteAction.forCluster("cluster0", Collections.emptyList(), null, null, false),
+            Collections.emptyMap())),
+        Collections.emptyMap());
+    NamedFilterConfig namedConfig =
+        new NamedFilterConfig("dummy_filter", () -> "type.googleapis.com/dummy");
+    fakeXdsClient.deliverLdsUpdateWithFilters(vhost, Collections.singletonList(namedConfig));
+    createAndDeliverClusterUpdates(fakeXdsClient, "cluster0");
+
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    ResolutionResult result = resolutionResultCaptor.getValue();
+    InternalConfigSelector configSelector = result.getAttributes().get(InternalConfigSelector.KEY);
+
+    // 2. Start ClientCall (stream 1) via configSelector.selectConfig.
+    // RefCountedRoute refCount is now 2.
+    startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector, Collections.emptyMap(), CallOptions.DEFAULT);
+    verify(mockCleanup, never()).run();
+
+    // 3. Deliver LDS 2 with a new route configuration. XdsNameResolver calls oldConfig.close(),
+    // decrementing the old route's refCount from 2 to 1. Verify cleanup task has NOT run yet.
+    fakeXdsClient.deliverLdsUpdateWithFilters(vhost, Collections.emptyList());
+    verify(mockCleanup, never()).run();
+
+    // 4. Terminate stream 1 (Listener#onClose). RefCountedRouteInterceptor calls release(),
+    // decrementing refCount from 1 to 0. Verify cleanup task is now executed exactly once.
+    testCall.deliverCompleted();
+    verify(mockCleanup, times(1)).run();
+  }
+
+  @Test
+  public void updateRoutes_multipleConfigUpdates_retainsAndReleasesCorrectly() {
+    // 1. Create a test filter that registers a mocked cleanup Runnable
+    Runnable mockCleanup = mock(Runnable.class);
+    Filter mockFilter = new Filter() {
+      @Override
+      public ClientInterceptor buildClientInterceptor(
+          FilterConfig config,
+          FilterConfig overrideConfig,
+          ScheduledExecutorService scheduler,
+          Filter.ResourceCleanupRegistry cleanupRegistry) {
+        cleanupRegistry.addCleanupTask(mockCleanup);
+        return new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+            return next.newCall(method, callOptions);
+          }
+        };
+      }
+    };
+    Filter.Provider mockProvider = mock(Filter.Provider.class);
+    when(mockProvider.typeUrls()).thenReturn(new String[]{"type.googleapis.com/dummy"});
+    when(mockProvider.newInstance(any())).thenReturn(mockFilter);
+    FilterRegistry customRegistry = FilterRegistry.newRegistry().register(mockProvider);
+
+    XdsNameResolver customResolver = new XdsNameResolver(targetUri, null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, customRegistry, rawBootstrap, metricRecorder,
+        nameResolverArgs);
+    customResolver.start(mockListener);
+
+    FakeXdsClient fakeXdsClient = (FakeXdsClient) xdsClientPoolFactory.xdsClient;
+
+    // Deliver initial LDS update (Config 1 with filter)
+    VirtualHost vhost = VirtualHost.create(
+        "virtual-host", Collections.singletonList(expectedLdsResourceName),
+        Collections.singletonList(Route.forAction(
+            RouteMatch.create(PathMatcher.fromPrefix("/", false), Collections.emptyList(), null),
+            RouteAction.forCluster("cluster0", Collections.emptyList(), null, null, false),
+            Collections.emptyMap())),
+        Collections.emptyMap());
+    NamedFilterConfig namedConfig =
+        new NamedFilterConfig("dummy_filter", () -> "type.googleapis.com/dummy");
+    fakeXdsClient.deliverLdsUpdateWithFilters(vhost, Collections.singletonList(namedConfig));
+    createAndDeliverClusterUpdates(fakeXdsClient, "cluster0");
+
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector1 =
+        resolutionResultCaptor.getValue().getAttributes().get(InternalConfigSelector.KEY);
+
+    // Start Call 1 on Config 1.
+    // RefCountedRoute 1 refCount becomes 2 (1 from control plane, 1 from stream)
+    startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector1, Collections.emptyMap(), CallOptions.DEFAULT);
+    TestCall<?, ?> call1 = testCall; // Capture Call 1
+    verify(mockCleanup, never()).run();
+
+    // Deliver LDS 2 (Config 2 - no filters)
+    // This updates the resolution result, replacing the old config selector and closing it.
+    // Config 1 is closed. RefCountedRoute 1 refCount decrements 2 -> 1 (held by Call 1).
+    fakeXdsClient.deliverLdsUpdateWithFilters(vhost, Collections.emptyList());
+    verify(mockCleanup, never()).run();
+
+    // Capture Config Selector 2
+    verify(mockListener, times(2)).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector2 =
+        resolutionResultCaptor.getAllValues().get(1)
+            .getAttributes().get(InternalConfigSelector.KEY);
+
+    // Start Call 2 on Config 2.
+    startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector2, Collections.emptyMap(), CallOptions.DEFAULT);
+    TestCall<?, ?> call2 = testCall; // Capture Call 2
+    verify(mockCleanup, never()).run();
+
+    // Deliver LDS 3 (Config 3 - no filters)
+    // This closes Config 2.
+    fakeXdsClient.deliverLdsUpdateWithFilters(vhost, Collections.emptyList());
+
+    // At this point:
+    // - Config 1 is closed. RefCountedRoute 1 is at refCount=1 (held by active Call 1).
+    // - Config 2 is closed. RefCountedRoute 2 is at refCount=1 (held by active Call 2).
+    // - Config 3 is active (refCount=1).
+    // Cleanup has not run yet.
+    verify(mockCleanup, never()).run();
+
+    // Now terminate Call 2. This decrements RefCountedRoute 2 refCount from 1 to 0.
+    // Route 2 has no filters, so no cleanup should run.
+    call2.deliverCompleted();
+    verify(mockCleanup, never()).run();
+
+    // Now terminate Call 1. This decrements RefCountedRoute 1 refCount from 1 to 0.
+    // This should trigger Route 1's cleanup task (mockCleanup) exactly once.
+    call1.deliverCompleted();
+    verify(mockCleanup, times(1)).run();
+  }
+
+  @Test
+  public void
+      cleanUpRoutes_withInFlightStream_delaysCleanupUntilStreamClose() {
+    // 1. Create a test filter that registers a mocked cleanup Runnable
+    Runnable mockCleanup = mock(Runnable.class);
+    Filter mockFilter = new Filter() {
+      @Override
+      public ClientInterceptor buildClientInterceptor(
+          FilterConfig config,
+          FilterConfig overrideConfig,
+          ScheduledExecutorService scheduler,
+          Filter.ResourceCleanupRegistry cleanupRegistry) {
+        cleanupRegistry.addCleanupTask(mockCleanup);
+        return new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              CallOptions callOptions, Channel next) {
+            return next.newCall(method, callOptions);
+          }
+        };
+      }
+    };
+    Filter.Provider mockProvider = mock(Filter.Provider.class);
+    when(mockProvider.typeUrls())
+        .thenReturn(new String[]{"type.googleapis.com/dummy"});
+    when(mockProvider.newInstance(any()))
+        .thenReturn(mockFilter);
+    FilterRegistry customRegistry =
+        FilterRegistry.newRegistry().register(mockProvider);
+
+    XdsNameResolver customResolver = new XdsNameResolver(
+        targetUri, null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, customRegistry,
+        rawBootstrap, metricRecorder, nameResolverArgs);
+    customResolver.start(mockListener);
+
+    FakeXdsClient fakeXdsClient =
+        (FakeXdsClient) xdsClientPoolFactory.xdsClient;
+
+    // 2. Deliver initial LDS update with the filter
+    VirtualHost vhost = VirtualHost.create(
+        "virtual-host",
+        Collections.singletonList(expectedLdsResourceName),
+        Collections.singletonList(Route.forAction(
+            RouteMatch.create(
+                PathMatcher.fromPrefix("/", false),
+                Collections.emptyList(), null),
+            RouteAction.forCluster(
+                "cluster0", Collections.emptyList(),
+                null, null, false),
+            Collections.emptyMap())),
+        Collections.emptyMap());
+    NamedFilterConfig namedConfig = new NamedFilterConfig(
+        "dummy_filter", () -> "type.googleapis.com/dummy");
+    fakeXdsClient.deliverLdsUpdateWithFilters(
+        vhost, Collections.singletonList(namedConfig));
+    createAndDeliverClusterUpdates(fakeXdsClient, "cluster0");
+
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector =
+        resolutionResultCaptor.getValue().getAttributes()
+            .get(InternalConfigSelector.KEY);
+
+    // 3. Start a call. RefCountedRoute refCount becomes 2.
+    startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector, Collections.emptyMap(),
+        CallOptions.DEFAULT);
+    verify(mockCleanup, never()).run();
+
+    // 4. Deliver error — triggers cleanUpRoutes(), closing the
+    // old config. RefCountedRoute refCount goes from 2 to 1.
+    fakeXdsClient.deliverError(
+        Status.UNAVAILABLE.withDescription("server unreachable"));
+    verify(mockCleanup, never()).run();
+
+    // 5. Terminate the stream. RefCountedRoute refCount goes
+    // from 1 to 0. Cleanup task should run exactly once.
+    testCall.deliverCompleted();
+    verify(mockCleanup, times(1)).run();
+  }
+
+  @Test
+  public void
+      shutdown_withInFlightStream_delaysCleanupUntilStreamClose() {
+    // 1. Create a test filter that registers a mocked cleanup Runnable
+    Runnable mockCleanup = mock(Runnable.class);
+    Filter mockFilter = new Filter() {
+      @Override
+      public ClientInterceptor buildClientInterceptor(
+          FilterConfig config,
+          FilterConfig overrideConfig,
+          ScheduledExecutorService scheduler,
+          Filter.ResourceCleanupRegistry cleanupRegistry) {
+        cleanupRegistry.addCleanupTask(mockCleanup);
+        return new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              CallOptions callOptions, Channel next) {
+            return next.newCall(method, callOptions);
+          }
+        };
+      }
+    };
+    Filter.Provider mockProvider = mock(Filter.Provider.class);
+    when(mockProvider.typeUrls())
+        .thenReturn(new String[]{"type.googleapis.com/dummy"});
+    when(mockProvider.newInstance(any()))
+        .thenReturn(mockFilter);
+    FilterRegistry customRegistry =
+        FilterRegistry.newRegistry().register(mockProvider);
+
+    XdsNameResolver customResolver = new XdsNameResolver(
+        targetUri, null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, customRegistry,
+        rawBootstrap, metricRecorder, nameResolverArgs);
+    customResolver.start(mockListener);
+
+    FakeXdsClient fakeXdsClient =
+        (FakeXdsClient) xdsClientPoolFactory.xdsClient;
+
+    // 2. Deliver initial LDS update with the filter
+    VirtualHost vhost = VirtualHost.create(
+        "virtual-host",
+        Collections.singletonList(expectedLdsResourceName),
+        Collections.singletonList(Route.forAction(
+            RouteMatch.create(
+                PathMatcher.fromPrefix("/", false),
+                Collections.emptyList(), null),
+            RouteAction.forCluster(
+                "cluster0", Collections.emptyList(),
+                null, null, false),
+            Collections.emptyMap())),
+        Collections.emptyMap());
+    NamedFilterConfig namedConfig = new NamedFilterConfig(
+        "dummy_filter", () -> "type.googleapis.com/dummy");
+    fakeXdsClient.deliverLdsUpdateWithFilters(
+        vhost, Collections.singletonList(namedConfig));
+    createAndDeliverClusterUpdates(fakeXdsClient, "cluster0");
+
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    InternalConfigSelector configSelector =
+        resolutionResultCaptor.getValue().getAttributes()
+            .get(InternalConfigSelector.KEY);
+
+    // 3. Start a call. RefCountedRoute refCount becomes 2.
+    startNewCall(TestMethodDescriptors.voidMethod(),
+        configSelector, Collections.emptyMap(),
+        CallOptions.DEFAULT);
+    verify(mockCleanup, never()).run();
+
+    // 4. Shut down the resolver. This closes the current config.
+    // RefCountedRoute refCount goes from 2 to 1.
+    customResolver.shutdown();
+    verify(mockCleanup, never()).run();
+
+    // 5. Terminate the stream. RefCountedRoute refCount goes
+    // from 1 to 0. Cleanup task should run exactly once.
+    testCall.deliverCompleted();
+    verify(mockCleanup, times(1)).run();
+  }
+
+  @Test
+  public void shutdown_noInFlightStreams_runsCleanupImmediately() {
+    // 1. Create a test filter that registers a mocked cleanup Runnable
+    Runnable mockCleanup = mock(Runnable.class);
+    Filter mockFilter = new Filter() {
+      @Override
+      public ClientInterceptor buildClientInterceptor(
+          FilterConfig config,
+          FilterConfig overrideConfig,
+          ScheduledExecutorService scheduler,
+          Filter.ResourceCleanupRegistry cleanupRegistry) {
+        cleanupRegistry.addCleanupTask(mockCleanup);
+        return new ClientInterceptor() {
+          @Override
+          public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+              MethodDescriptor<ReqT, RespT> method,
+              CallOptions callOptions, Channel next) {
+            return next.newCall(method, callOptions);
+          }
+        };
+      }
+    };
+    Filter.Provider mockProvider = mock(Filter.Provider.class);
+    when(mockProvider.typeUrls())
+        .thenReturn(new String[]{"type.googleapis.com/dummy"});
+    when(mockProvider.newInstance(any()))
+        .thenReturn(mockFilter);
+    FilterRegistry customRegistry =
+        FilterRegistry.newRegistry().register(mockProvider);
+
+    XdsNameResolver customResolver = new XdsNameResolver(
+        targetUri, null, AUTHORITY, null,
+        serviceConfigParser, syncContext, scheduler,
+        xdsClientPoolFactory, mockRandom, customRegistry,
+        rawBootstrap, metricRecorder, nameResolverArgs);
+    customResolver.start(mockListener);
+
+    FakeXdsClient fakeXdsClient =
+        (FakeXdsClient) xdsClientPoolFactory.xdsClient;
+
+    // 2. Deliver initial LDS update with the filter.
+    // RefCountedRoute refCount is 1 (control-plane only).
+    VirtualHost vhost = VirtualHost.create(
+        "virtual-host",
+        Collections.singletonList(expectedLdsResourceName),
+        Collections.singletonList(Route.forAction(
+            RouteMatch.create(
+                PathMatcher.fromPrefix("/", false),
+                Collections.emptyList(), null),
+            RouteAction.forCluster(
+                "cluster0", Collections.emptyList(),
+                null, null, false),
+            Collections.emptyMap())),
+        Collections.emptyMap());
+    NamedFilterConfig namedConfig = new NamedFilterConfig(
+        "dummy_filter", () -> "type.googleapis.com/dummy");
+    fakeXdsClient.deliverLdsUpdateWithFilters(
+        vhost, Collections.singletonList(namedConfig));
+    createAndDeliverClusterUpdates(fakeXdsClient, "cluster0");
+
+    verify(mockListener).onResult2(resolutionResultCaptor.capture());
+    verify(mockCleanup, never()).run();
+
+    // 3. Shut down the resolver without starting any RPCs.
+    // RefCountedRoute refCount goes from 1 to 0.
+    // Cleanup task should run immediately.
+    customResolver.shutdown();
+    verify(mockCleanup, times(1)).run();
+  }
+
   private <ReqT, RespT> ClientCall.Listener<RespT> startNewCall(
       MethodDescriptor<ReqT, RespT> method, InternalConfigSelector selector,
       Map<String, String> headers, CallOptions callOptions) {
@@ -3038,4 +3443,384 @@ public class XdsNameResolverTest {
         channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
     assertThat(response).isEqualTo("Hello World");
   }
+
+  // ---- RefCountedRoute unit tests ----
+
+  @Test
+  public void refCountedRoute_initialRefCountIsOne() {
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route =
+        new RefCountedRoute(routeData, ImmutableList.of(), syncContext);
+    // Release from 1 -> 0; should not throw
+    route.release();
+    // Retain on a dead route (refCount==0) should return false
+    assertThat(route.retain()).isFalse();
+  }
+
+  @Test
+  public void refCountedRoute_retainAndRelease() {
+    AtomicBoolean cleaned = new AtomicBoolean(false);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(() -> cleaned.set(true)), syncContext);
+
+    // retain: 1 -> 2
+    route.retain();
+    // release: 2 -> 1
+    route.release();
+    assertThat(cleaned.get()).isFalse();
+
+    // release: 1 -> 0 => cleanup fires
+    route.release();
+    assertThat(cleaned.get()).isTrue();
+  }
+
+  @Test
+  public void refCountedRoute_retainOnDeadRoute_returnsFalse() {
+    AtomicBoolean cleaned = new AtomicBoolean(false);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(() -> cleaned.set(true)), syncContext);
+    route.release(); // refCount 1 -> 0
+    assertThat(cleaned.get()).isTrue();
+    // retain on dead route returns false
+    assertThat(route.retain()).isFalse();
+    // subsequent release throws AssertionError
+    try {
+      route.release();
+      assertWithMessage("Expected AssertionError").fail();
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().isNull();
+    }
+  }
+
+  @Test
+  public void refCountedRoute_releaseAtZero_runsAllCleanupTasks() {
+    AtomicBoolean task1Ran = new AtomicBoolean(false);
+    AtomicBoolean task2Ran = new AtomicBoolean(false);
+    AtomicBoolean task3Ran = new AtomicBoolean(false);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(
+            () -> task1Ran.set(true),
+            () -> task2Ran.set(true),
+            () -> task3Ran.set(true)), syncContext);
+    route.release();
+    assertThat(task1Ran.get()).isTrue();
+    assertThat(task2Ran.get()).isTrue();
+    assertThat(task3Ran.get()).isTrue();
+  }
+
+  @Test
+  public void refCountedRoute_cleanupTaskException_doesNotAbortRemainingTasks() {
+    AtomicBoolean task1Ran = new AtomicBoolean(false);
+    AtomicBoolean task3Ran = new AtomicBoolean(false);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(
+            () -> task1Ran.set(true),
+            () -> {
+              throw new RuntimeException("boom");
+            },
+            () -> task3Ran.set(true)), syncContext);
+    route.release();
+    assertThat(task1Ran.get()).isTrue();
+    assertThat(task3Ran.get()).isTrue();
+  }
+
+  @Test
+  public void refCountedRoute_redundantRelease_throwsAssertionError() {
+    AtomicLong runCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(runCount::incrementAndGet), syncContext);
+    route.release(); // refCount 1 -> 0, cleanup fires
+    assertThat(runCount.get()).isEqualTo(1);
+    try {
+      route.release(); // underflow
+      assertWithMessage("Expected AssertionError").fail();
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().isNull();
+    }
+  }
+
+  @Test
+  public void refCountedRoute_multipleRetainRelease_tasksFireOnlyOnFinalRelease() {
+    AtomicLong runCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(runCount::incrementAndGet), syncContext);
+    route.retain(); // 1 -> 2
+    route.retain(); // 2 -> 3
+    route.release(); // 3 -> 2
+    assertThat(runCount.get()).isEqualTo(0);
+    route.release(); // 2 -> 1
+    assertThat(runCount.get()).isEqualTo(0);
+    route.release(); // 1 -> 0, cleanup fires
+    assertThat(runCount.get()).isEqualTo(1);
+  }
+
+  // ---- RefCountedRouteInterceptor tests ----
+
+  @Test
+  public void refCountedRouteInterceptor_onClose_releasesExactlyOnce() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain for in-flight RPC
+    RefCountedRouteInterceptor interceptor =
+        new RefCountedRouteInterceptor(route);
+    Channel mockChannel = mock(Channel.class);
+    @SuppressWarnings("unchecked")
+    ClientCall<String, String> mockCall = mock(ClientCall.class);
+    org.mockito.Mockito.doReturn(mockCall)
+        .when(mockChannel).newCall(any(), any());
+    // interceptCall
+    ClientCall<?, ?> wrappedCall = interceptor.interceptCall(
+        TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+        mockChannel);
+    // Release control-plane ref: 2 -> 1
+    route.release();
+    assertThat(cleanupCount.get()).isEqualTo(0);
+    // Start the call to wire up the listener
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<ClientCall.Listener<String>> listenerCaptor =
+        ArgumentCaptor.forClass(ClientCall.Listener.class);
+    wrappedCall.start(
+        new NoopClientCallListener<>(), new Metadata());
+    verify(mockCall).start(listenerCaptor.capture(), any());
+    // Trigger onClose: interceptor releases 1 -> 0
+    listenerCaptor.getValue().onClose(Status.OK, new Metadata());
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void refCountedRouteInterceptor_cancel_releasesExactlyOnce() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain for in-flight RPC
+    RefCountedRouteInterceptor interceptor =
+        new RefCountedRouteInterceptor(route);
+    Channel mockChannel = mock(Channel.class);
+    @SuppressWarnings("unchecked")
+    ClientCall<String, String> mockCall = mock(ClientCall.class);
+    org.mockito.Mockito.doReturn(mockCall)
+        .when(mockChannel).newCall(any(), any());
+    // interceptCall
+    ClientCall<?, ?> wrappedCall = interceptor.interceptCall(
+        TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+        mockChannel);
+    // Release control-plane ref: 2 -> 1
+    route.release();
+    assertThat(cleanupCount.get()).isEqualTo(0);
+    // Cancel the call: interceptor releases 1 -> 0
+    wrappedCall.cancel("test cancel", null);
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      refCountedRouteInterceptor_cancelAfterOnClose_noDoubleRelease() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain
+    RefCountedRouteInterceptor interceptor =
+        new RefCountedRouteInterceptor(route);
+    Channel mockChannel = mock(Channel.class);
+    @SuppressWarnings("unchecked")
+    ClientCall<String, String> mockCall = mock(ClientCall.class);
+    org.mockito.Mockito.doReturn(mockCall)
+        .when(mockChannel).newCall(any(), any());
+    ClientCall<?, ?> wrappedCall = interceptor.interceptCall(
+        TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+        mockChannel);
+    // Release control-plane ref
+    route.release();
+    // Start the call
+    wrappedCall.start(
+        new NoopClientCallListener<>(), new Metadata());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<ClientCall.Listener<String>> listenerCaptor =
+        ArgumentCaptor.forClass(ClientCall.Listener.class);
+    verify(mockCall).start(listenerCaptor.capture(), any());
+    // onClose releases once
+    listenerCaptor.getValue().onClose(Status.OK, new Metadata());
+    assertThat(cleanupCount.get()).isEqualTo(1);
+    // cancel after onClose should not double-release
+    wrappedCall.cancel("late cancel", null);
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      refCountedRouteInterceptor_onCloseAfterCancel_noDoubleRelease() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain
+    RefCountedRouteInterceptor interceptor =
+        new RefCountedRouteInterceptor(route);
+    Channel mockChannel = mock(Channel.class);
+    @SuppressWarnings("unchecked")
+    ClientCall<String, String> mockCall = mock(ClientCall.class);
+    org.mockito.Mockito.doReturn(mockCall)
+        .when(mockChannel).newCall(any(), any());
+    ClientCall<?, ?> wrappedCall = interceptor.interceptCall(
+        TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+        mockChannel);
+    // Release control-plane ref
+    route.release();
+    // Start the call
+    wrappedCall.start(
+        new NoopClientCallListener<>(), new Metadata());
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<ClientCall.Listener<String>> listenerCaptor =
+        ArgumentCaptor.forClass(ClientCall.Listener.class);
+    verify(mockCall).start(listenerCaptor.capture(), any());
+    // cancel releases once (1 -> 0)
+    wrappedCall.cancel("cancel first", null);
+    assertThat(cleanupCount.get()).isEqualTo(1);
+    // onClose after cancel should not double-release
+    listenerCaptor.getValue().onClose(Status.CANCELLED, new Metadata());
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      refCountedRouteInterceptor_newCallException_releasesReliably() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain
+    Channel mockChannel = mock(Channel.class);
+    when(mockChannel.newCall(any(), any()))
+        .thenThrow(new RuntimeException("newCall failed"));
+    // Release control-plane ref: 2 -> 1 (held by interceptCall next)
+    route.release();
+    assertThat(cleanupCount.get()).isEqualTo(0);
+    // But first interceptCall will retain (already done above: 1 -> 2),
+    // then newCall throws, so it releases (2 -> 1)
+    // Let's execute interceptCall directly to see it throw and release:
+    RefCountedRouteInterceptor interceptor = new RefCountedRouteInterceptor(route);
+    try {
+      interceptor.interceptCall(
+          TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+          mockChannel);
+      assertWithMessage("Expected RuntimeException").fail();
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo("newCall failed");
+    }
+    // interceptor released on exception: 1 -> 0, cleanup fires!
+    assertThat(cleanupCount.get()).isEqualTo(1);
+
+    // Reset for the second part
+    cleanupCount.set(0);
+    RouteData routeData2 = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method2"),
+        null, ImmutableList.of());
+    RefCountedRoute route2 = new RefCountedRoute(
+        routeData2,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route2.retain(); // explicitly retain
+    RefCountedRouteInterceptor interceptor2 =
+        new RefCountedRouteInterceptor(route2);
+    try {
+      interceptor2.interceptCall(
+          TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+          mockChannel);
+      assertWithMessage("Expected RuntimeException").fail();
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo("newCall failed");
+    }
+    // The interceptor should have released after the exception (2 -> 1).
+    // Control-plane ref is still held (refCount=1), so cleanup should NOT have fired yet.
+    assertThat(cleanupCount.get()).isEqualTo(0);
+    // Now release the control-plane ref (1 -> 0)
+    route2.release();
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void
+      refCountedRouteInterceptor_startException_releasesReliably() {
+    AtomicLong cleanupCount = new AtomicLong(0);
+    RouteData routeData = new RouteData(
+        RouteMatch.withPathExactOnly("/svc/method"),
+        null, ImmutableList.of());
+    RefCountedRoute route = new RefCountedRoute(
+        routeData,
+        ImmutableList.of(cleanupCount::incrementAndGet), syncContext);
+    route.retain(); // explicitly retain
+    RefCountedRouteInterceptor interceptor =
+        new RefCountedRouteInterceptor(route);
+    Channel mockChannel = mock(Channel.class);
+    @SuppressWarnings("unchecked")
+    ClientCall<String, String> mockCall = mock(ClientCall.class);
+    org.mockito.Mockito.doReturn(mockCall)
+        .when(mockChannel).newCall(any(), any());
+    // Make start() throw
+    org.mockito.stubbing.Answer<Void> throwOnStart = invocation -> {
+      throw new RuntimeException("start failed");
+    };
+    org.mockito.Mockito.doAnswer(throwOnStart)
+        .when(mockCall).start(any(), any());
+    ClientCall<?, ?> wrappedCall = interceptor.interceptCall(
+        TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT,
+        mockChannel);
+    // Release control-plane ref: 2 -> 1
+    route.release();
+    assertThat(cleanupCount.get()).isEqualTo(0);
+    try {
+      wrappedCall.start(
+          new NoopClientCallListener<>(), new Metadata());
+      assertWithMessage("Expected RuntimeException").fail();
+    } catch (RuntimeException e) {
+      assertThat(e).hasMessageThat().isEqualTo("start failed");
+    }
+    // The interceptor should release on start exception: 1 -> 0
+    assertThat(cleanupCount.get()).isEqualTo(1);
+  }
 }
+
