@@ -32,7 +32,6 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.GrpcUtil;
@@ -126,24 +125,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
 
-    NameResolver.ConfigOrError configOrError;
     if (clusterConfig.getChildren() instanceof EndpointConfig) {
-      // The LB policy config is provided in service_config.proto/JSON format.
-      configOrError =
-              GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()),
-                      lbRegistry);
-      if (configOrError.getError() != null) {
-        // Should be impossible, because XdsClusterResource validated this
-        return fail(Status.INTERNAL.withDescription(
-                errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
-      }
-
       StatusOr<EdsUpdate> edsUpdate = getEdsUpdate(xdsConfig, clusterName);
       StatusOr<ClusterResolutionResult> statusOrResult = clusterState.edsUpdateToResult(
           clusterName,
           clusterConfig.getClusterResource(),
-          configOrError.getConfig(),
+          clusterConfig.getClusterResource().lbPolicyConfig(),
           edsUpdate);
       if (!statusOrResult.hasValue()) {
         Status status = Status.UNAVAILABLE

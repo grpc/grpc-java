@@ -145,14 +145,14 @@ public class LoadBalancerConfigFactoryTest {
       ImmutableMap.of("childPolicy", ImmutableList.of(
       ImmutableMap.of("weighted_round_robin",
       ImmutableMap.of("blackoutPeriod","287s", "enableOobLoadReport", true,
-          "errorUtilizationPenalty", 1.75F )))));
+          "errorUtilizationPenalty", 1.75 )))));
 
   private static final LbConfig VALID_WRR_CONFIG_WITH_METRICS =
       new LbConfig("wrr_locality_experimental",
           ImmutableMap.of("childPolicy",
               ImmutableList.of(ImmutableMap.of("weighted_round_robin",
                   ImmutableMap.of("blackoutPeriod", "287s", "enableOobLoadReport", true,
-                      "errorUtilizationPenalty", 1.75F,
+                      "errorUtilizationPenalty", 1.75,
                       LoadBalancerConfigFactory.METRIC_NAMES_FOR_COMPUTING_UTILIZATION,
                       ImmutableList.of("foo", "bar"))))));
   private static final LbConfig VALID_RING_HASH_CONFIG = new LbConfig("ring_hash_experimental",
