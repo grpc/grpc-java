@@ -1370,14 +1370,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .build())
             .build());
       } else {
-        // Send EOS signal via empty body
-        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-            .setResponseBody(HttpBody.newBuilder()
-                .setEndOfStreamWithoutMessage(true)
-                .build())
-            .build());
-        
         proceedWithClose();
+        dataPlaneClientCall.closeExtProcStream();
       }
     }
 
