@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
-  private final ChannelConfigurator channelConfigurer;
+  private final ChannelConfigurator channelConfigurator;
 
   // The map of xDS server info to its corresponding gRPC xDS transport.
   // This enables reusing and sharing the same underlying gRPC channel.
@@ -66,9 +66,9 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       new ConcurrentHashMap<>();
 
   GrpcXdsTransportFactory(CallCredentials callCredentials,
-                          ChannelConfigurator channelConfigurer) {
+                          ChannelConfigurator channelConfigurator) {
     this.callCredentials = callCredentials;
-    this.channelConfigurer = channelConfigurer;
+    this.channelConfigurator = channelConfigurator;
   }
 
   @Override
@@ -77,7 +77,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         serverInfo,
         (info, transport) -> {
           if (transport == null) {
-            transport = new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurer);
+            transport = new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurator);
           }
           ++transport.refCount;
           return transport;
@@ -119,13 +119,13 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
                             CallCredentials callCredentials,
-                            ChannelConfigurator channelConfigurer) {
+                            ChannelConfigurator channelConfigurator) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
           .keepAliveTime(5, TimeUnit.MINUTES);
-      if (channelConfigurer != null) {
-        channelConfigurer.configureChannelBuilder(channelBuilder);
+      if (channelConfigurator != null) {
+        channelConfigurator.configureChannelBuilder(channelBuilder);
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;

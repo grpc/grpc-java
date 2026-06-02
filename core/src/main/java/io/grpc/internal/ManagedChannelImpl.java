@@ -162,7 +162,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * <p>This is intended for use by gRPC internal components
    * that are responsible for creating auxiliary {@code ManagedChannel} instances.
    */
-  private ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
+  private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
   private final InternalLogId logId;
   private final String target;
@@ -554,8 +554,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
-    if (builder.channelConfigurer != null) {
-      this.channelConfigurer = builder.channelConfigurer;
+    if (builder.channelConfigurator != null) {
+      this.channelConfigurator = builder.channelConfigurator;
     }
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
@@ -602,7 +602,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
             .setNameResolverRegistry(builder.nameResolverRegistry)
-            .setChildChannelConfigurator(this.channelConfigurer);
+            .setChildChannelConfigurator(this.channelConfigurator);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -1501,8 +1501,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       // Note that we follow the global configurator pattern and try to fuse the configurations as
       // soon as the builder gets created
-      if (channelConfigurer != null) {
-        channelConfigurer.configureChannelBuilder(builder);
+      if (channelConfigurator != null) {
+        channelConfigurator.configureChannelBuilder(builder);
       }
 
       return builder

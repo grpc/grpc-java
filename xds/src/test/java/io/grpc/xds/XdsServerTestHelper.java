@@ -186,7 +186,7 @@ public class XdsServerTestHelper {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ChannelConfigurator channelConfigurer) {
+        ChannelConfigurator channelConfigurator) {
       this.savedBootstrapInfo = bootstrapInfo;
       return new ObjectPool<XdsClient>() {
         @Override

@@ -358,7 +358,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurator_passesMetricSinkToChannel_E2E() {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChannelConfigurator configurer = new ChannelConfigurator() {
+    ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockSink);
@@ -367,7 +367,7 @@ public class FakeControlPlaneXdsIntegrationTest {
 
     ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
-        .childChannelConfigurator(configurer)
+        .childChannelConfigurator(configurator)
         .build();
 
     try {
@@ -375,7 +375,7 @@ public class FakeControlPlaneXdsIntegrationTest {
           channel);
       blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
 
-      // The xDS client inside the channel configurer will have created an ADS stream.
+      // The xDS client inside the channel configurator will have created an ADS stream.
       // The metric sink should have received attempt or connection metrics.
       verify(mockSink, timeout(5000).atLeastOnce())
           .addLongCounter(any(), anyLong(), anyList(), anyList());
@@ -387,7 +387,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChannelConfigurator configurer = new ChannelConfigurator() {
+    ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         // Child channels (xDS client connections) created by this server get the sink.
@@ -401,7 +401,7 @@ public class FakeControlPlaneXdsIntegrationTest {
             0, InsecureServerCredentials.create())
         .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {})
         .overrideBootstrapForTest(controlPlane.defaultBootstrapOverride())
-        .childChannelConfigurator(configurer);
+        .childChannelConfigurator(configurator);
         
     Server childServer = serverBuilder.build().start();
 

@@ -255,14 +255,14 @@ public class SharedXdsClientPoolProviderTest {
             next.newCall(method, callOptions)) {
           @Override
           public void start(Listener<RespT> responseListener, Metadata headers) {
-            headers.put(AUTHORIZATION_METADATA_KEY, "Bearer test-configurer-token");
+            headers.put(AUTHORIZATION_METADATA_KEY, "Bearer test-configurator-token");
             super.start(responseListener, headers);
           }
         };
       }
     };
 
-    ChannelConfigurator configurer = new ChannelConfigurator() {
+    ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(testInterceptor);
@@ -271,14 +271,15 @@ public class SharedXdsClientPoolProviderTest {
 
     // Create xDS client that uses the ChannelConfigurator on the transport
     ObjectPool<XdsClient> xdsClientPool =
-        provider.getOrCreate("target", bootstrapInfo, metricRecorder, null, configurer);
+        provider.getOrCreate("target", bootstrapInfo, metricRecorder, null, configurator);
     XdsClient xdsClient = xdsClientPool.getObject();
     xdsClient.watchXdsResource(
         XdsListenerResource.getInstance(), "someLDSresource", ldsResourceWatcher);
 
-    // Wait for xDS server to get the request and verify that it received the token from configurer
+    // Wait for xDS server to get the request and verify that it received the token from
+    // configurator
     assertThat(callInterceptor.getTokenWithTimeout(5, TimeUnit.SECONDS))
-        .isEqualTo("Bearer test-configurer-token");
+        .isEqualTo("Bearer test-configurator-token");
 
     // Clean up
     xdsClientPool.returnObject(xdsClient);

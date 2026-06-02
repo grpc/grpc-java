@@ -105,7 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChannelConfigurator channelConfigurer = mock(ChannelConfigurator.class);
+    ChannelConfigurator channelConfigurator = mock(ChannelConfigurator.class);
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -117,13 +117,13 @@ public class NameResolverTest {
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
         .setArg(FOO_ARG_KEY, customArgValue)
-        .setChildChannelConfigurator(channelConfigurer)
+        .setChildChannelConfigurator(channelConfigurator)
         .build();
   }
 
   @Test
   public void args_childChannelConfigurator() {
-    ChannelConfigurator channelConfigurer = mock(ChannelConfigurator.class);
+    ChannelConfigurator channelConfigurator = mock(ChannelConfigurator.class);
 
     SynchronizationContext realSyncContext = new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
@@ -139,15 +139,16 @@ public class NameResolverTest {
         .setSynchronizationContext(realSyncContext)
         .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
-        .setChildChannelConfigurator(channelConfigurer)
+        .setChildChannelConfigurator(channelConfigurator)
         .build();
 
-    assertThat(args.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurer);
+    ChannelConfigurator configurator = args.getChildChannelConfigurator();
+    assertThat(configurator).isSameInstanceAs(channelConfigurator);
     
-    // Validate configurer accepts builders
+    // Validate configurator accepts builders
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
-    args.getChildChannelConfigurator().configureChannelBuilder(mockBuilder);
-    verify(channelConfigurer).configureChannelBuilder(mockBuilder);
+    configurator.configureChannelBuilder(mockBuilder);
+    verify(channelConfigurator).configureChannelBuilder(mockBuilder);
   }
 
   @Test

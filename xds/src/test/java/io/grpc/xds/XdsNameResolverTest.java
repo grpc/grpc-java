@@ -2491,7 +2491,7 @@ public class XdsNameResolverTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ChannelConfigurator channelConfigurer) {
+        ChannelConfigurator channelConfigurator) {
       targets.add(target);
       return new ObjectPool<XdsClient>() {
         @Override
@@ -2949,7 +2949,7 @@ public class XdsNameResolverTest {
   public void start_passesChannelConfiguratorToClientPoolFactory() {
     ChannelConfigurator mockChannelConfigurator = mock(ChannelConfigurator.class);
 
-    // Build NameResolver.Args containing the channel configurer
+    // Build NameResolver.Args containing the channel configurator
     NameResolver.Args args = NameResolver.Args.newBuilder()
         .setDefaultPort(8080)
         .setProxyDetector(mock(ProxyDetector.class))

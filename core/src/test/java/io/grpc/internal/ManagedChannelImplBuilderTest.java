@@ -786,9 +786,9 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void childChannelConfigurator_setsField() {
-    ChannelConfigurator configurer = mock(ChannelConfigurator.class);
-    assertSame(builder, builder.childChannelConfigurator(configurer));
-    assertSame(configurer, builder.channelConfigurer);
+    ChannelConfigurator configurator = mock(ChannelConfigurator.class);
+    assertSame(builder, builder.childChannelConfigurator(configurator));
+    assertSame(configurator, builder.channelConfigurator);
   }
 
   @Test
@@ -804,8 +804,8 @@ public class ManagedChannelImplBuilderTest {
     MetricSink mockMetricSink = mock(MetricSink.class);
     ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
 
-    // Define the Configurer
-    ChannelConfigurator configurer = new ChannelConfigurator() {
+    // Define the Configurator
+    ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockMetricSink);
@@ -823,7 +823,7 @@ public class ManagedChannelImplBuilderTest {
     when(mockNameResolverFactory.newNameResolver((URI) any(),
         argsCaptor.capture())).thenReturn(mockNameResolver);
 
-    // Use the configurer and the mock factory
+    // Use the configurator and the mock factory
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(new NameResolverFactoryToProviderFacade(mockNameResolverFactory));
 
@@ -831,7 +831,7 @@ public class ManagedChannelImplBuilderTest {
         "xds:///my-service-target",
         mockClientTransportFactoryBuilder,
         new FixedPortProvider(DUMMY_PORT))
-        .childChannelConfigurator(configurer)
+        .childChannelConfigurator(configurator)
         .nameResolverRegistry(registry);
 
     ManagedChannel channel = parentBuilder.build();
@@ -842,19 +842,19 @@ public class ManagedChannelImplBuilderTest {
 
     // Extract the childChannelConfigurator from Args
     NameResolver.Args args = argsCaptor.getValue();
-    ChannelConfigurator channelConfigurerInArgs = args.getChildChannelConfigurator();
-    assertNotNull("Child channel configurer should be present in NameResolver.Args",
-        channelConfigurerInArgs);
+    ChannelConfigurator channelConfiguratorInArgs = args.getChildChannelConfigurator();
+    assertNotNull("Child channel configurator should be present in NameResolver.Args",
+        channelConfiguratorInArgs);
 
-    // Verify the configurer is the one we passed
-    assertThat(channelConfigurerInArgs).isSameInstanceAs(configurer);
+    // Verify the configurator is the one we passed
+    assertThat(channelConfiguratorInArgs).isSameInstanceAs(configurator);
 
-    // Verify the configurer logically applies (by running it on a mock)
+    // Verify the configurator logically applies (by running it on a mock)
     ManagedChannelBuilder<?> mockChildBuilder = mock(ManagedChannelBuilder.class);
     // Stub addMetricSink to return the builder to avoid generic return type issues
     doReturn(mockChildBuilder).when(mockChildBuilder).addMetricSink(any());
 
-    configurer.configureChannelBuilder(mockChildBuilder);
+    configurator.configureChannelBuilder(mockChildBuilder);
     verify(mockChildBuilder).addMetricSink(mockMetricSink);
   }
 

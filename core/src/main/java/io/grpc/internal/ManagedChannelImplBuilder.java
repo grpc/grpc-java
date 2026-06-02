@@ -128,12 +128,12 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-  ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
+  ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
   @Override
   public ManagedChannelImplBuilder childChannelConfigurator(
-      ChannelConfigurator channelConfigurer) {
-    this.channelConfigurer = checkNotNull(channelConfigurer,
+      ChannelConfigurator channelConfigurator) {
+    this.channelConfigurator = checkNotNull(channelConfigurator,
         "childChannelConfigurator");
     return this;
   }
@@ -414,7 +414,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
+  protected ManagedChannelImplBuilder interceptWithTarget(InterceptorFactory factory) {
     // Add a placeholder instance to the interceptor list, and replace it with a real instance
     // during build().
     this.interceptors.add(new InterceptorFactoryWrapper(factory));

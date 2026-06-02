@@ -358,7 +358,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
-    @Nullable private final ChannelConfigurator channelConfigurer;
+    @Nullable private final ChannelConfigurator channelConfigurator;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -373,7 +373,7 @@ public abstract class NameResolver {
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
-      this.channelConfigurer = builder.channelConfigurer;
+      this.channelConfigurator = builder.channelConfigurator;
     }
 
     /**
@@ -473,14 +473,14 @@ public abstract class NameResolver {
     }
 
     /**
-     * Returns the configurer for child channels.
+     * Returns the configurator for child channels.
      *
      * @since 1.81.0
      */
     @Nullable
     @Internal
     public ChannelConfigurator getChildChannelConfigurator() {
-      return channelConfigurer;
+      return channelConfigurator;
     }
 
     /**
@@ -592,7 +592,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
-      private ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
+      private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
       Builder() {
       }
@@ -713,8 +713,8 @@ public abstract class NameResolver {
        *
        * @since 1.81.0
        */
-      public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurer) {
-        this.channelConfigurer = channelConfigurer;
+      public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurator) {
+        this.channelConfigurator = channelConfigurator;
         return this;
       }
 

@@ -168,7 +168,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
-  public interface InterceptorFactory {
+  protected interface InterceptorFactory {
     ClientInterceptor newInterceptor(String target);
   }
 
@@ -660,17 +660,18 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
 
 
   /**
-   * Sets a configurer that will be applied to all internal child channels created by this channel.
+   * Sets a configurator that will be applied to all internal child channels created by this
+   * channel.
    *
    * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
    * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
    *
-   * @param channelConfigurer the configurer to apply.
+   * @param channelConfigurator the configurator to apply.
    * @return this
    * @since 1.81.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T childChannelConfigurator(ChannelConfigurator channelConfigurer) {
+  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
     throw new UnsupportedOperationException("Not implemented");
   }
 

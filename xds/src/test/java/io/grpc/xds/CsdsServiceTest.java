@@ -522,7 +522,7 @@ public class CsdsServiceTest {
     @Override
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ChannelConfigurator channelConfigurer) {
+        ChannelConfigurator channelConfigurator) {
       throw new UnsupportedOperationException("Should not be called");
     }
   }

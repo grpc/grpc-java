@@ -129,7 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  private ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
+  private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
   XdsServerWrapper(
       String listenerAddress,
@@ -159,7 +159,7 @@ final class XdsServerWrapper extends Server {
       XdsClientPoolFactory xdsClientPoolFactory,
       @Nullable Map<String, ?> bootstrapOverride,
       FilterRegistry filterRegistry,
-      ChannelConfigurator channelConfigurer) {
+      ChannelConfigurator channelConfigurator) {
     this(
         listenerAddress,
         delegateBuilder,
@@ -170,8 +170,8 @@ final class XdsServerWrapper extends Server {
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
     sharedTimeService = true;
-    if (channelConfigurer != null) {
-      this.channelConfigurer = channelConfigurer;
+    if (channelConfigurator != null) {
+      this.channelConfigurator = channelConfigurator;
     }
   }
 
@@ -230,7 +230,7 @@ final class XdsServerWrapper extends Server {
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
           "#server", bootstrapInfo, new MetricRecorder() {},
-          channelConfigurer);
+          channelConfigurator);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();

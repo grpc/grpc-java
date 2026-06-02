@@ -33,7 +33,7 @@ interface XdsClientPoolFactory {
 
   ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-      ChannelConfigurator channelConfigurer);
+      ChannelConfigurator channelConfigurator);
 
   List<String> getTargets();
 }
