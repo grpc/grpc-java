@@ -157,6 +157,9 @@ public class ClusterImplLoadBalancerTest {
   private SubchannelPicker currentPicker;
   private ClusterImplLoadBalancer loadBalancer;
 
+  private static final BackendMetricPropagation PROPAGATE_ALL =
+      BackendMetricPropagation.fromMetricSpecs(Arrays.asList("named_metrics.*"));
+
   @Before
   public void setUp() {
     loadBalancer = new ClusterImplLoadBalancer(helper, mockRandom);
@@ -325,7 +328,7 @@ public class ClusterImplLoadBalancerTest {
         null, Collections.<DropOverload>emptyList(),
         GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
             weightedTargetProvider, weightedTargetConfig),
-        null, Collections.emptyMap(), null);
+        null, Collections.emptyMap(), PROPAGATE_ALL);
     EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
     deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
     FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
@@ -368,24 +371,24 @@ public class ClusterImplLoadBalancerTest {
     assertThat(localityStats.totalSuccessfulRequests()).isEqualTo(1L);
     assertThat(localityStats.totalErrorRequests()).isEqualTo(1L);
     assertThat(localityStats.totalRequestsInProgress()).isEqualTo(1L);
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named_metrics.named1")).isTrue();
     assertThat(
-        localityStats.loadMetricStatsMap().get("named1").numRequestsFinishedWithMetric()).isEqualTo(
-        2L);
-    assertThat(localityStats.loadMetricStatsMap().get("named1").totalMetricValue()).isWithin(
-        TOLERANCE).of(3.14159 + 2.718);
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
+        localityStats.loadMetricStatsMap().get("named_metrics.named1")
+            .numRequestsFinishedWithMetric()).isEqualTo(2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named1")
+        .totalMetricValue()).isWithin(TOLERANCE).of(3.14159 + 2.718);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named_metrics.named2")).isTrue();
     assertThat(
-        localityStats.loadMetricStatsMap().get("named2").numRequestsFinishedWithMetric()).isEqualTo(
-        2L);
-    assertThat(localityStats.loadMetricStatsMap().get("named2").totalMetricValue()).isWithin(
-        TOLERANCE).of(-1.618 + 1.414);
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named3")).isTrue();
+        localityStats.loadMetricStatsMap().get("named_metrics.named2")
+            .numRequestsFinishedWithMetric()).isEqualTo(2L);
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named2")
+        .totalMetricValue()).isWithin(TOLERANCE).of(-1.618 + 1.414);
+    assertThat(localityStats.loadMetricStatsMap().containsKey("named_metrics.named3")).isTrue();
     assertThat(
-        localityStats.loadMetricStatsMap().get("named3").numRequestsFinishedWithMetric()).isEqualTo(
-        1L);
-    assertThat(localityStats.loadMetricStatsMap().get("named3").totalMetricValue()).isWithin(
-        TOLERANCE).of(0.009);
+        localityStats.loadMetricStatsMap().get("named_metrics.named3")
+            .numRequestsFinishedWithMetric()).isEqualTo(1L);
+    assertThat(localityStats.loadMetricStatsMap().get("named_metrics.named3")
+        .totalMetricValue()).isWithin(TOLERANCE).of(0.009);
 
     streamTracer3.streamClosed(Status.OK);
     subchannel.shutdown(); // stats recorder released
@@ -406,8 +409,6 @@ public class ClusterImplLoadBalancerTest {
 
   @Test
   public void recordLoadStats_orcaLrsPropagationEnabled() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
     BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
         Arrays.asList("application_utilization", "cpu_utilization", "named_metrics.named1"));
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -458,60 +459,6 @@ public class ClusterImplLoadBalancerTest {
         .isWithin(TOLERANCE).of(3.14159);
     assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
     subchannel.shutdown();
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
-  }
-
-  @Test
-  public void recordLoadStats_orcaLrsPropagationDisabled() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
-    BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
-        Arrays.asList("application_utilization", "cpu_utilization", "named_metrics.named1"));
-    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
-    WeightedTargetConfig weightedTargetConfig =
-        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
-    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
-        null, Collections.<DropOverload>emptyList(),
-        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-            weightedTargetProvider, weightedTargetConfig),
-        null, Collections.emptyMap(), backendMetricPropagation);
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
-    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    Subchannel subchannel = leafBalancer.createSubChannel();
-    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
-    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
-    fakeSubchannel.setConnectedEagIndex(0);
-    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
-    assertThat(result.getStatus().isOk()).isTrue();
-    ClientStreamTracer streamTracer = result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
-    Metadata trailersWithOrcaLoadReport = new Metadata();
-    trailersWithOrcaLoadReport.put(ORCA_ENDPOINT_LOAD_METRICS_KEY,
-        OrcaLoadReport.newBuilder()
-            .setApplicationUtilization(1.414)
-            .setCpuUtilization(0.5)
-            .setMemUtilization(0.034)
-            .putNamedMetrics("named1", 3.14159)
-            .putNamedMetrics("named2", -1.618).build());
-    streamTracer.inboundTrailers(trailersWithOrcaLoadReport);
-    streamTracer.streamClosed(Status.OK);
-    ClusterStats clusterStats =
-        Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    UpstreamLocalityStats localityStats =
-        Iterables.getOnlyElement(clusterStats.upstreamLocalityStatsList());
-
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("application_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("cpu_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("mem_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named1");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
-    subchannel.shutdown();
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   // Verifies https://github.com/grpc/grpc-java/issues/11434.
