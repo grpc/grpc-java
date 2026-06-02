@@ -19,7 +19,7 @@ package io.grpc;
 
 
 /**
- * A configurer for child channels created by gRPC's internal infrastructure.
+ * A configurator for child channels created by gRPC's internal infrastructure.
  *
  * <p>This interface allows users to inject configuration (such as credentials, interceptors,
  * or flow control settings) into channels created automatically by gRPC for control plane
@@ -31,15 +31,15 @@ package io.grpc;
  *
  * <p><strong>Usage Example:</strong>
  * <pre>{@code
- * // 1. Define the configurer
- * ChannelConfigurer configurer = builder -> {
+ * // 1. Define the configurator
+ * ChannelConfigurator configurator = builder -> {
  *   builder.maxInboundMessageSize(4 * 1024 * 1024);
  * };
  *
  * // 2. Apply to parent channel - automatically used for ALL child channels
  * ManagedChannel channel = ManagedChannelBuilder
  *     .forTarget("xds:///my-service")
- *     .childChannelConfigurer(configurer)
+ *     .childChannelConfigurator(configurator)
  *     .build();
  * }</pre>
  *
@@ -49,7 +49,7 @@ package io.grpc;
  * @since 1.81.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-public interface ChannelConfigurer {
+public interface ChannelConfigurator {
 
   /**
    * Configures a builder for a new child channel.
@@ -60,14 +60,4 @@ public interface ChannelConfigurer {
    * @param builder the mutable channel builder for the new child channel
    */
   default void configureChannelBuilder(ManagedChannelBuilder<?> builder) {}
-
-  /**
-   * Configures a builder for a new child server.
-   *
-   * <p>This method is invoked synchronously during the creation of the child server,
-   * before {@link ServerBuilder#build()} is called.
-   *
-   * @param builder the mutable server builder for the new child server
-   */
-  default void configureServerBuilder(ServerBuilder<?> builder) {}
 }

@@ -37,7 +37,7 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -162,7 +162,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * <p>This is intended for use by gRPC internal components
    * that are responsible for creating auxiliary {@code ManagedChannel} instances.
    */
-  private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
+  private ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
 
   private final InternalLogId logId;
   private final String target;
@@ -602,7 +602,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
             .setNameResolverRegistry(builder.nameResolverRegistry)
-            .setChildChannelConfigurer(this.channelConfigurer);
+            .setChildChannelConfigurator(this.channelConfigurer);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(

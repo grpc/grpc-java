@@ -24,18 +24,14 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class ChannelConfigurerTest {
+public class ChannelConfiguratorTest {
 
   @Test
   public void defaultMethods_doNothing() {
-    ChannelConfigurer configurer = new ChannelConfigurer() {};
+    ChannelConfigurator configurator = new ChannelConfigurator() {};
     
     ManagedChannelBuilder<?> mockChannelBuilder = mock(ManagedChannelBuilder.class);
-    configurer.configureChannelBuilder(mockChannelBuilder);
+    configurator.configureChannelBuilder(mockChannelBuilder);
     verifyNoInteractions(mockChannelBuilder);
-
-    ServerBuilder<?> mockServerBuilder = mock(ServerBuilder.class);
-    configurer.configureServerBuilder(mockServerBuilder);
-    verifyNoInteractions(mockServerBuilder);
   }
 }

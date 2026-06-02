@@ -22,7 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.CallCredentials;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -107,7 +107,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
   @Override
   public ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-      ChannelConfigurer channelConfigurer) {
+      ChannelConfigurator channelConfigurer) {
     return getOrCreate(target, bootstrapInfo, metricRecorder, null,
         channelConfigurer);
   }
@@ -117,7 +117,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
       BootstrapInfo bootstrapInfo,
       MetricRecorder metricRecorder,
       CallCredentials transportCallCredentials,
-      ChannelConfigurer channelConfigurer) {
+      ChannelConfigurator channelConfigurer) {
     ObjectPool<XdsClient> ref = targetToXdsClientMap.get(target);
     if (ref == null) {
       synchronized (lock) {
@@ -151,7 +151,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     private final String target; // The target associated with the xDS client.
     private final MetricRecorder metricRecorder;
     private final CallCredentials transportCallCredentials;
-    private final ChannelConfigurer channelConfigurer;
+    private final ChannelConfigurator channelConfigurer;
     private final Object lock = new Object();
     @GuardedBy("lock")
     private ScheduledExecutorService scheduler;
@@ -174,7 +174,7 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
         String target,
         MetricRecorder metricRecorder,
         CallCredentials transportCallCredentials,
-        ChannelConfigurer channelConfigurer) {
+        ChannelConfigurator channelConfigurer) {
       this.bootstrapInfo = checkNotNull(bootstrapInfo, "bootstrapInfo");
       this.target = target;
       this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");

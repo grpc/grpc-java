@@ -437,7 +437,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
    * @since 1.81.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T childChannelConfigurer(ChannelConfigurer channelConfigurer) {
+  public T childChannelConfigurator(ChannelConfigurator channelConfigurer) {
     throw new UnsupportedOperationException("Not implemented");
   }
 

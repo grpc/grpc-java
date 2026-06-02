@@ -54,7 +54,7 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
@@ -356,9 +356,9 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   @Test
-  public void childChannelConfigurer_passesMetricSinkToChannel_E2E() {
+  public void childChannelConfigurator_passesMetricSinkToChannel_E2E() {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockSink);
@@ -367,7 +367,7 @@ public class FakeControlPlaneXdsIntegrationTest {
 
     ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
-        .childChannelConfigurer(configurer)
+        .childChannelConfigurator(configurer)
         .build();
 
     try {
@@ -385,9 +385,9 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   @Test
-  public void childChannelConfigurer_passesMetricSinkToServer_E2E() throws Exception {
+  public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
     MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         // Child channels (xDS client connections) created by this server get the sink.
@@ -401,7 +401,7 @@ public class FakeControlPlaneXdsIntegrationTest {
             0, InsecureServerCredentials.create())
         .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {})
         .overrideBootstrapForTest(controlPlane.defaultBootstrapOverride())
-        .childChannelConfigurer(configurer);
+        .childChannelConfigurator(configurer);
         
     Server childServer = serverBuilder.build().start();
 

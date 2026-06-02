@@ -35,7 +35,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -785,14 +785,14 @@ public class ManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void childChannelConfigurer_setsField() {
-    ChannelConfigurer configurer = mock(ChannelConfigurer.class);
-    assertSame(builder, builder.childChannelConfigurer(configurer));
+  public void childChannelConfigurator_setsField() {
+    ChannelConfigurator configurer = mock(ChannelConfigurator.class);
+    assertSame(builder, builder.childChannelConfigurator(configurer));
     assertSame(configurer, builder.channelConfigurer);
   }
 
   @Test
-  public void childChannelConfigurer_propagatesMetricsAndInterceptors_xdsTarget() {
+  public void childChannelConfigurator_propagatesMetricsAndInterceptors_xdsTarget() {
     // Setup Mocks
     when(mockClientTransportFactory.getScheduledExecutorService())
         .thenReturn(clock.getScheduledExecutorService());
@@ -805,7 +805,7 @@ public class ManagedChannelImplBuilderTest {
     ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
 
     // Define the Configurer
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.addMetricSink(mockMetricSink);
@@ -831,7 +831,7 @@ public class ManagedChannelImplBuilderTest {
         "xds:///my-service-target",
         mockClientTransportFactoryBuilder,
         new FixedPortProvider(DUMMY_PORT))
-        .childChannelConfigurer(configurer)
+        .childChannelConfigurator(configurer)
         .nameResolverRegistry(registry);
 
     ManagedChannel channel = parentBuilder.build();
@@ -840,9 +840,9 @@ public class ManagedChannelImplBuilderTest {
     // Verify that newNameResolver was called
     verify(mockNameResolverFactory).newNameResolver((URI) any(), any());
 
-    // Extract the childChannelConfigurer from Args
+    // Extract the childChannelConfigurator from Args
     NameResolver.Args args = argsCaptor.getValue();
-    ChannelConfigurer channelConfigurerInArgs = args.getChildChannelConfigurer();
+    ChannelConfigurator channelConfigurerInArgs = args.getChildChannelConfigurator();
     assertNotNull("Child channel configurer should be present in NameResolver.Args",
         channelConfigurerInArgs);
 

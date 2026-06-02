@@ -29,7 +29,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -128,13 +128,13 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-  ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
+  ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
 
   @Override
-  public ManagedChannelImplBuilder childChannelConfigurer(
-      ChannelConfigurer channelConfigurer) {
+  public ManagedChannelImplBuilder childChannelConfigurator(
+      ChannelConfigurator channelConfigurer) {
     this.channelConfigurer = checkNotNull(channelConfigurer,
-        "childChannelConfigurer");
+        "childChannelConfigurator");
     return this;
   }
 

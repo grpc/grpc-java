@@ -29,7 +29,7 @@ import io.envoyproxy.envoy.service.discovery.v3.DiscoveryResponse;
 import io.grpc.BindableService;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientInterceptor;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
@@ -216,7 +216,7 @@ public class GrpcXdsTransportFactoryTest {
         .thenReturn(new io.grpc.NoopClientCall<>());
 
     // Create Configurer that adds the interceptor
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(mockInterceptor);
@@ -252,9 +252,9 @@ public class GrpcXdsTransportFactoryTest {
   }
 
   @Test
-  public void useChannelConfigurer() {
+  public void useChannelConfigurator() {
     // Mock Configurer
-    ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
+    ChannelConfigurator mockConfigurer = mock(ChannelConfigurator.class);
 
     // Create Factory
     GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(
@@ -272,12 +272,30 @@ public class GrpcXdsTransportFactoryTest {
   }
 
   @Test
+  public void useChannelConfigurator_throwsException_propagates() {
+    ChannelConfigurator mockConfigurer = mock(ChannelConfigurator.class);
+    RuntimeException testException = new RuntimeException("test exception");
+    org.mockito.Mockito.doThrow(testException).when(mockConfigurer)
+        .configureChannelBuilder(any(ManagedChannelBuilder.class));
+
+    GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(null, mockConfigurer);
+
+    try {
+      factory.create(
+          Bootstrapper.ServerInfo.create("localhost:8080", InsecureChannelCredentials.create()));
+      org.junit.Assert.fail("Expected RuntimeException");
+    } catch (RuntimeException e) {
+      assertThat(e).isSameInstanceAs(testException);
+    }
+  }
+
+  @Test
   public void verifyConfigApplied_maxInboundMessageSize() {
     // Create a mock Builder
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
 
     // Create Configurer that modifies message size
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.maxInboundMessageSize(1024);
@@ -296,7 +314,7 @@ public class GrpcXdsTransportFactoryTest {
     ClientInterceptor interceptor1 = mock(ClientInterceptor.class);
     ClientInterceptor interceptor2 = mock(ClientInterceptor.class);
 
-    ChannelConfigurer configurer = new ChannelConfigurer() {
+    ChannelConfigurator configurer = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         builder.intercept(interceptor1);

@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.Context;
@@ -54,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
-  private final ChannelConfigurer channelConfigurer;
+  private final ChannelConfigurator channelConfigurer;
 
   // The map of xDS server info to its corresponding gRPC xDS transport.
   // This enables reusing and sharing the same underlying gRPC channel.
@@ -66,7 +66,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
       new ConcurrentHashMap<>();
 
   GrpcXdsTransportFactory(CallCredentials callCredentials,
-                          ChannelConfigurer channelConfigurer) {
+                          ChannelConfigurator channelConfigurer) {
     this.callCredentials = callCredentials;
     this.channelConfigurer = channelConfigurer;
   }
@@ -119,7 +119,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
                             CallCredentials callCredentials,
-                            ChannelConfigurer channelConfigurer) {
+                            ChannelConfigurator channelConfigurer) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
       ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)

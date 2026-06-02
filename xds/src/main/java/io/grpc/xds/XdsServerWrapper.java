@@ -29,7 +29,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -129,7 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  private ChannelConfigurer channelConfigurer = new ChannelConfigurer() {};
+  private ChannelConfigurator channelConfigurer = new ChannelConfigurator() {};
 
   XdsServerWrapper(
       String listenerAddress,
@@ -159,7 +159,7 @@ final class XdsServerWrapper extends Server {
       XdsClientPoolFactory xdsClientPoolFactory,
       @Nullable Map<String, ?> bootstrapOverride,
       FilterRegistry filterRegistry,
-      ChannelConfigurer channelConfigurer) {
+      ChannelConfigurator channelConfigurer) {
     this(
         listenerAddress,
         delegateBuilder,

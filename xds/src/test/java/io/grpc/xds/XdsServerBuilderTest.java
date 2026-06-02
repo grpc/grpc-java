@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
-import io.grpc.ChannelConfigurer;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -330,8 +330,8 @@ public class XdsServerBuilderTest {
   }
 
   @Test
-  public void start_passesChannelConfigurerToClientPoolFactory() throws Exception {
-    ChannelConfigurer mockConfigurer = mock(ChannelConfigurer.class);
+  public void start_passesChannelConfiguratorToClientPoolFactory() throws Exception {
+    ChannelConfigurator mockConfigurer = mock(ChannelConfigurator.class);
     XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
     @SuppressWarnings("unchecked")
     ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
@@ -339,13 +339,13 @@ public class XdsServerBuilderTest {
     when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
 
     buildBuilder(null);
-    builder.childChannelConfigurer(mockConfigurer);
+    builder.childChannelConfigurator(mockConfigurer);
     builder.xdsClientPoolFactory(mockPoolFactory);
     xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
 
     Future<?> unused = startServerAsync();
 
-    // Verify getOrCreate called with the ChannelConfigurer instance
+    // Verify getOrCreate called with the ChannelConfigurator instance
     verify(mockPoolFactory).getOrCreate(
         any(), any(), any(), org.mockito.ArgumentMatchers.eq(mockConfigurer));
   }

@@ -105,7 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChannelConfigurer channelConfigurer = mock(ChannelConfigurer.class);
+    ChannelConfigurator channelConfigurer = mock(ChannelConfigurator.class);
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -117,13 +117,13 @@ public class NameResolverTest {
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
         .setArg(FOO_ARG_KEY, customArgValue)
-        .setChildChannelConfigurer(channelConfigurer)
+        .setChildChannelConfigurator(channelConfigurer)
         .build();
   }
 
   @Test
-  public void args_childChannelConfigurer() {
-    ChannelConfigurer channelConfigurer = mock(ChannelConfigurer.class);
+  public void args_childChannelConfigurator() {
+    ChannelConfigurator channelConfigurer = mock(ChannelConfigurator.class);
 
     SynchronizationContext realSyncContext = new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
@@ -139,14 +139,14 @@ public class NameResolverTest {
         .setSynchronizationContext(realSyncContext)
         .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
         .setChannelLogger(mock(ChannelLogger.class))
-        .setChildChannelConfigurer(channelConfigurer)
+        .setChildChannelConfigurator(channelConfigurer)
         .build();
 
-    assertThat(args.getChildChannelConfigurer()).isSameInstanceAs(channelConfigurer);
+    assertThat(args.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurer);
     
     // Validate configurer accepts builders
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
-    args.getChildChannelConfigurer().configureChannelBuilder(mockBuilder);
+    args.getChildChannelConfigurator().configureChannelBuilder(mockBuilder);
     verify(channelConfigurer).configureChannelBuilder(mockBuilder);
   }
 
