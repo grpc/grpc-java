@@ -28,6 +28,8 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
+import io.grpc.xds.client.AllowedGrpcServices;
+import io.grpc.xds.client.AllowedGrpcServices.AllowedGrpcService;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.Bootstrapper.AuthorityInfo;
 import io.grpc.xds.client.Bootstrapper.BootstrapInfo;
@@ -95,6 +97,59 @@ public class GrpcBootstrapperImplTest {
     XdsInitializationException e = Assert.assertThrows(XdsInitializationException.class,
         bootstrapper::bootstrap);
     assertThat(e).hasMessageThat().isEqualTo("Invalid bootstrap: 'xds_servers' is empty");
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices() throws XdsInitializationException {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+        + "      \"call_creds\": [{\"type\": \"access_token\"}]\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    BootstrapInfo info = bootstrapper.bootstrap();
+    GrpcBootstrapImplConfig customConfig =
+        (GrpcBootstrapImplConfig) info.implSpecificObject().get();
+    AllowedGrpcServices allowed = customConfig.allowedGrpcServices();
+    assertThat(allowed).isNotNull();
+    assertThat(allowed.services()).containsKey("dns:///foo.com:443");
+    AllowedGrpcService service = allowed.services().get("dns:///foo.com:443");
+    assertThat(service.configuredChannelCredentials().channelCredentials())
+        .isInstanceOf(InsecureChannelCredentials.class);
+    assertThat(service.callCredentials().isPresent()).isFalse();
+  }
+
+  @Test
+  public void parseBootstrap_allowedGrpcServices_invalidChannelCreds() {
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+        + "      \"channel_creds\": [{\"type\": \"insecure\"}]\n"
+        + "    }\n"
+        + "  ],\n"
+        + "  \"allowed_grpc_services\": {\n"
+        + "    \"dns:///foo.com:443\": {\n"
+        + "      \"channel_creds\": []\n"
+        + "    }\n"
+        + "  }\n"
+        + "}";
+
+    bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+    XdsInitializationException e = assertThrows(XdsInitializationException.class,
+        bootstrapper::bootstrap);
+    assertThat(e).hasMessageThat()
+        .isEqualTo("Invalid bootstrap: server dns:///foo.com:443 'channel_creds' required");
   }
 
   @Test

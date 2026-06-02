@@ -208,6 +208,12 @@ public abstract class ForwardingServerBuilder<T extends ServerBuilder<T>> extend
   }
 
   @Override
+  public T addMetricSink(MetricSink metricSink) {
+    delegate().addMetricSink(metricSink);
+    return thisT();
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

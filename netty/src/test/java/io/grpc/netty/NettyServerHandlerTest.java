@@ -59,6 +59,7 @@ import com.google.common.truth.Truth;
 import io.grpc.Attributes;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -129,6 +130,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private final ServerTransportListener transportListener =
       mock(ServerTransportListener.class, delegatesTo(new ServerTransportListenerImpl()));
   private final TestServerStreamTracer streamTracer = new TestServerStreamTracer();
+  private final MetricRecorder metricRecorder = mock(MetricRecorder.class);
   private NettyServerStream stream;
   private KeepAliveManager spyKeepAliveManager;
   final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
@@ -203,6 +205,18 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
     channel().releaseOutbound();
+  }
+
+  @Test
+  public void tcpMetrics_recorded() throws Exception {
+    manualSetUp();
+    handler().channelActive(ctx());
+    // Verify that channelActive triggered TcpMetrics
+    verify(metricRecorder, atLeastOnce()).addLongCounter(
+        eq(io.grpc.InternalTcpMetrics.CONNECTIONS_CREATED_INSTRUMENT),
+        eq(1L),
+        any(),
+        any());
   }
 
   @Test
@@ -1416,7 +1430,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxRstCount,
         maxRstPeriodNanos,
         Attributes.EMPTY,
-        fakeClock().getTicker());
+        fakeClock().getTicker(),
+        metricRecorder);
   }
 
   @Override

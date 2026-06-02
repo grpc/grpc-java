@@ -38,6 +38,9 @@ public final class OpenTelemetryConstants {
   public static final AttributeKey<String> BACKEND_SERVICE_KEY =
       AttributeKey.stringKey("grpc.lb.backend_service");
 
+  public static final AttributeKey<String> CUSTOM_LABEL_KEY =
+      AttributeKey.stringKey("grpc.client.call.custom");
+
   public static final AttributeKey<String> DISCONNECT_ERROR_KEY =
       AttributeKey.stringKey("grpc.disconnect_error");
 

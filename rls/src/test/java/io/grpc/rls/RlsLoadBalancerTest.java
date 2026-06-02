@@ -42,6 +42,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingChannelBuilder2;
+import io.grpc.Grpc;
 import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
@@ -370,8 +371,10 @@ public class RlsLoadBalancerTest {
         .build());
 
     StreamRecorder<Void> recorder = StreamRecorder.create();
+    CallOptions callOptions = CallOptions.DEFAULT
+        .withOption(Grpc.CALL_OPTION_CUSTOM_LABEL, "customvalue");
     StreamObserver<Void> requestObserver = ClientCalls.asyncClientStreamingCall(
-        channel.newCall(fakeSearchMethod, CallOptions.DEFAULT), recorder);
+        channel.newCall(fakeSearchMethod, callOptions), recorder);
     requestObserver.onCompleted();
     assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
     assertThat(recorder.getError()).isNull();
@@ -381,7 +384,7 @@ public class RlsLoadBalancerTest {
         eq(1L),
         eq(Arrays.asList("directaddress:///fake-bigtable.googleapis.com", "localhost:8972",
             "defaultTarget", "complete")),
-        eq(Arrays.asList()));
+        eq(Arrays.asList("customvalue")));
   }
 
   @Test
@@ -685,7 +688,7 @@ public class RlsLoadBalancerTest {
     verify(mockMetricRecorder, times(times)).addLongCounter(
         eqMetricInstrumentName(name), eq(value),
         eq(Lists.newArrayList(channelTarget, "localhost:8972", dataPlaneTargetLabel, pickResult)),
-        eq(Lists.newArrayList()));
+        eq(Lists.newArrayList("")));
   }
 
   // This one is for verifying the failed_pick metric specifically.
@@ -694,7 +697,7 @@ public class RlsLoadBalancerTest {
     verify(mockMetricRecorder, times(times)).addLongCounter(
         eqMetricInstrumentName("grpc.lb.rls.failed_picks"), eq(value),
         eq(Lists.newArrayList(channelTarget, "localhost:8972")),
-        eq(Lists.newArrayList()));
+        eq(Lists.newArrayList("")));
   }
 
   @SuppressWarnings("TypeParameterUnusedInFormals")

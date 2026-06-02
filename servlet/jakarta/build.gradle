@@ -122,6 +122,11 @@ if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
     tasks.named("check").configure {
         dependsOn jetty11Test
     }
+    tasks.named("jacocoTestReport").configure {
+        // Must use executionData(Task...) override. The executionData(Object...) override doesn't
+        // find execution data correctly for tasks.
+        executionData jetty11Test.get()
+    }
 }
 if (JavaVersion.current().isJava11Compatible()) {
     def tomcat10Test = tasks.register('tomcat10Test', Test) {
@@ -149,5 +154,10 @@ if (JavaVersion.current().isJava11Compatible()) {
 
     tasks.named("check").configure {
         dependsOn tomcat10Test, undertowTest
+    }
+    tasks.named("jacocoTestReport").configure {
+        // Must use executionData(Task...) override. The executionData(Object...) override doesn't
+        // find execution data correctly for tasks.
+        executionData tomcat10Test.get(), undertowTest.get()
     }
 }

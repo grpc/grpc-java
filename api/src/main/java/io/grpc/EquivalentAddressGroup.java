@@ -56,6 +56,12 @@ public final class EquivalentAddressGroup {
   public static final Attributes.Key<String> ATTR_LOCALITY_NAME =
       Attributes.Key.create("io.grpc.EquivalentAddressGroup.LOCALITY");
   /**
+   * The backend service associated with this EquivalentAddressGroup.
+   */
+  @Attr
+  static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.BACKEND_SERVICE");
+  /**
    * Endpoint weight for load balancing purposes. While the type is Long, it must be a valid uint32.
    * Must not be zero. The weight is proportional to the other endpoints; if an endpoint's weight is
    * twice that of another endpoint, it is intended to receive twice the load.

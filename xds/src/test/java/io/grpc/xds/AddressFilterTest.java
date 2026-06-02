@@ -58,4 +58,29 @@ public class AddressFilterTest {
     assertThat(filteredAddress0.getAttributes().get(key1)).isEqualTo("value1");
     assertThat(filteredAddress1.getAddresses()).containsExactlyElementsIn(eag3.getAddresses());
   }
+
+  @Test
+  public void longerPathChain() {
+    List<EquivalentAddressGroup> addresses = Arrays.asList(
+        newEag(new InetSocketAddress(8000), Arrays.asList("A", "B", "C")),
+        newEag(new InetSocketAddress(8001), Arrays.asList("Z", "B", "C")),
+        newEag(new InetSocketAddress(8002), Arrays.asList("A", "Z", "C")),
+        newEag(new InetSocketAddress(8003), Arrays.asList("A", "B", "Z")));
+    addresses = AddressFilter.filter(addresses, "A");
+    assertThat(addresses).hasSize(3);
+
+    addresses = AddressFilter.filter(addresses, "B");
+    assertThat(addresses).hasSize(2);
+
+    addresses = AddressFilter.filter(addresses, "C");
+    assertThat(addresses).hasSize(1);
+    assertThat(addresses.get(0).getAddresses()).containsExactly(new InetSocketAddress(8000));
+
+    addresses = AddressFilter.filter(addresses, "D");
+    assertThat(addresses).hasSize(0);
+  }
+
+  private static EquivalentAddressGroup newEag(InetSocketAddress address, List<String> names) {
+    return AddressFilter.setPathFilter(new EquivalentAddressGroup(address), names);
+  }
 }

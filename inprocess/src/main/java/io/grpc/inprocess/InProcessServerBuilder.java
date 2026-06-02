@@ -24,6 +24,7 @@ import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.FixedObjectPool;
@@ -120,7 +121,8 @@ public final class InProcessServerBuilder extends ForwardingServerBuilder<InProc
     final class InProcessClientTransportServersBuilder implements ClientTransportServersBuilder {
       @Override
       public InternalServer buildClientTransportServers(
-          List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+          List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+          MetricRecorder metricRecorder) {
         return buildTransportServers(streamTracerFactories);
       }
     }

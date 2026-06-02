@@ -60,14 +60,11 @@ public final class SslContextProviderSupplier implements Closeable {
     try {
       if (!shutdown) {
         if (sslContextProvider == null) {
-          sslContextProvider = getSslContextProvider();
-          if (tlsContext instanceof UpstreamTlsContext && autoSniSanValidationDoesNotApply) {
-            ((DynamicSslContextProvider) sslContextProvider).setAutoSniSanValidationDoesNotApply();
-          }
+          sslContextProvider = getSslContextProvider(autoSniSanValidationDoesNotApply);
         }
       }
       // we want to increment the ref-count so call findOrCreate again...
-      final SslContextProvider toRelease = getSslContextProvider();
+      final SslContextProvider toRelease = getSslContextProvider(autoSniSanValidationDoesNotApply);
       toRelease.addCallback(
           new SslContextProvider.Callback(callback.getExecutor()) {
 
@@ -102,11 +99,20 @@ public final class SslContextProviderSupplier implements Closeable {
     }
   }
 
-  private SslContextProvider getSslContextProvider() {
-    return tlsContext instanceof UpstreamTlsContext
-        ? tlsContextManager.findOrCreateClientSslContextProvider((UpstreamTlsContext) tlsContext)
-        : tlsContextManager.findOrCreateServerSslContextProvider(
-            (DownstreamTlsContext) tlsContext);
+  private SslContextProvider getSslContextProvider(boolean autoSniSanValidationDoesNotApply) {
+    if (tlsContext instanceof UpstreamTlsContext) {
+      UpstreamTlsContext upstreamTlsContext = (UpstreamTlsContext) tlsContext;
+      if (autoSniSanValidationDoesNotApply && upstreamTlsContext.getAutoSniSanValidation()) {
+        upstreamTlsContext = new UpstreamTlsContext(
+            upstreamTlsContext.getCommonTlsContext(),
+            upstreamTlsContext.getSni(),
+            upstreamTlsContext.getAutoHostSni(),
+            false);
+      }
+      return tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
+    }
+    return tlsContextManager.findOrCreateServerSslContextProvider(
+        (DownstreamTlsContext) tlsContext);
   }
 
   @VisibleForTesting public boolean isShutdown() {

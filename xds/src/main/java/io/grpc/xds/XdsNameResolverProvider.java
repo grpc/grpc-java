@@ -87,7 +87,11 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return newNameResolver(targetUri.toString(), targetUri.getAuthority(), name, args);
+      // TODO(jdcormie): java.net.URI#getAuthority incorrectly returns null for both xds:///service
+      //  and xds:/service. This doesn't matter for now since XdsNameResolver treats them the same
+      //  anyway and all this code will go away once newNameResolver(io.grpc.Uri) launches.
+      String targetAuthority = targetUri.getAuthority();
+      return newNameResolver(targetUri.toString(), targetAuthority, name, args);
     }
     return null;
   }

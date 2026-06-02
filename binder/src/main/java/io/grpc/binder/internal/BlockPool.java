@@ -40,7 +40,7 @@ final class BlockPool {
    * The size of each standard block. (Currently 16k) The block size must be at least as large as
    * the maximum header list size.
    */
-  private static final int BLOCK_SIZE = Math.max(16 * 1024, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
+  static final int BLOCK_SIZE = Math.max(16 * 1024, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE);
 
   /**
    * Maximum number of blocks to keep around. (Max 128k). This limit is a judgement call. 128k is

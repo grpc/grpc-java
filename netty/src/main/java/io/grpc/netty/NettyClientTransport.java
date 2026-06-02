@@ -34,6 +34,7 @@ import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
@@ -108,6 +109,7 @@ class NettyClientTransport implements ConnectionClientTransport,
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
   private final Ticker ticker;
+  private final MetricRecorder metricRecorder;
 
 
   NettyClientTransport(
@@ -132,6 +134,7 @@ class NettyClientTransport implements ConnectionClientTransport,
       LocalSocketPicker localSocketPicker,
       ChannelLogger channelLogger,
       boolean useGetForSafeMethods,
+      MetricRecorder metricRecorder,
       Ticker ticker) {
 
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
@@ -159,6 +162,7 @@ class NettyClientTransport implements ConnectionClientTransport,
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
     this.useGetForSafeMethods = useGetForSafeMethods;
+    this.metricRecorder = metricRecorder;
     this.ticker = Preconditions.checkNotNull(ticker, "ticker");
   }
 
@@ -251,7 +255,8 @@ class NettyClientTransport implements ConnectionClientTransport,
             eagAttributes,
             authorityString,
             channelLogger,
-            ticker);
+            ticker,
+            metricRecorder);
 
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 

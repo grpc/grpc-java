@@ -68,11 +68,9 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.FakeClock.ScheduledTask;
 import io.grpc.internal.FakeClock.TaskFilter;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.TimeProvider;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Endpoints.DropOverload;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -601,11 +599,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2572,12 +2569,11 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
-    assertThat(childConfigs.get(0).getRawConfigValue().get("choiceCount")).isEqualTo(3);
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("least_request_experimental", ImmutableMap.of(
+                "choiceCount", 3.0))))))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2606,12 +2602,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "minRingSize")).isEqualTo(
-        10L);
-    assertThat(JsonUtil.getNumberAsLong(lbConfig.getRawConfigValue(), "maxRingSize")).isEqualTo(
-        100L);
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("ring_hash_experimental", ImmutableMap.of(
+            "minRingSize", 10.0, "maxRingSize", 100.0)))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -2638,11 +2632,10 @@ public abstract class GrpcXdsClientImplTestBase {
     CdsUpdate cdsUpdate = statusOrUpdate.getValue();
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.AGGREGATE);
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate.prioritizedClusterNames()).containsExactlyElementsIn(candidates).inOrder();
     verifyResourceMetadataAcked(CDS, CDS_RESOURCE, clusterAggregate, VERSION_1, TIME_INCREMENT);
     verifySubscribedResourcesMetadataSizes(0, 1, 0, 0);
@@ -2683,11 +2676,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isNull();
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isEqualTo(200L);
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -3085,11 +3077,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isNull();
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -3110,11 +3101,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate.edsServiceName()).isEqualTo(edsService);
-    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate.upstreamTlsContext()).isNull();
@@ -3511,11 +3501,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate1.clusterName()).isEqualTo(CDS_RESOURCE);
     assertThat(cdsUpdate1.clusterType()).isEqualTo(ClusterType.LOGICAL_DNS);
     assertThat(cdsUpdate1.dnsHostName()).isEqualTo(dnsHostAddr + ":" + dnsHostPort);
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate1.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate1.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate1.lrsServerInfo()).isNull();
     assertThat(cdsUpdate1.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate1.upstreamTlsContext()).isNull();
@@ -3527,11 +3516,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate2.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate2.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate2.edsServiceName()).isEqualTo(edsService);
-    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate2.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate2.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate2.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate2.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate2.upstreamTlsContext()).isNull();
@@ -3543,11 +3531,10 @@ public abstract class GrpcXdsClientImplTestBase {
     assertThat(cdsUpdate3.clusterName()).isEqualTo(cdsResourceTwo);
     assertThat(cdsUpdate3.clusterType()).isEqualTo(ClusterType.EDS);
     assertThat(cdsUpdate3.edsServiceName()).isEqualTo(edsService);
-    lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(cdsUpdate3.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("round_robin");
+    assertThat(cdsUpdate3.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(ImmutableList.of(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of())))))).getConfig());
     assertThat(cdsUpdate3.lrsServerInfo()).isEqualTo(xdsServerInfo);
     assertThat(cdsUpdate3.maxConcurrentRequests()).isNull();
     assertThat(cdsUpdate3.upstreamTlsContext()).isNull();

@@ -26,4 +26,10 @@ public final class InternalEquivalentAddressGroup {
    * twice that of another endpoint, it is intended to receive twice the load.
    */
   public static final Attributes.Key<Long> ATTR_WEIGHT = EquivalentAddressGroup.ATTR_WEIGHT;
+
+  /**
+   * The backend service associated with this EquivalentAddressGroup.
+   */
+  public static final Attributes.Key<String> ATTR_BACKEND_SERVICE =
+      EquivalentAddressGroup.ATTR_BACKEND_SERVICE;
 }

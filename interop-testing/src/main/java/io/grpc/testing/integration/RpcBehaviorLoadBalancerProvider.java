@@ -110,6 +110,7 @@ public class RpcBehaviorLoadBalancerProvider extends LoadBalancerProvider {
       return delegateLb;
     }
 
+    @Deprecated
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       helper.setRpcBehavior(

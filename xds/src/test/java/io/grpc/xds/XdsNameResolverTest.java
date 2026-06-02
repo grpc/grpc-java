@@ -301,6 +301,40 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolving_emptyTargetAuthority_templateWithXdstp() {
+    bootstrapInfo =
+        BootstrapInfo.builder()
+            .servers(
+                ImmutableList.of(
+                    ServerInfo.create("td.googleapis.com", InsecureChannelCredentials.create())))
+            .node(Node.newBuilder().build())
+            .clientDefaultListenerResourceNameTemplate(
+                "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/%s?id=1")
+            .build();
+    String serviceAuthority = "[::FFFF:129.144.52.38]:80";
+    expectedLdsResourceName =
+        "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
+            + "%5B::FFFF:129.144.52.38%5D:80?id=1";
+    resolver =
+        new XdsNameResolver(
+            "xds:///foo.googleapis.com",
+            "",
+            serviceAuthority,
+            null,
+            serviceConfigParser,
+            syncContext,
+            scheduler,
+            xdsClientPoolFactory,
+            mockRandom,
+            FilterRegistry.getDefaultRegistry(),
+            rawBootstrap,
+            metricRecorder,
+            nameResolverArgs);
+    resolver.start(mockListener);
+    verify(mockListener, never()).onError(any(Status.class));
+  }
+
+  @Test
   public void resolving_noTargetAuthority_templateWithXdstp() {
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
@@ -1233,7 +1267,7 @@ public class XdsNameResolverTest {
     for (String clusterName : clusterNames) {
       CdsUpdate.Builder forEds = CdsUpdate
           .forEds(clusterName, clusterName, null, null, null, null, false, null)
-              .roundRobinLbPolicy();
+              .lbPolicyConfigJsonForTesting(ImmutableMap.of("round_robin", ImmutableMap.of()));
       xdsClient.deliverCdsUpdate(clusterName, forEds.build());
       EdsUpdate edsUpdate = new EdsUpdate(clusterName,
           XdsTestUtils.createMinimalLbEndpointsMap("127.0.0.3"), Collections.emptyList());

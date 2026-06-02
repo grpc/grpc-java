@@ -51,7 +51,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.StatusOr;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -88,6 +87,11 @@ public class XdsTestUtils {
   static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
       Bootstrapper.ServerInfo.create(
       "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false);
+  static final Bootstrapper.BootstrapInfo EMPTY_BOOTSTRAP =
+      Bootstrapper.BootstrapInfo.builder()
+          .servers(com.google.common.collect.ImmutableList.of(EMPTY_BOOTSTRAPPER_SERVER_INFO))
+          .node(io.grpc.xds.client.EnvoyProtoData.Node.newBuilder().setId("node-id").build())
+          .build();
   public static final String ENDPOINT_HOSTNAME = "data-host";
   public static final int ENDPOINT_PORT = 1234;
 
@@ -252,7 +256,7 @@ public class XdsTestUtils {
     RouteConfiguration routeConfiguration =
         buildRouteConfiguration(serverHostName, RDS_NAME, CLUSTER_NAME);
     XdsResourceType.Args args = new XdsResourceType.Args(
-        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", null, null, null);
+        EMPTY_BOOTSTRAPPER_SERVER_INFO, "0", "0", EMPTY_BOOTSTRAP, null, null);
     XdsRouteConfigureResource.RdsUpdate rdsUpdate =
         XdsRouteConfigureResource.getInstance().doParse(args, routeConfiguration);
 
@@ -273,7 +277,7 @@ public class XdsTestUtils {
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
         CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
-        .lbPolicyConfig(getWrrLbConfigAsMap()).build();
+        .lbPolicyConfigJsonForTesting(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
 
@@ -296,12 +300,9 @@ public class XdsTestUtils {
     return lbEndpointsMap;
   }
 
-  @SuppressWarnings("unchecked")
-  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
-    String lbConfigStr = "{\"wrr_locality_experimental\" : "
-        + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
-
-    return ImmutableMap.copyOf((Map<String, ?>) JsonParser.parse(lbConfigStr));
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() {
+    return ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+          ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of()))));
   }
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,
