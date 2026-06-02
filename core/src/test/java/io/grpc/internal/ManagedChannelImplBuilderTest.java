@@ -820,8 +820,13 @@ public class ManagedChannelImplBuilderTest {
     NameResolver mockNameResolver = mock(NameResolver.class);
     when(mockNameResolver.getServiceAuthority()).thenReturn("foo.authority");
     ArgumentCaptor<NameResolver.Args> argsCaptor = ArgumentCaptor.forClass(NameResolver.Args.class);
-    when(mockNameResolverFactory.newNameResolver((URI) any(),
-        argsCaptor.capture())).thenReturn(mockNameResolver);
+    if (enableRfc3986UrisParam) {
+      when(mockNameResolverFactory.newNameResolver((io.grpc.Uri) any(),
+          argsCaptor.capture())).thenReturn(mockNameResolver);
+    } else {
+      when(mockNameResolverFactory.newNameResolver((URI) any(),
+          argsCaptor.capture())).thenReturn(mockNameResolver);
+    }
 
     // Use the configurator and the mock factory
     NameResolverRegistry registry = new NameResolverRegistry();
@@ -838,7 +843,11 @@ public class ManagedChannelImplBuilderTest {
     grpcCleanupRule.register(channel);
 
     // Verify that newNameResolver was called
-    verify(mockNameResolverFactory).newNameResolver((URI) any(), any());
+    if (enableRfc3986UrisParam) {
+      verify(mockNameResolverFactory).newNameResolver((io.grpc.Uri) any(), any());
+    } else {
+      verify(mockNameResolverFactory).newNameResolver((URI) any(), any());
+    }
 
     // Extract the childChannelConfigurator from Args
     NameResolver.Args args = argsCaptor.getValue();
