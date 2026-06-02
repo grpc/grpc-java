@@ -337,8 +337,8 @@ public abstract class LoadBalancer {
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("addresses", addresses)
-          .add("attributes", attributes)
           .add("loadBalancingPolicyConfig", loadBalancingPolicyConfig)
+          .add("attributes", attributes)
           .toString();
     }
 
