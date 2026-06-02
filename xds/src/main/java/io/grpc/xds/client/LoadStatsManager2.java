@@ -59,7 +59,7 @@ public final class LoadStatsManager2 {
       Map<Locality, ReferenceCounted<ClusterLocalityStats>>>> allLoadStats = new HashMap<>();
   private final Supplier<Stopwatch> stopwatchSupplier;
   public static boolean isEnabledOrcaLrsPropagation =
-      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", false);
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_ORCA_LRS_PROPAGATION", true);
 
   @VisibleForTesting
   public LoadStatsManager2(Supplier<Stopwatch> stopwatchSupplier) {
@@ -345,12 +345,14 @@ public final class LoadStatsManager2 {
 
     private ClusterLocalityStats(
         String clusterName, @Nullable String edsServiceName, Locality locality,
-        Stopwatch stopwatch, BackendMetricPropagation backendMetricPropagation) {
+        Stopwatch stopwatch, @Nullable BackendMetricPropagation backendMetricPropagation) {
       this.clusterName = checkNotNull(clusterName, "clusterName");
       this.edsServiceName = edsServiceName;
       this.locality = checkNotNull(locality, "locality");
       this.stopwatch = checkNotNull(stopwatch, "stopwatch");
-      this.backendMetricPropagation = backendMetricPropagation;
+      this.backendMetricPropagation = backendMetricPropagation != null
+          ? backendMetricPropagation
+          : BackendMetricPropagation.fromMetricSpecs(null);
       stopwatch.reset().start();
     }
 
