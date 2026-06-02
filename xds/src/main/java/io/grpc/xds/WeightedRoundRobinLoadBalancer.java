@@ -828,6 +828,19 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
           parsedMetricNamesForComputingUtilization);
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("blackoutPeriodNanos", blackoutPeriodNanos)
+          .add("weightExpirationPeriodNanos", weightExpirationPeriodNanos)
+          .add("enableOobLoadReport", enableOobLoadReport)
+          .add("oobReportingPeriodNanos", oobReportingPeriodNanos)
+          .add("weightUpdatePeriodNanos", weightUpdatePeriodNanos)
+          .add("errorUtilizationPenalty", errorUtilizationPenalty)
+          .add("parsedMetricNamesForComputingUtilization", parsedMetricNamesForComputingUtilization)
+          .toString();
+    }
+
     static final class Builder {
       long blackoutPeriodNanos = 10_000_000_000L; // 10s
       long weightExpirationPeriodNanos = 180_000_000_000L; // 3min
