@@ -46,9 +46,8 @@ import io.grpc.StatusException;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ObjectPool;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
 import io.grpc.xds.Filter.FilterContext;
@@ -103,7 +102,7 @@ final class XdsServerWrapper extends Server {
   static final long RETRY_DELAY_NANOS = TimeUnit.MINUTES.toNanos(1);
   private final String listenerAddress;
   private final ServerBuilder<?> delegateBuilder;
-  private boolean sharedTimeService;
+  private final ObjectPool<ScheduledExecutorService> timeServicePool;
   private final ScheduledExecutorService timeService;
   private final FilterRegistry filterRegistry;
   private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
@@ -138,98 +137,6 @@ final class XdsServerWrapper extends Server {
 
   private final ChannelConfigurator channelConfigurator;
 
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      @Nullable Function<String, String> ldsResourceNameResolver,
-      FilterRegistry filterRegistry,
-      ChannelConfigurator channelConfigurator) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        ldsResourceNameResolver,
-        filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        channelConfigurator);
-    sharedTimeService = true;
-  }
-
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      FilterRegistry filterRegistry,
-      ChannelConfigurator channelConfigurator) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        null,
-        filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        channelConfigurator);
-    sharedTimeService = true;
-  }
-
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      FilterRegistry filterRegistry) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        null,
-        filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        builder -> { });
-    sharedTimeService = true;
-  }
-
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      @Nullable Function<String, String> ldsResourceNameResolver,
-      FilterRegistry filterRegistry) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        ldsResourceNameResolver,
-        filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        builder -> { });
-    sharedTimeService = true;
-  }
-
   @VisibleForTesting
   XdsServerWrapper(
           String listenerAddress,
@@ -249,7 +156,7 @@ final class XdsServerWrapper extends Server {
         bootstrapOverride,
         null,
         filterRegistry,
-        timeService,
+        new FixedObjectPool<>(timeService),
         builder -> { });
   }
 
@@ -263,55 +170,7 @@ final class XdsServerWrapper extends Server {
       @Nullable Map<String, ?> bootstrapOverride,
       @Nullable Function<String, String> ldsResourceNameResolver,
       FilterRegistry filterRegistry,
-      ScheduledExecutorService timeService) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        ldsResourceNameResolver,
-        filterRegistry,
-        timeService,
-        builder -> { });
-  }
-
-  @VisibleForTesting
-  XdsServerWrapper(
-          String listenerAddress,
-          ServerBuilder<?> delegateBuilder,
-          XdsServingStatusListener listener,
-          FilterChainSelectorManager filterChainSelectorManager,
-          XdsClientPoolFactory xdsClientPoolFactory,
-          @Nullable Map<String, ?> bootstrapOverride,
-          FilterRegistry filterRegistry,
-          ScheduledExecutorService timeService,
-          ChannelConfigurator channelConfigurator) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        null,
-        filterRegistry,
-        timeService,
-        channelConfigurator);
-  }
-
-  @VisibleForTesting
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      @Nullable Function<String, String> ldsResourceNameResolver,
-      FilterRegistry filterRegistry,
-      ScheduledExecutorService timeService,
+      ObjectPool<ScheduledExecutorService> timeServicePool,
       ChannelConfigurator channelConfigurator) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
@@ -322,7 +181,8 @@ final class XdsServerWrapper extends Server {
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.bootstrapOverride = bootstrapOverride;
     this.ldsResourceNameResolver = ldsResourceNameResolver;
-    this.timeService = checkNotNull(timeService, "timeService");
+    this.timeServicePool = checkNotNull(timeServicePool, "timeServicePool");
+    this.timeService = checkNotNull(timeServicePool.getObject(), "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
     this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
@@ -439,9 +299,7 @@ final class XdsServerWrapper extends Server {
     if (restartTimer != null) {
       restartTimer.cancel();
     }
-    if (sharedTimeService) {
-      SharedResourceHolder.release(GrpcUtil.TIMER_SERVICE, timeService);
-    }
+    timeServicePool.returnObject(timeService);
     isServing = false;
     internalTerminationLatch.countDown();
   }

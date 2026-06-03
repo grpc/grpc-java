@@ -53,6 +53,7 @@ import io.grpc.StatusException;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.ObjectPool;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
@@ -163,7 +164,7 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry, executor.getScheduledExecutorService());
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -204,7 +205,9 @@ public class XdsServerWrapperTest {
             new FakeXdsClientPoolFactory(xdsClient),
             XdsServerTestHelper.RAW_BOOTSTRAP,
             addr -> "xdstp://resolved_name/" + addr,
-            filterRegistry);
+            filterRegistry,
+            new FixedObjectPool<>(executor.getScheduledExecutorService()),
+            builder -> { });
     Executors.newSingleThreadExecutor()
         .execute(
             new Runnable() {
@@ -241,7 +244,8 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-            XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+            XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+            executor.getScheduledExecutorService());
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -281,7 +285,8 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+        executor.getScheduledExecutorService());
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -2001,7 +2006,8 @@ public class XdsServerWrapperTest {
   private SettableFuture<Server> filterStateTestStartServer(FilterRegistry filterRegistry) {
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+        executor.getScheduledExecutorService());
     SettableFuture<Server> serverStart = SettableFuture.create();
     scheduleServerStart(xdsServerWrapper, serverStart);
     return serverStart;
@@ -2184,8 +2190,8 @@ public class XdsServerWrapperTest {
 
     XdsServerWrapper serverWrapper = new XdsServerWrapper(
         "0.0.0.0:1", mockBuilder, listener, selectorManager, mockPoolFactory,
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
-        executor.getScheduledExecutorService(), configurator);
+        XdsServerTestHelper.RAW_BOOTSTRAP, null, filterRegistry,
+        new FixedObjectPool<>(executor.getScheduledExecutorService()), configurator);
 
     Executors.newSingleThreadExecutor().execute(() -> {
       try {
