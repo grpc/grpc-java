@@ -1660,7 +1660,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenRequestBodyModeGrpc_whenExtProcRespondsWithEmptyBody_thenEmptyMessageIsDelivered()
+  public void givenRequestBodyModeGrpc_whenExtProcRespondsEmpty_thenEmptyMsgDelivered()
       throws Exception {
     String uniqueExtProcServerName =
         "extProc-emptyMsg-" + InProcessServerBuilder.generateName();
@@ -1944,9 +1944,114 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-// --- Category 5: Response Header Mutation ---
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenRequestBodyModeNone_whenSendMessageCalled_thenMessageSentDirectlyToDataPlane()
+      throws Exception {
+    String uniqueExtProcServerName = "extProc-noneBody-" + InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName =
+        "dataPlane-noneBody-" + InProcessServerBuilder.generateName();
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + uniqueExtProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE).build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-@Test
+    final AtomicInteger extProcBodyCount = new AtomicInteger(0);
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
+    extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(
+          final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestBody()) {
+              extProcBodyCount.incrementAndGet();
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {
+          }
+
+          @Override
+          public void onCompleted() {
+            responseObserver.onCompleted();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<String> receivedBody = new AtomicReference<>();
+    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(uniqueRegistry)
+        .directExecutor()
+        .build().start());
+
+    uniqueRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+            (request, responseObserver) -> {
+              receivedBody.set(request);
+              responseObserver.onNext("Hello");
+              responseObserver.onCompleted();
+              dataPlaneLatch.countDown();
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
+
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
+    proxyCall.sendMessage("Hello World");
+    proxyCall.halfClose();
+
+    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(receivedBody.get()).isEqualTo("Hello World");
+    assertThat(extProcBodyCount.get()).isEqualTo(0);
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+
+  // --- Category 5: Response Header Mutation ---
+
+  @Test
   @SuppressWarnings("unchecked")
   public void givenResponseHeaderModeSend_whenExtProcRespondsWithMutatedHeaders_thenSent()
       throws Exception {
@@ -2225,7 +2330,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-// --- Category 6: Body Mutation: Inbound/Response (GRPC Mode) ---
+  // --- Category 6: Body Mutation: Inbound/Response (GRPC Mode) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -2545,7 +2650,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   // --- Category 7: Half-Close handling ---
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenRequestBodyModeGrpc_whenHalfCloseCalled_thenSuperHalfCloseDeferred()
       throws Exception {
@@ -3280,7 +3385,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenResponseTrailerModeSend_whenDataPlaneCloses_thenTrailersHandshakeCompleted()
       throws Exception {
@@ -3423,7 +3528,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-// --- Category 8: Outbound Backpressure (isReady / onReady) ---
+  // --- Category 8: Outbound Backpressure (isReady / onReady) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -4695,9 +4800,9 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-// --- Category 10: Error Handling & Security ---
+  // --- Category 10: Error Handling & Security ---
 
-@Test
+  @Test
   @SuppressWarnings("FutureReturnValueIgnored")
   public void givenPendingData_whenImmediateResponseReceived_thenDeliversDataBeforeStatus()
       throws Exception {
@@ -5050,7 +5155,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenObservabilityMode_whenDataPlaneClosed_thenSidecarCloseIsDeferred()
       throws Exception {
@@ -5473,7 +5578,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenHeaderSendModeDefault_whenProcessing_thenFollowsDefaultBehavior()
       throws Exception {
@@ -5643,7 +5748,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   // --- Category 11: Immediate Response Handling ---
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenImmediateResponse_whenReceived_thenDataPlaneCallCancelled()
       throws Exception {
@@ -5978,7 +6083,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
   }
 
-@Test
+  @Test
   @SuppressWarnings("unchecked")
   public void givenImmediateResponseInTrailers_whenReceived_thenDataPlaneCallStatusIsOverridden()
       throws Exception {

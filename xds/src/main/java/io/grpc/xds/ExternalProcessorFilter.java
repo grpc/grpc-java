@@ -194,8 +194,9 @@ public class ExternalProcessorFilter implements Filter {
 
     if (mode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC
         && mode.getResponseTrailerMode() != ProcessingMode.HeaderSendMode.SEND) {
-      return ConfigOrError.fromError("Invalid response_trailer_mode: " + mode.getResponseTrailerMode()
-          + ". response_trailer_mode must be SEND if response_body_mode is GRPC.");
+      return ConfigOrError.fromError(
+          "Invalid response_trailer_mode: " + mode.getResponseTrailerMode()
+              + ". response_trailer_mode must be SEND if response_body_mode is GRPC.");
     }
 
     try {
