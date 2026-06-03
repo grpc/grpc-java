@@ -442,6 +442,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private long serverHeadersStartNanos;
     private long serverTrailersStartNanos;
 
+    private boolean protocolConfigSent = false;
+    private ImmutableMap<String, Struct> collectedAttributes;
+    private boolean requestAttributesSent = false;
     private volatile Metadata requestHeaders;
     final AtomicReference<DataPlaneCallState> dataPlaneCallState =
         new AtomicReference<>(DataPlaneCallState.IDLE);
@@ -795,6 +798,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
       });
 
+      this.collectedAttributes = collectAttributes(
+          config.getRequestAttributes(), method, channel, headers);
+
       boolean sendRequestHeaders =
           currentProcessingMode.getRequestHeaderMode() == ProcessingMode.HeaderSendMode.SEND
           || currentProcessingMode.getRequestHeaderMode()
@@ -805,12 +811,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             .setRequestHeaders(HttpHeaders.newBuilder()
                 .setHeaders(toHeaderMap(headers, config.getForwardRulesConfig()))
                 .setEndOfStream(false)
-                .build())
-            .putAllAttributes(
-                collectAttributes(config.getRequestAttributes(), method, channel, headers))
-            .setProtocolConfig(ProtocolConfiguration.newBuilder()
-                .setRequestBodyMode(currentProcessingMode.getRequestBodyMode())
-                .setResponseBodyMode(currentProcessingMode.getResponseBodyMode())
                 .build())
             .build());
       }
@@ -835,8 +835,30 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         ProcessingRequest requestToSend = request;
+        if (!protocolConfigSent) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .setProtocolConfig(ProtocolConfiguration.newBuilder()
+                  .setRequestBodyMode(currentProcessingMode.getRequestBodyMode())
+                  .setResponseBodyMode(currentProcessingMode.getResponseBodyMode())
+                  .build())
+              .build();
+          protocolConfigSent = true;
+        }
+
+        boolean isClientServerMessage =
+            requestToSend.hasRequestHeaders() || requestToSend.hasRequestBody();
+        if (isClientServerMessage
+            && !requestAttributesSent
+            && collectedAttributes != null
+            && !collectedAttributes.isEmpty()) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .putAllAttributes(collectedAttributes)
+              .build();
+          requestAttributesSent = true;
+        }
+
         if (config.getObservabilityMode()) {
-          requestToSend = ProcessingRequest.newBuilder(request)
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
               .setObservabilityMode(true)
               .build();
         }
