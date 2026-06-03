@@ -12,41 +12,45 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 # GRPC_DEPS_START
 IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.android:annotations:4.1.1.4",
-    "com.google.api.grpc:proto-google-common-protos:2.63.2",
-    "com.google.auth:google-auth-library-credentials:1.41.0",
-    "com.google.auth:google-auth-library-oauth2-http:1.41.0",
+    "com.google.api.grpc:proto-google-common-protos:2.64.1",
+    "com.google.auth:google-auth-library-credentials:1.42.1",
+    "com.google.auth:google-auth-library-oauth2-http:1.42.1",
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.12.1",
-    "com.google.errorprone:error_prone_annotations:2.45.0",
+    "com.google.code.gson:gson:2.13.2",
+    "com.google.errorprone:error_prone_annotations:2.48.0",
     "com.google.guava:failureaccess:1.0.1",
     "com.google.guava:guava:33.5.0-android",
     "com.google.re2j:re2j:1.8",
     "com.google.s2a.proto.v2:s2a-proto:0.1.3",
     "com.google.truth:truth:1.4.5",
+    "dev.cel:runtime:0.12.0",
+    "dev.cel:protobuf:0.12.0",
+    "dev.cel:common:0.12.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.130.Final",
-    "io.netty:netty-codec-http2:4.1.130.Final",
-    "io.netty:netty-codec-http:4.1.130.Final",
-    "io.netty:netty-codec-socks:4.1.130.Final",
-    "io.netty:netty-codec:4.1.130.Final",
-    "io.netty:netty-common:4.1.130.Final",
-    "io.netty:netty-handler-proxy:4.1.130.Final",
-    "io.netty:netty-handler:4.1.130.Final",
-    "io.netty:netty-resolver:4.1.130.Final",
-    "io.netty:netty-tcnative-boringssl-static:2.0.74.Final",
-    "io.netty:netty-tcnative-classes:2.0.74.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.130.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.130.Final",
-    "io.netty:netty-transport:4.1.130.Final",
+    "io.netty:netty-buffer:4.1.133.Final",
+    "io.netty:netty-codec-http2:4.1.133.Final",
+    "io.netty:netty-codec-http:4.1.133.Final",
+    "io.netty:netty-codec-socks:4.1.133.Final",
+    "io.netty:netty-codec:4.1.133.Final",
+    "io.netty:netty-common:4.1.133.Final",
+    "io.netty:netty-handler-proxy:4.1.133.Final",
+    "io.netty:netty-handler:4.1.133.Final",
+    "io.netty:netty-resolver:4.1.133.Final",
+    "io.netty:netty-tcnative-boringssl-static:2.0.75.Final",
+    "io.netty:netty-tcnative-classes:2.0.75.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.133.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.133.Final",
+    "io.netty:netty-transport:4.1.133.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
     "junit:junit:4.13.2",
+    "org.mockito:mockito-core:4.4.0",
     "org.checkerframework:checker-qual:3.49.5",
-    "org.codehaus.mojo:animal-sniffer-annotations:1.26",
+    "org.codehaus.mojo:animal-sniffer-annotations:1.27",
 ]
 # GRPC_DEPS_END
 
@@ -94,10 +98,10 @@ def grpc_java_repositories():
     if not native.existing_rule("com_google_googleapis"):
         http_archive(
             name = "com_google_googleapis",
-            sha256 = "49930468563dd48283e8301e8d4e71436bf6d27ac27c235224cc1a098710835d",
-            strip_prefix = "googleapis-ca1372c6d7bcb199638ebfdb40d2b2660bab7b88",
+            sha256 = "397fd8eb8a1a62dcf144216d9775816fad7a3fcff0ced1614bee529003c30d9e",
+            strip_prefix = "googleapis-1dbb1a14e079f78d9214f8e48bf083f32e3ddb96",
             urls = [
-                "https://github.com/googleapis/googleapis/archive/ca1372c6d7bcb199638ebfdb40d2b2660bab7b88.tar.gz",
+                "https://github.com/googleapis/googleapis/archive/1dbb1a14e079f78d9214f8e48bf083f32e3ddb96.tar.gz",
             ],
         )
     if not native.existing_rule("io_grpc_grpc_proto"):
@@ -116,9 +120,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "fda132cb0c86400381c0af1fe98bd0f775cb566cb247cdcc105e344e00acc30e",
-        strip_prefix = "protobuf-33.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v33.1/protobuf-33.1.tar.gz"],
+        sha256 = "bc670a4e34992c175137ddda24e76562bb928f849d712a0e3c2fb2e19249bea1",
+        strip_prefix = "protobuf-33.4",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v33.4/protobuf-33.4.tar.gz"],
     )
 
 def io_grpc_grpc_proto():

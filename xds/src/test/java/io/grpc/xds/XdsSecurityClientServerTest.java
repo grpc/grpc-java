@@ -317,7 +317,6 @@ public class XdsSecurityClientServerTest {
   @Test
   public void tlsClientServer_autoSniValidation_sniInUtc()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -341,14 +340,12 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_sniFromHostname()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
     try {
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
@@ -375,16 +372,18 @@ public class XdsSecurityClientServerTest {
     } finally {
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 
   @Test
   public void tlsClientServer_autoSniValidation_noSniApplicable_usesMatcherFromCmnVdnCtx()
       throws Exception {
-    CertificateUtils.isXdsSniEnabled = true;
     Path trustStoreFilePath = getCacertFilePathForTestCa();
+    boolean originalUseChannelAuthorityIfNoSniApplicable =
+            CertificateUtils.useChannelAuthorityIfNoSniApplicable;
     try {
+      CertificateUtils.useChannelAuthorityIfNoSniApplicable =
+              true;
       setTrustStoreSystemProperties(trustStoreFilePath.toAbsolutePath().toString());
       DownstreamTlsContext downstreamTlsContext =
           setBootstrapInfoAndBuildDownstreamTlsContext(SERVER_1_PEM_FILE, null, null, null, null,
@@ -404,9 +403,10 @@ public class XdsSecurityClientServerTest {
           getBlockingStub(upstreamTlsContext, /* overrideAuthority= */ OVERRIDE_AUTHORITY);
       unaryRpc(/* requestMessage= */ "buddy", blockingStub);
     } finally {
+      CertificateUtils.useChannelAuthorityIfNoSniApplicable =
+              originalUseChannelAuthorityIfNoSniApplicable;
       Files.deleteIfExists(trustStoreFilePath);
       clearTrustStoreSystemProperties();
-      CertificateUtils.isXdsSniEnabled = false;
     }
   }
 

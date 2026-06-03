@@ -144,6 +144,30 @@ final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
     public String toString() {
       return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
     }
+
+    @Override
+    public void updateBalancingState(
+        io.grpc.ConnectivityState newState, LoadBalancer.SubchannelPicker newPicker) {
+      delegate().updateBalancingState(newState, new HealthCheckPicker(newPicker));
+    }
+
+    private final class HealthCheckPicker extends LoadBalancer.SubchannelPicker {
+      private final LoadBalancer.SubchannelPicker delegate;
+
+      HealthCheckPicker(LoadBalancer.SubchannelPicker delegate) {
+        this.delegate = delegate;
+      }
+
+      @Override
+      public LoadBalancer.PickResult pickSubchannel(LoadBalancer.PickSubchannelArgs args) {
+        LoadBalancer.PickResult result = delegate.pickSubchannel(args);
+        LoadBalancer.Subchannel subchannel = result.getSubchannel();
+        if (subchannel instanceof SubchannelImpl) {
+          return result.copyWithSubchannel(((SubchannelImpl) subchannel).delegate());
+        }
+        return result;
+      }
+    }
   }
 
   @VisibleForTesting

@@ -148,6 +148,15 @@ import javax.annotation.Nullable;
  * itself. RFC 9844 claims to obsolete RFC 6874 because web browsers would not support it. This
  * class implements RFC 6874 anyway, mostly to avoid creating a barrier to migration away from
  * {@link java.net.URI}.
+ *
+ * <p>Some URI components, e.g. scheme, are required while others may or may not be present, e.g.
+ * authority. {@link Uri} is careful to preserve the distinction between an absent string component
+ * (getter returns null) and one with an empty value (getter returns ""). {@link java.net.URI} makes
+ * this distinction too, *except* when it comes to the authority and host components: {@link
+ * java.net.URI#getAuthority()} and {@link java.net.URI#getHost()} return null when an authority is
+ * absent, e.g. <code>file:/path</code> as expected. But these methods surprisingly also return null
+ * when the authority is the empty string, e.g.<code>file:///path</code>. {@link Uri}'s getters
+ * correctly return null and "" in these cases, respectively, as one would expect.
  */
 @Internal
 public final class Uri {
@@ -236,23 +245,7 @@ public final class Uri {
           break;
         }
       }
-      String authority = s.substring(authorityStart, i);
-
-      // 3.2.1. UserInfo. Easy, because '@' cannot appear unencoded inside userinfo or host.
-      int userInfoEnd = authority.indexOf('@');
-      if (userInfoEnd >= 0) {
-        builder.setRawUserInfo(authority.substring(0, userInfoEnd));
-      }
-
-      // 3.2.2/3. Host/Port.
-      int hostStart = userInfoEnd >= 0 ? userInfoEnd + 1 : 0;
-      int portStartColon = findPortStartColon(authority, hostStart);
-      if (portStartColon < 0) {
-        builder.setRawHost(authority.substring(hostStart, authority.length()));
-      } else {
-        builder.setRawHost(authority.substring(hostStart, portStartColon));
-        builder.setRawPort(authority.substring(portStartColon + 1));
-      }
+      builder.setRawAuthority(s.substring(authorityStart, i));
     }
 
     // 3.3. Path: Whatever is left before '?' or '#'.
@@ -347,6 +340,15 @@ public final class Uri {
   /**
    * Returns the percent-decoded "Authority" component of this URI, or null if not present.
    *
+   * <p>NB: This method's decoding is lossy -- It only exists for compatibility with {@link
+   * java.net.URI}. Prefer {@link #getRawAuthority()} or work instead with authority in terms of its
+   * individual components ({@link #getUserInfo()}, {@link #getHost()} and {@link #getPort()}). The
+   * problem with getAuthority() is that it returns the delimited concatenation of the percent-
+   * decoded userinfo, host and port components. But both userinfo and host can contain the '@'
+   * character, which becomes indistinguishable from the userinfo/host delimiter after decoding. For
+   * example, URIs <code>scheme://x@y%40z</code> and <code>scheme://x%40y@z</code> have different
+   * userinfo and host components but getAuthority() returns "x@y@z" for both of them.
+   *
    * <p>NB: This method assumes the "host" component was encoded as UTF-8, as mandated by RFC 3986.
    * This method also assumes the "user information" part of authority was encoded as UTF-8,
    * although RFC 3986 doesn't specify an encoding.
@@ -437,9 +439,9 @@ public final class Uri {
     return host;
   }
 
-  /** Returns the "port" component of this URI, or -1 if not present. */
+  /** Returns the "port" component of this URI, or -1 if empty or not present. */
   public int getPort() {
-    return port != null ? Integer.parseInt(port) : -1;
+    return port != null && !port.isEmpty() ? Integer.parseInt(port) : -1;
   }
 
   /** Returns the raw port component of this URI in its originally parsed form. */
@@ -481,6 +483,15 @@ public final class Uri {
    * <p>Prefer this method over {@link #getPath()} because it preserves the distinction between
    * segment separators and literal '/'s within a path segment.
    *
+   * <p>A trailing '/' delimiter in the path results in the empty string as the last element in the
+   * returned list. For example, <code>file://localhost/foo/bar/</code> has path segments <code>
+   * ["foo", "bar", ""]</code>
+   *
+   * <p>A leading '/' delimiter cannot be detected using this method. For example, both <code>
+   * dns:example.com</code> and <code>dns:///example.com</code> have the same list of path segments:
+   * <code>["example.com"]</code>. Use {@link #isPathAbsolute()} or {@link #isPathRootless()} to
+   * distinguish these cases.
+   *
    * <p>The returned list is immutable.
    */
   public List<String> getPathSegments() {
@@ -491,6 +502,44 @@ public final class Uri {
   }
 
   /**
+   * Returns true iff this URI's path component starts with a path segment (rather than the '/'
+   * segment delimiter).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>tel:+1-206-555-1212
+   * </code>, <code>mailto:me@example.com</code> and <code>urn:isbn:978-1492082798</code> all have
+   * rootless paths. <code>mailto:%2Fdev%2Fnull@example.com</code> is also rootless because its
+   * percent-encoded slashes are not segment delimiters but rather part of the first and only path
+   * segment.
+   *
+   * <p>Contrast rootless paths with absolute ones (see {@link #isPathAbsolute()}.
+   */
+  public boolean isPathRootless() {
+    return !path.isEmpty() && !path.startsWith("/");
+  }
+
+  /**
+   * Returns true iff this URI's path component starts with the '/' segment delimiter (rather than a
+   * path segment).
+   *
+   * <p>The path of an RFC 3986 URI is either empty, absolute (starts with the '/' segment
+   * delimiter) or rootless (starts with a path segment). For example, <code>file:///resume.txt
+   * </code>, <code>file:/resume.txt</code> and <code>file://localhost/</code> all have absolute
+   * paths while <code>tel:+1-206-555-1212</code>'s path is not absolute. <code>
+   * mailto:%2Fdev%2Fnull@example.com</code> is also not absolute because its percent-encoded
+   * slashes are not segment delimiters but rather part of the first and only path segment.
+   *
+   * <p>Contrast absolute paths with rootless ones (see {@link #isPathRootless()}.
+   *
+   * <p>NB: The term "absolute" has two different meanings in RFC 3986 which are easily confused.
+   * This method tests for a property of this URI's path component. Contrast with {@link
+   * #isAbsolute()} which tests the URI itself for a different property.
+   */
+  public boolean isPathAbsolute() {
+    return path.startsWith("/");
+  }
+
+  /**
    * Returns the path component of this URI in its originally parsed, possibly percent-encoded form.
    */
   public String getRawPath() {
@@ -498,23 +547,17 @@ public final class Uri {
   }
 
   /**
-   * Returns the percent-decoded "query" component of this URI, or null if not present.
-   *
-   * <p>NB: This method assumes the query was encoded as UTF-8, although RFC 3986 doesn't specify an
-   * encoding.
-   *
-   * <p>Decoding errors are indicated by a {@code '\u005CuFFFD'} unicode replacement character in
-   * the output. Callers who want to detect and handle errors in some other way should call {@link
-   * #getRawQuery()}, {@link #percentDecode(CharSequence)}, then decode the bytes for themselves.
-   */
-  @Nullable
-  public String getQuery() {
-    return percentDecodeAssumedUtf8(query);
-  }
-
-  /**
    * Returns the query component of this URI in its originally parsed, possibly percent-encoded
-   * form, without any leading '?' character.
+   * form, without any leading '?' character, or null if not present.
+   *
+   * <p>The query component can only be read in its raw form. That’s because virtually everyone uses
+   * query as a container for structured data, with some additional layer of encoding not present in
+   * RFC-3986. Like 'application/x-www-form-urlencoded', which encodes key/value pairs like so:
+   * <code>?k1=v1&k2=v+2</code>. The encoding of these containers always has characters that take on
+   * a special delimiter meaning when not percent-encoded and a literal meaning when they are (like
+   * '&', '=' and '+' above). Since it matters whether a character was percent encoded or not,
+   * offering a '#getQuery()' method that percent-decodes everything like we do for other components
+   * would be error-prone.
    */
   @Nullable
   public String getRawQuery() {
@@ -530,6 +573,19 @@ public final class Uri {
    * <p>Decoding errors are indicated by a {@code '\u005CuFFFD'} unicode replacement character in
    * the output. Callers who want to detect and handle errors in some other way should call {@link
    * #getRawFragment()}, {@link #percentDecode(CharSequence)}, then decode the bytes for themselves.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getRawFragment()}. Many URI schemes
+   * embed further structure inside the fragment that isn't part of the RFC 3986 generic syntax. For
+   * example, Android uses the fragment to encode the many fields of an Intent, like {@code
+   * intent:#Intent;S.key=val;end;}. And the URI of a JSON resource may use RFC 6901 in its fragment
+   * to point at a particular node, e.g. {@code
+   * file:/etc/config/service.json#/methodConfig/0/retryPolicy/maxBackoff}.
+   *
+   * <p>When percent-encoding is used to escape internal delimiters, like a literal ';' and '=' in
+   * an `intent:`, call {@link #getRawFragment()} to preserve that percent-encoding, or risk
+   * corruption. Conversely, use *this* method when percent-decoding is needed *before* any further
+   * interpretation, like with a JSON pointer, which must be percent-encoded in a URI fragment but
+   * uses a completely different method of escaping literal '/' characters.
    */
   @Nullable
   public String getFragment() {
@@ -539,6 +595,9 @@ public final class Uri {
   /**
    * Returns the fragment component of this URI in its original, possibly percent-encoded form, and
    * without any leading '#' character.
+   *
+   * <p>NB: Choose carefully between this method and {@link #getFragment()}. See that Javadoc for
+   * details.
    */
   @Nullable
   public String getRawFragment() {
@@ -727,10 +786,20 @@ public final class Uri {
     }
 
     /**
-     * Specifies the query component of the new URI (not including the leading '?').
+     * Specifies the query component of the new URI, possibly percent-encoded, exactly as it will
+     * appear in the string form of the built URI.
      *
-     * <p>Query can contain any string of codepoints. Codepoints that can't be encoded literally
-     * will be percent-encoded for you as UTF-8.
+     * <p>'query' must only contain codepoints from RFC 3986's "query" character class. Any other
+     * characters must be percent-encoded using UTF-8. Do not include the leading '?' delimiter.
+     *
+     * <p>The query component can only be provided in its raw form. That’s because virtually
+     * everyone uses query as a container for structured data, with some additional layer of
+     * encoding not present in RFC-3986. Like 'application/x-www-form-urlencoded', which encodes
+     * key/value pairs like so: <code>?k1=v1&k2=v+2</code>. The encoding of these containers always
+     * has characters that take on a special delimiter meaning when not percent-encoded and a
+     * literal meaning when they are (like '&', '=' and '+' above). Since 'query' must have already
+     * been carefully percent-encoded externally, a '#setQuery(String)' method that percent-encodes
+     * an assumed-cooked string would be error-prone.
      *
      * <p>This field is optional.
      *
@@ -738,14 +807,10 @@ public final class Uri {
      * @return this, for fluent building
      */
     @CanIgnoreReturnValue
-    public Builder setQuery(@Nullable String query) {
-      this.query = percentEncode(query, queryChars);
-      return this;
-    }
-
-    @CanIgnoreReturnValue
-    Builder setRawQuery(String query) {
-      checkPercentEncodedArg(query, "query", queryChars);
+    public Builder setRawQuery(@Nullable String query) {
+      if (query != null) {
+        checkPercentEncodedArg(query, "query", queryChars);
+      }
       this.query = query;
       return this;
     }
@@ -755,6 +820,13 @@ public final class Uri {
      *
      * <p>The fragment can contain any string of codepoints. Codepoints that can't be encoded
      * literally will be percent-encoded for you as UTF-8.
+     *
+     * <p>NB: Choose carefully between this method and {@link #setRawFragment(String)}. Many URI
+     * schemes embed further structure in the fragment that isn't part of the RFC 3986 generic
+     * syntax. These schemes often use internal delimiters that must be carefully percent-encoded in
+     * ways that this method doesn't understand. See {@link #getFragment()} for an example. In that
+     * case, callers should percent-encode externally then call {@link #setRawFragment(String)}
+     * instead.
      *
      * <p>This field is optional.
      *
@@ -767,9 +839,27 @@ public final class Uri {
       return this;
     }
 
+    /**
+     * Specifies the fragment component of the new URI, already percent-encoded, exactly as it will
+     * appear after the '#' delimiter in the string form of the built URI.
+     *
+     * <p>NB: Choose carefully between this method and {@link #setFragment(String)}. {@code
+     * fragment} must only contain codepoints from RFC 3986's "fragment" character class. Use
+     * percent-encoding and UTF-8 to represent anything else. In certain cases, you can use {@link
+     * #setFragment(String)} to have the fragment percent-encoded for you instead, but see that
+     * method's Javadoc for its limitations.
+     *
+     * <p>This field is optional.
+     *
+     * @param fragment the new fragment component, or null to clear this field
+     * @return this, for fluent building
+     * @throws IllegalArgumentException if 'fragment' contains forbidden characters
+     */
     @CanIgnoreReturnValue
-    Builder setRawFragment(String fragment) {
-      checkPercentEncodedArg(fragment, "fragment", fragmentChars);
+    public Builder setRawFragment(@Nullable String fragment) {
+      if (fragment != null) {
+        checkPercentEncodedArg(fragment, "fragment", fragmentChars);
+      }
       this.fragment = fragment;
       return this;
     }
@@ -887,12 +977,59 @@ public final class Uri {
 
     @CanIgnoreReturnValue
     Builder setRawPort(String port) {
-      try {
-        Integer.parseInt(port); // Result unused.
-      } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid port", e);
+      if (port != null && !port.isEmpty()) {
+        try {
+          Integer.parseInt(port); // Result unused.
+        } catch (NumberFormatException e) {
+          throw new IllegalArgumentException("Invalid port", e);
+        }
       }
       this.port = port;
+      return this;
+    }
+
+    /**
+     * Specifies the userinfo, host and port URI components all at once using a single string.
+     *
+     * <p>This setter is "raw" in the sense that special characters in userinfo and host must be
+     * passed in percent-encoded. See <a
+     * href="https://datatracker.ietf.org/doc/html/rfc3986#section-3.2">RFC 3986 3.2</a> for the set
+     * of characters allowed in each component of an authority.
+     *
+     * <p>There's no "cooked" method to set authority like for other URI components because
+     * authority is a *compound* URI component whose userinfo, host and port components are
+     * delimited with special characters '@' and ':'. But the first two of those components can
+     * themselves contain these delimiters so we need percent-encoding to parse them unambiguously.
+     *
+     * @param authority an RFC 3986 authority string that will be used to set userinfo, host and
+     *     port, or null to clear all three of those components
+     */
+    @CanIgnoreReturnValue
+    public Builder setRawAuthority(@Nullable String authority) {
+      if (authority == null) {
+        setUserInfo(null);
+        setHost((String) null);
+        setPort(-1);
+      } else {
+        // UserInfo. Easy because '@' cannot appear unencoded inside userinfo or host.
+        int userInfoEnd = authority.indexOf('@');
+        if (userInfoEnd >= 0) {
+          setRawUserInfo(authority.substring(0, userInfoEnd));
+        } else {
+          setUserInfo(null);
+        }
+
+        // Host/Port.
+        int hostStart = userInfoEnd >= 0 ? userInfoEnd + 1 : 0;
+        int portStartColon = findPortStartColon(authority, hostStart);
+        if (portStartColon < 0) {
+          setRawHost(authority.substring(hostStart));
+          setPort(-1);
+        } else {
+          setRawHost(authority.substring(hostStart, portStartColon));
+          setRawPort(authority.substring(portStartColon + 1));
+        }
+      }
       return this;
     }
 

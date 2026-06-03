@@ -39,10 +39,10 @@ abstract class CertProviderSslContextProvider extends DynamicSslContextProvider 
   @Nullable private final NoExceptionCloseable rootCertHandle;
   @Nullable private final CertificateProviderInstance certInstance;
   @Nullable protected final CertificateProviderInstance rootCertInstance;
-  @Nullable protected PrivateKey savedKey;
-  @Nullable protected List<X509Certificate> savedCertChain;
-  @Nullable protected List<X509Certificate> savedTrustedRoots;
-  @Nullable protected Map<String, List<X509Certificate>> savedSpiffeTrustMap;
+  @Nullable protected volatile PrivateKey savedKey;
+  @Nullable protected volatile List<X509Certificate> savedCertChain;
+  @Nullable protected volatile List<X509Certificate> savedTrustedRoots;
+  @Nullable protected volatile Map<String, List<X509Certificate>> savedSpiffeTrustMap;
   private final boolean isUsingSystemRootCerts;
 
   protected CertProviderSslContextProvider(

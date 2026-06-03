@@ -68,7 +68,7 @@ public final class BinderServerBuilder extends ForwardingServerBuilder<BinderSer
 
     serverImplBuilder =
         new ServerImplBuilder(
-            streamTracerFactories -> {
+            (streamTracerFactories, metricRecorder) -> {
               internalBuilder.setStreamTracerFactories(streamTracerFactories);
               BinderServer server = internalBuilder.build();
               BinderInternal.setIBinder(binderReceiver, server.getHostBinder());

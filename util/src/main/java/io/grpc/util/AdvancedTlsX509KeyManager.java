@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.SSLEngine;
@@ -40,59 +41,86 @@ import javax.net.ssl.X509ExtendedKeyManager;
 /**
  * AdvancedTlsX509KeyManager is an {@code X509ExtendedKeyManager} that allows users to configure
  * advanced TLS features, such as private key and certificate chain reloading.
+ *
+ * <p>The alias increments on every credential load (e.g. {@code "key-1"}, {@code "key-2"}, ...),
+ * so the same alias always maps to the same key material. The previous alias is retained for one
+ * rotation to allow in-progress handshakes to complete, ensuring alias-to-key-material consistency
+ * across credential reloads.
  */
 public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
   private static final Logger log = Logger.getLogger(AdvancedTlsX509KeyManager.class.getName());
   // Minimum allowed period for refreshing files with credential information.
-  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1 ;
-  // The credential information to be sent to peers to prove our identity.
-  private volatile KeyInfo keyInfo;
+  private static final int MINIMUM_REFRESH_PERIOD_IN_MINUTES = 1;
+  // Prefix for the key material alias; revision counter appended on each credential load.
+  static final String ALIAS_PREFIX = "key-";
+
+  private final AtomicInteger revision = new AtomicInteger(0);
+  // Snapshot of current and previous KeyInfo; previous is retained for in-progress handshakes
+  // after one rotation.
+  private volatile KeyInfoSnapshot snapshot = new KeyInfoSnapshot(null, null);
+
+  public AdvancedTlsX509KeyManager() {}
+
+  private String alias() {
+    KeyInfo curr = this.snapshot.current;
+    return curr != null ? curr.alias : null;
+  }
 
   @Override
   public PrivateKey getPrivateKey(String alias) {
-    if (alias.equals("default")) {
-      return this.keyInfo.key;
+    KeyInfoSnapshot snap = this.snapshot;
+    if (snap.current != null && snap.current.alias.equals(alias)) {
+      return snap.current.key;
+    }
+    if (snap.previous != null && snap.previous.alias.equals(alias)) {
+      return snap.previous.key;
     }
     return null;
   }
 
   @Override
   public X509Certificate[] getCertificateChain(String alias) {
-    if (alias.equals("default")) {
-      return Arrays.copyOf(this.keyInfo.certs, this.keyInfo.certs.length);
+    KeyInfoSnapshot snap = this.snapshot;
+    if (snap.current != null && snap.current.alias.equals(alias)) {
+      return Arrays.copyOf(snap.current.certs, snap.current.certs.length);
+    }
+    if (snap.previous != null && snap.previous.alias.equals(alias)) {
+      return Arrays.copyOf(snap.previous.certs, snap.previous.certs.length);
     }
     return null;
   }
 
   @Override
   public String[] getClientAliases(String keyType, Principal[] issuers) {
-    return new String[] {"default"};
+    String alias = alias();
+    return alias != null ? new String[] {alias} : null;
   }
 
   @Override
   public String chooseClientAlias(String[] keyType, Principal[] issuers, Socket socket) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String chooseEngineClientAlias(String[] keyType, Principal[] issuers, SSLEngine engine) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String[] getServerAliases(String keyType, Principal[] issuers) {
-    return new String[] {"default"};
+    String alias = alias();
+    return alias != null ? new String[] {alias} : null;
   }
 
   @Override
   public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
-    return "default";
+    return alias();
   }
 
   @Override
   public String chooseEngineServerAlias(String keyType, Principal[] issuers,
       SSLEngine engine) {
-    return "default";
+    return alias();
   }
 
   /**
@@ -116,7 +144,9 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
    * @param key  the private key that is going to be used
    */
   public void updateIdentityCredentials(X509Certificate[] certs, PrivateKey key) {
-    this.keyInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"));
+    KeyInfo newInfo = new KeyInfo(checkNotNull(certs, "certs"), checkNotNull(key, "key"),
+        ALIAS_PREFIX + revision.incrementAndGet());
+    this.snapshot = new KeyInfoSnapshot(newInfo, this.snapshot.current);
   }
 
   /**
@@ -218,10 +248,22 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     // The private key and the cert chain we will use to send to peers to prove our identity.
     final X509Certificate[] certs;
     final PrivateKey key;
+    final String alias;
 
-    public KeyInfo(X509Certificate[] certs, PrivateKey key) {
+    public KeyInfo(X509Certificate[] certs, PrivateKey key, String alias) {
       this.certs = certs;
       this.key = key;
+      this.alias = alias;
+    }
+  }
+
+  private static class KeyInfoSnapshot {
+    final KeyInfo current;
+    final KeyInfo previous;
+
+    KeyInfoSnapshot(KeyInfo current, KeyInfo previous) {
+      this.current = current;
+      this.previous = previous;
     }
   }
 
@@ -309,4 +351,3 @@ public final class AdvancedTlsX509KeyManager extends X509ExtendedKeyManager {
     void close();
   }
 }
-

@@ -1,0 +1,133 @@
+/*
+ * Copyright 2026 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds.internal.matcher;
+
+import com.google.common.collect.ImmutableSet;
+import dev.cel.runtime.CelVariableResolver;
+import io.grpc.Metadata;
+import java.util.AbstractMap;
+import java.util.Optional;
+import java.util.Set;
+import javax.annotation.Nullable;
+
+/**
+ * CEL Environment for gRPC xDS matching.
+ */
+final class GrpcCelEnvironment implements CelVariableResolver {
+  private final MatchContext context;
+
+  GrpcCelEnvironment(MatchContext context) {
+    this.context = context;
+  }
+
+  @Override
+  public Optional<Object> find(String name) {
+    if (name.equals("request")) {
+      return Optional.of(new LazyRequestMap(this));
+    }
+    return Optional.empty();
+  }
+
+  @Nullable
+  private Object getRequestField(String requestField) {
+    switch (requestField) {
+      case "headers": return new HeadersWrapper(context);
+      case "host": return orEmpty(context.getHost());
+      case "id": return getHeader("x-request-id"); 
+      case "method": return or(context.getMethod(), "POST");
+      case "path":
+      case "url_path":
+        return orEmpty(context.getPath());
+      case "query": return "";
+      case "scheme": return "";
+      case "protocol": return "";
+      case "time": return null;
+      case "referer": return getHeader("referer");
+      case "useragent": return getHeader("user-agent");
+
+      default:
+        return null; 
+    }
+  }
+
+  private String getHeader(String key) {
+    Metadata metadata = context.getMetadata();
+    Iterable<String> values = metadata.getAll(
+        Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+    if (values == null) {
+      return "";
+    }
+    return String.join(",", values);
+  }
+  
+  private static String orEmpty(@Nullable String s) {
+    return s == null ? "" : s;
+  }
+
+  private static String or(@Nullable String s, String def) {
+    return s == null ? def : s;
+  }
+
+  private static final class LazyRequestMap extends AbstractMap<String, Object> {
+    private static final Set<String> KNOWN_KEYS = ImmutableSet.of(
+        "headers", "host", "id", "method", "path", "url_path", "query", "scheme", "protocol",
+        "referer", "useragent", "time");
+    private final GrpcCelEnvironment resolver;
+
+    LazyRequestMap(GrpcCelEnvironment resolver) {
+      this.resolver = resolver;
+    }
+
+    @Override
+    public Object get(Object key) {
+      if (key instanceof String) {
+        Object val = resolver.getRequestField((String) key);
+        if (val == null) {
+          return null;
+        }
+        return val;
+      }
+      return null;
+    }
+
+    @Override
+    public boolean containsKey(Object key) {
+      boolean contains = key instanceof String && KNOWN_KEYS.contains(key);
+      return contains;
+    }
+
+    @Override
+    public Set<String> keySet() {
+      return KNOWN_KEYS;
+    }
+
+    @Override
+    public int size() {
+      return KNOWN_KEYS.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+      return false;
+    }
+
+    @Override
+    public Set<Entry<String, Object>> entrySet() {
+      throw new UnsupportedOperationException("LazyRequestMap does not support entrySet");
+    }
+  }
+}

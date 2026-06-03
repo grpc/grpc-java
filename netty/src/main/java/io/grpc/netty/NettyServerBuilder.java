@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
+import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -32,6 +33,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
 import io.grpc.ServerStreamTracer;
@@ -112,7 +114,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
   private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
-  private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
+  private long permitKeepAliveTimeInNanos = DEFAULT_SERVER_PERMIT_KEEPALIVE_TIME_NANOS;
   private int maxRstCount;
   private long maxRstPeriodNanos;
   private Attributes eagAttributes = Attributes.EMPTY;
@@ -164,8 +166,9 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private final class NettyClientTransportServersBuilder implements ClientTransportServersBuilder {
     @Override
     public InternalServer buildClientTransportServers(
-        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
-      return buildTransportServers(streamTracerFactories);
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+        MetricRecorder metricRecorder) {
+      return buildTransportServers(streamTracerFactories, metricRecorder);
     }
   }
 
@@ -703,8 +706,10 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
     this.eagAttributes = checkNotNull(eagAttributes, "eagAttributes");
   }
 
+  @VisibleForTesting
   NettyServer buildTransportServers(
-      List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
+      MetricRecorder metricRecorder) {
     assertEventLoopsAndChannelType();
 
     ProtocolNegotiator negotiator = protocolNegotiatorFactory.newNegotiator(
@@ -737,7 +742,8 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         maxRstCount,
         maxRstPeriodNanos,
         eagAttributes,
-        this.serverImplBuilder.getChannelz());
+        this.serverImplBuilder.getChannelz(),
+        metricRecorder);
   }
 
   @VisibleForTesting

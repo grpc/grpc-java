@@ -1,0 +1,114 @@
+/*
+ * Copyright 2025 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds.internal.headermutations;
+
+import com.google.common.collect.ImmutableList;
+import io.grpc.xds.internal.grpcservice.HeaderValueValidationUtils;
+import java.util.Collection;
+import java.util.Optional;
+import java.util.function.Predicate;
+
+/**
+ * The HeaderMutationFilter class is responsible for filtering header mutations based on a given set
+ * of rules.
+ */
+public class HeaderMutationFilter {
+  private final Optional<HeaderMutationRulesConfig> mutationRules;
+
+
+
+  public HeaderMutationFilter(Optional<HeaderMutationRulesConfig> mutationRules) {
+    this.mutationRules = mutationRules;
+  }
+
+  /**
+   * Filters the given header mutations based on the configured rules and returns the allowed
+   * mutations.
+   *
+   * @param mutations The header mutations to filter
+   * @return The allowed header mutations.
+   * @throws HeaderMutationDisallowedException if a disallowed mutation is encountered and the rules
+   *         specify that this should be an error.
+   */
+  public HeaderMutations filter(HeaderMutations mutations)
+      throws HeaderMutationDisallowedException {
+    ImmutableList<HeaderValueOption> allowedHeaders =
+        filterCollection(mutations.headers(), this::isDisallowed, this::isHeaderMutationAllowed);
+    ImmutableList<String> allowedHeadersToRemove =
+        filterCollection(mutations.headersToRemove(), this::isDisallowed,
+                this::isHeaderMutationAllowed);
+    return HeaderMutations.create(allowedHeaders, allowedHeadersToRemove);
+  }
+
+  /**
+   * A generic helper to filter a collection based on a predicate.
+   */
+  private <T> ImmutableList<T> filterCollection(Collection<T> items,
+      Predicate<T> isIgnoredPredicate, Predicate<T> isAllowedPredicate)
+      throws HeaderMutationDisallowedException {
+    ImmutableList.Builder<T> allowed = ImmutableList.builder();
+    for (T item : items) {
+      boolean isIgnored = isIgnoredPredicate.test(item);
+      boolean isAllowed = isAllowedPredicate.test(item);
+
+      // TODO(sauravzg): The specification is ambiguous regarding whether system headers
+      // should be silently ignored or trigger an error when disallowIsError is enabled.
+      // We default to triggering errors matching Envoy's implementation.
+      // Ref: https://github.com/grpc/proposal/pull/481#discussion_r3124453674
+      if (!isIgnored && isAllowed) {
+        allowed.add(item);
+      } else if (disallowIsError()) {
+        throw new HeaderMutationDisallowedException("Header mutation disallowed");
+      }
+    }
+    return allowed.build();
+  }
+
+  private boolean isDisallowed(String key) {
+    return HeaderValueValidationUtils.isDisallowed(key);
+  }
+
+  private boolean isDisallowed(HeaderValueOption option) {
+    return HeaderValueValidationUtils.isDisallowed(option.header());
+  }
+
+  private boolean isHeaderMutationAllowed(HeaderValueOption option) {
+    return isHeaderMutationAllowed(option.header().key());
+  }
+
+  private boolean isHeaderMutationAllowed(String headerName) {
+    return mutationRules.map(rules -> isHeaderMutationAllowed(headerName, rules))
+        .orElse(true);
+  }
+
+  private boolean isHeaderMutationAllowed(String headerName,
+          HeaderMutationRulesConfig rules) {
+    if (rules.disallowExpression().isPresent()
+        && rules.disallowExpression().get().matcher(headerName).matches()) {
+      return false;
+    }
+    if (rules.allowExpression().isPresent()
+        && rules.allowExpression().get().matcher(headerName).matches()) {
+      return true;
+    }
+    return !rules.disallowAll();
+  }
+
+  private boolean disallowIsError() {
+    return mutationRules.map(HeaderMutationRulesConfig::disallowIsError).orElse(false);
+  }
+}

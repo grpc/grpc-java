@@ -84,6 +84,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     this.helper = checkNotNull(helper, "helper");
   }
 
+  @Deprecated
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     Config config = (Config) resolvedAddresses.getLoadBalancingPolicyConfig();

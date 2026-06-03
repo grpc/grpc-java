@@ -61,17 +61,17 @@ public class S2AStubTest {
 
   @Test
   public void send_receiveOkStatus() throws Exception {
-    ObjectPool<Channel> channelPool =
-        SharedResourcePool.forResource(
-            S2AHandshakerServiceChannel.getChannelResource(
-                S2A_ADDRESS, InsecureChannelCredentials.create()));
-    S2AServiceGrpc.S2AServiceStub serviceStub = S2AServiceGrpc.newStub(channelPool.getObject());
-    S2AStub newStub = S2AStub.newInstance(serviceStub);
+    SessionReq req =
+        SessionReq.newBuilder()
+            .setGetTlsConfigurationReq(
+                GetTlsConfigurationReq.newBuilder()
+                    .setConnectionSide(ConnectionSide.CONNECTION_SIDE_CLIENT))
+            .build();
 
-    IOException expected =
-        assertThrows(IOException.class, () -> newStub.send(SessionReq.getDefaultInstance()));
+    SessionResp resp = stub.send(req);
 
-    assertThat(expected).hasMessageThat().contains("DEADLINE_EXCEEDED");
+    assertThat(resp.hasGetTlsConfigurationResp()).isTrue();
+    assertThat(resp.getGetTlsConfigurationResp().hasClientTlsConfiguration()).isTrue();
   }
 
   @Test
@@ -231,6 +231,21 @@ public class S2AStubTest {
             ConnectionClosedException.class, () -> stub.send(SessionReq.getDefaultInstance()));
 
     assertThat(expected).hasMessageThat().contains("Stream to the S2A is closed.");
+  }
+
+  @Test
+  public void send_withUnavailableService_throwsDeadlineExceeded() throws Exception {
+    ObjectPool<Channel> channelPool =
+        SharedResourcePool.forResource(
+            S2AHandshakerServiceChannel.getChannelResource(
+                S2A_ADDRESS, InsecureChannelCredentials.create()));
+    S2AServiceGrpc.S2AServiceStub serviceStub = S2AServiceGrpc.newStub(channelPool.getObject());
+    S2AStub newStub = S2AStub.newInstanceWithDeadline(serviceStub, 1);
+
+    IOException expected =
+        assertThrows(IOException.class, () -> newStub.send(SessionReq.getDefaultInstance()));
+
+    assertThat(expected).hasMessageThat().contains("DEADLINE_EXCEEDED");
   }
 
   @Test

@@ -229,6 +229,232 @@ public class DelayedClientCallTest {
     assertThat(contextKey.get(readyContext.get())).isEqualTo(goldenValue);
   }
 
+  @Test
+  public void listenerThrowsInPendingCallback_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onMessage(Integer msg) {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    // Deliver onMessage while the wrapping DelayedListener is still buffering, by firing
+    // it from within realCall.start() — drainPendingCalls has not yet flipped the listener
+    // to pass-through. The queued onMessage is then drained and throws; the fix must catch
+    // the throwable and cancel the real call rather than let it escape.
+    Runnable r = delayedClientCall.setCall(new SimpleForwardingClientCall<String, Integer>(
+        mockRealCall) {
+      @Override
+      public void start(Listener<Integer> listener, Metadata metadata) {
+        super.start(listener, metadata);
+        listener.onMessage(42);
+      }
+    });
+    assertThat(r).isNotNull();
+    r.run(); // Must not propagate `boom`.
+    verify(mockRealCall).cancel(eq("Failed to read message."), eq(boom));
+  }
+
+  @Test
+  public void listenerThrowsInPendingOnHeaders_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onHeaders(Metadata headers) {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(new SimpleForwardingClientCall<String, Integer>(
+        mockRealCall) {
+      @Override
+      public void start(Listener<Integer> listener, Metadata metadata) {
+        super.start(listener, metadata);
+        listener.onHeaders(new Metadata());
+      }
+    });
+    assertThat(r).isNotNull();
+    r.run();
+    verify(mockRealCall).cancel(eq("Failed to read headers"), eq(boom));
+  }
+
+  @Test
+  public void listenerThrowsInPendingOnReady_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onReady() {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(new SimpleForwardingClientCall<String, Integer>(
+        mockRealCall) {
+      @Override
+      public void start(Listener<Integer> listener, Metadata metadata) {
+        super.start(listener, metadata);
+        listener.onReady();
+      }
+    });
+    assertThat(r).isNotNull();
+    r.run();
+    verify(mockRealCall).cancel(eq("Failed to call onReady."), eq(boom));
+  }
+
+  @Test
+  public void onCloseExceptionCaughtAndLogged() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    final AtomicReference<Status> observed = new AtomicReference<>();
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        observed.set(status);
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(new SimpleForwardingClientCall<String, Integer>(
+        mockRealCall) {
+      @Override
+      public void start(Listener<Integer> listener, Metadata metadata) {
+        super.start(listener, metadata);
+        listener.onClose(Status.DATA_LOSS, new Metadata());
+      }
+    });
+    assertThat(r).isNotNull();
+    r.run(); // Must not propagate `boom`.
+    assertThat(observed.get().getCode()).isEqualTo(Status.Code.DATA_LOSS);
+    verify(mockRealCall, never()).cancel(any(), any());
+  }
+
+  @Test
+  public void listenerThrowsInPassThroughOnMessage_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onMessage(Integer msg) {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run(); // drain completes, listener transitions to passThrough
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    realCallListener.onMessage(42); // dispatched on passThrough fast path
+    verify(mockRealCall).cancel(eq("Failed to read message."), eq(boom));
+  }
+
+  @Test
+  public void listenerThrowsInPassThroughOnHeaders_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onHeaders(Metadata headers) {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    realCallListener.onHeaders(new Metadata());
+    verify(mockRealCall).cancel(eq("Failed to read headers"), eq(boom));
+  }
+
+  @Test
+  public void listenerThrowsInPassThroughOnReady_cancelsRealCall() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onReady() {
+        throw boom;
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+    realCallListener.onReady();
+    verify(mockRealCall).cancel(eq("Failed to call onReady."), eq(boom));
+  }
+
+  @Test
+  public void listenerThrowsInPassThrough_subsequentCallbacksSwallowedAndOnCloseOverridden() {
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        callExecutor, fakeClock.getScheduledExecutorService(), null);
+    final RuntimeException boom = new RuntimeException("boom");
+    final AtomicReference<Integer> lastMessage = new AtomicReference<>();
+    final AtomicReference<Status> closeStatus = new AtomicReference<>();
+    final AtomicReference<Metadata> closeTrailers = new AtomicReference<>();
+    ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
+      @Override
+      public void onMessage(Integer msg) {
+        lastMessage.set(msg);
+        if (msg == 1) {
+          throw boom;
+        }
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        closeStatus.set(status);
+        closeTrailers.set(trailers);
+      }
+    };
+    delayedClientCall.start(throwingListener, new Metadata());
+    Runnable r = delayedClientCall.setCall(mockRealCall);
+    assertThat(r).isNotNull();
+    r.run();
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Listener<Integer>> listenerCaptor = ArgumentCaptor.forClass(Listener.class);
+    verify(mockRealCall).start(listenerCaptor.capture(), any(Metadata.class));
+    Listener<Integer> realCallListener = listenerCaptor.getValue();
+
+    realCallListener.onMessage(1); // throws -> exceptionStatus captured
+    assertThat(lastMessage.get()).isEqualTo(1);
+    verify(mockRealCall).cancel(eq("Failed to read message."), eq(boom));
+
+    // Later callbacks are swallowed — the listener must not see message 2.
+    realCallListener.onMessage(2);
+    assertThat(lastMessage.get()).isEqualTo(1);
+
+    // Transport onClose with OK must be overridden by the captured CANCELLED status.
+    Metadata serverTrailers = new Metadata();
+    serverTrailers.put(Metadata.Key.of("k", Metadata.ASCII_STRING_MARSHALLER), "v");
+    realCallListener.onClose(Status.OK, serverTrailers);
+    assertThat(closeStatus.get().getCode()).isEqualTo(Status.Code.CANCELLED);
+    assertThat(closeStatus.get().getCause()).isEqualTo(boom);
+    // Trailers replaced to avoid mixing sources.
+    assertThat(closeTrailers.get()).isNotSameInstanceAs(serverTrailers);
+  }
+
   private void callMeMaybe(Runnable r) {
     if (r != null) {
       r.run();

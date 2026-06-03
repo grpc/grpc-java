@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.envoyproxy.envoy.config.route.v3.RouteAction.ClusterSpecifierCase.CLUSTER_SPECIFIER_PLUGIN;
-import static io.grpc.xds.XdsClusterResource.TRANSPORT_SOCKET_NAME_HTTP11_PROXY;
 import static io.grpc.xds.XdsEndpointResource.GRPC_EXPERIMENTAL_XDS_DUALSTACK_ENDPOINTS;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
@@ -117,14 +116,12 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -139,7 +136,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -1049,7 +1045,9 @@ public class GrpcXdsClientImplDataTest {
             .setWeight(UInt32Value.newBuilder().setValue(30))
             .build();
     ClusterWeight clusterWeight =
-        XdsRouteConfigureResource.parseClusterWeight(proto, filterRegistry).getStruct();
+            XdsRouteConfigureResource
+                    .parseClusterWeight(proto, filterRegistry, getXdsResourceTypeArgs(true))
+                    .getStruct();
     assertThat(clusterWeight.name()).isEqualTo("cluster-foo");
     assertThat(clusterWeight.weight()).isEqualTo(30);
   }
@@ -1255,7 +1253,8 @@ public class GrpcXdsClientImplDataTest {
         .setIsOptional(true)
         .setTypedConfig(Any.pack(StringValue.of("unsupported")))
         .build();
-    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true)).isNull();
+    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true,
+            getXdsResourceTypeArgs(true))).isNull();
   }
 
   private static class SimpleFilterConfig implements FilterConfig {
@@ -1294,12 +1293,14 @@ public class GrpcXdsClientImplDataTest {
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfig(Message rawProtoMessage,
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
 
       @Override
-      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage) {
+      public ConfigOrError<SimpleFilterConfig> parseFilterConfigOverride(Message rawProtoMessage,
+              FilterConfigParseContext context) {
         return ConfigOrError.fromConfig(new SimpleFilterConfig(rawProtoMessage));
       }
     }
@@ -1319,7 +1320,7 @@ public class GrpcXdsClientImplDataTest {
                 .setValue(rawStruct)
         .build())).build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry,
-        true).getStruct();
+            true, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
 
     HttpFilter httpFilterNewTypeStruct = HttpFilter.newBuilder()
@@ -1330,7 +1331,7 @@ public class GrpcXdsClientImplDataTest {
                 .setValue(rawStruct)
                 .build())).build();
     config = XdsListenerResource.parseHttpFilter(httpFilterNewTypeStruct, filterRegistry,
-        true).getStruct();
+            true, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)config).getConfig()).isEqualTo(rawStruct);
   }
 
@@ -1356,7 +1357,7 @@ public class GrpcXdsClientImplDataTest {
                   .build())
     );
     Map<String, FilterConfig> map = XdsRouteConfigureResource.parseOverrideFilterConfigs(
-        rawFilterMap, filterRegistry).getStruct();
+            rawFilterMap, filterRegistry, getXdsResourceTypeArgs(true)).getStruct();
     assertThat(((SimpleFilterConfig)map.get("struct-0")).getConfig()).isEqualTo(rawStruct0);
     assertThat(((SimpleFilterConfig)map.get("struct-1")).getConfig()).isEqualTo(rawStruct1);
   }
@@ -1368,7 +1369,8 @@ public class GrpcXdsClientImplDataTest {
         .setName("unsupported.filter")
         .setTypedConfig(Any.pack(StringValue.of("string value")))
         .build();
-    assertThat(XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true)
+    assertThat(XdsListenerResource
+            .parseHttpFilter(httpFilter, filterRegistry, true, getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported "
@@ -1385,7 +1387,8 @@ public class GrpcXdsClientImplDataTest {
             .setTypedConfig(Any.pack(Router.getDefaultInstance()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, true /* isForClient */).getStruct();
+            httpFilter, filterRegistry, true /* isForClient */, getXdsResourceTypeArgs(true))
+            .getStruct();
     assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
   }
 
@@ -1399,7 +1402,8 @@ public class GrpcXdsClientImplDataTest {
             .setTypedConfig(Any.pack(Router.getDefaultInstance()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+            httpFilter, filterRegistry, false /* isForClient */, getXdsResourceTypeArgs(false))
+            .getStruct();
     assertThat(config.typeUrl()).isEqualTo(RouterFilter.TYPE_URL);
   }
 
@@ -1426,7 +1430,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, true /* isForClient */).getStruct();
+            httpFilter, filterRegistry, true /* isForClient */, getXdsResourceTypeArgs(true))
+            .getStruct();
     assertThat(config).isInstanceOf(FaultConfig.class);
   }
 
@@ -1453,7 +1458,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     StructOrError<FilterConfig> config =
-        XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, false /* isForClient */);
+            XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, false /* isForClient */,
+                    getXdsResourceTypeArgs(false));
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.fault](" + FaultFilter.TYPE_URL + ") is required but "
             + "unsupported for server");
@@ -1482,7 +1488,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     FilterConfig config = XdsListenerResource.parseHttpFilter(
-        httpFilter, filterRegistry, false /* isForClient */).getStruct();
+            httpFilter, filterRegistry, false /* isForClient */, getXdsResourceTypeArgs(false))
+            .getStruct();
     assertThat(config).isInstanceOf(RbacConfig.class);
   }
 
@@ -1509,7 +1516,8 @@ public class GrpcXdsClientImplDataTest {
                         .build()))
             .build();
     StructOrError<FilterConfig> config =
-        XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true /* isForClient */);
+            XdsListenerResource.parseHttpFilter(httpFilter, filterRegistry, true /* isForClient */,
+                    getXdsResourceTypeArgs(true));
     assertThat(config.getErrorDetail()).isEqualTo(
         "HttpFilter [envoy.auth](" + RbacFilter.TYPE_URL + ") is required but "
             + "unsupported for client");
@@ -1534,7 +1542,8 @@ public class GrpcXdsClientImplDataTest {
             .build();
     Map<String, Any> configOverrides = ImmutableMap.of("envoy.auth", Any.pack(rbacPerRoute));
     Map<String, FilterConfig> parsedConfigs =
-        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
             .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.auth");
@@ -1555,7 +1564,8 @@ public class GrpcXdsClientImplDataTest {
             .setIsOptional(true).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
     Map<String, FilterConfig> parsedConfigs =
-        XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+            XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
             .getStruct();
     assertThat(parsedConfigs).hasSize(1);
     assertThat(parsedConfigs).containsKey("envoy.fault");
@@ -1574,7 +1584,9 @@ public class GrpcXdsClientImplDataTest {
         Any.pack(io.envoyproxy.envoy.config.route.v3.FilterConfig.newBuilder()
             .setIsOptional(false).setConfig(Any.pack(StringValue.of("string value")))
             .build()));
-    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource
+            .parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -1584,7 +1596,9 @@ public class GrpcXdsClientImplDataTest {
         Any.pack(httpFault),
         "unsupported.filter",
         Any.pack(StringValue.of("string value")));
-    assertThat(XdsRouteConfigureResource.parseOverrideFilterConfigs(configOverrides, filterRegistry)
+    assertThat(XdsRouteConfigureResource
+            .parseOverrideFilterConfigs(configOverrides, filterRegistry,
+                    getXdsResourceTypeArgs(true))
         .getErrorDetail()).isEqualTo(
             "HttpFilter [unsupported.filter]"
                 + "(type.googleapis.com/google.protobuf.StringValue) is required but unsupported");
@@ -2222,8 +2236,9 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
         cluster, null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("ring_hash_experimental", ImmutableMap.of()))).getConfig());
   }
 
   @Test
@@ -2244,11 +2259,11 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
         cluster, null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            Arrays.asList(ImmutableMap.of("least_request_experimental",
+                ImmutableMap.of())))))).getConfig());
   }
 
   @Test
@@ -2295,20 +2310,16 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
             cluster, null, LRS_SERVER_INFO,
             LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin");
-    WeightedRoundRobinLoadBalancerConfig result = (WeightedRoundRobinLoadBalancerConfig)
-        new WeightedRoundRobinLoadBalancerProvider().parseLoadBalancingPolicyConfig(
-        childConfigs.get(0).getRawConfigValue()).getConfig();
-    assertThat(result.blackoutPeriodNanos).isEqualTo(17_000_000_000L);
-    assertThat(result.enableOobLoadReport).isTrue();
-    assertThat(result.oobReportingPeriodNanos).isEqualTo(10_000_000_000L);
-    assertThat(result.weightUpdatePeriodNanos).isEqualTo(1_000_000_000L);
-    assertThat(result.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
-    assertThat(result.errorUtilizationPenalty).isEqualTo(1.75F);
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            Arrays.asList(ImmutableMap.of("weighted_round_robin", ImmutableMap.of(
+                "blackoutPeriod", "17s",
+                "enableOobLoadReport", true,
+                "oobReportingPeriod", "10s",
+                "weightUpdatePeriod", "1s",
+                "errorUtilizationPenalty", 1.75
+              ))))))).getConfig());
   }
 
   @Test
@@ -2615,7 +2626,7 @@ public class GrpcXdsClientImplDataTest {
             .build();
 
     TransportSocket transportSocket = TransportSocket.newBuilder()
-        .setName(TRANSPORT_SOCKET_NAME_HTTP11_PROXY)
+        .setName("envoy.transport_sockets.http_11_proxy")
         .setTypedConfig(Any.pack(http11ProxyUpstreamTransport))
         .build();
 
@@ -2641,6 +2652,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
     LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
 
     ImmutableList<String> metricSpecs = ImmutableList.of(
@@ -2672,7 +2684,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
         .isFalse();
 
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test
@@ -3614,7 +3626,7 @@ public class GrpcXdsClientImplDataTest {
 
   private XdsResourceType.Args getXdsResourceTypeArgs(boolean isTrustedServer) {
     return new XdsResourceType.Args(
-        ServerInfo.create("http://td", "", false, isTrustedServer, false, false), "1.0", null, null, null, null
+        ServerInfo.create("http://td", "", false, isTrustedServer, false, false), "1.0", null, XdsTestUtils.EMPTY_BOOTSTRAP, null, null
     );
   }
 }

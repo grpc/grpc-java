@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.base.Preconditions;
 import io.grpc.EquivalentAddressGroup;
@@ -31,8 +32,18 @@ final class UdsNameResolver extends NameResolver {
   private NameResolver.Listener2 listener;
   private final String authority;
 
+  /**
+   * Constructs a new instance of UdsNameResolver.
+   *
+   * @param authority authority of the 'unix:' URI to resolve, or null if target has no authority
+   * @param targetPath path of the 'unix:' URI to resolve
+   */
   UdsNameResolver(String authority, String targetPath, Args args) {
-    checkArgument(authority == null, "non-null authority not supported");
+    // UDS is inherently local. According to https://github.com/grpc/grpc/blob/master/doc/naming.md,
+    // this is expressed in the target URI either by using a blank authority, like "unix:///sock",
+    // or by omitting authority completely, e.g. "unix:/sock".
+    // TODO(jdcormie): Allow the explicit authority string "localhost"?
+    checkArgument(isNullOrEmpty(authority), "authority not supported: %s", authority);
     this.authority = targetPath;
   }
 

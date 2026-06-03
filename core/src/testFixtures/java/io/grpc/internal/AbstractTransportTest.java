@@ -185,7 +185,7 @@ public abstract class AbstractTransportTest {
   protected final ClientStreamTracer[] tracers = new ClientStreamTracer[] {
       clientStreamTracer1, clientStreamTracer2
   };
-  private final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
+  protected final ClientStreamTracer[] noopTracers = new ClientStreamTracer[] {
     new ClientStreamTracer() {}
   };
 

@@ -79,10 +79,17 @@ public final class EnvoyServerProtoData {
 
     @VisibleForTesting
     public UpstreamTlsContext(CommonTlsContext commonTlsContext) {
+      this(commonTlsContext, "", false, false);
+    }
+
+    @VisibleForTesting
+    public UpstreamTlsContext(
+        CommonTlsContext commonTlsContext, String sni, boolean autoHostSni,
+        boolean autoSniSanValidation) {
       super(commonTlsContext);
-      this.sni = null;
-      this.autoHostSni = false;
-      this.autoSniSanValidation = false;
+      this.sni = sni == null ? "" : sni;
+      this.autoHostSni = autoHostSni;
+      this.autoSniSanValidation = autoSniSanValidation;
     }
 
     @VisibleForTesting
@@ -121,6 +128,26 @@ public final class EnvoyServerProtoData {
           + "\nauto_host_sni=" + autoHostSni
           + "\nauto_sni_san_validation=" + autoSniSanValidation
           + "}";
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      UpstreamTlsContext that = (UpstreamTlsContext) o;
+      return autoHostSni == that.autoHostSni
+          && autoSniSanValidation == that.autoSniSanValidation
+          && Objects.equals(commonTlsContext, that.commonTlsContext)
+          && Objects.equals(sni, that.sni);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(commonTlsContext, sni, autoHostSni, autoSniSanValidation);
     }
   }
 

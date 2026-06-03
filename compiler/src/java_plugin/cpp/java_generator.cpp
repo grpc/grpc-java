@@ -46,6 +46,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include "absl/strings/escaping.h"
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/io/printer.h>
@@ -213,7 +214,7 @@ static inline std::string MethodIdFieldName(const MethodDescriptor* method) {
 }
 
 static inline std::string MessageFullJavaName(const Descriptor* desc) {
-  return protobuf::compiler::java::ClassName(desc);
+  return protobuf::compiler::java::QualifiedClassName(desc);
 }
 
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
@@ -1050,7 +1051,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
     (*vars)["proto_base_descriptor_supplier"] = service_name + "BaseDescriptorSupplier";
     (*vars)["proto_file_descriptor_supplier"] = service_name + "FileDescriptorSupplier";
     (*vars)["proto_method_descriptor_supplier"] = service_name + "MethodDescriptorSupplier";
-    (*vars)["proto_class_name"] = protobuf::compiler::java::ClassName(service->file());
+    (*vars)["proto_class_name"] = protobuf::compiler::java::QualifiedClassName(service->file());
     p->Print(
         *vars,
         "private static abstract class $proto_base_descriptor_supplier$\n"
@@ -1206,7 +1207,7 @@ static void PrintService(const ServiceDescriptor* service,
                          bool disable_version,
                          GeneratedAnnotation generated_annotation) {
   (*vars)["service_name"] = service->name();
-  (*vars)["file_name"] = service->file()->name();
+  (*vars)["file_name"] = absl::Utf8SafeCEscape(service->file()->name());
   (*vars)["service_class_name"] = ServiceClassName(service);
   (*vars)["grpc_version"] = "";
   #ifdef GRPC_VERSION
@@ -1384,7 +1385,7 @@ void GenerateService(const ServiceDescriptor* service,
 }
 
 std::string ServiceJavaPackage(const FileDescriptor* file) {
-  std::string result = protobuf::compiler::java::ClassName(file);
+  std::string result = protobuf::compiler::java::QualifiedClassName(file);
   size_t last_dot_pos = result.find_last_of('.');
   if (last_dot_pos != std::string::npos) {
     result.resize(last_dot_pos);

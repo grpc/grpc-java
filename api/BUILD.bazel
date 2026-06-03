@@ -15,3 +15,21 @@ java_library(
         artifact("com.google.guava:guava"),
     ],
 )
+
+java_library(
+    name = "test_fixtures",
+    testonly = 1,
+    srcs = glob([
+        "src/testFixtures/java/io/grpc/**/*.java",
+    ]),
+    visibility = ["//xds:__pkg__"],
+    deps = [
+        "//core",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+        artifact("com.google.truth:truth"),
+        artifact("junit:junit"),
+        artifact("org.mockito:mockito-core"),
+    ],
+)

@@ -33,10 +33,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/10847")
 public abstract class XdsResourceType<T extends ResourceUpdate> {
+  private static final Logger log = Logger.getLogger(XdsResourceType.class.getName());
+
   static final String TYPE_URL_RESOURCE =
       "type.googleapis.com/envoy.service.discovery.v3.Resource";
   protected static final String TRANSPORT_SOCKET_NAME_TLS = "envoy.transport_sockets.tls";
@@ -174,6 +178,16 @@ public abstract class XdsResourceType<T extends ResourceUpdate> {
       } catch (ResourceInvalidException e) {
         errors.add(String.format("%s response %s '%s' validation error: %s",
                 typeName(), unpackedClassName().getSimpleName(), cname, e.getMessage()));
+        invalidResources.add(cname);
+        continue;
+      } catch (Throwable t) {
+        log.log(Level.FINE, "Unexpected error in doParse()", t);
+        String errorMessage = t.getClass().getSimpleName();
+        if (t.getMessage() != null) {
+          errorMessage = errorMessage + ": " + t.getMessage();
+        }
+        errors.add(String.format("%s response '%s' unexpected error: %s",
+                typeName(), cname, errorMessage));
         invalidResources.add(cname);
         continue;
       }

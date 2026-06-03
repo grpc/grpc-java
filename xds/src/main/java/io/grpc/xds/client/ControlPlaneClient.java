@@ -160,6 +160,31 @@ final class ControlPlaneClient {
     }
 
     Collection<String> resources = resourceStore.getSubscribedResources(serverInfo, resourceType);
+    if (resources == null && !adsStream.sentTypes.contains(resourceType)) {
+      // No subscription for this type on this server, and we have never sent a DiscoveryRequest
+      // of this type on the current stream — the server has no subscription state to clear.
+      //
+      // Per the ResourceStore contract in XdsClient.java, a null return means "no subscription";
+      // an empty collection means wildcard subscription, which is a real subscription and must
+      // not be skipped here.
+      //
+      // We track sent types per-stream rather than gating on `versions` because `versions` is
+      // only populated on ACK. If a watch is canceled after the initial DiscoveryRequest goes
+      // out but before any response is ACKed, `versions` would still have no entry for the
+      // type, and gating on it would suppress the empty unsubscribe — leaving the server with
+      // a stale subscription until the stream resets.
+      //
+      // Without this skip, sendDiscoveryRequests() iterates over every globally-subscribed
+      // resource type when a stream becomes ready and emits an empty DiscoveryRequest for types
+      // that have no subscription on this server. Per A47 (xDS Federation) servers may be
+      // authority-specific (e.g. an EDS-only control plane) and reject DiscoveryRequests for
+      // types they do not handle, tearing down the stream.
+      //
+      // Mirrors grpc-go's behavior in
+      // internal/xds/clients/xdsclient/ads_stream.go:sendExisting, which skips types with no
+      // subscription.
+      return;
+    }
     if (resources == null) {
       resources = Collections.emptyList();
     }
@@ -319,6 +344,11 @@ final class ControlPlaneClient {
     // management server should not send a DiscoveryResponse for any DiscoveryRequest that has a
     // stale nonce."
     private final Map<String, String> respNonces = new HashMap<>();
+    // Resource types for which a DiscoveryRequest has been sent on this stream. Used by
+    // adjustResourceSubscription() to decide whether an empty unsubscribe must be sent on the
+    // wire: the server only has subscription state to clear for types we have actually sent a
+    // request for on this stream. Cleared implicitly when the stream is replaced.
+    private final Set<XdsResourceType<?>> sentTypes = new HashSet<>();
     private final StreamingCall<DiscoveryRequest, DiscoveryResponse> call;
     private final MethodDescriptor<DiscoveryRequest, DiscoveryResponse> methodDescriptor =
         AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod();
@@ -358,6 +388,7 @@ final class ControlPlaneClient {
       }
       DiscoveryRequest request = builder.build();
       call.sendMessage(request);
+      sentTypes.add(type);
       if (logger.isLoggable(XdsLogLevel.DEBUG)) {
         logger.log(XdsLogLevel.DEBUG, "Sent DiscoveryRequest\n{0}", messagePrinter.print(request));
       }

@@ -48,6 +48,7 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
@@ -1510,7 +1511,7 @@ public class InternalSubchannelTest {
     when(mockBackoffPolicyProvider.get()).thenReturn(mockBackoffPolicy);
     SocketAddress addr = mock(SocketAddress.class);
     Attributes eagAttributes = Attributes.newBuilder()
-        .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
+        .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
         .build();
@@ -1564,7 +1565,7 @@ public class InternalSubchannelTest {
     // 2. Setup Subchannel with attributes
     SocketAddress addr = mock(SocketAddress.class);
     Attributes eagAttributes = Attributes.newBuilder()
-        .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
+        .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
         .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
         .build();
@@ -1629,6 +1630,45 @@ public class InternalSubchannelTest {
     );
 
     inOrder.verifyNoMoreInteractions();
+  }
+
+  @Test
+  public void subchannelStateChanges_backendServiceFallsBackToResolutionResultAttr() {
+    when(mockBackoffPolicyProvider.get()).thenReturn(mockBackoffPolicy);
+    SocketAddress addr = mock(SocketAddress.class);
+    Attributes eagAttributes = Attributes.newBuilder()
+        .set(NameResolver.ATTR_BACKEND_SERVICE, BACKEND_SERVICE)
+        .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, LOCALITY)
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SECURITY_LEVEL)
+        .build();
+    List<EquivalentAddressGroup> addressGroups =
+        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr), eagAttributes));
+    InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
+    ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
+        fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
+    LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
+        LoadBalancer.CreateSubchannelArgs.newBuilder().setAddresses(addressGroups).build();
+    internalSubchannel = new InternalSubchannel(
+        createSubchannelArgs, AUTHORITY, USER_AGENT, mockBackoffPolicyProvider,
+        mockTransportFactory, fakeClock.getScheduledExecutorService(),
+        fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback, channelz,
+        CallTracer.getDefaultFactory().create(), subchannelTracer, logId,
+        new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()),
+        Collections.emptyList(), AUTHORITY, mockMetricRecorder
+    );
+
+    internalSubchannel.obtainActiveTransport();
+    MockClientTransportInfo transportInfo = transports.poll();
+    assertNotNull(transportInfo);
+    transportInfo.listener.transportReady();
+    fakeClock.runDueTasks();
+
+    verify(mockMetricRecorder).addLongCounter(
+        eqMetricInstrumentName("grpc.subchannel.connection_attempts_succeeded"),
+        eq(1L),
+        eq(Arrays.asList(AUTHORITY)),
+        eq(Arrays.asList(BACKEND_SERVICE, LOCALITY))
+    );
   }
 
   private void assertNoCallbackInvoke() {

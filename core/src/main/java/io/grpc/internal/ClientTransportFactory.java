@@ -24,6 +24,7 @@ import io.grpc.CallCredentials;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.MetricRecorder;
 import java.io.Closeable;
 import java.net.SocketAddress;
 import java.util.Collection;
@@ -91,6 +92,8 @@ public interface ClientTransportFactory extends Closeable {
     private Attributes eagAttributes = Attributes.EMPTY;
     @Nullable private String userAgent;
     @Nullable private HttpConnectProxiedSocketAddress connectProxiedSocketAddr;
+    private MetricRecorder metricRecorder = new MetricRecorder() {
+    };
 
     public ChannelLogger getChannelLogger() {
       return channelLogger;
@@ -98,6 +101,15 @@ public interface ClientTransportFactory extends Closeable {
 
     public ClientTransportOptions setChannelLogger(ChannelLogger channelLogger) {
       this.channelLogger = channelLogger;
+      return this;
+    }
+
+    public MetricRecorder getMetricRecorder() {
+      return metricRecorder;
+    }
+
+    public ClientTransportOptions setMetricRecorder(MetricRecorder metricRecorder) {
+      this.metricRecorder = Preconditions.checkNotNull(metricRecorder, "metricRecorder");
       return this;
     }
 

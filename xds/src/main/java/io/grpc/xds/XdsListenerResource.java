@@ -527,7 +527,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
             "HttpConnectionManager contains duplicate HttpFilter: " + filterName);
       }
       StructOrError<Filter.FilterConfig> filterConfig =
-          parseHttpFilter(httpFilter, filterRegistry, isForClient);
+          parseHttpFilter(httpFilter, filterRegistry, isForClient, args);
       if ((i == proto.getHttpFiltersCount() - 1)
           && (filterConfig == null || !isTerminalFilter(filterConfig.getStruct()))) {
         throw new ResourceInvalidException("The last HttpFilter must be a terminal filter: "
@@ -581,7 +581,8 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
   @Nullable // Returns null if the filter is optional but not supported.
   static StructOrError<Filter.FilterConfig> parseHttpFilter(
       io.envoyproxy.envoy.extensions.filters.network.http_connection_manager.v3.HttpFilter
-          httpFilter, FilterRegistry filterRegistry, boolean isForClient) {
+          httpFilter, FilterRegistry filterRegistry, boolean isForClient,
+      XdsResourceType.Args args) {
     String filterName = httpFilter.getName();
     boolean isOptional = httpFilter.getIsOptional();
     if (!httpFilter.hasTypedConfig()) {
@@ -616,7 +617,13 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
               isForClient ? "client" : "server"));
     }
-    ConfigOrError<? extends FilterConfig> filterConfig = provider.parseFilterConfig(rawConfig);
+
+    Filter.FilterConfigParseContext filterContext = Filter.FilterConfigParseContext.builder()
+        .bootstrapInfo(args.getBootstrapInfo())
+        .serverInfo(args.getServerInfo())
+        .build();
+    ConfigOrError<? extends FilterConfig> filterConfig =
+        provider.parseFilterConfig(rawConfig, filterContext);
     if (filterConfig.errorDetail != null) {
       return StructOrError.fromError(
           "Invalid filter config for HttpFilter [" + filterName + "]: " + filterConfig.errorDetail);

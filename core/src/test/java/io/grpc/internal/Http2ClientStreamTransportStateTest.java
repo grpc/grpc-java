@@ -302,6 +302,24 @@ public class Http2ClientStreamTransportStateTest {
   }
 
   @Test
+  public void transportTrailersReceived_missingContentTypeUsesHttpStatus() {
+    BaseTransportState state = new BaseTransportState(transportTracer);
+    state.setListener(mockListener);
+    Metadata trailers = new Metadata();
+    trailers.put(testStatusMashaller, "431");
+
+    state.transportTrailersReceived(trailers);
+
+    verify(mockListener, never()).headersRead(any(Metadata.class));
+    verify(mockListener).closed(statusCaptor.capture(), same(PROCESSED), same(trailers));
+    assertEquals(Code.INTERNAL, statusCaptor.getValue().getCode());
+    assertTrue(statusCaptor.getValue().getDescription().contains("HTTP status code 431"));
+    assertTrue(
+        statusCaptor.getValue().getDescription().contains(
+            "missing content-type in response headers"));
+  }
+
+  @Test
   public void transportTrailersReceived_missingHttpStatus() {
     BaseTransportState state = new BaseTransportState(transportTracer);
     state.setListener(mockListener);

@@ -279,7 +279,7 @@ public final class BinderClientTransport extends BinderTransport
   }
 
   @Override
-  protected void unregisterInbound(Inbound<?> inbound) {
+  protected void unregisterInbound(Inbound<?, ?> inbound) {
     if (inbound.countsForInUse() && numInUseStreams.decrementAndGet() == 0) {
       clientTransportListener.transportInUse(false);
     }

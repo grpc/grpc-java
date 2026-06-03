@@ -3943,6 +3943,28 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void nameResolverHelper_badParser_failsGracefully() {
+    boolean retryEnabled = false;
+    int maxRetryAttemptsLimit = 2;
+    int maxHedgedAttemptsLimit = 3;
+
+    Throwable t = new Error("really poor config parser");
+    when(mockLoadBalancerProvider.parseLoadBalancingPolicyConfig(any())).thenThrow(t);
+    ScParser parser = new ScParser(
+        retryEnabled,
+        maxRetryAttemptsLimit,
+        maxHedgedAttemptsLimit,
+        mockLoadBalancerProvider);
+
+    ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.of());
+
+    assertThat(coe.getError()).isNotNull();
+    assertThat(coe.getError().getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(coe.getError().getDescription()).contains("Unexpected error parsing service config");
+    assertThat(coe.getError().getCause()).isSameInstanceAs(t);
+  }
+
+  @Test
   public void nameResolverHelper_noConfigChosen() {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;

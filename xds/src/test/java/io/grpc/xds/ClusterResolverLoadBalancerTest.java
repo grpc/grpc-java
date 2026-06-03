@@ -60,6 +60,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -261,6 +262,18 @@ public class ClusterResolverLoadBalancerTest {
   }
 
   @Test
+  public void edsClustersWithRingHashEndpointLbPolicy_oppositePickFirstWeightedShuffling()
+      throws Exception {
+    boolean original = CdsLoadBalancer2.pickFirstWeightedShuffling;
+    CdsLoadBalancer2.pickFirstWeightedShuffling = !CdsLoadBalancer2.pickFirstWeightedShuffling;
+    try {
+      edsClustersWithRingHashEndpointLbPolicy();
+    } finally {
+      CdsLoadBalancer2.pickFirstWeightedShuffling = original;
+    }
+  }
+
+  @Test
   public void edsClustersWithRingHashEndpointLbPolicy() throws Exception {
     boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
     LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
@@ -305,16 +318,22 @@ public class ClusterResolverLoadBalancerTest {
     // LOCALITY1 are equally weighted.
     assertThat(addr1.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.1", 8080)));
+    assertThat(addr1.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr1.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr2.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.0.2", 8080)));
+    assertThat(addr2.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr2.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(10);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x0AAAAAAA /* 1/12 */ : 10);
     assertThat(addr3.getAddresses())
         .isEqualTo(Arrays.asList(newInetSocketAddress("127.0.1.1", 8080)));
+    assertThat(addr3.getAttributes().get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE))
+        .isEqualTo(CLUSTER);
     assertThat(addr3.getAttributes().get(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT))
-        .isEqualTo(50 * 60);
+        .isEqualTo(CdsLoadBalancer2.pickFirstWeightedShuffling ? 0x6AAAAAAA /* 5/6 */ : 50 * 60);
     assertThat(childBalancer.name).isEqualTo(PRIORITY_POLICY_NAME);
     PriorityLbConfig priorityLbConfig = (PriorityLbConfig) childBalancer.config;
     assertThat(priorityLbConfig.priorities).containsExactly(CLUSTER + "[child1]");
@@ -678,8 +697,8 @@ public class ClusterResolverLoadBalancerTest {
 
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + CLUSTER + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
@@ -701,8 +720,8 @@ public class ClusterResolverLoadBalancerTest {
     assertThat(childBalancers).hasSize(0);  // no child LB policy created
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Timed out waiting for resource " + CLUSTER + " from xDS server nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + CLUSTER + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
@@ -732,8 +751,8 @@ public class ClusterResolverLoadBalancerTest {
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of());
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + ": NOT_FOUND. "
-        + "Details: Resource " + CLUSTER + " does not exist nodeID: node-id";
+    String expectedDescription = "Error retrieving CDS resource " + CLUSTER + " nodeID: node-id: "
+        + "NOT_FOUND: Resource " + CLUSTER + " does not exist";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
     assertThat(childBalancer.shutdown).isTrue();
@@ -748,8 +767,8 @@ public class ClusterResolverLoadBalancerTest {
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     String expectedDescription = "Error retrieving EDS resource " + EDS_SERVICE_NAME
-        + ": NOT_FOUND. Details: Timed out waiting for resource " + EDS_SERVICE_NAME
-        + " from xDS server nodeID: node-id";
+        + " nodeID: node-id: "
+        + "NOT_FOUND: Timed out waiting for resource " + EDS_SERVICE_NAME + " from xDS server";
     Status expectedError = Status.UNAVAILABLE.withDescription(expectedDescription);
     assertPicker(pickerCaptor.getValue(), expectedError, null);
   }
@@ -908,6 +927,8 @@ public class ClusterResolverLoadBalancerTest {
         Arrays.asList(new EquivalentAddressGroup(Arrays.asList(
             newInetSocketAddress("127.0.2.1", 9000), newInetSocketAddress("127.0.2.2", 9000)))),
         childBalancer.addresses);
+    assertThat(childBalancer.addresses.get(0).getAttributes()
+        .get(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
     assertThat(childBalancer.addresses.get(0).getAttributes()
         .get(XdsInternalAttributes.ATTR_ADDRESS_NAME)).isEqualTo(DNS_HOST_NAME + ":9000");
   }

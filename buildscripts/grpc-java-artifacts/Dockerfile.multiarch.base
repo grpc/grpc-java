@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -9,7 +9,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
         curl \
         g++-aarch64-linux-gnu \
         g++-powerpc64le-linux-gnu \
-        openjdk-8-jdk \
+        g++-s390x-linux-gnu \
+        openjdk-11-jdk \
         pkg-config \
         && \
     rm -rf /var/lib/apt/lists/*

@@ -69,8 +69,19 @@ public final class ScParser extends NameResolver.ServiceConfigParser {
               maxHedgedAttemptsLimit,
               loadBalancingPolicySelection));
     } catch (RuntimeException e) {
+      // TODO(ejona): We really don't want parsers throwing exceptions; they should return an error.
+      // However, right now ManagedChannelServiceConfig itself uses exceptions like
+      // ClassCastException. We should handle those with a graceful return within
+      // ManagedChannelServiceConfig and then get rid of this case. Then all exceptions are
+      // "unexpected" and the INTERNAL status code makes it clear a bug needs to be fixed.
       return ConfigOrError.fromError(
           Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
+    } catch (Throwable t) {
+      // Even catch Errors, since broken config parsing could trigger AssertionError,
+      // StackOverflowError, and other errors we can reasonably safely recover. Since the config
+      // could be untrusted, we want to error on the side of recovering.
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withDescription("Unexpected error parsing service config").withCause(t));
     }
   }
 }

@@ -21,6 +21,7 @@ import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.StatusOr;
 import io.grpc.internal.DnsNameResolver;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.InetAddress;
@@ -58,14 +59,22 @@ final class GrpclbNameResolver extends DnsNameResolver {
   }
 
   @Override
-  protected InternalResolutionResult doResolve(boolean forceTxt) {
+  protected ResolutionResult doResolve() {
+    ResolutionResult result = super.doResolve();
     List<EquivalentAddressGroup> balancerAddrs = resolveBalancerAddresses();
-    InternalResolutionResult result = super.doResolve(!balancerAddrs.isEmpty());
     if (!balancerAddrs.isEmpty()) {
-      result.attributes =
-          Attributes.newBuilder()
+      ResolutionResult.Builder resultBuilder = result.toBuilder()
+          .setAttributes(result.getAttributes().toBuilder()
               .set(GrpclbConstants.ATTR_LB_ADDRS, balancerAddrs)
-              .build();
+              .build());
+      if (!result.getAddressesOrError().hasValue()) {
+        // While ResolutionResult is powerful enough to communicate attributes simultaneously with
+        // an address resolution failure, LoadBalancer.ResolvedAddresses isn't yet and so the
+        // attributes are lost if addresses fail. GrpclbLB will be able to handle the lack of
+        // addresses since there are LB addresses, so discard the failure for now.
+        resultBuilder.setAddressesOrError(StatusOr.fromValue(Collections.emptyList()));
+      }
+      result = resultBuilder.build();
     }
     return result;
   }

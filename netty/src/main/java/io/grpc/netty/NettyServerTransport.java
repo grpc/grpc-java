@@ -25,6 +25,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
+import io.grpc.MetricRecorder;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.internal.ServerTransport;
@@ -81,6 +82,7 @@ class NettyServerTransport implements ServerTransport {
   private final int maxRstCount;
   private final long maxRstPeriodNanos;
   private final Attributes eagAttributes;
+  private final MetricRecorder metricRecorder;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
 
@@ -105,7 +107,8 @@ class NettyServerTransport implements ServerTransport {
       long permitKeepAliveTimeInNanos,
       int maxRstCount,
       long maxRstPeriodNanos,
-      Attributes eagAttributes) {
+      Attributes eagAttributes,
+      MetricRecorder metricRecorder) {
     this.channel = Preconditions.checkNotNull(channel, "channel");
     this.channelUnused = channelUnused;
     this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
@@ -128,6 +131,7 @@ class NettyServerTransport implements ServerTransport {
     this.maxRstCount = maxRstCount;
     this.maxRstPeriodNanos = maxRstPeriodNanos;
     this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
+    this.metricRecorder = metricRecorder;
     SocketAddress remote = channel.remoteAddress();
     this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
   }
@@ -289,6 +293,7 @@ class NettyServerTransport implements ServerTransport {
         permitKeepAliveTimeInNanos,
         maxRstCount,
         maxRstPeriodNanos,
-        eagAttributes);
+        eagAttributes,
+        metricRecorder);
   }
 }

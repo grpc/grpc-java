@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -319,7 +318,7 @@ public class GrpclbNameResolverTest {
   }
 
   @Test
-  public void resolve_addressAndBalancersLookupFail_neverLookupServiceConfig() throws Exception {
+  public void resolve_addressAndBalancersLookupFail_stillLookupServiceConfig() throws Exception {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new UnknownHostException("I really tried"));
@@ -338,7 +337,7 @@ public class GrpclbNameResolverTest {
     Status errorStatus = resultCaptor.getValue().getAddressesOrError().getStatus();
     assertThat(errorStatus.getCode()).isEqualTo(Code.UNAVAILABLE);
     verify(mockAddressResolver).resolveAddress(hostName);
-    verify(mockResourceResolver, never()).resolveTxt("_grpc_config." + hostName);
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostName);
     verify(mockResourceResolver).resolveSrv("_grpclb._tcp." + hostName);
   }
 }

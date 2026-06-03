@@ -22,17 +22,19 @@ import static io.grpc.xds.XdsLbPolicies.CDS_POLICY_NAME;
 import static io.grpc.xds.XdsLbPolicies.PRIORITY_POLICY_NAME;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.primitives.UnsignedInts;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusOr;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
@@ -74,6 +76,9 @@ import java.util.TreeMap;
  * by a group of sub-clusters in a tree hierarchy.
  */
 final class CdsLoadBalancer2 extends LoadBalancer {
+  static boolean pickFirstWeightedShuffling =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
+
   private final XdsLogger logger;
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
@@ -120,24 +125,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     }
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
 
-    NameResolver.ConfigOrError configOrError;
     if (clusterConfig.getChildren() instanceof EndpointConfig) {
-      // The LB policy config is provided in service_config.proto/JSON format.
-      configOrError =
-              GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
-                      Arrays.asList(clusterConfig.getClusterResource().lbPolicyConfig()),
-                      lbRegistry);
-      if (configOrError.getError() != null) {
-        // Should be impossible, because XdsClusterResource validated this
-        return fail(Status.INTERNAL.withDescription(
-                errorPrefix() + "Unable to parse the LB config: " + configOrError.getError()));
-      }
-
       StatusOr<EdsUpdate> edsUpdate = getEdsUpdate(xdsConfig, clusterName);
       StatusOr<ClusterResolutionResult> statusOrResult = clusterState.edsUpdateToResult(
           clusterName,
           clusterConfig.getClusterResource(),
-          configOrError.getConfig(),
+          clusterConfig.getClusterResource().lbPolicyConfig(),
           edsUpdate);
       if (!statusOrResult.hasValue()) {
         Status status = Status.UNAVAILABLE
@@ -222,6 +215,26 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     return "CdsLb for " + clusterName + ": ";
   }
 
+  /**
+   * The number of bits assigned to the fractional part of fixed-point values. We normalize weights
+   * to a fixed-point number between 0 and 1, representing that item's proportion of traffic (1 ==
+   * 100% of traffic). We reserve at least one bit for the whole number so that we don't need to
+   * special case a single item, and so that we can round up very low values without risking uint32
+   * overflow of the sum of weights.
+   */
+  private static final int FIXED_POINT_FRACTIONAL_BITS = 31;
+
+  /** Divide two uint32s and produce a fixed-point uint32 result. */
+  private static long fractionToFixedPoint(long numerator, long denominator) {
+    long one = 1L << FIXED_POINT_FRACTIONAL_BITS;
+    return numerator * one / denominator;
+  }
+
+  /** Multiply two uint32 fixed-point numbers, returning a uint32 fixed-point. */
+  private static long fixedPointMultiply(long a, long b) {
+    return (a * b) >> FIXED_POINT_FRACTIONAL_BITS;
+  }
+
   private static StatusOr<EdsUpdate> getEdsUpdate(XdsConfig xdsConfig, String cluster) {
     StatusOr<XdsClusterConfig> clusterConfig = xdsConfig.getClusters().get(cluster);
     if (clusterConfig == null) {
@@ -286,26 +299,75 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       Map<String, Map<Locality, Integer>> prioritizedLocalityWeights = new HashMap<>();
       List<String> sortedPriorityNames =
           generatePriorityNames(clusterName, localityLbEndpoints);
+      Map<String, Long> priorityLocalityWeightSums;
+      if (pickFirstWeightedShuffling) {
+        priorityLocalityWeightSums = new HashMap<>(sortedPriorityNames.size() * 2);
+        for (Locality locality : localityLbEndpoints.keySet()) {
+          LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
+          String priorityName = localityPriorityNames.get(locality);
+          Long sum = priorityLocalityWeightSums.get(priorityName);
+          if (sum == null) {
+            sum = 0L;
+          }
+          long weight = UnsignedInts.toLong(localityLbInfo.localityWeight());
+          priorityLocalityWeightSums.put(priorityName, sum + weight);
+        }
+      } else {
+        priorityLocalityWeightSums = null;
+      }
+
       for (Locality locality : localityLbEndpoints.keySet()) {
         LocalityLbEndpoints localityLbInfo = localityLbEndpoints.get(locality);
         String priorityName = localityPriorityNames.get(locality);
+        String localityName = localityName(locality);
+        AddressFilter.PathChain pathChain =
+            AddressFilter.createPathChain(Arrays.asList(priorityName, localityName));
+
         boolean discard = true;
+        // These sums _should_ fit in uint32, but XdsEndpointResource isn't actually verifying that
+        // is true today. Since we are using long to avoid signedness trouble, the math happens to
+        // still work if it turns out the sums exceed uint32.
+        long localityWeightSum = 0;
+        long endpointWeightSum = 0;
+        if (pickFirstWeightedShuffling) {
+          localityWeightSum = priorityLocalityWeightSums.get(priorityName);
+          for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
+            if (endpoint.isHealthy()) {
+              endpointWeightSum += UnsignedInts.toLong(endpoint.loadBalancingWeight());
+            }
+          }
+        }
         for (LbEndpoint endpoint : localityLbInfo.endpoints()) {
           if (endpoint.isHealthy()) {
             discard = false;
-            long weight = localityLbInfo.localityWeight();
-            if (endpoint.loadBalancingWeight() != 0) {
-              weight *= endpoint.loadBalancingWeight();
+            long weight;
+            if (pickFirstWeightedShuffling) {
+              // Combine locality and endpoint weights as defined by gRFC A113
+              long localityWeight = fractionToFixedPoint(
+                  UnsignedInts.toLong(localityLbInfo.localityWeight()), localityWeightSum);
+              long endpointWeight = fractionToFixedPoint(
+                  UnsignedInts.toLong(endpoint.loadBalancingWeight()), endpointWeightSum);
+              weight = fixedPointMultiply(localityWeight, endpointWeight);
+              if (weight == 0) {
+                weight = 1;
+              }
+            } else {
+              weight = localityLbInfo.localityWeight();
+              if (endpoint.loadBalancingWeight() != 0) {
+                weight *= endpoint.loadBalancingWeight();
+              }
             }
-            String localityName = localityName(locality);
+
             Attributes attr =
                 endpoint.eag().getAttributes().toBuilder()
+                    .set(InternalEquivalentAddressGroup.ATTR_BACKEND_SERVICE, clusterName)
                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY, locality)
                     .set(EquivalentAddressGroup.ATTR_LOCALITY_NAME, localityName)
                     .set(io.grpc.xds.XdsAttributes.ATTR_LOCALITY_WEIGHT,
                         localityLbInfo.localityWeight())
                     .set(io.grpc.xds.XdsAttributes.ATTR_SERVER_WEIGHT, weight)
                     .set(XdsInternalAttributes.ATTR_ADDRESS_NAME, endpoint.hostname())
+                    .set(AddressFilter.PATH_CHAIN_KEY, pathChain)
                     .build();
             EquivalentAddressGroup eag;
             if (discovery.isHttp11ProxyAvailable()) {
@@ -318,7 +380,6 @@ final class CdsLoadBalancer2 extends LoadBalancer {
             } else {
               eag = new EquivalentAddressGroup(endpoint.eag().getAddresses(), attr);
             }
-            eag = AddressFilter.setPathFilter(eag, Arrays.asList(priorityName, localityName));
             addresses.add(eag);
           }
         }

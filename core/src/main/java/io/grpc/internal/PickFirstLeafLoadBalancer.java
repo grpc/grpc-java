@@ -26,10 +26,12 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -61,6 +63,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   static final int CONNECTION_DELAY_INTERVAL_MS = 250;
   private final boolean enableHappyEyeballs = !isSerializingRetries()
       && PickFirstLoadBalancerProvider.isEnabledHappyEyeballs();
+  static boolean weightedShuffling =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_PF_WEIGHTED_SHUFFLING", true);
   private final Helper helper;
   private final Map<SocketAddress, SubchannelData> subchannels = new HashMap<>();
   private final Index addressIndex = new Index(ImmutableList.of(), this.enableHappyEyeballs);
@@ -128,13 +132,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       PickFirstLeafLoadBalancerConfig config
           = (PickFirstLeafLoadBalancerConfig) resolvedAddresses.getLoadBalancingPolicyConfig();
       if (config.shuffleAddressList != null && config.shuffleAddressList) {
-        Collections.shuffle(cleanServers,
-            config.randomSeed != null ? new Random(config.randomSeed) : new Random());
+        cleanServers = shuffle(
+            cleanServers, config.randomSeed != null ? new Random(config.randomSeed) : new Random());
       }
     }
 
     final ImmutableList<EquivalentAddressGroup> newImmutableAddressGroups =
-        ImmutableList.<EquivalentAddressGroup>builder().addAll(cleanServers).build();
+        ImmutableList.copyOf(cleanServers);
 
     if (rawConnectivityState == READY
         || (rawConnectivityState == CONNECTING
@@ -224,6 +228,46 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     return newGroups;
   }
 
+  // Also used by PickFirstLoadBalancer
+  @CheckReturnValue
+  static List<EquivalentAddressGroup> shuffle(List<EquivalentAddressGroup> eags, Random random) {
+    if (weightedShuffling) {
+      List<WeightEntry> weightedEntries = new ArrayList<>(eags.size());
+      for (EquivalentAddressGroup eag : eags) {
+        weightedEntries.add(new WeightEntry(eag, eagToWeight(eag, random)));
+      }
+      Collections.sort(weightedEntries, Collections.reverseOrder() /* descending */);
+      return Lists.transform(weightedEntries, entry -> entry.eag);
+    } else {
+      List<EquivalentAddressGroup> eagsCopy = new ArrayList<>(eags);
+      Collections.shuffle(eagsCopy, random);
+      return eagsCopy;
+    }
+  }
+
+  private static double eagToWeight(EquivalentAddressGroup eag, Random random) {
+    Long weight = eag.getAttributes().get(InternalEquivalentAddressGroup.ATTR_WEIGHT);
+    if (weight == null) {
+      weight = 1L;
+    }
+    return Math.pow(random.nextDouble(), 1.0 / weight);
+  }
+
+  private static final class WeightEntry implements Comparable<WeightEntry> {
+    final EquivalentAddressGroup eag;
+    final double weight;
+
+    public WeightEntry(EquivalentAddressGroup eag, double weight) {
+      this.eag = eag;
+      this.weight = weight;
+    }
+
+    @Override
+    public int compareTo(WeightEntry entry) {
+      return Double.compare(this.weight, entry.weight);
+    }
+  }
+
   @Override
   public void handleNameResolutionError(Status error) {
     if (rawConnectivityState == SHUTDOWN) {
@@ -289,6 +333,16 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
+        // If we get a newly resolved address list via acceptResolvedAddresses,
+        // as we are in CONNECTING, we will try to .updateAddresses the currently
+        // connecting subchannel if it exists in the new list.
+        // As such, We need to make sure that with transitioning to CONNECTING the subchannel for
+        // the current address of a valid index exists.
+        if ((!enableHappyEyeballs && !addressIndex.isValid())
+            || (addressIndex.isValid() && !subchannels.containsKey(
+            addressIndex.getCurrentAddress()))) {
+          addressIndex.seekTo(getAddress(subchannelData.subchannel));
+        }
         updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
         break;
 
@@ -452,7 +506,7 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
    */
   @Override
   public void requestConnection() {
-    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN) {
+    if (!addressIndex.isValid() || rawConnectivityState == SHUTDOWN || reconnectTask != null) {
       return;
     }
 
@@ -590,6 +644,11 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   ConnectivityState getConcludedConnectivityState() {
     return this.concludedState;
+  }
+
+  @VisibleForTesting
+  ConnectivityState getRawConnectivityState() {
+    return this.rawConnectivityState;
   }
 
   /**

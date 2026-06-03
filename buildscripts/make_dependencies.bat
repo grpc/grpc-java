@@ -1,7 +1,7 @@
 choco install -y pkgconfiglite
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
-set PROTOBUF_VER=33.1
+set PROTOBUF_VER=33.4
 set ABSL_VERSION=20250127.1
 set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 
