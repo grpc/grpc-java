@@ -30,7 +30,7 @@ import java.util.logging.Logger;
 /**
  * A utility class for certificate-related information.
  */
-public final class CertificateUtils {
+final class CertificateUtils {
   private static final Logger logger = Logger.getLogger(CertificateUtils.class.getName());
   // From RFC 5280, section 4.2.1.6, Subject Alternative Name
   // dNSName (2)
@@ -48,21 +48,21 @@ public final class CertificateUtils {
    * @param cert The certificate.
    * @return The principal.
    */
-  public static String getPrincipal(X509Certificate cert) {
+  static String getPrincipal(X509Certificate cert) {
     try {
       Collection<List<?>> sans = cert.getSubjectAlternativeNames();
       if (sans != null) {
         // Look for URI SAN (Priority 1).
         for (List<?> san : sans) {
           if (san.size() == 2 && san.get(0) instanceof Integer
-              && (Integer) san.get(0) == SAN_TYPE_URI) {
+              && san.get(0).equals(SAN_TYPE_URI)) {
             return (String) san.get(1);
           }
         }
         // If no URI SAN, look for DNS SAN (Priority 2).
         for (List<?> san : sans) {
           if (san.size() == 2 && san.get(0) instanceof Integer
-              && (Integer) san.get(0) == SAN_TYPE_DNS_NAME) {
+              && san.get(0).equals(SAN_TYPE_DNS_NAME)) {
             return (String) san.get(1);
           }
         }
@@ -82,10 +82,10 @@ public final class CertificateUtils {
    * @throws CertificateEncodingException If an error occurs while encoding the certificate.
    * @throws UnsupportedEncodingException If an error occurs while encoding the URL.
    */
-  public static String getUrlPemEncodedCertificate(X509Certificate cert)
+  static String getUrlPemEncodedCertificate(X509Certificate cert)
       throws CertificateEncodingException, UnsupportedEncodingException {
     String pemCert = CertPemConverter.toPem(cert);
-    return URLEncoder.encode(pemCert, StandardCharsets.UTF_8.toString());
+    return URLEncoder.encode(pemCert, StandardCharsets.UTF_8.name());
   }
 
   /**
@@ -106,7 +106,9 @@ public final class CertificateUtils {
      * @throws CertificateEncodingException If an error occurs while encoding the certificate.
      */
     public static String toPem(X509Certificate cert) throws CertificateEncodingException {
-      return X509_PEM_HEADER + BaseEncoding.base64().encode(cert.getEncoded()) + X509_PEM_FOOTER;
+      return X509_PEM_HEADER
+          + BaseEncoding.base64().withSeparator("\n", 64).encode(cert.getEncoded())
+          + X509_PEM_FOOTER;
     }
   }
 }

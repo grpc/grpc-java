@@ -18,8 +18,11 @@ package io.grpc.xds.internal.extauthz;
 
 
 import com.google.common.io.BaseEncoding;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
 import io.envoyproxy.envoy.config.core.v3.Address;
+import io.envoyproxy.envoy.config.core.v3.HeaderMap;
+import io.envoyproxy.envoy.config.core.v3.HeaderValue;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress;
 import io.envoyproxy.envoy.service.auth.v3.AttributeContext;
 import io.envoyproxy.envoy.service.auth.v3.CheckRequest;
@@ -33,24 +36,24 @@ import java.net.InetSocketAddress;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 
 /**
- * Interface for building external authorization check requests.
+ * Builds external authorization check requests from gRPC call metadata.
  */
+@ThreadSafe
 public class CheckRequestBuilder {
 
   /**
    * An interface for providing certificate-related information.
    */
-  public interface CertificateProvider {
+  interface CertificateProvider {
     /**
      * Gets the principal from a certificate.
      *
@@ -72,11 +75,17 @@ public class CheckRequestBuilder {
   }
 
   private static final Logger logger = Logger.getLogger(CheckRequestBuilder.class.getName());
+  private static final BaseEncoding BASE64_NO_PAD = BaseEncoding.base64().omitPadding();
 
 
   private final ExtAuthzConfig config;
   private final CertificateProvider certificateProvider;
 
+  /**
+   * Constructs a new {@link CheckRequestBuilder} with the default certificate provider.
+   *
+   * @param config The external authorization configuration.
+   */
   public CheckRequestBuilder(ExtAuthzConfig config) {
     this(config, new CertificateProvider() {
       @Override
@@ -92,18 +101,40 @@ public class CheckRequestBuilder {
     });
   }
 
-  public CheckRequestBuilder(ExtAuthzConfig config, CertificateProvider certificateProvider) {
+  /**
+   * Constructs a new {@link CheckRequestBuilder} with a custom certificate provider.
+   *
+   * @param config The external authorization configuration.
+   * @param certificateProvider The certificate provider.
+   */
+  CheckRequestBuilder(ExtAuthzConfig config, CertificateProvider certificateProvider) {
     this.config = config;
     this.certificateProvider = certificateProvider;
   }
 
 
+  /**
+   * Builds a check request for a client-side call.
+   *
+   * @param methodDescriptor The method descriptor of the RPC.
+   * @param headers The initial metadata headers.
+   * @param requestTime The timestamp when the request was initiated.
+   * @return The constructed {@link CheckRequest}.
+   */
   public CheckRequest buildRequest(MethodDescriptor<?, ?> methodDescriptor, Metadata headers,
       Timestamp requestTime) {
     return build(methodDescriptor, headers, requestTime, null, null, null);
   }
 
 
+  /**
+   * Builds a check request for a server-side call.
+   *
+   * @param serverCall The server call.
+   * @param headers The initial metadata headers.
+   * @param requestTime The timestamp when the request was initiated.
+   * @return The constructed {@link CheckRequest}.
+   */
   public CheckRequest buildRequest(ServerCall<?, ?> serverCall, Metadata headers,
       Timestamp requestTime) {
     java.net.SocketAddress localAddress =
@@ -171,10 +202,24 @@ public class CheckRequestBuilder {
     AttributeContext.Peer.Builder peerBuilder = AttributeContext.Peer.newBuilder();
     if (socketAddress instanceof InetSocketAddress) {
       InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
+      // Prefer the resolved IP address, but fall back to the hostname string for
+      // unresolved addresses. In practice, Netty transports always provide resolved
+      // InetSocketAddress instances for active connections, and other gRPC
+      // implementations (C++, Go) always produce IP addresses because they operate
+      // on real TCP sockets. However, Envoy's address.proto permits hostnames (the
+      // only constraint is a non-empty string), so we gracefully fall back to
+      // getHostString() for robustness. See also TcpMetrics.java for precedent:
+      // https://github.com/grpc/grpc-java/blob/master/netty/src/main/java/io/grpc/netty/TcpMetrics.java
+      String address;
+      if (inetSocketAddress.getAddress() != null) {
+        address = inetSocketAddress.getAddress().getHostAddress();
+      } else {
+        address = inetSocketAddress.getHostString();
+      }
       peerBuilder
           .setAddress(Address.newBuilder()
               .setSocketAddress(SocketAddress.newBuilder()
-                  .setAddress(inetSocketAddress.getAddress().getHostAddress())
+                  .setAddress(address)
                   .setPortValue(inetSocketAddress.getPort()))
               .build());
     }
@@ -190,36 +235,55 @@ public class CheckRequestBuilder {
     httpReqBuilder.setMethod("POST");
     httpReqBuilder.setProtocol("HTTP/2");
     httpReqBuilder.setSize(-1);
+
+    HeaderMap.Builder headerMapBuilder = HeaderMap.newBuilder();
     for (String key : headers.keys()) {
       if (!isAllowed(key)) {
         continue;
       }
-      String value;
+      String lowerCaseKey = key.toLowerCase(Locale.ROOT);
       if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        value = getBinaryHeaderValue(headers, key);
+        populateBinaryHeaderValues(headers, key, lowerCaseKey, headerMapBuilder);
       } else {
-        value = getAsciiHeaderValue(headers, key);
+        populateAsciiHeaderValues(headers, key, lowerCaseKey, headerMapBuilder);
       }
-      httpReqBuilder.putHeaders(key.toLowerCase(Locale.ROOT), value);
     }
+    httpReqBuilder.setHeaderMap(headerMapBuilder);
     reqBuilder.setHttp(httpReqBuilder);
     return reqBuilder.build();
   }
 
-  private String getBinaryHeaderValue(Metadata headers, String key) {
+  private void populateBinaryHeaderValues(Metadata headers, String key, String lowerCaseKey,
+      HeaderMap.Builder headerMapBuilder) {
     Iterable<byte[]> binaryValues =
         headers.getAll(Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER));
-    List<String> base64Values = new ArrayList<>();
-    for (byte[] value : binaryValues) {
-      base64Values.add(BaseEncoding.base64().encode(value));
+    if (binaryValues != null) {
+      for (byte[] value : binaryValues) {
+        // Binary header values are base64-encoded before storing in rawValue,
+        // matching Envoy's behavior for CheckRequest header serialization.
+        String base64Value = BASE64_NO_PAD.encode(value);
+        headerMapBuilder.addHeaders(
+            HeaderValue.newBuilder()
+                .setKey(lowerCaseKey)
+                .setRawValue(ByteString.copyFromUtf8(base64Value))
+                .build());
+      }
     }
-    return String.join(",", base64Values);
   }
 
-  private String getAsciiHeaderValue(Metadata headers, String key) {
+  private void populateAsciiHeaderValues(Metadata headers, String key, String lowerCaseKey,
+      HeaderMap.Builder headerMapBuilder) {
     Iterable<String> stringValues =
         headers.getAll(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
-    return String.join(",", stringValues);
+    if (stringValues != null) {
+      for (String value : stringValues) {
+        headerMapBuilder.addHeaders(
+            HeaderValue.newBuilder()
+                .setKey(lowerCaseKey)
+                .setRawValue(ByteString.copyFromUtf8(value))
+                .build());
+      }
+    }
   }
 
   private boolean isAllowed(String header) {
