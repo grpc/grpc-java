@@ -178,5 +178,4 @@ public abstract class Server {
    * @since 1.0.0
    */
   public abstract void awaitTermination() throws InterruptedException;
-
 }

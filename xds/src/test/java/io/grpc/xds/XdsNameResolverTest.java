@@ -3009,7 +3009,7 @@ public class XdsNameResolverTest {
         metricRecorder,
         args);
 
-    // Start the resolver (this triggers the factory call)
+    // Start the resolver
     resolver.start(mockListener);
 
     assertThat(xdsClientPoolFactory.savedChannelConfigurator).isSameInstanceAs(channelConfigurator);

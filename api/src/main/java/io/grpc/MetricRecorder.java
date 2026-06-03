@@ -26,8 +26,6 @@ import java.util.List;
  */
 @Internal
 public interface MetricRecorder {
-
-
   /**
    * Adds a value for a double-precision counter metric instrument.
    *
@@ -178,6 +176,4 @@ public interface MetricRecorder {
     @Override
     void close();
   }
-
-
 }

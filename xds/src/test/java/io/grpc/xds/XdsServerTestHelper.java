@@ -187,19 +187,7 @@ public class XdsServerTestHelper {
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
         ChannelConfigurator channelConfigurator) {
-      this.savedBootstrapInfo = bootstrapInfo;
-      return new ObjectPool<XdsClient>() {
-        @Override
-        public XdsClient getObject() {
-          return xdsClient;
-        }
-
-        @Override
-        public XdsClient returnObject(Object object) {
-          xdsClient.shutdown();
-          return null;
-        }
-      };
+      return getOrCreate(target, bootstrapInfo, metricRecorder);
     }
 
     @Override
