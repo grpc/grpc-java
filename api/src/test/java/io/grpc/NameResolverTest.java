@@ -105,7 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChannelConfigurator channelConfigurator = mock(ChannelConfigurator.class);
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -123,7 +123,13 @@ public class NameResolverTest {
 
   @Test
   public void args_childChannelConfigurator() {
-    ChannelConfigurator channelConfigurator = mock(ChannelConfigurator.class);
+    final ManagedChannelBuilder<?>[] capturedBuilder = new ManagedChannelBuilder<?>[1];
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        capturedBuilder[0] = builder;
+      }
+    };
 
     SynchronizationContext realSyncContext = new SynchronizationContext(
         new Thread.UncaughtExceptionHandler() {
@@ -148,7 +154,7 @@ public class NameResolverTest {
     // Validate configurator accepts builders
     ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
     configurator.configureChannelBuilder(mockBuilder);
-    verify(channelConfigurator).configureChannelBuilder(mockBuilder);
+    assertThat(capturedBuilder[0]).isSameInstanceAs(mockBuilder);
   }
 
   @Test

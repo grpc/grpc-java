@@ -22,7 +22,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -60,7 +59,6 @@ import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
-import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NoopMetricSink;
 import io.grpc.ServerCall;
@@ -100,6 +98,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Rule;
@@ -1310,7 +1309,7 @@ public class WeightedRoundRobinLoadBalancerTest {
         .directExecutor()
         .build()
         .start());
-    MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    VerificationMetricSink metrics = new VerificationMetricSink();
     Channel channel = grpcCleanupRule.register(
         InternalManagedChannelBuilder.addMetricSink(
             InProcessChannelBuilder.forName(serverName)
@@ -1332,11 +1331,7 @@ public class WeightedRoundRobinLoadBalancerTest {
 
     // Make sure at least one metric works. The other tests will make sure other metrics and the
     // edge cases are working. Since this is racy, we just care it happened at least once.
-    verify(metrics, atLeast(1)).addLongCounter(
-        argThat((instr) -> instr.getName().equals("grpc.lb.wrr.rr_fallback")),
-        eq(1L),
-        eq(Arrays.asList("directaddress:///wrr-metrics")),
-        eq(Arrays.asList("", "")));
+    metrics.awaitCall();
   }
 
 
@@ -1717,6 +1712,35 @@ public class WeightedRoundRobinLoadBalancerTest {
     @Override
     public String getChannelTarget() {
       return channelTarget;
+    }
+  }
+
+  private static final class VerificationMetricSink extends NoopMetricSink {
+    private final AtomicBoolean called =
+        new AtomicBoolean();
+
+    @Override
+    public void addLongCounter(
+        LongCounterMetricInstrument metricInstrument,
+        long value,
+        List<String> requiredLabelValues,
+        List<String> optionalLabelValues) {
+      if (metricInstrument.getName().equals("grpc.lb.wrr.rr_fallback")
+          && value == 1L
+          && requiredLabelValues.equals(Arrays.asList("directaddress:///wrr-metrics"))
+          && optionalLabelValues.equals(Arrays.asList("", ""))) {
+        called.set(true);
+      }
+    }
+
+    public void awaitCall() throws InterruptedException {
+      long start = System.currentTimeMillis();
+      while (!called.get()) {
+        if (System.currentTimeMillis() - start > 5000) {
+          throw new AssertionError("Timed out waiting for metric sink call");
+        }
+        Thread.sleep(50);
+      }
     }
   }
 }

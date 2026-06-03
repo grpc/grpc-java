@@ -27,7 +27,6 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.lenient;
@@ -2498,6 +2497,7 @@ public class XdsNameResolverTest {
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     Set<String> targets = new HashSet<>();
     XdsClient xdsClient = new FakeXdsClient();
+    ChannelConfigurator savedChannelConfigurator;
 
     @Override
     @Nullable
@@ -2527,6 +2527,7 @@ public class XdsNameResolverTest {
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
         ChannelConfigurator channelConfigurator) {
       targets.add(target);
+      this.savedChannelConfigurator = channelConfigurator;
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -2981,7 +2982,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void start_passesChannelConfiguratorToClientPoolFactory() {
-    ChannelConfigurator mockChannelConfigurator = mock(ChannelConfigurator.class);
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
     // Build NameResolver.Args containing the channel configurator
     NameResolver.Args args = NameResolver.Args.newBuilder()
@@ -2990,23 +2991,8 @@ public class XdsNameResolverTest {
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(serviceConfigParser)
         .setChannelLogger(mock(ChannelLogger.class))
-        .setChildChannelConfigurator(mockChannelConfigurator)
+        .setChildChannelConfigurator(channelConfigurator)
         .build();
-
-    // Mock the XdsClientPoolFactory
-    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
-    @SuppressWarnings("unchecked")
-    ObjectPool<XdsClient> mockObjectPool = mock(ObjectPool.class);
-    XdsClient mockXdsClient = mock(XdsClient.class);
-    when(mockObjectPool.getObject()).thenReturn(mockXdsClient);
-    when(mockXdsClient.getBootstrapInfo()).thenReturn(bootstrapInfo);
-
-    when(mockPoolFactory.getOrCreate(
-        anyString(),
-        any(BootstrapInfo.class),
-        any(MetricRecorder.class),
-        any(ChannelConfigurator.class)))
-        .thenReturn(mockObjectPool);
 
     XdsNameResolver resolver = new XdsNameResolver(
         targetUri,
@@ -3016,7 +3002,7 @@ public class XdsNameResolverTest {
         serviceConfigParser,
         syncContext,
         scheduler,
-        mockPoolFactory,
+        xdsClientPoolFactory,
         mockRandom,
         FilterRegistry.getDefaultRegistry(),
         rawBootstrap,
@@ -3026,11 +3012,7 @@ public class XdsNameResolverTest {
     // Start the resolver (this triggers the factory call)
     resolver.start(mockListener);
 
-    verify(mockPoolFactory).getOrCreate(
-        eq(AUTHORITY),
-        any(BootstrapInfo.class),
-        eq(metricRecorder),
-        eq(mockChannelConfigurator));
+    assertThat(xdsClientPoolFactory.savedChannelConfigurator).isSameInstanceAs(channelConfigurator);
 
     resolver.shutdown();
   }

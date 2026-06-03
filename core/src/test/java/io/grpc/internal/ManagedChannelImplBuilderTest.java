@@ -26,7 +26,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -52,7 +51,9 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
+import io.grpc.NoopMetricSink;
 import io.grpc.StaticTestingClassLoader;
+import io.grpc.Uri;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -77,7 +78,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -786,7 +786,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void childChannelConfigurator_setsField() {
-    ChannelConfigurator configurator = mock(ChannelConfigurator.class);
+    ChannelConfigurator configurator = new ChannelConfigurator() {};
     assertSame(builder, builder.childChannelConfigurator(configurator));
     assertSame(configurator, builder.channelConfigurator);
   }
@@ -801,8 +801,14 @@ public class ManagedChannelImplBuilderTest {
     when(mockClientTransportFactory.getSupportedSocketAddressTypes())
         .thenReturn(Collections.singleton(InetSocketAddress.class));
 
-    MetricSink mockMetricSink = mock(MetricSink.class);
-    ClientInterceptor mockInterceptor = mock(ClientInterceptor.class);
+    MetricSink mockMetricSink = new NoopMetricSink();
+    ClientInterceptor mockInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    };
 
     // Define the Configurator
     ChannelConfigurator configurator = new ChannelConfigurator() {
@@ -814,23 +820,47 @@ public class ManagedChannelImplBuilderTest {
       }
     };
 
-    // Mock NameResolver.Factory to capture Args
-    NameResolver.Factory mockNameResolverFactory = mock(NameResolver.Factory.class);
-    when(mockNameResolverFactory.getDefaultScheme()).thenReturn("xds");
-    NameResolver mockNameResolver = mock(NameResolver.class);
-    when(mockNameResolver.getServiceAuthority()).thenReturn("foo.authority");
-    ArgumentCaptor<NameResolver.Args> argsCaptor = ArgumentCaptor.forClass(NameResolver.Args.class);
-    if (enableRfc3986UrisParam) {
-      when(mockNameResolverFactory.newNameResolver((io.grpc.Uri) any(),
-          argsCaptor.capture())).thenReturn(mockNameResolver);
-    } else {
-      when(mockNameResolverFactory.newNameResolver((URI) any(),
-          argsCaptor.capture())).thenReturn(mockNameResolver);
-    }
+    // Use NameResolver.Factory to capture Args
+    final NameResolver.Args[] capturedArgs = new NameResolver.Args[1];
+    final boolean[] newNameResolverCalled = new boolean[1];
 
-    // Use the configurator and the mock factory
+    NameResolver realNameResolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return "foo.authority";
+      }
+
+      @Override
+      public void start(Listener2 listener) {}
+
+      @Override
+      public void shutdown() {}
+    };
+
+    NameResolver.Factory realNameResolverFactory = new NameResolver.Factory() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public NameResolver newNameResolver(Uri targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "xds";
+      }
+    };
+
+    // Use the configurator and the custom factory
     NameResolverRegistry registry = new NameResolverRegistry();
-    registry.register(new NameResolverFactoryToProviderFacade(mockNameResolverFactory));
+    registry.register(new NameResolverFactoryToProviderFacade(realNameResolverFactory));
 
     ManagedChannelBuilder<?> parentBuilder = new ManagedChannelImplBuilder(
         "xds:///my-service-target",
@@ -843,14 +873,10 @@ public class ManagedChannelImplBuilderTest {
     grpcCleanupRule.register(channel);
 
     // Verify that newNameResolver was called
-    if (enableRfc3986UrisParam) {
-      verify(mockNameResolverFactory).newNameResolver((io.grpc.Uri) any(), any());
-    } else {
-      verify(mockNameResolverFactory).newNameResolver((URI) any(), any());
-    }
+    assertThat(newNameResolverCalled[0]).isTrue();
 
     // Extract the childChannelConfigurator from Args
-    NameResolver.Args args = argsCaptor.getValue();
+    NameResolver.Args args = capturedArgs[0];
     ChannelConfigurator channelConfiguratorInArgs = args.getChildChannelConfigurator();
     assertNotNull("Child channel configurator should be present in NameResolver.Args",
         channelConfiguratorInArgs);
@@ -858,13 +884,14 @@ public class ManagedChannelImplBuilderTest {
     // Verify the configurator is the one we passed
     assertThat(channelConfiguratorInArgs).isSameInstanceAs(configurator);
 
-    // Verify the configurator logically applies (by running it on a mock)
-    ManagedChannelBuilder<?> mockChildBuilder = mock(ManagedChannelBuilder.class);
-    // Stub addMetricSink to return the builder to avoid generic return type issues
-    doReturn(mockChildBuilder).when(mockChildBuilder).addMetricSink(any());
+    // Verify the configurator logically applies (by running it on a real builder)
+    ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder(
+        "xds:///child-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT));
 
-    configurator.configureChannelBuilder(mockChildBuilder);
-    verify(mockChildBuilder).addMetricSink(mockMetricSink);
+    configurator.configureChannelBuilder(childBuilder);
+    assertThat(childBuilder.metricSinks).contains(mockMetricSink);
   }
 
   @Test

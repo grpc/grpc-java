@@ -22,13 +22,6 @@ import static io.grpc.xds.DataPlaneRule.ENDPOINT_HOST_NAME;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_CDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_EDS;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.verify;
 
 import com.github.xds.type.v3.TypedStruct;
 import com.google.common.collect.ImmutableMap;
@@ -66,11 +59,11 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.InternalFeatureFlags;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.MetricSink;
 import io.grpc.NoopMetricSink;
 import io.grpc.Server;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -78,6 +71,8 @@ import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -377,12 +372,12 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   @Test
-  public void childChannelConfigurator_passesMetricSinkToChannel_E2E() {
-    MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+  public void childChannelConfigurator_passesMetricSinkToChannel_E2E() throws Exception {
+    CountingMetricSink sink = new CountingMetricSink();
     ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        builder.addMetricSink(mockSink);
+        builder.addMetricSink(sink);
       }
     };
 
@@ -398,8 +393,7 @@ public class FakeControlPlaneXdsIntegrationTest {
 
       // The xDS client inside the channel configurator will have created an ADS stream.
       // The metric sink should have received attempt or connection metrics.
-      verify(mockSink, timeout(5000).atLeastOnce())
-          .addLongCounter(any(), anyLong(), anyList(), anyList());
+      sink.awaitCall();
     } finally {
       channel.shutdownNow();
     }
@@ -407,12 +401,12 @@ public class FakeControlPlaneXdsIntegrationTest {
 
   @Test
   public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
-    MetricSink mockSink = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
+    CountingMetricSink sink = new CountingMetricSink();
     ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
         // Child channels (xDS client connections) created by this server get the sink.
-        builder.addMetricSink(mockSink);
+        builder.addMetricSink(sink);
       }
     };
 
@@ -428,10 +422,33 @@ public class FakeControlPlaneXdsIntegrationTest {
 
     try {
       // The server xDS client will connect to control plane to get LDS.
-      verify(mockSink, timeout(5000).atLeastOnce())
-          .addLongCounter(any(), anyLong(), anyList(), anyList());
+      sink.awaitCall();
     } finally {
       childServer.shutdownNow();
+    }
+  }
+
+  private static final class CountingMetricSink extends NoopMetricSink {
+    private final AtomicInteger count =
+        new AtomicInteger();
+
+    @Override
+    public void addLongCounter(
+        LongCounterMetricInstrument metricInstrument,
+        long value,
+        List<String> requiredLabelValues,
+        List<String> optionalLabelValues) {
+      count.incrementAndGet();
+    }
+
+    public void awaitCall() throws InterruptedException {
+      long start = System.currentTimeMillis();
+      while (count.get() == 0) {
+        if (System.currentTimeMillis() - start > 5000) {
+          throw new AssertionError("Timed out waiting for metric sink call");
+        }
+        Thread.sleep(50);
+      }
     }
   }
 }
