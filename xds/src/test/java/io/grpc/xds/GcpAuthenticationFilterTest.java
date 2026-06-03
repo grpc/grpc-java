@@ -71,7 +71,6 @@ import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.Locality;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -147,7 +146,7 @@ public class GcpAuthenticationFilterTest {
   }
 
   @Test
-  public void testClientInterceptor_success() throws IOException, ResourceInvalidException {
+  public void testClientInterceptor_success() throws ResourceInvalidException {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME,
         cdsUpdate,
@@ -176,7 +175,7 @@ public class GcpAuthenticationFilterTest {
 
   @Test
   public void testClientInterceptor_createsAndReusesCachedCredentials()
-      throws IOException, ResourceInvalidException {
+      throws ResourceInvalidException {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME,
         cdsUpdate,
@@ -323,8 +322,7 @@ public class GcpAuthenticationFilterTest {
   }
 
   @Test
-  public void testClientInterceptor_notAudienceWrapper()
-      throws IOException, ResourceInvalidException {
+  public void testClientInterceptor_notAudienceWrapper() throws ResourceInvalidException {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME,
         getCdsUpdateWithIncorrectAudienceWrapper(),
@@ -352,7 +350,7 @@ public class GcpAuthenticationFilterTest {
   }
 
   @Test
-  public void testLruCacheAcrossInterceptors() throws IOException, ResourceInvalidException {
+  public void testLruCacheAcrossInterceptors() throws ResourceInvalidException {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
     XdsConfig defaultXdsConfig = new XdsConfig.XdsConfigBuilder()
@@ -386,7 +384,7 @@ public class GcpAuthenticationFilterTest {
   }
 
   @Test
-  public void testLruCacheEvictionOnResize() throws IOException, ResourceInvalidException {
+  public void testLruCacheEvictionOnResize() throws ResourceInvalidException {
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
     XdsConfig defaultXdsConfig = new XdsConfig.XdsConfigBuilder()
@@ -494,35 +492,27 @@ public class GcpAuthenticationFilterTest {
   private static CdsUpdate getCdsUpdate() {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("TEST_AUDIENCE"));
-    try {
-      CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
-          .lbPolicyConfig(getWrrLbConfigAsMap());
-      return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
-    } catch (IOException ex) {
-      return null;
-    }
+    CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
+            CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
+        .lbPolicyConfigJsonForTesting(getWrrLbConfigAsMap());
+    return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
 
   private static CdsUpdate getCdsUpdate2() {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
     parsedMetadata.put("FILTER_INSTANCE_NAME", new AudienceWrapper("NEW_TEST_AUDIENCE"));
-    try {
-      CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
-              CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
-          .lbPolicyConfig(getWrrLbConfigAsMap());
-      return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
-    } catch (IOException ex) {
-      return null;
-    }
+    CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
+            CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
+        .lbPolicyConfigJsonForTesting(getWrrLbConfigAsMap());
+    return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
 
-  private static CdsUpdate getCdsUpdateWithIncorrectAudienceWrapper() throws IOException {
+  private static CdsUpdate getCdsUpdateWithIncorrectAudienceWrapper() {
     ImmutableMap.Builder<String, Object> parsedMetadata = ImmutableMap.builder();
     parsedMetadata.put("FILTER_INSTANCE_NAME", "TEST_AUDIENCE");
     CdsUpdate.Builder cdsUpdate = CdsUpdate.forEds(
             CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
-        .lbPolicyConfig(getWrrLbConfigAsMap());
+        .lbPolicyConfigJsonForTesting(getWrrLbConfigAsMap());
     return cdsUpdate.parsedMetadata(parsedMetadata.build()).build();
   }
 

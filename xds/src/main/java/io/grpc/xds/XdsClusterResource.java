@@ -43,8 +43,7 @@ import io.envoyproxy.envoy.extensions.transport_sockets.tls.v3.CommonTlsContext;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.EnvoyServerProtoData.OutlierDetection;
 import io.grpc.xds.EnvoyServerProtoData.UpstreamTlsContext;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
@@ -165,18 +164,16 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     ImmutableMap<String, ?> lbPolicyConfig = LoadBalancerConfigFactory.newConfig(cluster,
         enableLeastRequest);
 
-    // Validate the LB config by trying to parse it with the corresponding LB provider.
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(lbPolicyConfig);
-    NameResolver.ConfigOrError configOrError = loadBalancerRegistry.getProvider(
-        lbConfig.getPolicyName()).parseLoadBalancingPolicyConfig(
-        lbConfig.getRawConfigValue());
+    NameResolver.ConfigOrError configOrError
+        = GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+            ImmutableList.of(lbPolicyConfig), loadBalancerRegistry);
     if (configOrError.getError() != null) {
       throw new ResourceInvalidException(
           "Failed to parse lb config for cluster '" + cluster.getName() + "': "
           + configOrError.getError());
     }
 
-    updateBuilder.lbPolicyConfig(lbPolicyConfig);
+    updateBuilder.lbPolicyConfig(configOrError.getConfig(), lbPolicyConfig);
     updateBuilder.filterMetadata(
         ImmutableMap.copyOf(cluster.getMetadata().getFilterMetadataMap()));
 
@@ -228,7 +225,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     boolean isHttp11ProxyAvailable = false;
     BackendMetricPropagation backendMetricPropagation = null;
 
-    if (isEnabledOrcaLrsPropagation) {
+    if (isEnabledOrcaLrsPropagation && !cluster.getLrsReportEndpointMetricsList().isEmpty()) {
       backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
           cluster.getLrsReportEndpointMetricsList());
     }
@@ -582,16 +579,22 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
 
     abstract ClusterType clusterType();
 
-    abstract ImmutableMap<String, ?> lbPolicyConfig();
+    /** Graceful switch configuration. */
+    Object lbPolicyConfig() {
+      return internalLbPolicyConfig().getValue();
+    }
 
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long minRingSize();
+    /**
+     * Use {@link #lbPolicyConfig()} instead. This avoids using the LB policy configs' equals() when
+     * XdsClient squelches config updates that are identical to the current value. LB policies are
+     * not required to implement equals for their configs. Instead, {link
+     * #internalLbPolicyConfigJson()} is used to detect changes.
+     */
+    abstract IgnoreEquals<Object> internalLbPolicyConfig();
 
-    // Only valid if lbPolicy is "ring_hash_experimental".
-    abstract long maxRingSize();
-
-    // Only valid if lbPolicy is "least_request_experimental".
-    abstract int choiceCount();
+    /** Use {@code lbPolicyConfig} instead. */
+    @Nullable
+    abstract ImmutableMap<String, ?> internalLbPolicyConfigJson();
 
     // Alternative resource name to be used in EDS requests.
     /// Only valid for EDS cluster.
@@ -640,9 +643,6 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     private static Builder newBuilder(String clusterName) {
       return new AutoValue_XdsClusterResource_CdsUpdate.Builder()
           .clusterName(clusterName)
-          .minRingSize(0)
-          .maxRingSize(0)
-          .choiceCount(0)
           .filterMetadata(ImmutableMap.of())
           .parsedMetadata(ImmutableMap.of())
           .isHttp11ProxyAvailable(false)
@@ -703,10 +703,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       return MoreObjects.toStringHelper(this)
           .add("clusterName", clusterName())
           .add("clusterType", clusterType())
-          .add("lbPolicyConfig", lbPolicyConfig())
-          .add("minRingSize", minRingSize())
-          .add("maxRingSize", maxRingSize())
-          .add("choiceCount", choiceCount())
+          .add("lbPolicyConfigJson", internalLbPolicyConfigJson())
           .add("edsServiceName", edsServiceName())
           .add("dnsHostName", dnsHostName())
           .add("lrsServerInfo", lrsServerInfo())
@@ -725,31 +722,31 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
       // Private, use one of the static factory methods instead.
       protected abstract Builder clusterType(ClusterType clusterType);
 
-      protected abstract Builder lbPolicyConfig(ImmutableMap<String, ?> lbPolicyConfig);
-
-      Builder roundRobinLbPolicy() {
-        return this.lbPolicyConfig(ImmutableMap.of("round_robin", ImmutableMap.of()));
+      /**
+       * The config to use, and the JSON representation that produced that config. The JSON
+       * representation is only used to detect if the configuration changed, since LB policies don't
+       * have to implement equals() for their parsed configs.
+       */
+      protected Builder lbPolicyConfig(
+          Object gracefulSwitchConfig, ImmutableMap<String, ?> jsonConfig) {
+        return internalLbPolicyConfig(new IgnoreEquals<>(gracefulSwitchConfig))
+            .internalLbPolicyConfigJson(jsonConfig);
       }
 
-      Builder ringHashLbPolicy(Long minRingSize, Long maxRingSize) {
-        return this.lbPolicyConfig(ImmutableMap.of("ring_hash_experimental",
-            ImmutableMap.of("minRingSize", minRingSize.doubleValue(), "maxRingSize",
-                maxRingSize.doubleValue())));
+      protected Builder lbPolicyConfigJsonForTesting(ImmutableMap<String, ?> jsonConfig) {
+        NameResolver.ConfigOrError result =
+            GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(
+                ImmutableList.of(jsonConfig));
+        if (result.getError() != null) {
+          throw new IllegalArgumentException(
+              "Bad JSON config: " + result.getError() + " json: " + jsonConfig);
+        }
+        return lbPolicyConfig(result.getConfig(), jsonConfig);
       }
 
-      Builder leastRequestLbPolicy(Integer choiceCount) {
-        return this.lbPolicyConfig(ImmutableMap.of("least_request_experimental",
-            ImmutableMap.of("choiceCount", choiceCount.doubleValue())));
-      }
+      protected abstract Builder internalLbPolicyConfig(IgnoreEquals<Object> gracefulSwitchConfig);
 
-      // Private, use leastRequestLbPolicy(int).
-      protected abstract Builder choiceCount(int choiceCount);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder minRingSize(long minRingSize);
-
-      // Private, use ringHashLbPolicy(long, long).
-      protected abstract Builder maxRingSize(long maxRingSize);
+      protected abstract Builder internalLbPolicyConfigJson(ImmutableMap<String, ?> jsonConfig);
 
       // Private, use CdsUpdate.forEds() instead.
       protected abstract Builder edsServiceName(String edsServiceName);
@@ -781,6 +778,37 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
           BackendMetricPropagation backendMetricPropagation);
 
       abstract CdsUpdate build();
+    }
+  }
+
+  /** Always equal to this same type. */
+  static final class IgnoreEquals<V> {
+    private final V value;
+
+    IgnoreEquals(V value) {
+      this.value = value;
+    }
+
+    public V getValue() {
+      return value;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof IgnoreEquals)) {
+        return false;
+      }
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      return 0;
+    }
+
+    @Override
+    public String toString() {
+      return "IgnoreEquals{" + value + "}";
     }
   }
 }

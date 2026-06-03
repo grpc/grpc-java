@@ -116,14 +116,12 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status.Code;
-import io.grpc.internal.JsonUtil;
-import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.lookup.v1.GrpcKeyBuilder;
 import io.grpc.lookup.v1.GrpcKeyBuilder.Name;
 import io.grpc.lookup.v1.NameMatcher;
 import io.grpc.lookup.v1.RouteLookupClusterSpecifier;
 import io.grpc.lookup.v1.RouteLookupConfig;
+import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Endpoints.LbEndpoint;
@@ -140,7 +138,6 @@ import io.grpc.xds.VirtualHost.Route.RouteAction.ClusterWeight;
 import io.grpc.xds.VirtualHost.Route.RouteAction.HashPolicy;
 import io.grpc.xds.VirtualHost.Route.RouteMatch;
 import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
-import io.grpc.xds.WeightedRoundRobinLoadBalancer.WeightedRoundRobinLoadBalancerConfig;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
@@ -2241,8 +2238,9 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
         cluster, null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("ring_hash_experimental");
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("ring_hash_experimental", ImmutableMap.of()))).getConfig());
   }
 
   @Test
@@ -2263,11 +2261,11 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
         cluster, null, LRS_SERVER_INFO,
         LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-        JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("least_request_experimental");
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            Arrays.asList(ImmutableMap.of("least_request_experimental",
+                ImmutableMap.of())))))).getConfig());
   }
 
   @Test
@@ -2314,20 +2312,16 @@ public class GrpcXdsClientImplDataTest {
     CdsUpdate update = XdsClusterResource.processCluster(
             cluster, null, LRS_SERVER_INFO,
             LoadBalancerRegistry.getDefaultRegistry());
-    LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(update.lbPolicyConfig());
-    assertThat(lbConfig.getPolicyName()).isEqualTo("wrr_locality_experimental");
-    List<LbConfig> childConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(
-            JsonUtil.getListOfObjects(lbConfig.getRawConfigValue(), "childPolicy"));
-    assertThat(childConfigs.get(0).getPolicyName()).isEqualTo("weighted_round_robin");
-    WeightedRoundRobinLoadBalancerConfig result = (WeightedRoundRobinLoadBalancerConfig)
-        new WeightedRoundRobinLoadBalancerProvider().parseLoadBalancingPolicyConfig(
-        childConfigs.get(0).getRawConfigValue()).getConfig();
-    assertThat(result.blackoutPeriodNanos).isEqualTo(17_000_000_000L);
-    assertThat(result.enableOobLoadReport).isTrue();
-    assertThat(result.oobReportingPeriodNanos).isEqualTo(10_000_000_000L);
-    assertThat(result.weightUpdatePeriodNanos).isEqualTo(1_000_000_000L);
-    assertThat(result.weightExpirationPeriodNanos).isEqualTo(180_000_000_000L);
-    assertThat(result.errorUtilizationPenalty).isEqualTo(1.75F);
+    assertThat(update.lbPolicyConfig()).isEqualTo(
+        GracefulSwitchLoadBalancer.parseLoadBalancingPolicyConfig(Arrays.asList(
+          ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+            Arrays.asList(ImmutableMap.of("weighted_round_robin", ImmutableMap.of(
+                "blackoutPeriod", "17s",
+                "enableOobLoadReport", true,
+                "oobReportingPeriod", "10s",
+                "weightUpdatePeriod", "1s",
+                "errorUtilizationPenalty", 1.75
+              ))))))).getConfig());
   }
 
   @Test
@@ -2660,6 +2654,7 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
+    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
     LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
 
     ImmutableList<String> metricSpecs = ImmutableList.of(
@@ -2691,7 +2686,7 @@ public class GrpcXdsClientImplDataTest {
     assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
         .isFalse();
 
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
+    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test

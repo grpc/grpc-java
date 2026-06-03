@@ -1278,7 +1278,7 @@ public class XdsNameResolverTest {
     for (String clusterName : clusterNames) {
       CdsUpdate.Builder forEds = CdsUpdate
           .forEds(clusterName, clusterName, null, null, null, null, false, null)
-          .roundRobinLbPolicy();
+              .lbPolicyConfigJsonForTesting(ImmutableMap.of("round_robin", ImmutableMap.of()));
       xdsClient.deliverCdsUpdate(clusterName, forEds.build());
       EdsUpdate edsUpdate = new EdsUpdate(clusterName,
           XdsTestUtils.createMinimalLbEndpointsMap("127.0.0.3"), Collections.emptyList());
