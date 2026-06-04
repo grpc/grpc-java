@@ -1200,6 +1200,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       System.out.println("=== CLIENT RECEIVED RESPONSE HEADERS: " + headers + " ===");
       dataPlaneClientCall.serverHeadersStartNanos = System.nanoTime();
       responseHeadersSent.set(true);
+      if (dataPlaneClientCall.extProcStreamState.get().isDraining()) {
+        this.savedHeaders = headers;
+        return;
+      }
       boolean sendResponseHeaders =
           dataPlaneClientCall.currentProcessingMode.getResponseHeaderMode()
               == ProcessingMode.HeaderSendMode.SEND
@@ -1281,6 +1285,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.savedTrailers = trailers;
 
       if (savedHeaders != null) {
+        return;
+      }
+
+      if (dataPlaneClientCall.extProcStreamState.get().isDraining()) {
         return;
       }
 
