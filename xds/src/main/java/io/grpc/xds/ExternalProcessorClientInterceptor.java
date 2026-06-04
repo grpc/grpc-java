@@ -1364,22 +1364,27 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (trailersOnly.get()) {
-        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-            .setResponseHeaders(HttpHeaders.newBuilder()
-                .setHeaders(
-                    toHeaderMap(
-                        savedTrailers,
-                        dataPlaneClientCall.config.getForwardRulesConfig()))
-                .setEndOfStream(true)
-                .build())
-            .build());
-        return;
-      }
-
       boolean sendResponseTrailers =
           dataPlaneClientCall.currentProcessingMode.getResponseTrailerMode()
               == ProcessingMode.HeaderSendMode.SEND;
+
+      if (trailersOnly.get()) {
+        if (sendResponseTrailers) {
+          dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
+              .setResponseHeaders(HttpHeaders.newBuilder()
+                  .setHeaders(
+                      toHeaderMap(
+                          savedTrailers,
+                          dataPlaneClientCall.config.getForwardRulesConfig()))
+                  .setEndOfStream(true)
+                  .build())
+              .build());
+        } else {
+          proceedWithClose();
+          dataPlaneClientCall.closeExtProcStream();
+        }
+        return;
+      }
 
       if (sendResponseTrailers) {
         dataPlaneClientCall.isProcessingTrailers.set(true);
