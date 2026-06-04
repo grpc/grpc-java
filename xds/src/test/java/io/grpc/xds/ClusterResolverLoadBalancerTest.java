@@ -95,7 +95,6 @@ import io.grpc.xds.RingHashLoadBalancer.RingHashConfig;
 import io.grpc.xds.WrrLocalityLoadBalancer.WrrLocalityConfig;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.XdsInternalAttributes;
 import java.net.InetSocketAddress;

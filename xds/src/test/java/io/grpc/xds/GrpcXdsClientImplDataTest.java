@@ -139,7 +139,6 @@ import io.grpc.xds.VirtualHost.Route.RouteMatch.PathMatcher;
 import io.grpc.xds.XdsClusterResource.CdsUpdate;
 import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.Bootstrapper.ServerInfo;
-import io.grpc.xds.client.LoadStatsManager2;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
 import io.grpc.xds.client.XdsResourceType.ResourceInvalidException;
