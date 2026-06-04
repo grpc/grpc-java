@@ -173,11 +173,22 @@ final class AsyncServletOutputStreamWriter {
   /** Called from the container thread {@link javax.servlet.WriteListener#onWritePossible()}. */
   void onWritePossible() throws IOException {
     log.finest("onWritePossible: ENTRY. The servlet output stream becomes ready");
-    if (writeState.get().readyAndDrained) {
-      assureReadyAndDrainedTurnsFalse();
+    if (writeState.get().state == WriteState.WRITING) {
+      if (!assureWritingStateTurnsStateOtherThanWriting()) {
+        return;
+      }
+    }
+    if (writeState.get().state == WriteState.READY_AND_DRAINED) {
+      return;
     }
     while (isReady.getAsBoolean()) {
       WriteState curState = writeState.get();
+      if (curState.state == WriteState.WRITING) {
+        if (!assureWritingStateTurnsStateOtherThanWriting()) {
+          return;
+        }
+        continue;
+      }
 
       ActionItem actionItem = writeChain.poll();
       if (actionItem != null) {
@@ -185,7 +196,7 @@ final class AsyncServletOutputStreamWriter {
         continue;
       }
 
-      if (writeState.compareAndSet(curState, curState.withReadyAndDrained(true))) {
+      if (writeState.compareAndSet(curState, new WriteState(WriteState.READY_AND_DRAINED))) {
         // state has not changed since.
         log.finest(
             "onWritePossible: EXIT. All data available now is sent out and the servlet output"
@@ -198,15 +209,20 @@ final class AsyncServletOutputStreamWriter {
     log.finest("onWritePossible: EXIT. The servlet output stream becomes not ready");
   }
 
-  private void assureReadyAndDrainedTurnsFalse() {
-    // readyAndDrained should have been set to false already.
-    // Just in case due to a race condition readyAndDrained is still true at this moment and is
-    // being set to false by runOrBuffer() concurrently.
+  private boolean assureWritingStateTurnsStateOtherThanWriting() {
     parkingThread = Thread.currentThread();
-    while (writeState.get().readyAndDrained) {
-      LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1)); // should return immediately
+    try {
+      while (writeState.get().state == WriteState.WRITING) {
+        LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1));
+        if (Thread.interrupted()) {
+          log.fine("Thread interrupted while parked");
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      parkingThread = null;
     }
-    parkingThread = null;
   }
 
   /**
@@ -216,31 +232,76 @@ final class AsyncServletOutputStreamWriter {
    * <p>Called from application thread.
    */
   private void runOrBuffer(ActionItem actionItem) throws IOException {
-    WriteState curState = writeState.get();
-    if (curState.readyAndDrained) { // write to the outputStream directly
-      actionItem.run();
-      if (actionItem == completeAction) {
-        return;
-      }
-      if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("the servlet output stream becomes not ready");
-      }
-    } else { // buffer to the writeChain
-      writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
+    ActionItem itemToWrite = actionItem;
+    while (true) {
+      WriteState curState = writeState.get();
+      if (curState.state == WriteState.READY_AND_DRAINED) { // write to the outputStream directly
+        WriteState writingState = new WriteState(WriteState.WRITING);
+        if (writeState.compareAndSet(curState, writingState)) {
+          boolean successfulExited = false;
+          try {
+            while (true) {
+              if (itemToWrite != null) {
+                itemToWrite.run();
+                if (itemToWrite == completeAction) {
+                  writeState.set(WriteState.DEFAULT);
+                  LockSupport.unpark(parkingThread);
+                  successfulExited = true;
+                  return;
+                }
+              }
+
+              if (isReady.getAsBoolean()) {
+                itemToWrite = writeChain.poll();
+                if (itemToWrite != null) {
+                  continue;
+                }
+                WriteState latestState = writeState.get();
+                if (latestState.state == WriteState.WRITING) {
+                  if (writeState.compareAndSet(latestState, new WriteState(WriteState.READY_AND_DRAINED))) {
+                    LockSupport.unpark(parkingThread);
+                    successfulExited = true;
+                    return;
+                  }
+                  // CAS failed, loop again to poll and write
+                } else {
+                  successfulExited = true;
+                  return;
+                }
+              } else {
+                WriteState latestState = writeState.get();
+                if (latestState.state == WriteState.WRITING) {
+                  if (writeState.compareAndSet(latestState, WriteState.DEFAULT)) {
+                    LockSupport.unpark(parkingThread);
+                    log.finest("the servlet output stream becomes not ready");
+                    successfulExited = true;
+                    return;
+                  }
+                  // CAS failed, loop again with itemToWrite = null
+                  itemToWrite = null;
+                } else {
+                  successfulExited = true;
+                  return;
+                }
+              }
+            }
+          } finally {
+            if (!successfulExited) {
+              writeState.set(WriteState.DEFAULT);
+              LockSupport.unpark(parkingThread);
+            }
+          }
         }
-      } // state has not changed since
+      } else { // NOT_READY_OR_NOT_DRAINED or WRITING
+        writeChain.offer(itemToWrite);
+        if (writeState.compareAndSet(curState, new WriteState(curState.state))) {
+          return;
+        }
+        itemToWrite = writeChain.poll();
+        if (itemToWrite == null) {
+          return;
+        }
+      }
     }
   }
 
@@ -263,34 +324,16 @@ final class AsyncServletOutputStreamWriter {
   }
 
   private static final class WriteState {
+    static final int READY_AND_DRAINED = 0;
+    static final int NOT_READY_OR_NOT_DRAINED = 1;
+    static final int WRITING = 2; // Active direct write in progress
 
-    static final WriteState DEFAULT = new WriteState(false);
+    static final WriteState DEFAULT = new WriteState(NOT_READY_OR_NOT_DRAINED);
 
-    /**
-     * The servlet output stream is ready and the writeChain is empty.
-     *
-     * <p>readyAndDrained turns from false to true when:
-     * {@code onWritePossible()} exits while currently there is no more data to write, but the last
-     * check of {@link javax.servlet.ServletOutputStream#isReady()} is true.
-     *
-     * <p>readyAndDrained turns from true to false when:
-     * {@code runOrBuffer()} exits while either the action item is written directly to the
-     * servlet output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()}
-     * right after that returns false, or the action item is buffered into the writeChain.
-     */
-    final boolean readyAndDrained;
+    final int state;
 
-    WriteState(boolean readyAndDrained) {
-      this.readyAndDrained = readyAndDrained;
-    }
-
-    /**
-     * Only {@code onWritePossible()} can set readyAndDrained to true, and only {@code
-     * runOrBuffer()} can set it to false.
-     */
-    @CheckReturnValue
-    WriteState withReadyAndDrained(boolean readyAndDrained) {
-      return new WriteState(readyAndDrained);
+    WriteState(int state) {
+      this.state = state;
     }
   }
 }
