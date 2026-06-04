@@ -2652,9 +2652,6 @@ public class GrpcXdsClientImplDataTest {
 
   @Test
   public void processCluster_parsesOrcaLrsPropagationMetrics() throws ResourceInvalidException {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
-
     ImmutableList<String> metricSpecs = ImmutableList.of(
         "cpu_utilization",
         "named_metrics.foo",
@@ -2683,8 +2680,6 @@ public class GrpcXdsClientImplDataTest {
     assertThat(propagationConfig.shouldPropagateNamedMetric("bar")).isFalse();
     assertThat(propagationConfig.shouldPropagateNamedMetric("unknown_metric_spec"))
         .isFalse();
-
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   @Test
