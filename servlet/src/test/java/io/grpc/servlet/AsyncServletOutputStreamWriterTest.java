@@ -260,7 +260,7 @@ public class AsyncServletOutputStreamWriterTest {
         try {
           forceReadyAndDrained(writer);
         } catch (ReflectiveOperationException e) {
-          throw new AssertionError(e);
+          throw new LinkageError(e.getMessage(), e);
         }
         return offered;
       }
