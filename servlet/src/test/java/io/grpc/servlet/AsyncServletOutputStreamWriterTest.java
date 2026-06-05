@@ -35,29 +35,31 @@ import org.junit.runners.JUnit4;
 public class AsyncServletOutputStreamWriterTest {
 
   @Test
-  public void writeBytes_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
+  public void writeBytes_notReadyException_buffersUntilOnWritePossible() throws IOException {
     List<String> actions = new ArrayList<>();
+    AtomicBoolean rejectWrites = new AtomicBoolean(true);
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
+          if (rejectWrites.get()) {
+            throw new IllegalStateException("not ready");
+          }
           actions.add("write");
         };
     ActionItem flushAction = () -> { };
     ActionItem completeAction = () -> { };
-    AtomicBoolean isReady = new AtomicBoolean(true);
 
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
-            writeAction, flushAction, completeAction, isReady::get, new Log() {});
+            writeAction, flushAction, completeAction, () -> true, new Log() {});
 
     writer.onWritePossible();
 
-    isReady.set(false);
     writer.writeBytes(new byte[]{1}, 1);
 
     assertEquals("Write should be buffered until onWritePossible", 0, actions.size());
 
-    isReady.set(true);
+    rejectWrites.set(false);
     writer.onWritePossible();
     assertEquals("Buffered write should drain after onWritePossible", 1, actions.size());
   }
@@ -89,6 +91,7 @@ public class AsyncServletOutputStreamWriterTest {
   @Test
   public void flush_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
     List<String> actions = new ArrayList<>();
+    AtomicBoolean isReady = new AtomicBoolean(true);
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
         (bytes, numBytes) -> () -> {
@@ -96,9 +99,9 @@ public class AsyncServletOutputStreamWriterTest {
         };
     ActionItem flushAction = () -> {
       actions.add("flush");
+      isReady.set(false);
     };
     ActionItem completeAction = () -> { };
-    AtomicBoolean isReady = new AtomicBoolean(true);
 
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
@@ -109,7 +112,6 @@ public class AsyncServletOutputStreamWriterTest {
     writer.flush();
     assertEquals("First flush should execute directly", 1, actions.size());
 
-    isReady.set(false);
     writer.flush();
     assertEquals("Second flush should be buffered", 1, actions.size());
 

@@ -218,11 +218,15 @@ final class AsyncServletOutputStreamWriter {
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
     if (curState.readyAndDrained) { // write to the outputStream directly
-      if (!isReady.getAsBoolean()) {
+      try {
+        actionItem.run();
+      } catch (IllegalStateException e) {
+        if (actionItem == flushAction || actionItem == completeAction) {
+          throw e;
+        }
         buffer(actionItem, curState);
         return;
       }
-      actionItem.run();
       if (actionItem == completeAction) {
         return;
       }
