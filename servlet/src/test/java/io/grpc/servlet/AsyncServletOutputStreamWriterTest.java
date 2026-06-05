@@ -17,6 +17,7 @@
 package io.grpc.servlet;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 import io.grpc.servlet.AsyncServletOutputStreamWriter.ActionItem;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,9 +71,7 @@ public class AsyncServletOutputStreamWriterTest {
     List<byte[]> writtenData = new ArrayList<>();
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
-        (bytes, numBytes) -> () -> {
-          writtenData.add(Arrays.copyOf(bytes, numBytes));
-        };
+        (bytes, numBytes) -> () -> writtenData.add(Arrays.copyOf(bytes, numBytes));
     ActionItem flushAction = () -> { };
     ActionItem completeAction = () -> { };
 
@@ -89,14 +89,40 @@ public class AsyncServletOutputStreamWriterTest {
   }
 
   @Test
+  public void writeBytes_isReadyFalseAfterWrite_buffersNextWrite() throws IOException {
+    List<byte[]> writtenData = new ArrayList<>();
+    AtomicBoolean isReady = new AtomicBoolean(true);
+
+    BiFunction<byte[], Integer, ActionItem> writeAction =
+        (bytes, numBytes) -> () -> {
+          writtenData.add(Arrays.copyOf(bytes, numBytes));
+          isReady.set(false);
+        };
+    ActionItem flushAction = () -> { };
+    ActionItem completeAction = () -> { };
+
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            writeAction, flushAction, completeAction, isReady::get, new Log() {});
+
+    writer.onWritePossible();
+
+    writer.writeBytes(new byte[]{1}, 1);
+    writer.writeBytes(new byte[]{2}, 1);
+    assertEquals("Second write should be buffered", 1, writtenData.size());
+
+    isReady.set(true);
+    writer.onWritePossible();
+    assertEquals("Buffered write should drain", 2, writtenData.size());
+  }
+
+  @Test
   public void flush_isReadyFalse_buffersUntilOnWritePossible() throws IOException {
     List<String> actions = new ArrayList<>();
     AtomicBoolean isReady = new AtomicBoolean(true);
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
-        (bytes, numBytes) -> () -> {
-          actions.add("write");
-        };
+        (bytes, numBytes) -> () -> actions.add("write");
     ActionItem flushAction = () -> {
       actions.add("flush");
       isReady.set(false);
@@ -125,12 +151,8 @@ public class AsyncServletOutputStreamWriterTest {
     List<String> actions = new ArrayList<>();
 
     BiFunction<byte[], Integer, ActionItem> writeAction =
-        (bytes, numBytes) -> () -> {
-          actions.add("write");
-        };
-    ActionItem flushAction = () -> {
-      actions.add("flush");
-    };
+        (bytes, numBytes) -> () -> actions.add("write");
+    ActionItem flushAction = () -> actions.add("flush");
     ActionItem completeAction = () -> { };
 
     AsyncServletOutputStreamWriter writer =
@@ -143,5 +165,60 @@ public class AsyncServletOutputStreamWriterTest {
     writer.flush();
 
     assertEquals("Both flushes should execute directly", 2, actions.size());
+  }
+
+  @Test
+  public void complete_readyAndDrained_runsDirectly() throws IOException {
+    AtomicInteger completeCount = new AtomicInteger();
+
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            (bytes, numBytes) -> () -> { },
+            () -> { },
+            completeCount::incrementAndGet,
+            () -> true,
+            new Log() {});
+
+    writer.onWritePossible();
+
+    writer.complete();
+
+    assertEquals(1, completeCount.get());
+  }
+
+  @Test
+  public void complete_notReadyAndDrained_buffersUntilOnWritePossible() throws IOException {
+    AtomicInteger completeCount = new AtomicInteger();
+
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            (bytes, numBytes) -> () -> { },
+            () -> { },
+            completeCount::incrementAndGet,
+            () -> true,
+            new Log() {});
+
+    writer.complete();
+    assertEquals(0, completeCount.get());
+
+    writer.onWritePossible();
+    assertEquals(1, completeCount.get());
+  }
+
+  @Test
+  public void flush_notReadyException_isPropagated() throws IOException {
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            (bytes, numBytes) -> () -> { },
+            () -> {
+              throw new IllegalStateException("not ready");
+            },
+            () -> { },
+            () -> true,
+            new Log() {});
+
+    writer.onWritePossible();
+
+    assertThrows(IllegalStateException.class, writer::flush);
   }
 }
