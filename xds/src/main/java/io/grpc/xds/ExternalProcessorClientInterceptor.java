@@ -453,6 +453,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean passThroughMode = new AtomicBoolean(false);
     final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
+    final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -1035,6 +1036,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
+      if (extProcStreamState.get().isDraining()) {
+        pendingHalfClose.set(true);
+        return;
+      }
+
       if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
         if (requestSideClosed.compareAndSet(false, true)) {
           proceedWithHalfClose();
@@ -1132,6 +1138,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           super.sendMessage(msg);
         }
         passThroughMode.set(true);
+        if (pendingHalfClose.get()) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        }
       }
     }
 
