@@ -1248,7 +1248,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (savedHeaders != null) {
+      if (savedHeaders != null || dataPlaneClientCall.extProcStreamState.get().isDraining()) {
         savedMessages.add(message);
         return;
       }
@@ -1327,9 +1327,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (savedHeaders != null) {
         proceedWithHeaders(savedHeaders);
         savedHeaders = null;
-        InputStream msg;
-        while ((msg = savedMessages.poll()) != null) {
-          onMessage(msg);
+        if (!dataPlaneClientCall.extProcStreamState.get().isDraining()) {
+          InputStream msg;
+          while ((msg = savedMessages.poll()) != null) {
+            onMessage(msg);
+          }
         }
         onReadyNotify();
         if (savedStatus != null) {
@@ -1373,8 +1375,17 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void unblockAfterStreamComplete() {
       proceedWithHeaders();
+      proceedWithSavedMessages();
       dataPlaneClientCall.drainPendingDrainingMessages();
       proceedWithClose();
+    }
+
+    private void proceedWithSavedMessages() {
+      InputStream msg;
+      while ((msg = savedMessages.poll()) != null) {
+        final InputStream finalMsg = msg;
+        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(finalMsg));
+      }
     }
 
     private void triggerCloseHandshake() {

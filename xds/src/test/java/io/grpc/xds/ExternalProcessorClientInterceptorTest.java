@@ -6180,7 +6180,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenDrainingStream_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
+  public void drainingStartsBeforeRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
       throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -6223,29 +6223,6 @@ public class ExternalProcessorClientInterceptorTest {
                 responseObserver.onNext(ProcessingResponse.newBuilder()
                     .setRequestHeaders(HeadersResponse.newBuilder().build())
                     .setRequestDrain(true)
-                    .build());
-                // Send mutated request bodies
-                responseObserver.onNext(ProcessingResponse.newBuilder()
-                    .setRequestBody(BodyResponse.newBuilder()
-                        .setResponse(CommonResponse.newBuilder()
-                            .setBodyMutation(BodyMutation.newBuilder()
-                                .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                    .setBody(ByteString.copyFromUtf8("Mutated Message 1"))
-                                    .build())
-                                .build())
-                            .build())
-                        .build())
-                    .build());
-                responseObserver.onNext(ProcessingResponse.newBuilder()
-                    .setRequestBody(BodyResponse.newBuilder()
-                        .setResponse(CommonResponse.newBuilder()
-                            .setBodyMutation(BodyMutation.newBuilder()
-                                .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                    .setBody(ByteString.copyFromUtf8("Mutated Message 2"))
-                                    .build())
-                                .build())
-                            .build())
-                        .build())
                     .build());
                 try {
                   if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
@@ -6357,7 +6334,7 @@ public class ExternalProcessorClientInterceptorTest {
     
     // Verify the exact messages and their delivery order at data plane server
     assertThat(dataPlaneReceivedMessages).containsExactly(
-        "Mutated Message 1", "Mutated Message 2", "App Message During Drain"
+        "App Message During Drain"
     ).inOrder();
     
     assertThat(appLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -6369,7 +6346,199 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenDrainingStream_whenUpstreamRespondsAndThenCloses_thenBufferedAndDelivered()
+  public void drainingStartsAfterRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server
+    final CountDownLatch sidecarFinishLatch = new CountDownLatch(1);
+    final CountDownLatch drainCompletedLatch = new CountDownLatch(1);
+    final CountDownLatch extProcReceivedBodyLatch = new CountDownLatch(1);
+    final CountDownLatch mutatedBodyDeliveredLatch = new CountDownLatch(1);
+    
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
+    extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(
+          final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+            } else if (request.hasRequestBody()) {
+              extProcReceivedBodyLatch.countDown();
+              new Thread(() -> {
+                responseObserver.onNext(ProcessingResponse.newBuilder()
+                    .setRequestBody(BodyResponse.newBuilder()
+                        .setResponse(CommonResponse.newBuilder()
+                            .setBodyMutation(BodyMutation.newBuilder()
+                                .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                    .setBody(ByteString.copyFromUtf8("Mutated Message 1"))
+                                    .build())
+                                .build())
+                            .build())
+                        .build())
+                    .setRequestDrain(true)
+                    .build());
+                try {
+                  if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                    responseObserver.onCompleted();
+                  }
+                } catch (InterruptedException e) {
+                  Thread.currentThread().interrupt();
+                }
+              }).start();
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {
+          }
+
+          @Override
+          public void onCompleted() {
+            drainCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> dataPlaneReceivedMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
+            new ServerCalls.ClientStreamingMethod<String, String>() {
+              @Override
+              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                return new StreamObserver<String>() {
+                  @Override
+                  public void onNext(String value) {
+                    dataPlaneReceivedMessages.add(value);
+                    if (value.equals("Mutated Message 1")) {
+                      mutatedBodyDeliveredLatch.countDown();
+                    }
+                  }
+
+                  @Override
+                  public void onError(Throwable t) {
+                  }
+
+                  @Override
+                  public void onCompleted() {
+                    responseObserver.onNext("Direct Response");
+                    responseObserver.onCompleted();
+                    dataPlaneLatch.countDown();
+                  }
+                };
+              }
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final AtomicReference<String> appReceivedMessage = new AtomicReference<>();
+    final CountDownLatch appLatch = new CountDownLatch(1);
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        appReceivedMessage.set(message);
+        appLatch.countDown();
+      }
+    };
+    
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_CLIENT_STREAMING, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+    proxyCall.request(1);
+
+    // Send original message 1
+    proxyCall.sendMessage("Original Message 1");
+
+    // Wait until ext-proc receives it and mutated body is delivered downstream
+    assertThat(extProcReceivedBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(mutatedBodyDeliveredLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify proxyCall is in draining (i.e. isReady is false)
+    assertThat(proxyCall.isReady()).isFalse();
+
+    // Send message and half-close concurrently during drain state
+    final CountDownLatch appActionLatch = new CountDownLatch(1);
+    new Thread(() -> {
+      proxyCall.sendMessage("App Message During Drain");
+      proxyCall.halfClose();
+      appActionLatch.countDown();
+    }).start();
+
+    assertThat(appActionLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify the message during drain has NOT been delivered to the data plane server yet
+    assertThat(dataPlaneReceivedMessages).containsExactly("Mutated Message 1");
+
+    // Now let sidecar complete
+    sidecarFinishLatch.countDown();
+
+    // Wait for the control stream drain to be fully completed
+    assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Request response from data plane
+    proxyCall.request(1);
+
+    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    
+    // Verify the exact messages and their delivery order at data plane server
+    assertThat(dataPlaneReceivedMessages).containsExactly(
+        "Mutated Message 1", "App Message During Drain"
+    ).inOrder();
+    
+    assertThat(appLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appReceivedMessage.get()).isEqualTo("Direct Response");
+    
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainingStartsBeforeResponseHeaders_whenUpstreamResponds_thenBufferedAndDelivered()
       throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -6535,6 +6704,257 @@ public class ExternalProcessorClientInterceptorTest {
     // Verify the delivery order: response headers, upstream response, and close status/trailers
     assertThat(appReceivedHeaders.get()).isNotNull();
     assertThat(appReceivedMessages).containsExactly("Response Message During Drain");
+    assertThat(appReceivedStatus.get().isOk()).isTrue();
+    assertThat(appReceivedTrailers.get()).isNotNull();
+    
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void drainingStartsAfterResponseHeaders_whenUpstreamResponds_thenBufferedAndDelivered()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final CountDownLatch reqHeadersLatch = new CountDownLatch(1);
+    final CountDownLatch respHeadersLatch = new CountDownLatch(1);
+    final CountDownLatch m2ReceivedLatch = new CountDownLatch(1);
+    final CountDownLatch respBody1Latch = new CountDownLatch(1);
+    final CountDownLatch respBody2Latch = new CountDownLatch(1);
+    final CountDownLatch m3SentLatch = new CountDownLatch(1);
+    final CountDownLatch sidecarFinishLatch = new CountDownLatch(1);
+    final CountDownLatch drainCompletedLatch = new CountDownLatch(1);
+
+    // External Processor Server
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+      @Override
+      @SuppressWarnings("unchecked")
+      public StreamObserver<ProcessingRequest> process(
+          final StreamObserver<ProcessingResponse> responseObserver) {
+        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+        return new StreamObserver<ProcessingRequest>() {
+          @Override
+          public void onNext(ProcessingRequest request) {
+            if (request.hasRequestHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setRequestHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              reqHeadersLatch.countDown();
+            } else if (request.hasResponseHeaders()) {
+              responseObserver.onNext(ProcessingResponse.newBuilder()
+                  .setResponseHeaders(HeadersResponse.newBuilder().build())
+                  .build());
+              respHeadersLatch.countDown();
+            } else if (request.hasResponseBody()) {
+              String msgStr = request.getResponseBody().getBody().toStringUtf8();
+              if ("Original Message 1".equals(msgStr)) {
+                new Thread(() -> {
+                  try {
+                    // Wait until M2 is received by sidecar so both M1 and M2 are in flight
+                    if (m2ReceivedLatch.await(5, TimeUnit.SECONDS)) {
+                      responseObserver.onNext(ProcessingResponse.newBuilder()
+                          .setResponseBody(BodyResponse.newBuilder()
+                              .setResponse(CommonResponse.newBuilder()
+                                  .setBodyMutation(BodyMutation.newBuilder()
+                                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                          .setBody(ByteString.copyFromUtf8("Mutated Message 1"))
+                                          .build())
+                                      .build())
+                                  .build())
+                              .build())
+                          .setRequestDrain(true)
+                          .build());
+                      respBody1Latch.countDown();
+                    }
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                  }
+                }).start();
+              } else if ("Original Message 2".equals(msgStr)) {
+                m2ReceivedLatch.countDown();
+                new Thread(() -> {
+                  try {
+                    // Wait until M3 is sent by upstream concurrently during drain
+                    if (m3SentLatch.await(5, TimeUnit.SECONDS)) {
+                      responseObserver.onNext(ProcessingResponse.newBuilder()
+                          .setResponseBody(BodyResponse.newBuilder()
+                              .setResponse(CommonResponse.newBuilder()
+                                  .setBodyMutation(BodyMutation.newBuilder()
+                                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                          .setBody(ByteString.copyFromUtf8("Mutated Message 2"))
+                                          .build())
+                                      .build())
+                                  .build())
+                              .build())
+                          .build());
+                      respBody2Latch.countDown();
+                    }
+                    if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                      responseObserver.onCompleted();
+                    }
+                  } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                  }
+                }).start();
+              }
+            }
+          }
+
+          @Override
+          public void onError(Throwable t) {}
+
+          @Override
+          public void onCompleted() {
+            drainCompletedLatch.countDown();
+          }
+        };
+      }
+    };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef = new AtomicReference<>();
+    final CountDownLatch dataPlaneCallStartedLatch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<String, String>() {
+              @Override
+              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                dataPlaneResponseObserverRef.set(responseObserver);
+                dataPlaneCallStartedLatch.countDown();
+                return new StreamObserver<String>() {
+                  @Override
+                  public void onNext(String value) {}
+
+                  @Override
+                  public void onError(Throwable t) {}
+
+                  @Override
+                  public void onCompleted() {}
+                };
+              }
+            }))
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    final List<String> appReceivedMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final AtomicReference<Metadata> appReceivedHeaders = new AtomicReference<>();
+    final AtomicReference<Status> appReceivedStatus = new AtomicReference<>();
+    final AtomicReference<Metadata> appReceivedTrailers = new AtomicReference<>();
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    final CountDownLatch mutatedMsg1ReceivedLatch = new CountDownLatch(1);
+    
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onHeaders(Metadata headers) {
+        appReceivedHeaders.set(headers);
+      }
+
+      @Override
+      public void onMessage(String message) {
+        appReceivedMessages.add(message);
+        if ("Mutated Message 1".equals(message)) {
+          mutatedMsg1ReceivedLatch.countDown();
+        }
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        appReceivedStatus.set(status);
+        appReceivedTrailers.set(trailers);
+        appCloseLatch.countDown();
+      }
+    };
+
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+
+    // Request messages from server
+    proxyCall.request(10);
+
+    // Wait for the data plane call to start
+    assertThat(dataPlaneCallStartedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    StreamObserver<String> dataPlaneResponseObserver = dataPlaneResponseObserverRef.get();
+    assertThat(dataPlaneResponseObserver).isNotNull();
+
+    // 1. Upstream sends M1 (which triggers response headers and M1 body to sidecar)
+    dataPlaneResponseObserver.onNext("Original Message 1");
+
+    // Wait for sidecar to receive and respond to response headers
+    assertThat(respHeadersLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // 2. Upstream sends M2 (which triggers M2 body to sidecar)
+    dataPlaneResponseObserver.onNext("Original Message 2");
+
+    // Wait for app to receive Mutated Message 1 (meaning M1's response with request_drain=true has been processed)
+    assertThat(mutatedMsg1ReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify the stream is currently in DRAINING state and app has only received Mutated Message 1 so far
+    assertThat(appReceivedMessages).containsExactly("Mutated Message 1");
+
+    // 3. Upstream concurrently sends M3 and completes the call during draining
+    dataPlaneResponseObserver.onNext("Original Message 3");
+    dataPlaneResponseObserver.onCompleted();
+
+    // Verify that M3 and close are not delivered to application yet because drain is still active
+    assertThat(appReceivedMessages).containsExactly("Mutated Message 1");
+    assertThat(appReceivedStatus.get()).isNull();
+
+    // 4. Signal sidecar to send Mutated Message 2
+    m3SentLatch.countDown();
+    
+    // Wait for sidecar to finish sending M2
+    assertThat(respBody2Latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify that Mutated Message 2 is delivered immediately to app upon arrival (even before M3 is released)
+    assertThat(appReceivedMessages).containsExactly("Mutated Message 1", "Mutated Message 2");
+
+    // 5. Complete sidecar stream to finish the drain
+    sidecarFinishLatch.countDown();
+
+    // Wait for the call to close on application side
+    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify delivery order: mutated messages first, then bypass messages, and finally status/trailers
+    assertThat(appReceivedHeaders.get()).isNotNull();
+    assertThat(appReceivedMessages).containsExactly(
+        "Mutated Message 1", "Mutated Message 2", "Original Message 3"
+    );
     assertThat(appReceivedStatus.get().isOk()).isTrue();
     assertThat(appReceivedTrailers.get()).isNotNull();
     
