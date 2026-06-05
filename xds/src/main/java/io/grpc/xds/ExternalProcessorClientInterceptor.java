@@ -1372,12 +1372,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
+      boolean sendResponseHeaders =
+          dataPlaneClientCall.currentProcessingMode.getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.SEND
+          || dataPlaneClientCall.currentProcessingMode.getResponseHeaderMode()
+              == ProcessingMode.HeaderSendMode.DEFAULT;
+
       boolean sendResponseTrailers =
           dataPlaneClientCall.currentProcessingMode.getResponseTrailerMode()
               == ProcessingMode.HeaderSendMode.SEND;
 
       if (trailersOnly.get()) {
-        if (sendResponseTrailers) {
+        if (sendResponseHeaders) {
           dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
               .setResponseHeaders(HttpHeaders.newBuilder()
                   .setHeaders(
@@ -1389,12 +1395,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               .build());
         } else {
           proceedWithClose();
-          dataPlaneClientCall.closeExtProcStream();
+          if (!dataPlaneClientCall.config.getObservabilityMode()) {
+            dataPlaneClientCall.closeExtProcStream();
+          }
         }
-        return;
-      }
-
-      if (sendResponseTrailers) {
+      } else if (sendResponseTrailers) {
         dataPlaneClientCall.isProcessingTrailers.set(true);
         dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
             .setResponseTrailers(HttpTrailers.newBuilder()
@@ -1406,7 +1411,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             .build());
       } else {
         proceedWithClose();
-        dataPlaneClientCall.closeExtProcStream();
+        if (!dataPlaneClientCall.config.getObservabilityMode()) {
+          dataPlaneClientCall.closeExtProcStream();
+        }
       }
     }
 
