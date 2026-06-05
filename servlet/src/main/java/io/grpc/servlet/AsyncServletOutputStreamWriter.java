@@ -218,44 +218,40 @@ final class AsyncServletOutputStreamWriter {
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
     if (curState.readyAndDrained) { // write to the outputStream directly
+      if (!isReady.getAsBoolean()) {
+        buffer(actionItem, curState);
+        return;
+      }
       actionItem.run();
       if (actionItem == completeAction) {
         return;
       }
-      if (actionItem == flushAction) {
-        // flush path: only set readyAndDrained=false if isReady() returns false.
-        // If isReady() is still true, keep readyAndDrained=true so consecutive
-        // flushes can continue to go direct, and the next write can also go
-        // direct before the writeBytes path clears readyAndDrained.
-        if (!isReady.getAsBoolean()) {
-          boolean successful =
-              writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-          LockSupport.unpark(parkingThread);
-          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-          log.finest("the servlet output stream becomes not ready");
-        }
-      } else {
-        // writeBytes path: always set readyAndDrained=false even when isReady()
-        // returns true. Tomcat requires onWritePossible() to fire between writes.
+      if (!isReady.getAsBoolean()) {
         boolean successful =
             writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
         LockSupport.unpark(parkingThread);
         checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("writeBytes path: cleared readyAndDrained, next writes buffered");
+        log.finest("the servlet output stream becomes not ready");
       }
     } else { // buffer to the writeChain
-      writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
-        }
-      } // state has not changed since
+      buffer(actionItem, curState);
     }
+  }
+
+  private void buffer(ActionItem actionItem, WriteState curState) throws IOException {
+    writeChain.offer(actionItem);
+    if (writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
+      LockSupport.unpark(parkingThread);
+    } else {
+      checkState(
+          writeState.get().readyAndDrained,
+          "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+      ActionItem lastItem = writeChain.poll();
+      if (lastItem != null) {
+        checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+        runOrBuffer(lastItem);
+      }
+    } // state has not changed since
   }
 
   /** Write actions, e.g. writeBytes, flush, complete. */
@@ -288,10 +284,9 @@ final class AsyncServletOutputStreamWriter {
      * check of {@link javax.servlet.ServletOutputStream#isReady()} is true.
      *
      * <p>readyAndDrained turns from true to false when:
-     * {@code runOrBuffer()} exits after writing directly to the servlet output stream.
-     * For writeBytes actions, it always transitions to false. For flush actions,
-     * it transitions to false only when {@link javax.servlet.ServletOutputStream#isReady()}
-     * returns false, or when the action is buffered into the writeChain.
+     * {@code runOrBuffer()} exits while either the action item is written directly to the
+     * servlet output stream and the check of {@link javax.servlet.ServletOutputStream#isReady()}
+     * right after that returns false, or the action item is buffered into the writeChain.
      */
     final boolean readyAndDrained;
 
