@@ -22,9 +22,13 @@ import static org.junit.Assert.assertThrows;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.ActionItem;
 import io.grpc.servlet.AsyncServletOutputStreamWriter.Log;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiFunction;
@@ -203,6 +207,90 @@ public class AsyncServletOutputStreamWriterTest {
 
     writer.onWritePossible();
     assertEquals(1, completeCount.get());
+  }
+
+  @Test
+  public void writeBytes_onWritePossibleWinsRace_drainsBufferedWrite() throws Exception {
+    List<String> actions = new ArrayList<>();
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            (bytes, numBytes) -> () -> actions.add("write"),
+            () -> {
+            },
+            () -> {
+            },
+            () -> true,
+            new Log() {
+            });
+    replaceWriteChain(writer, new ConcurrentLinkedQueue<ActionItem>() {
+      @Override
+      public boolean offer(ActionItem actionItem) {
+        boolean offered = super.offer(actionItem);
+        try {
+          writer.onWritePossible();
+        } catch (IOException e) {
+          throw new AssertionError(e);
+        }
+        return offered;
+      }
+    });
+
+    writer.writeBytes(new byte[]{1}, 1);
+
+    assertEquals(1, actions.size());
+  }
+
+  @Test
+  public void writeBytes_readyStateWinsRace_retriesWrite() throws Exception {
+    List<String> actions = new ArrayList<>();
+    AsyncServletOutputStreamWriter writer =
+        new AsyncServletOutputStreamWriter(
+            (bytes, numBytes) -> () -> actions.add("write"),
+            () -> {
+            },
+            () -> {
+            },
+            () -> true,
+            new Log() {
+            });
+    replaceWriteChain(writer, new ConcurrentLinkedQueue<ActionItem>() {
+      @Override
+      public boolean offer(ActionItem actionItem) {
+        boolean offered = super.offer(actionItem);
+        try {
+          forceReadyAndDrained(writer);
+        } catch (ReflectiveOperationException e) {
+          throw new AssertionError(e);
+        }
+        return offered;
+      }
+    });
+
+    writer.writeBytes(new byte[]{1}, 1);
+
+    assertEquals(1, actions.size());
+  }
+
+  private static void replaceWriteChain(
+      AsyncServletOutputStreamWriter writer, ConcurrentLinkedQueue<ActionItem> writeChain)
+      throws ReflectiveOperationException {
+    Field writeChainField = AsyncServletOutputStreamWriter.class.getDeclaredField("writeChain");
+    writeChainField.setAccessible(true);
+    writeChainField.set(writer, writeChain);
+  }
+
+  private static void forceReadyAndDrained(AsyncServletOutputStreamWriter writer)
+      throws ReflectiveOperationException {
+    Field writeStateField = AsyncServletOutputStreamWriter.class.getDeclaredField("writeState");
+    writeStateField.setAccessible(true);
+    @SuppressWarnings("unchecked")
+    AtomicReference<Object> writeState =
+        (AtomicReference<Object>) writeStateField.get(writer);
+    Object curState = writeState.get();
+    Method withReadyAndDrained = curState.getClass().getDeclaredMethod(
+        "withReadyAndDrained", boolean.class);
+    withReadyAndDrained.setAccessible(true);
+    writeState.set(withReadyAndDrained.invoke(curState, true));
   }
 
   @Test
