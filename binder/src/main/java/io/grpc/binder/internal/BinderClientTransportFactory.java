@@ -51,6 +51,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
   final BindServiceFlags bindServiceFlags;
   final InboundParcelablePolicy inboundParcelablePolicy;
   final OneWayBinderProxy.Decorator binderDecorator;
+  final LeakSafeOneWayBinder.Decorator inboundBinderDecorator;
   final long readyTimeoutMillis;
   final boolean preAuthorizeServers; // TODO(jdcormie): Default to true.
   final boolean useLegacyAuthStrategy;
@@ -72,6 +73,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     bindServiceFlags = checkNotNull(builder.bindServiceFlags);
     inboundParcelablePolicy = checkNotNull(builder.inboundParcelablePolicy);
     binderDecorator = checkNotNull(builder.binderDecorator);
+    inboundBinderDecorator = checkNotNull(builder.inboundBinderDecorator);
     readyTimeoutMillis = builder.readyTimeoutMillis;
     preAuthorizeServers = builder.preAuthorizeServers;
     useLegacyAuthStrategy = builder.useLegacyAuthStrategy;
@@ -126,6 +128,7 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
     BindServiceFlags bindServiceFlags = BindServiceFlags.DEFAULTS;
     InboundParcelablePolicy inboundParcelablePolicy = InboundParcelablePolicy.DEFAULT;
     OneWayBinderProxy.Decorator binderDecorator = OneWayBinderProxy.IDENTITY_DECORATOR;
+    LeakSafeOneWayBinder.Decorator inboundBinderDecorator = LeakSafeOneWayBinder.IDENTITY_DECORATOR;
     long readyTimeoutMillis = 60_000;
     boolean preAuthorizeServers;
     boolean useLegacyAuthStrategy = true; // TODO(jdcormie): Default to false.
@@ -188,6 +191,14 @@ public final class BinderClientTransportFactory implements ClientTransportFactor
      */
     public Builder setBinderDecorator(OneWayBinderProxy.Decorator binderDecorator) {
       this.binderDecorator = checkNotNull(binderDecorator, "binderDecorator");
+      return this;
+    }
+
+    /**
+     * Decorates the incoming binder, for fault injection.
+     */
+    public Builder setInboundBinderDecorator(LeakSafeOneWayBinder.Decorator inboundBinderDecorator) {
+      this.inboundBinderDecorator = checkNotNull(inboundBinderDecorator, "inboundBinderDecorator");
       return this;
     }
 
