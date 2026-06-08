@@ -12,7 +12,7 @@ DOWNLOAD_DIR=/tmp/source
 mkdir -p ${DOWNLOAD_DIR}
 curl -Ls https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz | tar xz -C ${DOWNLOAD_DIR}
 
-curl -Ls https://archive.apache.org/dist/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz | \
+curl -Ls https://archive.apache.org/dist/maven/maven-3/3.8.8/binaries/apache-maven-3.8.8-bin.tar.gz |
     tar xz -C "${DOWNLOAD_DIR}"
 
 # We had problems with random tests timing out because it took seconds to do
