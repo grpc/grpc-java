@@ -258,7 +258,7 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  public T addMetricSink(MetricSink metricSink) {
+  protected T addMetricSink(MetricSink metricSink) {
     delegate().addMetricSink(metricSink);
     return thisT();
   }

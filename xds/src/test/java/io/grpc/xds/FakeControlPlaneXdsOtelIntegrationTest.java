@@ -44,8 +44,6 @@ import org.junit.runners.Parameterized.Parameters;
 
 /**
  * xDS + OpenTelemetry E2E integration test using a fake control plane.
- * This class is skipped from Bazel builds because Bazel doesn't compile the
- * grpc-opentelemetry module.
  */
 @RunWith(Parameterized.class)
 public class FakeControlPlaneXdsOtelIntegrationTest {

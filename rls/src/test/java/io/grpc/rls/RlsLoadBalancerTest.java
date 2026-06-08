@@ -18,6 +18,7 @@ package io.grpc.rls;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -52,7 +53,6 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
-import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -61,6 +61,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.MetricInstrument;
 import io.grpc.MetricRecorder;
 import io.grpc.MetricRecorder.Registration;
+import io.grpc.MetricSink;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NoopMetricSink;
 import io.grpc.ServerCall;
@@ -94,7 +95,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nonnull;
 import org.junit.After;
 import org.junit.Before;
@@ -361,7 +361,7 @@ public class RlsLoadBalancerTest {
         .directExecutor()
         .build()
         .start());
-    VerificationMetricSink metrics = new VerificationMetricSink();
+    MetricSink metrics = mock(MetricSink.class, delegatesTo(new NoopMetricSink()));
     ManagedChannel channel = grpcCleanupRule.register(
         InternalManagedChannelBuilder.addMetricSink(
             InProcessChannelBuilder.forName("fake-bigtable.googleapis.com")
@@ -379,7 +379,12 @@ public class RlsLoadBalancerTest {
     assertThat(recorder.awaitCompletion(10, TimeUnit.SECONDS)).isTrue();
     assertThat(recorder.getError()).isNull();
 
-    metrics.awaitCall();
+    verify(metrics).addLongCounter(
+        eqMetricInstrumentName("grpc.lb.rls.default_target_picks"),
+        eq(1L),
+        eq(Arrays.asList("directaddress:///fake-bigtable.googleapis.com", "localhost:8972",
+            "defaultTarget", "complete")),
+        eq(Arrays.asList("customvalue")));
   }
 
   @Test
@@ -926,34 +931,4 @@ public class RlsLoadBalancerTest {
     }
   }
 
-  private static final class VerificationMetricSink extends NoopMetricSink {
-    private final AtomicBoolean called =
-        new AtomicBoolean();
-
-    @Override
-    public void addLongCounter(
-        LongCounterMetricInstrument metricInstrument,
-        long value,
-        List<String> requiredLabelValues,
-        List<String> optionalLabelValues) {
-      if (metricInstrument.getName().equals("grpc.lb.rls.default_target_picks")
-          && value == 1L
-          && requiredLabelValues.equals(Arrays.asList(
-              "directaddress:///fake-bigtable.googleapis.com", "localhost:8972",
-              "defaultTarget", "complete"))
-          && optionalLabelValues.equals(Arrays.asList("customvalue"))) {
-        called.set(true);
-      }
-    }
-
-    public void awaitCall() throws InterruptedException {
-      long start = System.currentTimeMillis();
-      while (!called.get()) {
-        if (System.currentTimeMillis() - start > 5000) {
-          throw new AssertionError("Timed out waiting for metric sink call");
-        }
-        Thread.sleep(50);
-      }
-    }
-  }
 }

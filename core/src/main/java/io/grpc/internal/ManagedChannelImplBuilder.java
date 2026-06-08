@@ -128,8 +128,6 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-
-
   static {
     Method getClientInterceptorMethod = null;
     try {
@@ -717,7 +715,7 @@ public final class ManagedChannelImplBuilder
   }
 
   @Override
-  public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
+  protected ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
     return this;
   }
