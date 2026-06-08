@@ -487,6 +487,17 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     return this;
   }
 
+  @Override
+  public OkHttpChannelBuilder preferJdkSslProvider(javax.net.ssl.SSLContext sslContext) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
+    if (sslContext != null) {
+      sslSocketFactory(sslContext.getSocketFactory());
+    }
+    return this;
+  }
+
+
   /**
    * Provides a custom scheduled executor service.
    *
