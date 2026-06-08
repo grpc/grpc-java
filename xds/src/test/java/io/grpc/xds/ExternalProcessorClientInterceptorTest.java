@@ -3517,6 +3517,15 @@ public class ExternalProcessorClientInterceptorTest {
               final StreamObserver<ProcessingResponse> responseObserver) {
             ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
             return new StreamObserver<ProcessingRequest>() {
+              private boolean responseCompleted;
+
+              private void completeResponse() {
+                if (!responseCompleted) {
+                  responseCompleted = true;
+                  responseObserver.onCompleted();
+                }
+              }
+
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasResponseTrailers()) {
@@ -3534,7 +3543,7 @@ public class ExternalProcessorClientInterceptorTest {
                           .build())
                       .build());
                   sidecarLatch.countDown();
-                  responseObserver.onCompleted();
+                  completeResponse();
                 } else if (request.hasRequestHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setRequestHeaders(HeadersResponse.newBuilder().build())
@@ -3551,7 +3560,7 @@ public class ExternalProcessorClientInterceptorTest {
 
               @Override
               public void onCompleted() {
-                responseObserver.onCompleted();
+                completeResponse();
               }
             };
           }
@@ -3669,6 +3678,15 @@ public class ExternalProcessorClientInterceptorTest {
           final StreamObserver<ProcessingResponse> responseObserver) {
         ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
         return new StreamObserver<ProcessingRequest>() {
+          private boolean responseCompleted;
+
+          private void completeResponse() {
+            if (!responseCompleted) {
+              responseCompleted = true;
+              responseObserver.onCompleted();
+            }
+          }
+
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
@@ -3677,7 +3695,7 @@ public class ExternalProcessorClientInterceptorTest {
                   .setResponseTrailers(TrailersResponse.newBuilder().build())
                   .build());
               sidecarLatch.countDown();
-              responseObserver.onCompleted();
+              completeResponse();
             } else if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
@@ -3695,7 +3713,7 @@ public class ExternalProcessorClientInterceptorTest {
 
           @Override
           public void onCompleted() {
-            responseObserver.onCompleted();
+            completeResponse();
           }
         };
       }
@@ -3800,6 +3818,15 @@ public class ExternalProcessorClientInterceptorTest {
           final StreamObserver<ProcessingResponse> responseObserver) {
         ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
         return new StreamObserver<ProcessingRequest>() {
+          private boolean responseCompleted;
+
+          private void completeResponse() {
+            if (!responseCompleted) {
+              responseCompleted = true;
+              responseObserver.onCompleted();
+            }
+          }
+
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
@@ -3814,7 +3841,7 @@ public class ExternalProcessorClientInterceptorTest {
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
                   .build());
               sidecarHeadersLatch.countDown();
-              responseObserver.onCompleted();
+              completeResponse();
             }
           }
 
@@ -3824,7 +3851,7 @@ public class ExternalProcessorClientInterceptorTest {
 
           @Override
           public void onCompleted() {
-            responseObserver.onCompleted();
+            completeResponse();
           }
         };
       }
@@ -3945,6 +3972,15 @@ public class ExternalProcessorClientInterceptorTest {
           final StreamObserver<ProcessingResponse> responseObserver) {
         ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
         return new StreamObserver<ProcessingRequest>() {
+          private boolean responseCompleted;
+
+          private void completeResponse() {
+            if (!responseCompleted) {
+              responseCompleted = true;
+              responseObserver.onCompleted();
+            }
+          }
+
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
@@ -3959,7 +3995,7 @@ public class ExternalProcessorClientInterceptorTest {
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
                   .build());
               sidecarHeadersLatch.countDown();
-              responseObserver.onCompleted();
+              completeResponse();
             }
           }
 
@@ -3969,7 +4005,7 @@ public class ExternalProcessorClientInterceptorTest {
 
           @Override
           public void onCompleted() {
-            responseObserver.onCompleted();
+            completeResponse();
           }
         };
       }
@@ -10625,7 +10661,6 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    ExecutorService bidiTestExecutor = Executors.newCachedThreadPool();
 
     final CountDownLatch sidecarRequestBodyLatch = new CountDownLatch(1);
     final CountDownLatch sidecarResponseHeadersLatch = new CountDownLatch(1);
@@ -10701,7 +10736,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
         .addService(extProcImpl)
-        .executor(bidiTestExecutor)
+        .executor(scheduler)
         .build().start());
 
     MutableHandlerRegistry uniqueBidiRegistry = new MutableHandlerRegistry();
@@ -10730,7 +10765,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
         .fallbackHandlerRegistry(uniqueBidiRegistry)
-        .executor(bidiTestExecutor)
+        .executor(scheduler)
         .build().start());
 
     ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
@@ -10748,7 +10783,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(InProcessChannelBuilder.forName(uniqueExtProcServerName)
-          .executor(bidiTestExecutor)
+          .executor(scheduler)
           .build());
     });
 
@@ -10757,12 +10792,12 @@ public class ExternalProcessorClientInterceptorTest {
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
-            .executor(bidiTestExecutor)
+            .executor(scheduler)
             .build());
 
     ClientCall<String, String> clientCall = interceptCall(interceptor,
         METHOD_BIDI_STREAMING,
-        DEFAULT_CALL_OPTIONS.withExecutor(bidiTestExecutor),
+        DEFAULT_CALL_OPTIONS.withExecutor(scheduler),
         dataPlaneChannel);
 
     StreamObserver<String> bidiRequestObserver = ClientCalls.asyncBidiStreamingCall(
@@ -10784,18 +10819,29 @@ public class ExternalProcessorClientInterceptorTest {
     bidiRequestObserver.onNext("ClientMsg");
 
     // Wait for ext_proc to process out-of-lockstep events
-    assertThat(sidecarRequestBodyLatch.await(10, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarResponseHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    while (sidecarRequestBodyLatch.getCount() > 0 || sidecarResponseHeadersLatch.getCount() > 0) {
+      if (fakeClock.numPendingTasks() == 0) {
+        break;
+      }
+      fakeClock.runDueTasks();
+    }
+    assertThat(sidecarRequestBodyLatch.getCount()).isEqualTo(0);
+    assertThat(sidecarResponseHeadersLatch.getCount()).isEqualTo(0);
 
     // Complete the bidi stream
     bidiRequestObserver.onCompleted();
-    assertThat(allDoneLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    while (allDoneLatch.getCount() > 0) {
+      if (fakeClock.numPendingTasks() == 0) {
+        break;
+      }
+      fakeClock.runDueTasks();
+    }
+    assertThat(allDoneLatch.getCount()).isEqualTo(0);
 
     // Clean up by cancelling the call explicitly
     clientCall.cancel("Test finished", null);
 
     channelManager.close();
-    bidiTestExecutor.shutdown();
   }
 
   // --- Category 24: Header Response Status Checks ---
@@ -11178,7 +11224,7 @@ public class ExternalProcessorClientInterceptorTest {
     realScheduler.shutdown();
   }
 
-  // --- Category 25: Delayed client call proceeds after fail-open ---
+  // --- Category 25: Client call proceeds after fail-open ---
   @Test
   public void givenRequestHeaderModeSend_whenExtProcTerminates_thenCallIsActivated() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
@@ -11272,6 +11318,115 @@ public class ExternalProcessorClientInterceptorTest {
 
     responseObserverRef.get().onError(new RuntimeException("Stream failure during start"));
 
+    boolean completed = callCompletedLatch.await(5, TimeUnit.SECONDS);
+    assertThat(completed).isTrue();
+
+    channelManager.close();
+  }
+
+  @Test
+  public void givenFailureModeAllowTrue_whenExtProcStreamFailsDuringBodyOrEos_thenCallUnblocked()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch streamActiveLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            streamActiveLatch.countDown();
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName)
+              .directExecutor()
+              .build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("response");
+          responseObserver.onCompleted();
+        })).build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> clientCall = interceptCall(
+        interceptor, METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final CountDownLatch callCompletedLatch = new CountDownLatch(1);
+    clientCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        callCompletedLatch.countDown();
+      }
+    }, new Metadata());
+    clientCall.request(1);
+
+    boolean active = streamActiveLatch.await(5, TimeUnit.SECONDS);
+    assertThat(active).isTrue();
+
+    clientCall.sendMessage("app-msg");
+    clientCall.halfClose();
+
+    // Now abruptly fail the stream
+    responseObserverRef.get().onError(new RuntimeException("Stream failure after sending body/EOS"));
+
+    // Verify that the call is unblocked (onClose is called) instead of hanging.
     boolean completed = callCompletedLatch.await(5, TimeUnit.SECONDS);
     assertThat(completed).isTrue();
 

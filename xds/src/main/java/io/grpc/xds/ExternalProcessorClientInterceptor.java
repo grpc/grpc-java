@@ -1036,8 +1036,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
+      pendingHalfClose.set(true);
+
       if (extProcStreamState.get().isDraining()) {
-        pendingHalfClose.set(true);
         return;
       }
 
