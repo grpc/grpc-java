@@ -1115,10 +1115,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         applyHeaderMutations(trailers, immediate.getHeaders());
       }
 
-      // ImmediateResponse should take precedence over any other closure
-      // if it arrives before the app is notified.
-      listener.savedStatus = status;
-      listener.savedTrailers = trailers;
+      listener.setImmediateResponse(status, trailers);
 
       if (isProcessingTrailers.get()) {
         // If sent in response to a server trailers event, sets the status and optionally
@@ -1175,6 +1172,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final ClientCall<?, ?> rawCall;
     private final DataPlaneClientCall dataPlaneClientCall;
     private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
+    private boolean inboundPassThrough = false;
     @Nullable private volatile Metadata savedHeaders;
     @Nullable private volatile Metadata savedTrailers;
     @Nullable private volatile Status savedStatus;
@@ -1203,6 +1201,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       return savedTrailers;
     }
 
+    void setImmediateResponse(Status status, Metadata trailers) {
+      this.savedStatus = status;
+      this.savedTrailers = trailers;
+    }
+
     @Override
     public void onReady() {
       dataPlaneClientCall.drainPendingRequests();
@@ -1211,7 +1214,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onHeaders(Metadata headers) {
-      System.out.println("=== CLIENT RECEIVED RESPONSE HEADERS: " + headers + " ===");
       dataPlaneClientCall.serverHeadersStartNanos = System.nanoTime();
       responseHeadersSent.set(true);
       if (dataPlaneClientCall.extProcStreamState.get().isDraining()) {
@@ -1246,13 +1248,20 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onMessage(InputStream message) {
-      if (dataPlaneClientCall.passThroughMode.get()) {
-        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(message));
-        return;
+      synchronized (savedMessages) {
+        if (inboundPassThrough) {
+          dataPlaneClientCall.callContext.run(() -> delegate().onMessage(message));
+          return;
+        }
+
+        if (savedHeaders != null || dataPlaneClientCall.extProcStreamState.get().isDraining()) {
+          savedMessages.add(message);
+          return;
+        }
       }
 
-      if (savedHeaders != null || dataPlaneClientCall.extProcStreamState.get().isDraining()) {
-        savedMessages.add(message);
+      if (dataPlaneClientCall.passThroughMode.get()) {
+        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(message));
         return;
       }
 
@@ -1331,11 +1340,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     void proceedWithHeaders() {
       if (savedHeaders != null) {
         proceedWithHeaders(savedHeaders);
-        savedHeaders = null;
-        if (!dataPlaneClientCall.extProcStreamState.get().isDraining()) {
-          InputStream msg;
-          while ((msg = savedMessages.poll()) != null) {
-            onMessage(msg);
+        synchronized (savedMessages) {
+          savedHeaders = null;
+          if (!dataPlaneClientCall.extProcStreamState.get().isDraining()) {
+            InputStream msg;
+            while ((msg = savedMessages.poll()) != null) {
+              onMessage(msg);
+            }
           }
         }
         onReadyNotify();
@@ -1386,10 +1397,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void proceedWithSavedMessages() {
-      InputStream msg;
-      while ((msg = savedMessages.poll()) != null) {
-        final InputStream finalMsg = msg;
-        dataPlaneClientCall.callContext.run(() -> delegate().onMessage(finalMsg));
+      synchronized (savedMessages) {
+        InputStream msg;
+        while ((msg = savedMessages.poll()) != null) {
+          final InputStream finalMsg = msg;
+          dataPlaneClientCall.callContext.run(() -> delegate().onMessage(finalMsg));
+        }
+        inboundPassThrough = true;
       }
     }
 
