@@ -54,6 +54,12 @@ public final class CelMatcherTestHelper {
     return COMPILER.compile(expression).getAst();
   }
 
+  public static CelMatcher compile(String expression)
+      throws dev.cel.common.CelException {
+    CelAbstractSyntaxTree ast = COMPILER.compile(expression).getAst();
+    return CelMatcher.compile(ast);
+  }
+
   public static CelStringExtractor compileStringExtractor(String expression)
       throws dev.cel.common.CelException {
     CelAbstractSyntaxTree ast = COMPILER.compile(expression).getAst();
