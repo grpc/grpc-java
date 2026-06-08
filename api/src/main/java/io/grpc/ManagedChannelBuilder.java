@@ -247,6 +247,20 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Sets a custom JDK {@link javax.net.ssl.SSLContext} to use for secure connections,
+   * preferring the JDK's built-in SSL/TLS implementation (JSSE).
+   *
+   * @param sslContext the custom SSLContext to use, or {@code null} to use defaults.
+   * @throws UnsupportedOperationException if the transport implementation does not support
+   *         configuring SSL provider preferences or custom JDK {@code SSLContext}.
+   * @since 1.69.0
+   */
+  public T preferJdkSslProvider(javax.net.ssl.SSLContext sslContext) {
+    throw new UnsupportedOperationException();
+  }
+
+
+  /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
    * the builder will try the providers registered in the default {@link NameResolverRegistry} for
    * the given target.

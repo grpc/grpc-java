@@ -58,6 +58,7 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collection;
@@ -393,6 +394,18 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     ((DefaultProtocolNegotiator) protocolNegotiatorFactory).sslContext = sslContext;
     return this;
   }
+
+  @CanIgnoreReturnValue
+  @Override
+  public NettyChannelBuilder preferJdkSslProvider(javax.net.ssl.SSLContext sslContext) {
+    checkState(!freezeProtocolNegotiatorFactory,
+               "Cannot change security when using ChannelCredentials");
+    if (sslContext == null) {
+      return this;
+    }
+    return sslContext(GrpcSslContexts.configure(sslContext));
+  }
+
 
   /**
    * Sets the initial flow control window in bytes. Setting initial flow control window enables auto

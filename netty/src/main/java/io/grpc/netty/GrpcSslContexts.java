@@ -27,6 +27,7 @@ import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectedListenerFailureBehavior;
 import io.netty.handler.ssl.ApplicationProtocolConfig.SelectorFailureBehavior;
 import io.netty.handler.ssl.OpenSsl;
+import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
@@ -221,6 +222,23 @@ public class GrpcSslContexts {
         .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apc)
         .sslContextProvider(jdkProvider);
+  }
+
+  /**
+   * Returns a Netty {@link SslContext} that wraps the given JDK {@link javax.net.ssl.SSLContext} and is
+   * configured with ciphers and ALPN appropriate for gRPC.
+   */
+  static SslContext configure(javax.net.ssl.SSLContext sslContext) {
+    return new io.netty.handler.ssl.JdkSslContext(
+        sslContext,
+        true, /* isClient */
+        Http2SecurityUtil.CIPHERS,
+        SupportedCipherSuiteFilter.INSTANCE,
+        ALPN,
+        io.netty.handler.ssl.ClientAuth.NONE,
+        null, /* protocols */
+        false /* startTls */
+    );
   }
 
   /**
