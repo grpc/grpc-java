@@ -131,10 +131,11 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
   }
 
   @Override
-  public T preferJdkSslProvider(javax.net.ssl.SSLContext sslContext) {
-    delegate().preferJdkSslProvider(sslContext);
+  public T preferJdkSslWithSecurityProvider(java.security.Provider provider) {
+    delegate().preferJdkSslWithSecurityProvider(provider);
     return thisT();
   }
+
 
 
   @Deprecated

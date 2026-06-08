@@ -329,10 +329,10 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void preferJdkSslProviderJavax_configuresJdkSslContext() throws Exception {
+  public void preferJdkSslWithSecurityProvider_configuresJdkSslContext() throws Exception {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-    javax.net.ssl.SSLContext javaxContext = javax.net.ssl.SSLContext.getDefault();
-    builder.preferJdkSslProvider(javaxContext);
+    java.security.Provider provider = javax.net.ssl.SSLContext.getDefault().getProvider();
+    builder.preferJdkSslWithSecurityProvider(provider);
 
     java.lang.reflect.Field factoryField = NettyChannelBuilder.class.getDeclaredField("protocolNegotiatorFactory");
     factoryField.setAccessible(true);
@@ -346,7 +346,7 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void preferJdkSslProviderJavax_null_isNoop() throws Exception {
+  public void preferJdkSslWithSecurityProvider_null_isNoop() throws Exception {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
     SslContext customContext = mock(SslContext.class);
     org.mockito.Mockito.when(customContext.isClient()).thenReturn(true);
@@ -355,7 +355,7 @@ public class NettyChannelBuilderTest {
     org.mockito.Mockito.when(customContext.applicationProtocolNegotiator()).thenReturn(apn);
     builder.sslContext(customContext);
 
-    builder.preferJdkSslProvider(null);
+    builder.preferJdkSslWithSecurityProvider(null);
 
     java.lang.reflect.Field factoryField = NettyChannelBuilder.class.getDeclaredField("protocolNegotiatorFactory");
     factoryField.setAccessible(true);

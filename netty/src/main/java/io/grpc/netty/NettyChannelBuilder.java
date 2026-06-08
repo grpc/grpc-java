@@ -397,14 +397,20 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
 
   @CanIgnoreReturnValue
   @Override
-  public NettyChannelBuilder preferJdkSslProvider(javax.net.ssl.SSLContext sslContext) {
+  public NettyChannelBuilder preferJdkSslWithSecurityProvider(java.security.Provider provider) {
     checkState(!freezeProtocolNegotiatorFactory,
                "Cannot change security when using ChannelCredentials");
-    if (sslContext == null) {
+    if (provider == null) {
       return this;
     }
-    return sslContext(GrpcSslContexts.configure(sslContext));
+    try {
+      SslContext nettySslContext = GrpcSslContexts.configure(SslContextBuilder.forClient(), provider).build();
+      return sslContext(nettySslContext);
+    } catch (SSLException e) {
+      throw new RuntimeException("Failed to configure Netty SslContext with provider", e);
+    }
   }
+
 
 
   /**
