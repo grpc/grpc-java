@@ -1461,19 +1461,40 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
   }
 
-  private static ByteString inboundStreamToByteString(InputStream message) throws IOException {
+  @com.google.common.annotations.VisibleForTesting
+  static ByteString inboundStreamToByteString(InputStream message) throws IOException {
     if (message == null) {
       return ByteString.EMPTY;
     }
     if (message instanceof HasByteBuffer && ((HasByteBuffer) message).byteBufferSupported()) {
-      ByteBuffer byteBuffer = ((HasByteBuffer) message).getByteBuffer();
-      if (byteBuffer != null) {
-        return UnsafeByteOperations.unsafeWrap(byteBuffer);
+      HasByteBuffer hasByteBuffer = (HasByteBuffer) message;
+      List<ByteString> chunks = new ArrayList<>();
+      while (message.available() > 0) {
+        ByteBuffer byteBuffer = hasByteBuffer.getByteBuffer();
+        if (byteBuffer != null && byteBuffer.hasRemaining()) {
+          int remaining = byteBuffer.remaining();
+          chunks.add(UnsafeByteOperations.unsafeWrap(byteBuffer));
+          long skipped = message.skip(remaining);
+          if (skipped < remaining) {
+            throw new IOException("Failed to skip all bytes in HasByteBuffer stream");
+          }
+        } else {
+          // Force advance past any exhausted component buffers at the head of the composite queue.
+          message.skip(0);
+          ByteBuffer nextBuffer = hasByteBuffer.getByteBuffer();
+          if (nextBuffer == null || !nextBuffer.hasRemaining()) {
+            break;
+          }
+        }
+      }
+      if (!chunks.isEmpty() && message.available() == 0) {
+        return ByteString.copyFrom(chunks);
       }
     }
     byte[] bodyBytes = ByteStreams.toByteArray(message);
     return ByteString.copyFrom(bodyBytes);
   }
+
 
   private static ByteString outboundStreamToByteString(InputStream message) throws IOException {
     if (message == null) {

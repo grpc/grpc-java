@@ -273,6 +273,18 @@ public class ExternalProcessorClientInterceptorTest {
   // --- Category 1: Configuration Override ---
 
   @Test
+  public void inboundStreamToByteString_handlesCompositeBuffers() throws Exception {
+    io.grpc.internal.CompositeReadableBuffer composite = new io.grpc.internal.CompositeReadableBuffer();
+    composite.addBuffer(io.grpc.internal.ReadableBuffers.wrap("hello ".getBytes(StandardCharsets.UTF_8)));
+    composite.addBuffer(io.grpc.internal.ReadableBuffers.wrap("world".getBytes(StandardCharsets.UTF_8)));
+
+    InputStream stream = io.grpc.internal.ReadableBuffers.openStream(composite, true);
+    ByteString result = ExternalProcessorClientInterceptor.inboundStreamToByteString(stream);
+
+    assertThat(result.toStringUtf8()).isEqualTo("hello world");
+  }
+
+  @Test
   public void givenOverrideConfig_whenGrpcServiceOverridden_thenUsesNewService() throws Exception {
     ExternalProcessor parentProto = createBaseProto(extProcServerName)
         .setGrpcService(GrpcService.newBuilder()
