@@ -102,30 +102,7 @@ import javax.annotation.Nullable;
  */
 final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
-  enum ExtProcStreamState {
-    ACTIVE,
-    DRAINING,
-    COMPLETED,
-    FAILED;
 
-    boolean isCompleted() {
-      return this == COMPLETED || this == FAILED;
-    }
-
-    boolean isFailed() {
-      return this == FAILED;
-    }
-
-    boolean isDraining() {
-      return this == DRAINING;
-    }
-  }
-
-  enum DataPlaneCallState {
-    IDLE,
-    ACTIVE,
-    CLOSED
-  }
 
   @VisibleForTesting
   static final DoubleHistogramMetricInstrument clientHeadersDuration;
@@ -406,6 +383,31 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
    */
   private static class DataPlaneClientCall 
       extends SimpleForwardingClientCall<InputStream, InputStream> {
+    enum ExtProcStreamState {
+      ACTIVE,
+      DRAINING,
+      COMPLETED,
+      FAILED;
+
+      boolean isCompleted() {
+        return this == COMPLETED || this == FAILED;
+      }
+
+      boolean isFailed() {
+        return this == FAILED;
+      }
+
+      boolean isDraining() {
+        return this == DRAINING;
+      }
+    }
+
+    enum DataPlaneCallState {
+      IDLE,
+      ACTIVE,
+      CLOSED
+    }
+
     private enum EventType {
       REQUEST_HEADERS,
       REQUEST_BODY,
@@ -420,12 +422,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final DataPlaneDelayedCall<InputStream, InputStream> delayedCall;
     private final ScheduledExecutorService scheduler;
     private final Object streamLock = new Object();
-    private final Queue<EventType> expectedRequestResponses = new ConcurrentLinkedQueue<>();
-    private final Queue<EventType> expectedResponseResponses = new ConcurrentLinkedQueue<>();
-    private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
+    @Nullable private volatile EventType expectedRequestResponse;
+    @Nullable private volatile EventType expectedResponseResponse;
+    @Nullable private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
     private final Queue<InputStream> pendingDrainingMessages =
         new ConcurrentLinkedQueue<>();
-    private volatile DataPlaneListener wrappedListener;
+    @Nullable private volatile DataPlaneListener wrappedListener;
     private final HeaderMutationFilter mutationFilter;
     private final HeaderMutator mutator = HeaderMutator.create();
     private final AtomicInteger pendingRequests = new AtomicInteger(0);
@@ -445,7 +447,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private boolean protocolConfigSent = false;
     private ImmutableMap<String, Struct> collectedAttributes;
     private boolean requestAttributesSent = false;
-    private volatile Metadata requestHeaders;
+    @Nullable private volatile Metadata requestHeaders;
     final AtomicReference<DataPlaneCallState> dataPlaneCallState =
         new AtomicReference<>(DataPlaneCallState.IDLE);
     final AtomicReference<ExtProcStreamState> extProcStreamState =
@@ -654,7 +656,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             }
 
             if (response.hasRequestHeaders()) {
-              EventType expected = expectedRequestResponses.peek();
+              EventType expected = expectedRequestResponse;
               if (expected == null || expected != EventType.REQUEST_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription("Protocol error: received response out of order. Expected: " 
@@ -662,9 +664,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .asRuntimeException());
                 return;
               }
-              expectedRequestResponses.poll();
+              expectedRequestResponse = null;
             } else if (response.hasResponseHeaders()) {
-              EventType expected = expectedResponseResponses.peek();
+              EventType expected = expectedResponseResponse;
               if (expected == null || expected != EventType.RESPONSE_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription("Protocol error: received response out of order. Expected: " 
@@ -672,9 +674,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .asRuntimeException());
                 return;
               }
-              expectedResponseResponses.poll();
+              expectedResponseResponse = null;
             } else if (response.hasResponseTrailers()) {
-              EventType expected = expectedResponseResponses.peek();
+              EventType expected = expectedResponseResponse;
               if (expected == null || expected != EventType.RESPONSE_TRAILERS) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription("Protocol error: received response out of order. Expected: " 
@@ -682,9 +684,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                     .asRuntimeException());
                 return;
               }
-              expectedResponseResponses.poll();
+              expectedResponseResponse = null;
             } else if (response.hasRequestBody()) {
-              EventType expected = expectedRequestResponses.peek();
+              EventType expected = expectedRequestResponse;
               if (expected == EventType.REQUEST_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription(
@@ -693,7 +695,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 return;
               }
             } else if (response.hasResponseBody()) {
-              EventType expected = expectedResponseResponses.peek();
+              EventType expected = expectedResponseResponse;
               if (expected == EventType.RESPONSE_HEADERS) {
                 internalOnError(Status.UNAVAILABLE
                     .withDescription(
@@ -828,11 +830,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
         
         if (request.hasRequestHeaders()) {
-          expectedRequestResponses.add(EventType.REQUEST_HEADERS);
+          expectedRequestResponse = EventType.REQUEST_HEADERS;
         } else if (request.hasResponseHeaders()) {
-          expectedResponseResponses.add(EventType.RESPONSE_HEADERS);
+          expectedResponseResponse = EventType.RESPONSE_HEADERS;
         } else if (request.hasResponseTrailers()) {
-          expectedResponseResponses.add(EventType.RESPONSE_TRAILERS);
+          expectedResponseResponse = EventType.RESPONSE_TRAILERS;
         }
 
         ProcessingRequest requestToSend = request;
@@ -1173,9 +1175,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final ClientCall<?, ?> rawCall;
     private final DataPlaneClientCall dataPlaneClientCall;
     private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
-    private volatile Metadata savedHeaders;
-    private volatile Metadata savedTrailers;
-    private volatile Status savedStatus;
+    @Nullable private volatile Metadata savedHeaders;
+    @Nullable private volatile Metadata savedTrailers;
+    @Nullable private volatile Status savedStatus;
     private final AtomicBoolean terminationTriggered = new AtomicBoolean(false);
     private final AtomicBoolean responseHeadersSent = new AtomicBoolean(false);
     private final AtomicBoolean trailersOnly = new AtomicBoolean(false);
@@ -1277,7 +1279,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void onClose(Status status, Metadata trailers) {
       dataPlaneClientCall.serverTrailersStartNanos = System.nanoTime();
-      ExtProcStreamState extProcStreamState = dataPlaneClientCall.extProcStreamState.get();
+      DataPlaneClientCall.ExtProcStreamState extProcStreamState = dataPlaneClientCall.extProcStreamState.get();
       if (extProcStreamState.isFailed()
           && !dataPlaneClientCall.config.getFailureModeAllow()) {
         if (dataPlaneClientCall.markDataPlaneCallClosed()) {
@@ -1293,8 +1295,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      this.savedStatus = status;
-      this.savedTrailers = trailers;
+      if (this.savedStatus == null) {
+        this.savedStatus = status;
+        this.savedTrailers = trailers;
+      }
 
       if (savedHeaders != null) {
         return;
