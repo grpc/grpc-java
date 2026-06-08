@@ -22,6 +22,8 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.config.core.v3.GrpcService;
+import io.envoyproxy.envoy.config.core.v3.HeaderValue;
+import io.envoyproxy.envoy.config.core.v3.HeaderValueOption;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcOverrides;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExtProcPerRoute;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor;
@@ -274,9 +276,12 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   public void inboundStreamToByteString_handlesCompositeBuffers() throws Exception {
-    io.grpc.internal.CompositeReadableBuffer composite = new io.grpc.internal.CompositeReadableBuffer();
-    composite.addBuffer(io.grpc.internal.ReadableBuffers.wrap("hello ".getBytes(StandardCharsets.UTF_8)));
-    composite.addBuffer(io.grpc.internal.ReadableBuffers.wrap("world".getBytes(StandardCharsets.UTF_8)));
+    io.grpc.internal.CompositeReadableBuffer composite =
+        new io.grpc.internal.CompositeReadableBuffer();
+    composite.addBuffer(
+        io.grpc.internal.ReadableBuffers.wrap("hello ".getBytes(StandardCharsets.UTF_8)));
+    composite.addBuffer(
+        io.grpc.internal.ReadableBuffers.wrap("world".getBytes(StandardCharsets.UTF_8)));
 
     InputStream stream = io.grpc.internal.ReadableBuffers.openStream(composite, true);
     ByteString result = ExternalProcessorClientInterceptor.inboundStreamToByteString(stream);
@@ -2142,8 +2147,9 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenRequestHeaderModeSkip_whenBodyProcessingEnabled_thenFirstRequestToExtProcIsRequestBody()
-      throws Exception {
+  public void
+      givenRequestHeaderModeSkip_whenBodyProcessingEnabled_thenFirstRequestToExtProcIsRequestBody()
+          throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
     ExternalProcessor proto = ExternalProcessor.newBuilder()
@@ -2167,7 +2173,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch extProcLatch = new CountDownLatch(1);
-    final List<ProcessingRequest> capturedRequests = Collections.synchronizedList(new ArrayList<>());
+    final List<ProcessingRequest> capturedRequests =
+        Collections.synchronizedList(new ArrayList<>());
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
           @Override
@@ -2242,7 +2249,8 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(capturedRequests).hasSize(2);
     assertThat(capturedRequests.get(0).hasRequestHeaders()).isFalse();
     assertThat(capturedRequests.get(0).hasRequestBody()).isTrue();
-    assertThat(capturedRequests.get(0).getRequestBody().getBody().toStringUtf8()).isEqualTo("test-message");
+    assertThat(capturedRequests.get(0).getRequestBody().getBody().toStringUtf8())
+        .isEqualTo("test-message");
     assertThat(capturedRequests.get(1).hasRequestHeaders()).isFalse();
     assertThat(capturedRequests.get(1).hasRequestBody()).isTrue();
     assertThat(capturedRequests.get(1).getRequestBody().getEndOfStreamWithoutMessage()).isTrue();
@@ -3514,8 +3522,9 @@ public class ExternalProcessorClientInterceptorTest {
   // --- Category 9: Response Trailers ---
 
   @Test
-  public void givenResponseTrailerModeSend_whenCallCloses_thenResponseTrailersAndStatusPropagatedToAppListener()
-      throws Exception {
+  public void
+      givenResponseTrailerModeSend_whenCallCloses_thenTrailersAndStatusPropagated()
+          throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
@@ -3545,8 +3554,8 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseTrailers(TrailersResponse.newBuilder()
                           .setHeaderMutation(HeaderMutation.newBuilder()
-                              .addSetHeaders(io.envoyproxy.envoy.config.core.v3.HeaderValueOption.newBuilder()
-                                  .setHeader(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                              .addSetHeaders(HeaderValueOption.newBuilder()
+                                  .setHeader(HeaderValue.newBuilder()
                                       .setKey("x-extproc-trailer")
                                       .setValue("mutated")
                                       .build())
@@ -3618,7 +3627,9 @@ public class ExternalProcessorClientInterceptorTest {
                     trailers.put(
                         Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER),
                         "original");
-                    super.close(Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"), trailers);
+                    super.close(
+                        Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"),
+                        trailers);
                   }
                 }, headers);
           }
@@ -3666,9 +3677,11 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify trailers contain both dataplane trailer and mutated extproc trailer
     Metadata finalTrailers = capturedTrailers.get();
-    assertThat(finalTrailers.get(Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
+    assertThat(finalTrailers.get(
+        Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("original");
-    assertThat(finalTrailers.get(Metadata.Key.of("x-extproc-trailer", Metadata.ASCII_STRING_MARSHALLER)))
+    assertThat(finalTrailers.get(
+        Metadata.Key.of("x-extproc-trailer", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("mutated");
 
     channelManager.close();
@@ -3910,7 +3923,9 @@ public class ExternalProcessorClientInterceptorTest {
                     trailers.put(
                         Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER),
                         "original");
-                    super.close(Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"), trailers);
+                    super.close(
+                        Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"),
+                        trailers);
                   }
                 }, headers);
           }
@@ -3961,7 +3976,8 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify trailers contain dataplane trailer
     Metadata finalTrailers = capturedTrailers.get();
-    assertThat(finalTrailers.get(Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
+    assertThat(finalTrailers.get(
+        Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("original");
     
     channelManager.close();
@@ -4064,7 +4080,9 @@ public class ExternalProcessorClientInterceptorTest {
                     trailers.put(
                         Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER),
                         "original");
-                    super.close(Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"), trailers);
+                    super.close(
+                        Status.INVALID_ARGUMENT.withDescription("Custom DataPlane Error"),
+                        trailers);
                   }
                 }, headers);
           }
@@ -4115,7 +4133,8 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify trailers contain dataplane trailer
     Metadata finalTrailers = capturedTrailers.get();
-    assertThat(finalTrailers.get(Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
+    assertThat(finalTrailers.get(
+        Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("original");
     
     channelManager.close();
@@ -4124,7 +4143,8 @@ public class ExternalProcessorClientInterceptorTest {
   // --- Category 10: Trailers-only response handling ---
 
   @Test
-  public void givenResponseHeaderModeSend_whenTrailersOnlyReceived_thenResponseHeadersSentToExtProc()
+  public void
+      givenResponseHeaderModeSend_whenTrailersOnlyReceived_thenResponseHeadersSentToExtProc()
       throws Exception {
     String myExtProcServerName = InProcessServerBuilder.generateName();
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest>
@@ -4278,7 +4298,8 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
   @Test
-  public void givenResponseHeaderModeDefault_whenTrailersOnlyReceived_thenResponseHeadersSentToExtProc()
+  public void
+      givenResponseHeaderModeDefault_whenTrailersOnlyReceived_thenResponseHeadersSentToExtProc()
       throws Exception {
     String myExtProcServerName = InProcessServerBuilder.generateName();
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest>
@@ -4432,7 +4453,8 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
   @Test
-  public void givenResponseHeaderModeSkip_whenTrailersOnlyReceived_thenResponseHeadersNotSentToExtProc()
+  public void
+      givenResponseHeaderModeSkip_whenTrailersOnlyReceived_thenResponseHeadersNotSentToExtProc()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -4552,7 +4574,8 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify trailers contain dataplane trailer
     Metadata finalTrailers = capturedTrailers.get();
-    assertThat(finalTrailers.get(Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
+    assertThat(finalTrailers.get(
+        Metadata.Key.of("x-dataplane-trailer", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("original");
     
     channelManager.close();
@@ -5684,7 +5707,8 @@ public class ExternalProcessorClientInterceptorTest {
     while (!proxyCall.isReady() && System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(10);
     }
-    // Since sidecar is ready, proxyCall.isReady() should return true, ignoring that upstream is busy
+    // Since sidecar is ready, proxyCall.isReady() should return true,
+    // ignoring that upstream is busy
     assertThat(proxyCall.isReady()).isTrue();
 
     proxyCall.cancel("Cleanup", null);
@@ -6228,7 +6252,8 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void drainingStartsBeforeRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
+  public void
+      drainingStartsBeforeRequestHeaders_whenAppSendsAndHalfCloses_thenBufferedAndDelivered()
       throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -6309,7 +6334,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final List<String> dataPlaneReceivedMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final List<String> dataPlaneReceivedMessages =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
@@ -6488,7 +6514,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final List<String> dataPlaneReceivedMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final List<String> dataPlaneReceivedMessages =
+        new java.util.concurrent.CopyOnWriteArrayList<>();
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
@@ -6664,7 +6691,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef = new AtomicReference<>();
+    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef =
+        new AtomicReference<>();
     final CountDownLatch dataPlaneCallStartedLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_BIDI_STREAMING, ServerCalls.asyncBidiStreamingCall(
@@ -6738,7 +6766,8 @@ public class ExternalProcessorClientInterceptorTest {
     dataPlaneResponseObserver.onNext("Response Message During Drain");
     dataPlaneResponseObserver.onCompleted();
 
-    // Verify app listener has NOT received headers, messages, or close yet because the drain is active
+    // Verify app listener has NOT received headers, messages, or close yet because the drain
+    // is active
     assertThat(appReceivedHeaders.get()).isNull();
     assertThat(appReceivedMessages).isEmpty();
     assertThat(appReceivedStatus.get()).isNull();
@@ -6795,89 +6824,89 @@ public class ExternalProcessorClientInterceptorTest {
     // External Processor Server
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
-      @Override
-      @SuppressWarnings("unchecked")
-      public StreamObserver<ProcessingRequest> process(
-          final StreamObserver<ProcessingResponse> responseObserver) {
-        ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
-        return new StreamObserver<ProcessingRequest>() {
           @Override
-          public void onNext(ProcessingRequest request) {
-            if (request.hasRequestHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setRequestHeaders(HeadersResponse.newBuilder().build())
-                  .build());
-              reqHeadersLatch.countDown();
-            } else if (request.hasResponseHeaders()) {
-              responseObserver.onNext(ProcessingResponse.newBuilder()
-                  .setResponseHeaders(HeadersResponse.newBuilder().build())
-                  .build());
-              respHeadersLatch.countDown();
-            } else if (request.hasResponseBody()) {
-              String msgStr = request.getResponseBody().getBody().toStringUtf8();
-              if ("Original Message 1".equals(msgStr)) {
-                new Thread(() -> {
-                  try {
-                    // Wait until M2 is received by sidecar so both M1 and M2 are in flight
-                    if (m2ReceivedLatch.await(5, TimeUnit.SECONDS)) {
-                      responseObserver.onNext(ProcessingResponse.newBuilder()
-                          .setResponseBody(BodyResponse.newBuilder()
-                              .setResponse(CommonResponse.newBuilder()
-                                  .setBodyMutation(BodyMutation.newBuilder()
-                                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                          .setBody(ByteString.copyFromUtf8("Mutated Message 1"))
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                  reqHeadersLatch.countDown();
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                  respHeadersLatch.countDown();
+                } else if (request.hasResponseBody()) {
+                  String msgStr = request.getResponseBody().getBody().toStringUtf8();
+                  if ("Original Message 1".equals(msgStr)) {
+                    new Thread(() -> {
+                      try {
+                        // Wait until M2 is received by sidecar so both M1 and M2 are in flight
+                        if (m2ReceivedLatch.await(5, TimeUnit.SECONDS)) {
+                          responseObserver.onNext(ProcessingResponse.newBuilder()
+                              .setResponseBody(BodyResponse.newBuilder()
+                                  .setResponse(CommonResponse.newBuilder()
+                                      .setBodyMutation(BodyMutation.newBuilder()
+                                          .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                              .setBody(ByteString.copyFromUtf8("Mutated Message 1"))
+                                              .build())
                                           .build())
                                       .build())
                                   .build())
-                              .build())
-                          .setRequestDrain(true)
-                          .build());
-                      respBody1Latch.countDown();
-                    }
-                  } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                  }
-                }).start();
-              } else if ("Original Message 2".equals(msgStr)) {
-                m2ReceivedLatch.countDown();
-                new Thread(() -> {
-                  try {
-                    // Wait until M3 is sent by upstream concurrently during drain
-                    if (m3SentLatch.await(5, TimeUnit.SECONDS)) {
-                      responseObserver.onNext(ProcessingResponse.newBuilder()
-                          .setResponseBody(BodyResponse.newBuilder()
-                              .setResponse(CommonResponse.newBuilder()
-                                  .setBodyMutation(BodyMutation.newBuilder()
-                                      .setStreamedResponse(StreamedBodyResponse.newBuilder()
-                                          .setBody(ByteString.copyFromUtf8("Mutated Message 2"))
+                              .setRequestDrain(true)
+                              .build());
+                          respBody1Latch.countDown();
+                        }
+                      } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                      }
+                    }).start();
+                  } else if ("Original Message 2".equals(msgStr)) {
+                    m2ReceivedLatch.countDown();
+                    new Thread(() -> {
+                      try {
+                        // Wait until M3 is sent by upstream concurrently during drain
+                        if (m3SentLatch.await(5, TimeUnit.SECONDS)) {
+                          responseObserver.onNext(ProcessingResponse.newBuilder()
+                              .setResponseBody(BodyResponse.newBuilder()
+                                  .setResponse(CommonResponse.newBuilder()
+                                      .setBodyMutation(BodyMutation.newBuilder()
+                                          .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                              .setBody(ByteString.copyFromUtf8("Mutated Message 2"))
+                                              .build())
                                           .build())
                                       .build())
                                   .build())
-                              .build())
-                          .build());
-                      respBody2Latch.countDown();
-                    }
-                    if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
-                      responseObserver.onCompleted();
-                    }
-                  } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                              .build());
+                          respBody2Latch.countDown();
+                        }
+                        if (sidecarFinishLatch.await(5, TimeUnit.SECONDS)) {
+                          responseObserver.onCompleted();
+                        }
+                      } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                      }
+                    }).start();
                   }
-                }).start();
+                }
               }
-            }
-          }
-
-          @Override
-          public void onError(Throwable t) {}
-
-          @Override
-          public void onCompleted() {
-            drainCompletedLatch.countDown();
+    
+              @Override
+              public void onError(Throwable t) {}
+    
+              @Override
+              public void onCompleted() {
+                drainCompletedLatch.countDown();
+              }
+            };
           }
         };
-      }
-    };
 
     grpcCleanup.register(InProcessServerBuilder.forName(extProcServerName)
         .addService(extProcImpl)
@@ -6892,7 +6921,8 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef = new AtomicReference<>();
+    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef =
+        new AtomicReference<>();
     final CountDownLatch dataPlaneCallStartedLatch = new CountDownLatch(1);
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_BIDI_STREAMING, ServerCalls.asyncBidiStreamingCall(
@@ -6969,10 +6999,12 @@ public class ExternalProcessorClientInterceptorTest {
     // 2. Upstream sends M2 (which triggers M2 body to sidecar)
     dataPlaneResponseObserver.onNext("Original Message 2");
 
-    // Wait for app to receive Mutated Message 1 (meaning M1's response with request_drain=true has been processed)
+    // Wait for app to receive Mutated Message 1 (meaning M1's response with request_drain=true
+    // has been processed)
     assertThat(mutatedMsg1ReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // Verify the stream is currently in DRAINING state and app has only received Mutated Message 1 so far
+    // Verify the stream is currently in DRAINING state and app has only received Mutated
+    // Message 1 so far
     assertThat(appReceivedMessages).containsExactly("Mutated Message 1");
 
     // 3. Upstream concurrently sends M3 and completes the call during draining
@@ -6989,7 +7021,8 @@ public class ExternalProcessorClientInterceptorTest {
     // Wait for sidecar to finish sending M2
     assertThat(respBody2Latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // Verify that Mutated Message 2 is delivered immediately to app upon arrival (even before M3 is released)
+    // Verify that Mutated Message 2 is delivered immediately to app upon arrival (even before
+    // M3 is released)
     assertThat(appReceivedMessages).containsExactly("Mutated Message 1", "Mutated Message 2");
 
     // 5. Complete sidecar stream to finish the drain
@@ -6998,7 +7031,8 @@ public class ExternalProcessorClientInterceptorTest {
     // Wait for the call to close on application side
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // Verify delivery order: mutated messages first, then bypass messages, and finally status/trailers
+    // Verify delivery order: mutated messages first, then bypass messages, and finally
+    // status/trailers
     assertThat(appReceivedHeaders.get()).isNotNull();
     assertThat(appReceivedMessages).containsExactly(
         "Mutated Message 1", "Mutated Message 2", "Original Message 3"
@@ -11238,7 +11272,8 @@ public class ExternalProcessorClientInterceptorTest {
 
   // --- Category 25: Client call proceeds after fail-open ---
   @Test
-  public void givenRequestHeaderModeSend_whenExtProcTerminates_thenCallIsActivated() throws Exception {
+  public void
+      givenRequestHeaderModeSend_whenExtProcTerminates_thenCallIsActivated() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
@@ -11436,7 +11471,8 @@ public class ExternalProcessorClientInterceptorTest {
     clientCall.halfClose();
 
     // Now abruptly fail the stream
-    responseObserverRef.get().onError(new RuntimeException("Stream failure after sending body/EOS"));
+    responseObserverRef.get()
+        .onError(new RuntimeException("Stream failure after sending body/EOS"));
 
     // Verify that the call is unblocked (onClose is called) instead of hanging.
     boolean completed = callCompletedLatch.await(5, TimeUnit.SECONDS);
