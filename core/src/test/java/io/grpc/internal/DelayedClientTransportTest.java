@@ -821,6 +821,26 @@ public class DelayedClientTransportTest {
     verify(mockTracer).delayEnded();
   }
 
+  @Test
+  public void streamDelayMetrics_shutdownNow() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+
+    SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
+    when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+
+    delayedTransport.reprocess(connectingPicker);
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    verify(mockTracer).delayStarted("pick_first:connecting");
+
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+
+    verify(mockTracer).delayEnded();
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

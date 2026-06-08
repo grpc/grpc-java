@@ -247,7 +247,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
     if (savedReportTransportTerminated != null) {
       for (PendingStream stream : savedPendingStreams) {
-        Runnable runnable = stream.setStream(
+        Runnable runnable = stream.setStreamAndEndDelay(
             new FailingClientStream(status, RpcProgress.REFUSED, stream.tracers));
         if (runnable != null) {
           // Drain in-line instead of using an executor as failing stream just throws everything
@@ -406,6 +406,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
       }
     }
 
+    Runnable setStreamAndEndDelay(ClientStream stream) {
+      endDelay();
+      return setStream(stream);
+    }
+
     /** Runnable may be null. */
     private Runnable createRealStream(ClientTransport transport, String authorityOverride) {
       ClientStream realStream;
@@ -424,7 +429,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         // been called on the delayed stream.
         realStream.setAuthority(authorityOverride);
       }
-      return setStream(realStream);
+      return setStreamAndEndDelay(realStream);
     }
 
     @Override
