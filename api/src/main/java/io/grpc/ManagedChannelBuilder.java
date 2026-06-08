@@ -168,6 +168,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
+  /** Internal-only. */
+  @Internal
   protected interface InterceptorFactory {
     ClientInterceptor newInterceptor(String target);
   }
@@ -636,7 +638,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.64.0
    */
-  public T addMetricSink(MetricSink metricSink) {
+  @Internal
+  protected T addMetricSink(MetricSink metricSink) {
     throw new UnsupportedOperationException();
   }
 
@@ -668,7 +671,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *
    * @param channelConfigurator the configurator to apply.
    * @return this
-   * @since 1.81.0
+   * @since 1.83.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
   public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {

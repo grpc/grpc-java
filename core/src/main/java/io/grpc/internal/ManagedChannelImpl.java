@@ -162,7 +162,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * <p>This is intended for use by gRPC internal components
    * that are responsible for creating auxiliary {@code ManagedChannel} instances.
    */
-  private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
+  private final ChannelConfigurator channelConfigurator;
 
   private final InternalLogId logId;
   private final String target;
@@ -554,9 +554,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
-    if (builder.channelConfigurator != null) {
-      this.channelConfigurator = builder.channelConfigurator;
-    }
+    this.channelConfigurator = checkNotNull(builder.channelConfigurator,
+            "channelConfigurator");
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
@@ -1501,9 +1500,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       // Note that we follow the global configurator pattern and try to fuse the configurations as
       // soon as the builder gets created
-      if (channelConfigurator != null) {
-        channelConfigurator.configureChannelBuilder(builder);
-      }
+      channelConfigurator.configureChannelBuilder(builder);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

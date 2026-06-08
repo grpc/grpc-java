@@ -2982,7 +2982,7 @@ public class XdsNameResolverTest {
 
   @Test
   public void start_passesChannelConfiguratorToClientPoolFactory() {
-    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
+    ChannelConfigurator channelConfigurator = builder -> { };
 
     // Build NameResolver.Args containing the channel configurator
     NameResolver.Args args = NameResolver.Args.newBuilder()

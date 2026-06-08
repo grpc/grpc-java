@@ -786,7 +786,7 @@ public class ManagedChannelImplBuilderTest {
 
   @Test
   public void childChannelConfigurator_setsField() {
-    ChannelConfigurator configurator = new ChannelConfigurator() {};
+    ChannelConfigurator configurator = builder -> { };
     assertSame(builder, builder.childChannelConfigurator(configurator));
     assertSame(configurator, builder.channelConfigurator);
   }
@@ -811,13 +811,10 @@ public class ManagedChannelImplBuilderTest {
     };
 
     // Define the Configurator
-    ChannelConfigurator configurator = new ChannelConfigurator() {
-      @Override
-      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        builder.addMetricSink(mockMetricSink);
+    ChannelConfigurator configurator = builder -> {
+      InternalManagedChannelBuilder.addMetricSink(builder, mockMetricSink);
 
-        InternalManagedChannelBuilder.interceptWithTarget(builder, target -> mockInterceptor);
-      }
+      InternalManagedChannelBuilder.interceptWithTarget(builder, target -> mockInterceptor);
     };
 
     // Use NameResolver.Factory to capture Args

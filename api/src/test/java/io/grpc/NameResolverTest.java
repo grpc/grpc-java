@@ -105,7 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
+    ChannelConfigurator channelConfigurator = builder -> { };
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)

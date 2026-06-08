@@ -128,15 +128,7 @@ public final class ManagedChannelImplBuilder
 
   private static final Method GET_CLIENT_INTERCEPTOR_METHOD;
 
-  ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
 
-  @Override
-  public ManagedChannelImplBuilder childChannelConfigurator(
-      ChannelConfigurator channelConfigurator) {
-    this.channelConfigurator = checkNotNull(channelConfigurator,
-        "childChannelConfigurator");
-    return this;
-  }
 
   static {
     Method getClientInterceptorMethod = null;
@@ -159,6 +151,8 @@ public final class ManagedChannelImplBuilder
     GET_CLIENT_INTERCEPTOR_METHOD = getClientInterceptorMethod;
   }
 
+
+  ChannelConfigurator channelConfigurator = builder -> { };
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
@@ -725,6 +719,14 @@ public final class ManagedChannelImplBuilder
   @Override
   public ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
+    return this;
+  }
+
+  @Override
+  public ManagedChannelImplBuilder childChannelConfigurator(
+      ChannelConfigurator channelConfigurator) {
+    this.channelConfigurator = checkNotNull(channelConfigurator,
+        "childChannelConfigurator");
     return this;
   }
 

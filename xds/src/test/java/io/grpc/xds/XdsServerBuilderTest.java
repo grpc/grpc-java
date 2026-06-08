@@ -332,7 +332,7 @@ public class XdsServerBuilderTest {
 
   @Test
   public void start_passesChannelConfiguratorToClientPoolFactory() throws Exception {
-    ChannelConfigurator configurer = new ChannelConfigurator() {};
+    ChannelConfigurator configurer = builder -> { };
     XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
     @SuppressWarnings("unchecked")
     ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);

@@ -129,27 +129,7 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
-  private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
-
-  XdsServerWrapper(
-      String listenerAddress,
-      ServerBuilder<?> delegateBuilder,
-      XdsServingStatusListener listener,
-      FilterChainSelectorManager filterChainSelectorManager,
-      XdsClientPoolFactory xdsClientPoolFactory,
-      @Nullable Map<String, ?> bootstrapOverride,
-      FilterRegistry filterRegistry) {
-    this(
-        listenerAddress,
-        delegateBuilder,
-        listener,
-        filterChainSelectorManager,
-        xdsClientPoolFactory,
-        bootstrapOverride,
-        filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
-    sharedTimeService = true;
-  }
+  private final ChannelConfigurator channelConfigurator;
 
   XdsServerWrapper(
       String listenerAddress,
@@ -168,11 +148,28 @@ final class XdsServerWrapper extends Server {
         xdsClientPoolFactory,
         bootstrapOverride,
         filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        channelConfigurator);
     sharedTimeService = true;
-    if (channelConfigurator != null) {
-      this.channelConfigurator = channelConfigurator;
-    }
+  }
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      FilterRegistry filterRegistry) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        builder -> { });
   }
 
   @VisibleForTesting
@@ -185,6 +182,29 @@ final class XdsServerWrapper extends Server {
           @Nullable Map<String, ?> bootstrapOverride,
           FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        timeService,
+        builder -> { });
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+          String listenerAddress,
+          ServerBuilder<?> delegateBuilder,
+          XdsServingStatusListener listener,
+          FilterChainSelectorManager filterChainSelectorManager,
+          XdsClientPoolFactory xdsClientPoolFactory,
+          @Nullable Map<String, ?> bootstrapOverride,
+          FilterRegistry filterRegistry,
+          ScheduledExecutorService timeService,
+          ChannelConfigurator channelConfigurator) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
@@ -196,6 +216,7 @@ final class XdsServerWrapper extends Server {
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
+    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
   }
 
   @Override

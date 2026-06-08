@@ -58,6 +58,7 @@ import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.InternalFeatureFlags;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
@@ -66,9 +67,15 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NoopMetricSink;
 import io.grpc.Server;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.data.MetricData;
+import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -377,7 +384,7 @@ public class FakeControlPlaneXdsIntegrationTest {
     ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        builder.addMetricSink(sink);
+        InternalManagedChannelBuilder.addMetricSink(builder, sink);
       }
     };
 
@@ -400,14 +407,60 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   @Test
-  public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
-    CountingMetricSink sink = new CountingMetricSink();
+  public void childChannelConfigurator_passesOtelSdkToChannel_E2E() throws Exception {
+    InMemoryMetricReader metricReader = InMemoryMetricReader.create();
+    SdkMeterProvider meterProvider = SdkMeterProvider.builder()
+        .registerMetricReader(metricReader)
+        .build();
+    OpenTelemetry openTelemetry = OpenTelemetrySdk.builder()
+        .setMeterProvider(meterProvider)
+        .build();
+    GrpcOpenTelemetry grpcOtel = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetry)
+        .build();
+
     ChannelConfigurator configurator = new ChannelConfigurator() {
       @Override
       public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        // Child channels (xDS client connections) created by this server get the sink.
-        builder.addMetricSink(sink);
+        grpcOtel.configureChannelBuilder(builder);
       }
+    };
+
+    ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
+            InsecureChannelCredentials.create())
+        .childChannelConfigurator(configurator)
+        .build();
+
+    try {
+      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
+          channel);
+      blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
+
+      boolean hasMetrics = false;
+      for (int i = 0; i < 20; i++) {
+        for (MetricData metric : metricReader.collectAllMetrics()) {
+          if (metric.getName().startsWith("grpc.client.")) {
+            hasMetrics = true;
+            break;
+          }
+        }
+        if (hasMetrics) {
+          break;
+        }
+        Thread.sleep(100);
+      }
+      assertThat(hasMetrics).isTrue();
+    } finally {
+      channel.shutdownNow();
+    }
+  }
+
+  @Test
+  public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
+    CountingMetricSink sink = new CountingMetricSink();
+    ChannelConfigurator configurator = builder -> {
+      // Child channels (xDS client connections) created by this server get the sink.
+      InternalManagedChannelBuilder.addMetricSink(builder, sink);
     };
 
     // We start an XdsServer manually.

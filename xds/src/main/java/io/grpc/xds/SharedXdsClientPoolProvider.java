@@ -93,23 +93,20 @@ final class SharedXdsClientPoolProvider implements XdsClientPoolFactory {
     } else {
       bootstrapInfo = GrpcBootstrapperImpl.defaultBootstrap();
     }
-    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials,
-        null);
+    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials, null);
   }
 
   @Override
   public ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
-    return getOrCreate(target, bootstrapInfo, metricRecorder, null,
-        null);
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null, null);
   }
 
   @Override
   public ObjectPool<XdsClient> getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
       ChannelConfigurator channelConfigurator) {
-    return getOrCreate(target, bootstrapInfo, metricRecorder, null,
-        channelConfigurator);
+    return getOrCreate(target, bootstrapInfo, metricRecorder, null, channelConfigurator);
   }
 
   public ObjectPool<XdsClient> getOrCreate(

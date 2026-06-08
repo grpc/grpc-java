@@ -46,7 +46,7 @@ package io.grpc;
  * <p>Implementations must be thread-safe as the configure methods may be invoked concurrently
  * by multiple internal components.
  *
- * @since 1.81.0
+ * @since 1.83.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
 public interface ChannelConfigurator {
@@ -59,5 +59,5 @@ public interface ChannelConfigurator {
    *
    * @param builder the mutable channel builder for the new child channel
    */
-  default void configureChannelBuilder(ManagedChannelBuilder<?> builder) {}
+  void configureChannelBuilder(ManagedChannelBuilder<?> builder);
 }

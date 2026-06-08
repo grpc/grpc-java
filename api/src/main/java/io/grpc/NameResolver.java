@@ -358,7 +358,7 @@ public abstract class NameResolver {
     private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
-    @Nullable private final ChannelConfigurator channelConfigurator;
+    private final ChannelConfigurator channelConfigurator;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -476,9 +476,8 @@ public abstract class NameResolver {
     /**
      * Returns the configurator for child channels.
      *
-     * @since 1.81.0
+     * @since 1.83.0
      */
-    @Nullable
     @Internal
     public ChannelConfigurator getChildChannelConfigurator() {
       return channelConfigurator;
@@ -592,7 +591,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
-      private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
+      private ChannelConfigurator channelConfigurator = builder -> { };
 
       Builder() {
       }
@@ -711,10 +710,10 @@ public abstract class NameResolver {
       /**
        * See {@link Args#getChildChannelConfigurator()}. This is an optional field.
        *
-       * @since 1.81.0
+       * @since 1.83.0
        */
       public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurator) {
-        this.channelConfigurator = channelConfigurator;
+        this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
         return this;
       }
 

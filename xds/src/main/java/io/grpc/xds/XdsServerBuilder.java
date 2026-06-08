@@ -59,7 +59,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
-  private ChannelConfigurator channelConfigurator = new ChannelConfigurator() {};
+  private ChannelConfigurator channelConfigurator = builder -> { };
+
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -109,10 +110,10 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * created by that server.
    *
    * @param channelConfigurator the configurator to store in the channel.
+   * @return this
    */
-  @Override
   public XdsServerBuilder childChannelConfigurator(ChannelConfigurator channelConfigurator) {
-    this.channelConfigurator = channelConfigurator;
+    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
     return this;
   }
 
@@ -144,7 +145,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     }
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry,
+        filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry,
         this.channelConfigurator);
   }
 

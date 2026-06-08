@@ -99,7 +99,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     private int refCount = 0;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
-      this(serverInfo, null);
+      this(serverInfo, null, null);
     }
 
     @VisibleForTesting
@@ -108,13 +108,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
-      String target = serverInfo.target();
-      ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
-      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
-          .keepAliveTime(5, TimeUnit.MINUTES)
-          .build();
-      this.callCredentials = callCredentials;
-      this.serverInfo = serverInfo;
+      this(serverInfo, callCredentials, null);
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
