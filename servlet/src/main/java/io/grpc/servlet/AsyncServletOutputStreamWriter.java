@@ -218,7 +218,15 @@ final class AsyncServletOutputStreamWriter {
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
     if (curState.readyAndDrained) { // write to the outputStream directly
-      actionItem.run();
+      try {
+        actionItem.run();
+      } catch (IllegalStateException e) {
+        if (actionItem == flushAction || actionItem == completeAction) {
+          throw e;
+        }
+        buffer(actionItem, curState);
+        return;
+      }
       if (actionItem == completeAction) {
         return;
       }
@@ -230,18 +238,24 @@ final class AsyncServletOutputStreamWriter {
         log.finest("the servlet output stream becomes not ready");
       }
     } else { // buffer to the writeChain
-      writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
-        }
-      } // state has not changed since
+      buffer(actionItem, curState);
     }
+  }
+
+  private void buffer(ActionItem actionItem, WriteState curState) throws IOException {
+    writeChain.offer(actionItem);
+    if (writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
+      LockSupport.unpark(parkingThread);
+    } else {
+      checkState(
+          writeState.get().readyAndDrained,
+          "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+      ActionItem lastItem = writeChain.poll();
+      if (lastItem != null) {
+        checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+        runOrBuffer(lastItem);
+      }
+    } // state has not changed since
   }
 
   /** Write actions, e.g. writeBytes, flush, complete. */
