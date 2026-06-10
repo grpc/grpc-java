@@ -25,20 +25,20 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "dev.cel:common:0.12.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.133.Final",
-    "io.netty:netty-codec-http2:4.1.133.Final",
-    "io.netty:netty-codec-http:4.1.133.Final",
-    "io.netty:netty-codec-socks:4.1.133.Final",
-    "io.netty:netty-codec:4.1.133.Final",
-    "io.netty:netty-common:4.1.133.Final",
-    "io.netty:netty-handler-proxy:4.1.133.Final",
-    "io.netty:netty-handler:4.1.133.Final",
-    "io.netty:netty-resolver:4.1.133.Final",
+    "io.netty:netty-buffer:4.1.135.Final",
+    "io.netty:netty-codec-http2:4.1.135.Final",
+    "io.netty:netty-codec-http:4.1.135.Final",
+    "io.netty:netty-codec-socks:4.1.135.Final",
+    "io.netty:netty-codec:4.1.135.Final",
+    "io.netty:netty-common:4.1.135.Final",
+    "io.netty:netty-handler-proxy:4.1.135.Final",
+    "io.netty:netty-handler:4.1.135.Final",
+    "io.netty:netty-resolver:4.1.135.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.75.Final",
     "io.netty:netty-tcnative-classes:2.0.75.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.133.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.133.Final",
-    "io.netty:netty-transport:4.1.133.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.135.Final",
+    "io.netty:netty-transport-native-unix-common:4.1.135.Final",
+    "io.netty:netty-transport:4.1.135.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -65,6 +65,7 @@ android_sdk_repository_extension = use_extension(
     "android_sdk_repository_extension",
 )
 use_repo(android_sdk_repository_extension, "androidsdk")
+
 register_toolchains("@androidsdk//:sdk-toolchain", "@androidsdk//:all")
 
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
@@ -83,6 +84,8 @@ use_repo(maven, "maven")
 grpc_android_maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven", dev_dependency = True)
 grpc_android_maven.install(
     name = "grpc_android_maven",
+    # Set this explicitly since the default guess is incorrect under Bzlmod.
+    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
     artifacts = [
         "androidx.annotation:annotation:1.6.0",
         "androidx.annotation:annotation-jvm:1.6.0",
@@ -96,8 +99,6 @@ grpc_android_maven.install(
     strict_visibility = True,
     # For Bazel 8+ compatibility.
     use_starlark_android_rules = True,
-    # Set this explicitly since the default guess is incorrect under Bzlmod.
-    aar_import_bzl_label = "@rules_android//rules:rules.bzl",
 )
 use_repo(grpc_android_maven, "grpc_android_maven")
 
