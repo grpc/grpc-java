@@ -735,9 +735,31 @@ public class ManagedChannelImplBuilderTest {
   @Test
   public void defaultServiceConfig_intValue() {
     Map<String, Object> config = new HashMap<>();
+
     config.put("key", 3);
 
-    assertThrows(IllegalArgumentException.class, () -> builder.defaultServiceConfig(config));
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsEntry("key", 3D);
+  }
+
+  @Test
+  public void defaultServiceConfig_nestedIntValue() {
+    Map<String, Object> config = new HashMap<>();
+    List<Object> list = new ArrayList<>();
+    Map<String, Object> nested = new HashMap<>();
+
+    list.add(123);
+    nested.put("key", 456);
+    list.add(nested);
+    config.put("list", list);
+
+    builder.defaultServiceConfig(config);
+    
+    assertThat(builder.defaultServiceConfig)
+            .containsEntry(
+                    "list",
+                    Arrays.asList(123D, Collections.singletonMap("key", 456D)));
   }
 
   @Test
