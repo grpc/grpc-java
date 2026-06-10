@@ -51,7 +51,6 @@ import java.net.SocketAddress;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -240,25 +239,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
               .asRuntimeException());
           return;
         }
-        if (whetherSendClientSocketAddressInResponse(request)) {
-          responseObserver.onNext(
-              StreamingOutputCallResponse.newBuilder()
-                  .setPeerSocketAddress(PEER_ADDRESS_CONTEXT_KEY.get().toString())
-                  .build());
-          return;
-        }
         dispatcher.enqueue(toChunkQueue(request));
-      }
-
-      private boolean whetherSendClientSocketAddressInResponse(StreamingOutputCallRequest request) {
-        Iterator<ResponseParameters> responseParametersIterator =
-            request.getResponseParametersList().iterator();
-        while (responseParametersIterator.hasNext()) {
-          if (responseParametersIterator.next().getFillPeerSocketAddress().getValue()) {
-            return true;
-          }
-        }
-        return false;
       }
 
       @Override
@@ -466,7 +447,13 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     Queue<Chunk> chunkQueue = new ArrayDeque<>();
     int offset = 0;
     for (ResponseParameters params : request.getResponseParametersList()) {
-      chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize()));
+      String peerSocketAddress = null;
+      if (params.getFillPeerSocketAddress().getValue()) {
+        SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
+        peerSocketAddress = peerAddress != null ? peerAddress.toString() : "";
+      }
+      chunkQueue.add(
+          new Chunk(params.getIntervalUs(), offset, params.getSize(), peerSocketAddress));
 
       // Increment the offset past this chunk. Buffer need to be circular.
       offset = (offset + params.getSize()) % compressableBuffer.size();
@@ -484,11 +471,17 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     private final int delayMicroseconds;
     private final int offset;
     private final int length;
+    private final String peerSocketAddress;
 
     public Chunk(int delayMicroseconds, int offset, int length) {
+      this(delayMicroseconds, offset, length, null);
+    }
+
+    public Chunk(int delayMicroseconds, int offset, int length, String peerSocketAddress) {
       this.delayMicroseconds = delayMicroseconds;
       this.offset = offset;
       this.length = length;
+      this.peerSocketAddress = peerSocketAddress;
     }
 
     /**
@@ -497,10 +490,15 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     private StreamingOutputCallResponse toResponse() {
       StreamingOutputCallResponse.Builder responseBuilder =
           StreamingOutputCallResponse.newBuilder();
-      ByteString payload = generatePayload(compressableBuffer, offset, length);
-      responseBuilder.setPayload(
-          Payload.newBuilder()
-              .setBody(payload));
+      if (length > 0) {
+        ByteString payload = generatePayload(compressableBuffer, offset, length);
+        responseBuilder.setPayload(
+            Payload.newBuilder()
+                .setBody(payload));
+      }
+      if (peerSocketAddress != null) {
+        responseBuilder.setPeerSocketAddress(peerSocketAddress);
+      }
       return responseBuilder.build();
     }
   }
