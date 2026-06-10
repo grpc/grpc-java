@@ -59,7 +59,6 @@ import io.grpc.internal.testing.StatsTestUtils.MetricsRecord;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
@@ -111,7 +110,8 @@ public class RetryTest {
       mock(ClientCall.Listener.class, delegatesTo(testCallListener));
 
   private CountDownLatch backoffLatch = new CountDownLatch(1);
-  private final EventLoopGroup clientGroup = new DefaultEventLoopGroup(1) {
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup clientGroup = new io.netty.channel.DefaultEventLoopGroup(1) {
     @SuppressWarnings("FutureReturnValueIgnored")
     @Override
     public ScheduledFuture<?> schedule(
@@ -138,7 +138,8 @@ public class RetryTest {
           TimeUnit.NANOSECONDS);
     }
   };
-  private final EventLoopGroup serverGroup = new DefaultEventLoopGroup(1);
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup serverGroup = new io.netty.channel.DefaultEventLoopGroup(1);
   private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
   private final ClientInterceptor statsInterceptor =
       InternalCensusStatsAccessor.getClientInterceptor(

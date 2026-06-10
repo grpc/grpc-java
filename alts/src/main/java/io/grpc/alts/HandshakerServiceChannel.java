@@ -25,7 +25,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.net.InetSocketAddress;
@@ -78,8 +77,10 @@ final class HandshakerServiceChannel {
     @Override
     public Channel create() {
       /* Use its own event loop thread pool to avoid blocking. */
+      @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
       EventLoopGroup eventGroup =
-          new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
+          new io.netty.channel.nio.NioEventLoopGroup(
+              1, new DefaultThreadFactory("handshaker pool", true));
       NettyChannelBuilder channelBuilder =
           NettyChannelBuilder.forTarget(target)
           .channelType(NioSocketChannel.class, InetSocketAddress.class)

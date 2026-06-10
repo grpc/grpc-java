@@ -41,7 +41,6 @@ import io.grpc.netty.NettyServerBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.Channel;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.local.LocalAddress;
@@ -103,7 +102,8 @@ public class TransportBenchmark {
       case NETTY_LOCAL: {
         String name = "bench" + Math.random();
         LocalAddress address = new LocalAddress(name);
-        EventLoopGroup group = new DefaultEventLoopGroup();
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        EventLoopGroup group = new io.netty.channel.DefaultEventLoopGroup();
         serverBuilder = NettyServerBuilder.forAddress(address, serverCreds)
             .bossEventLoopGroup(group)
             .workerEventLoopGroup(group)
