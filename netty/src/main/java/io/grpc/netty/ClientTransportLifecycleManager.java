@@ -69,6 +69,14 @@ final class ClientTransportLifecycleManager {
   public boolean notifyShutdown(Status s, DisconnectError disconnectError) {
     notifyGracefulShutdown(s, disconnectError);
     if (shutdownStatus != null) {
+      // Check if the incoming error is just the routine channel closure exception
+      boolean isClosedChannel = s.getCause() instanceof java.nio.channels.ClosedChannelException;
+
+      // Status Upgrade: Overwrite graceful shutdown if a hard network error occurs
+      if (shutdownStatus.getCause() == null && s.getCause() != null && !isClosedChannel) {
+        shutdownStatus = s;
+        return true;
+      }
       return false;
     }
     shutdownStatus = s;
