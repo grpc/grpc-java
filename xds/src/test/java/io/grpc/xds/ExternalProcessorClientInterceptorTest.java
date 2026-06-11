@@ -7748,9 +7748,9 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
-    // Verify application receives UNAVAILABLE due to sidecar failure
+    // Verify application receives INTERNAL due to sidecar failure
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
     
     proxyCall.cancel("Cleanup", null);
@@ -8126,12 +8126,12 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    // Verify application receives UNAVAILABLE with correct description
+    // Verify application receives INTERNAL with correct description
     for (int i = 0; i < 10000 && closedLatch.getCount() > 0; i++) {
       fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
     }
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
     
     proxyCall.cancel("Cleanup", null);
@@ -8271,9 +8271,9 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    // Verify application receives UNAVAILABLE with correct description
+    // Verify application receives INTERNAL with correct description
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
     
     proxyCall.cancel("Cleanup", null);
@@ -10623,9 +10623,9 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
-    // The call should fail with UNAVAILABLE status
+    // The call should fail with INTERNAL status
     // due to stream failure triggered by protocol error
-    assertThat(appStatus.get().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(appStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(appStatus.get().getDescription()).contains("External processor stream failed");
     
     channelManager.close();
@@ -11372,7 +11372,7 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
   @Test
-  public void givenFailureModeAllowTrue_whenExtProcStreamFailsDuringBodyOrEos_thenCallUnblocked()
+  public void givenFailureModeAllowTrue_whenExtProcStreamFailsAfterRequestBodySent_thenCallFails()
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
@@ -11455,10 +11455,12 @@ public class ExternalProcessorClientInterceptorTest {
         DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
         dataPlaneChannel);
 
+    final AtomicReference<Status> closedStatus = new AtomicReference<>();
     final CountDownLatch callCompletedLatch = new CountDownLatch(1);
     clientCall.start(new ClientCall.Listener<String>() {
       @Override
       public void onClose(Status status, Metadata trailers) {
+        closedStatus.set(status);
         callCompletedLatch.countDown();
       }
     }, new Metadata());
@@ -11474,9 +11476,137 @@ public class ExternalProcessorClientInterceptorTest {
     responseObserverRef.get()
         .onError(new RuntimeException("Stream failure after sending body/EOS"));
 
-    // Verify that the call is unblocked (onClose is called) instead of hanging.
+    // Verify that the call failed with INTERNAL status instead of succeeding.
     boolean completed = callCompletedLatch.await(5, TimeUnit.SECONDS);
     assertThat(completed).isTrue();
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
+
+    channelManager.close();
+  }
+
+  @Test
+  public void givenFailureModeAllowTrue_whenExtProcStreamFailsAfterResponseBodySent_thenCallFails()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch streamActiveLatch = new CountDownLatch(1);
+    final CountDownLatch streamFailedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            streamActiveLatch.countDown();
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setResponseHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasResponseBody()) {
+                  // Fail the stream once we see response body message
+                  responseObserver.onError(
+                      Status.INTERNAL.withDescription("Stream failure after response body")
+                          .asRuntimeException());
+                  streamFailedLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName)
+              .directExecutor()
+              .build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    MutableHandlerRegistry dataPlaneRegistry = new MutableHandlerRegistry();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
+        .fallbackHandlerRegistry(dataPlaneRegistry)
+        .directExecutor()
+        .build().start());
+
+    dataPlaneRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall((request, responseObserver) -> {
+          responseObserver.onNext("response-body-msg");
+          responseObserver.onCompleted();
+        })).build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(uniqueDataPlaneServerName)
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> clientCall = interceptCall(
+        interceptor, METHOD_SAY_HELLO,
+        DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+        dataPlaneChannel);
+
+    final AtomicReference<Status> closedStatus = new AtomicReference<>();
+    final CountDownLatch callCompletedLatch = new CountDownLatch(1);
+    clientCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        closedStatus.set(status);
+        callCompletedLatch.countDown();
+      }
+    }, new Metadata());
+    clientCall.request(1);
+
+    boolean active = streamActiveLatch.await(5, TimeUnit.SECONDS);
+    assertThat(active).isTrue();
+
+    // Since request body mode is NONE, this sendMessage is NOT sent to ext_proc
+    clientCall.sendMessage("app-msg");
+    clientCall.halfClose();
+
+    // Verify call completed and failed with INTERNAL status
+    boolean completed = callCompletedLatch.await(5, TimeUnit.SECONDS);
+    assertThat(completed).isTrue();
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
 
     channelManager.close();
   }

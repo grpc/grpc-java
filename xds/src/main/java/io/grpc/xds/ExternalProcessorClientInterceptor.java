@@ -457,6 +457,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
+    final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -784,7 +785,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             synchronized (streamLock) {
               extProcClientCallRequestObserver = null;
             }
-            if (config.getFailureModeAllow()) {
+            if (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get()) {
               handleFailOpen(wrappedListener);
             } else {
               String message = "External processor stream failed";
@@ -905,7 +906,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             extProcClientCallRequestObserver = null;
           }
         }
-        if (config.getFailureModeAllow()) {
+        if (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get()) {
           handleFailOpen(wrappedListener);
         } else {
           String message = "External processor stream failed";
@@ -1011,6 +1012,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .setEndOfStream(false)
                 .build())
             .build());
+        bodyMessageSentToExtProc.set(true);
 
         if (config.getObservabilityMode()) {
           super.sendMessage(new OutboundZeroCopyInputStream(bodyByteString));
@@ -1321,6 +1323,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       try {
         ByteString bodyByteString = inboundStreamToByteString(message);
         sendResponseBodyToExtProc(bodyByteString, false);
+        dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
 
         if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
           dataPlaneClientCall.getCallContext().run(
@@ -1337,9 +1340,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       DataPlaneClientCall.ExtProcStreamState extProcStreamState =
           dataPlaneClientCall.getExtProcStreamState().get();
       if (extProcStreamState.isFailed()
-          && !dataPlaneClientCall.getConfig().getFailureModeAllow()) {
+          && (!dataPlaneClientCall.getConfig().getFailureModeAllow()
+              || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
         if (dataPlaneClientCall.markDataPlaneCallClosed()) {
-          proceedWithClose(Status.UNAVAILABLE.withDescription("External processor stream failed")
+          proceedWithClose(Status.INTERNAL.withDescription("External processor stream failed")
               .withCause(status.getCause()), new Metadata());
         }
         return;
