@@ -31,10 +31,10 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
     "io.netty:netty-buffer:4.2.15.Final",
+    "io.netty:netty-codec-base:4.2.15.Final",
     "io.netty:netty-codec-http2:4.2.15.Final",
     "io.netty:netty-codec-http:4.2.15.Final",
     "io.netty:netty-codec-socks:4.2.15.Final",
-    "io.netty:netty-codec:4.2.15.Final",
     "io.netty:netty-common:4.2.15.Final",
     "io.netty:netty-handler-proxy:4.2.15.Final",
     "io.netty:netty-handler:4.2.15.Final",
