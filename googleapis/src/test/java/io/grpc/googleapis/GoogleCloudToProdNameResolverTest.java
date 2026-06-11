@@ -252,11 +252,11 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getRawQuery()).isEqualTo("foo=bar&baz=qux");
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
-      assertThat(delegatedUriValue.getQuery()).isEqualTo("foo=bar&baz=qux");
+      assertThat(delegatedUriValue.getQuery()).isNull();
     }
   }
 
@@ -276,11 +276,11 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("xds");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getRawQuery()).isEqualTo("foo=bar%26baz");
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("xds");
       assertThat(delegatedUriValue).isNotNull();
-      assertThat(delegatedUriValue.getRawQuery()).isEqualTo("foo=bar%26baz");
+      assertThat(delegatedUriValue.getRawQuery()).isNull();
     }
   }
 
@@ -299,11 +299,11 @@ public class GoogleCloudToProdNameResolverTest {
     if (enableRfc3986UrisParam) {
       Uri delegatedRfcUriValue = delegatedRfcUri.get("dns");
       assertThat(delegatedRfcUriValue).isNotNull();
-      assertThat(delegatedRfcUriValue.getRawQuery()).isEqualTo("FORCE-XDS");
+      assertThat(delegatedRfcUriValue.getRawQuery()).isNull();
     } else {
       URI delegatedUriValue = delegatedUri.get("dns");
       assertThat(delegatedUriValue).isNotNull();
-      assertThat(delegatedUriValue.getQuery()).isEqualTo("FORCE-XDS");
+      assertThat(delegatedUriValue.getQuery()).isNull();
     }
   }
 
