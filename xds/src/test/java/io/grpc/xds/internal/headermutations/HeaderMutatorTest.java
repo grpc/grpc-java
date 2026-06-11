@@ -73,7 +73,7 @@ public class HeaderMutatorTest {
   }
 
   private static HeaderValueOption header(String key, String value, HeaderAppendAction action) {
-    return HeaderValueOption.create(HeaderValue.create(key, value), action, false);
+    return HeaderValueOption.create(HeaderValue.create(key, value), action);
   }
 
   @Test
@@ -147,8 +147,7 @@ public class HeaderMutatorTest {
     HeaderValueOption option =
         HeaderValueOption.create(
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
-            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-            false);
+            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
@@ -195,8 +194,7 @@ public class HeaderMutatorTest {
     HeaderValueOption option =
         HeaderValueOption.create(
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
-            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-            false);
+            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
@@ -219,21 +217,19 @@ public class HeaderMutatorTest {
                 header(OVERWRITE_IF_EXISTS_KEY.name(), "", HeaderAppendAction.OVERWRITE_IF_EXISTS),
                     HeaderValueOption.create(
                     HeaderValue.create("keep-empty-key", ""),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-                    true),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("keep-empty-overwrite-key", ""),
-                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD,
-                    true),
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD),
                     HeaderValueOption.create(
                     HeaderValue.create("keep-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, true),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("ignore-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("overwrite-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD, false)),
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)),
             ImmutableList.of());
 
     headers.put(
@@ -287,7 +283,7 @@ public class HeaderMutatorTest {
   public void applyMutations_stringValueWithBinaryKey_ignored() {
     Metadata headers = new Metadata();
     HeaderValueOption option = HeaderValueOption.create(HeaderValue.create("some-key-bin", "value"),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
@@ -301,7 +297,7 @@ public class HeaderMutatorTest {
     Metadata headers = new Metadata();
     HeaderValueOption option = HeaderValueOption.create(
         HeaderValue.create("some-key", ByteString.copyFrom(new byte[] {1})),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);

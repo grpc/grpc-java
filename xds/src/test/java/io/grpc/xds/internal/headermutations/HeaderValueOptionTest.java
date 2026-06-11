@@ -31,10 +31,9 @@ public class HeaderValueOptionTest {
   public void create_withAllFields_success() {
     HeaderValue header = HeaderValue.create("key1", "value1");
     HeaderValueOption option = HeaderValueOption.create(
-        header, HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, true);
+        header, HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     assertThat(option.header()).isEqualTo(header);
     assertThat(option.appendAction()).isEqualTo(HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
-    assertThat(option.keepEmptyValue()).isTrue();
   }
 }

@@ -31,7 +31,7 @@ public class HeaderMutationsTest {
   public void testCreate() {
     HeaderValueOption header = HeaderValueOption.create(
         HeaderValue.create("key", "value"),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
     HeaderMutations mutations = HeaderMutations.create(
         ImmutableList.of(header), ImmutableList.of("remove-key"));
     assertThat(mutations.headers()).containsExactly(header);
