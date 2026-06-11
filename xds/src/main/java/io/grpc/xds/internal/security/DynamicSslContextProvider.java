@@ -42,7 +42,7 @@ public abstract class DynamicSslContextProvider extends SslContextProvider {
 
   protected final List<Callback> pendingCallbacks = new ArrayList<>();
   @Nullable protected final CertificateValidationContext staticCertificateValidationContext;
-  @Nullable protected volatile AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager>
+  @Nullable protected AbstractMap.SimpleImmutableEntry<SslContext, X509TrustManager>
       sslContextAndTrustManager;
 
   protected DynamicSslContextProvider(

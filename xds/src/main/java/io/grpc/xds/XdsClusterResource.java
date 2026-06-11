@@ -225,7 +225,7 @@ class XdsClusterResource extends XdsResourceType<CdsUpdate> {
     boolean isHttp11ProxyAvailable = false;
     BackendMetricPropagation backendMetricPropagation = null;
 
-    if (isEnabledOrcaLrsPropagation) {
+    if (isEnabledOrcaLrsPropagation && !cluster.getLrsReportEndpointMetricsList().isEmpty()) {
       backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
           cluster.getLrsReportEndpointMetricsList());
     }
