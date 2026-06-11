@@ -22,7 +22,7 @@ import io.grpc.netty.InternalNettyServerBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
-import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
@@ -36,7 +36,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class Http2NettyLocalChannelTest extends AbstractInteropTest {
 
-  private DefaultEventLoopGroup eventLoopGroup = new DefaultEventLoopGroup();
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private EventLoopGroup eventLoopGroup = new io.netty.channel.DefaultEventLoopGroup();
 
   @Override
   protected ServerBuilder<?> getServerBuilder() {

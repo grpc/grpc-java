@@ -56,7 +56,6 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.Future;
@@ -88,7 +87,8 @@ public class NettyServerTest {
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final InternalChannelz channelz = new InternalChannelz();
-  private final NioEventLoopGroup eventLoop = new NioEventLoopGroup(1);
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup eventLoop = new io.netty.channel.nio.NioEventLoopGroup(1);
   private final ChannelFactory<NioServerSocketChannel> channelFactory =
       new ReflectiveChannelFactory<>(NioServerSocketChannel.class);
 

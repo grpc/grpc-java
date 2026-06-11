@@ -90,11 +90,9 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -163,7 +161,8 @@ public class NettyClientTransportTest {
   private final List<NettyClientTransport> transports = new ArrayList<>();
   private final LinkedBlockingQueue<Attributes> serverTransportAttributesList =
       new LinkedBlockingQueue<>();
-  private final NioEventLoopGroup group = new NioEventLoopGroup(1);
+  @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+  private final EventLoopGroup group = new io.netty.channel.nio.NioEventLoopGroup(1);
   private final EchoServerListener serverListener = new EchoServerListener();
   private final InternalChannelz channelz = new InternalChannelz();
   private Runnable tooManyPingsRunnable = new Runnable() {
@@ -591,7 +590,8 @@ public class NettyClientTransportTest {
   @Test
   public void channelFactoryShouldNNotSetSocketOptionKeepAlive() throws Exception {
     startServer();
-    DefaultEventLoopGroup group = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup group = new io.netty.channel.DefaultEventLoopGroup(1);
     try {
       NettyClientTransport transport = newTransport(newNegotiator(),
           DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,

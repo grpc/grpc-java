@@ -90,7 +90,6 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
@@ -919,7 +918,8 @@ public class ProtocolNegotiatorsTest {
         return "h2";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
@@ -945,7 +945,8 @@ public class ProtocolNegotiatorsTest {
         return "managed_mtls";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     InputStream clientCert = TlsTesting.loadCert("client.pem");
     InputStream key = TlsTesting.loadCert("client.key");
@@ -983,7 +984,8 @@ public class ProtocolNegotiatorsTest {
         return "badproto";
       }
     };
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
 
     ClientTlsHandler handler = new ClientTlsHandler(grpcHandler, sslContext,
         "authority", elg, noopLogger, Optional.absent(),
@@ -1113,7 +1115,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void httpProxy_completes() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
     // the channel is already active.
     LocalAddress proxy = new LocalAddress("httpProxy_completes");
@@ -1176,7 +1179,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void httpProxy_500() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
     // the channel is already active.
     LocalAddress proxy = new LocalAddress("httpProxy_500");
@@ -1228,7 +1232,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void httpProxy_customHeaders() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     // ProxyHandler is incompatible with EmbeddedChannel because when channelRegistered() is called
     // the channel is already active.
     LocalAddress proxy = new LocalAddress("httpProxy_customHeaders");
@@ -1299,7 +1304,8 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void waitUntilActiveHandler_firesNegotiation() throws Exception {
-    EventLoopGroup elg = new DefaultEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup elg = new io.netty.channel.DefaultEventLoopGroup(1);
     SocketAddress addr = new LocalAddress("addr");
     final AtomicReference<Object> event = new AtomicReference<>();
     ChannelHandler next = new ChannelInboundHandlerAdapter() {

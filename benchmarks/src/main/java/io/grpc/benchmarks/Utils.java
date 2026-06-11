@@ -35,9 +35,7 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.testing.TlsTesting;
 import io.netty.channel.epoll.EpollDomainSocketChannel;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -128,22 +126,30 @@ public final class Utils {
     DefaultThreadFactory tf = new DefaultThreadFactory("client-elg-", true /*daemon */);
     switch (transport) {
       case NETTY_NIO:
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        io.netty.channel.EventLoopGroup elg = new io.netty.channel.nio.NioEventLoopGroup(0, tf);
         builder
-            .eventLoopGroup(new NioEventLoopGroup(0, tf))
+            .eventLoopGroup(elg)
             .channelType(NioSocketChannel.class, InetSocketAddress.class);
         break;
 
       case NETTY_EPOLL:
         // These classes only work on Linux.
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        io.netty.channel.EventLoopGroup epollElg =
+            new io.netty.channel.epoll.EpollEventLoopGroup(0, tf);
         builder
-            .eventLoopGroup(new EpollEventLoopGroup(0, tf))
+            .eventLoopGroup(epollElg)
             .channelType(EpollSocketChannel.class, InetSocketAddress.class);
         break;
 
       case NETTY_UNIX_DOMAIN_SOCKET:
         // These classes only work on Linux.
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        io.netty.channel.EventLoopGroup unixElg =
+            new io.netty.channel.epoll.EpollEventLoopGroup(0, tf);
         builder
-            .eventLoopGroup(new EpollEventLoopGroup(0, tf))
+            .eventLoopGroup(unixElg)
             .channelType(EpollDomainSocketChannel.class, DomainSocketAddress.class);
         break;
 

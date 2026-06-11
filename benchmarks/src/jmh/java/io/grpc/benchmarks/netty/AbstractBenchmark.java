@@ -41,7 +41,6 @@ import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
@@ -229,8 +228,14 @@ public abstract class AbstractBenchmark {
 
     // Always use a different worker group from the client.
     ThreadFactory serverThreadFactory = new DefaultThreadFactory("STF pool", true /* daemon */);
-    serverBuilder.workerEventLoopGroup(new NioEventLoopGroup(0, serverThreadFactory));
-    serverBuilder.bossEventLoopGroup(new NioEventLoopGroup(1, serverThreadFactory));
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup workerGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(0, serverThreadFactory);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup bossGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(1, serverThreadFactory);
+    serverBuilder.workerEventLoopGroup(workerGroup);
+    serverBuilder.bossEventLoopGroup(bossGroup);
 
     // Always set connection and stream window size to same value
     serverBuilder.flowControlWindow(windowSize.bytes());
@@ -388,8 +393,11 @@ public abstract class AbstractBenchmark {
     ThreadFactory clientThreadFactory = new DefaultThreadFactory("CTF pool", true /* daemon */);
     for (int i = 0; i < channelCount; i++) {
       // Use a dedicated event-loop for each channel
+      @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+      io.netty.channel.EventLoopGroup elg =
+          new io.netty.channel.nio.NioEventLoopGroup(1, clientThreadFactory);
       channels[i] = channelBuilder
-          .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
+          .eventLoopGroup(elg)
           .build();
     }
   }
