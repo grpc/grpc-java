@@ -75,6 +75,7 @@ public class TestServiceServer {
   private int port = 8080;
   private boolean useTls = true;
   private boolean useAlts = false;
+  private int mcsLimit = -1;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -118,6 +119,10 @@ public class TestServiceServer {
           usage = true;
           break;
         }
+      } else if ("max_concurrent_streams_limit".equals(key)) {
+        mcsLimit = Integer.parseInt(value);
+        // TODO: Make Netty server builder usable for IPV6 as well (not limited to MCS handling)
+        addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -141,6 +146,8 @@ public class TestServiceServer {
               + "\n                        for testing. Only effective when --use_alts=true."
               + "\n  --address_type=IPV4|IPV6|IPV4_IPV6"
               + "\n                        What type of addresses to listen on. Default IPV4_IPV6"
+              + "\n  --max_concurrent_streams_limit=LIMIT"
+              + "\n                        Set the maximum concurrent streams limit"
       );
       System.exit(1);
     }
@@ -185,6 +192,9 @@ public class TestServiceServer {
             NettyServerBuilder.forAddress(localV4Address, serverCreds);
         if (v4Address != null && !v4Address.equals(localV4Address)) {
           ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
+        }
+        if (mcsLimit != -1) {
+          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(mcsLimit);
         }
         break;
       case IPV6:
