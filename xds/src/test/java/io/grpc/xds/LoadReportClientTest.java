@@ -185,7 +185,7 @@ public class LoadReportClientTest {
     lrsClient =
         new LoadReportClient(
             loadStatsManager,
-            new GrpcXdsTransportFactory(null).createForTest(channel),
+            new GrpcXdsTransportFactory(null, null).createForTest(channel),
             NODE,
             syncContext,
             fakeClock.getScheduledExecutorService(),

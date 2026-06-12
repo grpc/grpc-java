@@ -358,6 +358,7 @@ public abstract class NameResolver {
     private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
+    private final ChannelConfigurator channelConfigurator;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -373,6 +374,7 @@ public abstract class NameResolver {
           : new MetricRecorder() {};
       this.nameResolverRegistry = builder.nameResolverRegistry;
       this.customArgs = cloneCustomArgs(builder.customArgs);
+      this.channelConfigurator = builder.channelConfigurator;
     }
 
     /**
@@ -469,6 +471,16 @@ public abstract class NameResolver {
         throw new IllegalStateException("ChannelLogger is not set in Builder");
       }
       return channelLogger;
+    }
+
+    /**
+     * Returns the configurator for child channels.
+     *
+     * @since 1.83.0
+     */
+    @Internal
+    public ChannelConfigurator getChildChannelConfigurator() {
+      return channelConfigurator;
     }
 
     /**
@@ -579,6 +591,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
+      private ChannelConfigurator channelConfigurator = builder -> { };
 
       Builder() {
       }
@@ -691,6 +704,16 @@ public abstract class NameResolver {
        */
       public Builder setNameResolverRegistry(NameResolverRegistry registry) {
         this.nameResolverRegistry = registry;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getChildChannelConfigurator()}. This is an optional field.
+       *
+       * @since 1.83.0
+       */
+      public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurator) {
+        this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
         return this;
       }
 

@@ -21,11 +21,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -52,6 +54,8 @@ import java.util.concurrent.TimeUnit;
 final class GrpcXdsTransportFactory implements XdsTransportFactory {
 
   private final CallCredentials callCredentials;
+  private final ChannelConfigurator channelConfigurator;
+
   // The map of xDS server info to its corresponding gRPC xDS transport.
   // This enables reusing and sharing the same underlying gRPC channel.
   //
@@ -61,8 +65,10 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
   private static final Map<Bootstrapper.ServerInfo, GrpcXdsTransport> xdsServerInfoToTransportMap =
       new ConcurrentHashMap<>();
 
-  GrpcXdsTransportFactory(CallCredentials callCredentials) {
+  GrpcXdsTransportFactory(CallCredentials callCredentials,
+                          ChannelConfigurator channelConfigurator) {
     this.callCredentials = callCredentials;
+    this.channelConfigurator = channelConfigurator;
   }
 
   @Override
@@ -71,7 +77,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
         serverInfo,
         (info, transport) -> {
           if (transport == null) {
-            transport = new GrpcXdsTransport(serverInfo, callCredentials);
+            transport = new GrpcXdsTransport(serverInfo, callCredentials, channelConfigurator);
           }
           ++transport.refCount;
           return transport;
@@ -93,7 +99,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     private int refCount = 0;
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo) {
-      this(serverInfo, null);
+      this(serverInfo, null, null);
     }
 
     @VisibleForTesting
@@ -102,11 +108,20 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
     }
 
     public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo, CallCredentials callCredentials) {
+      this(serverInfo, callCredentials, null);
+    }
+
+    public GrpcXdsTransport(Bootstrapper.ServerInfo serverInfo,
+                            CallCredentials callCredentials,
+                            ChannelConfigurator channelConfigurator) {
       String target = serverInfo.target();
       ChannelCredentials channelCredentials = (ChannelCredentials) serverInfo.implSpecificConfig();
-      this.channel = Grpc.newChannelBuilder(target, channelCredentials)
-          .keepAliveTime(5, TimeUnit.MINUTES)
-          .build();
+      ManagedChannelBuilder<?> channelBuilder = Grpc.newChannelBuilder(target, channelCredentials)
+          .keepAliveTime(5, TimeUnit.MINUTES);
+      if (channelConfigurator != null) {
+        channelConfigurator.configureChannelBuilder(channelBuilder);
+      }
+      this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;
       this.serverInfo = serverInfo;
     }

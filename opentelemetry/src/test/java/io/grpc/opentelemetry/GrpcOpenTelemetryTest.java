@@ -25,7 +25,9 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
@@ -168,6 +170,36 @@ public class GrpcOpenTelemetryTest {
     assertThat(module.getEnableMetrics()).isEmpty();
   }
 
-  // TODO(dnvindhya): Add tests for configurator
+  @Test
+  public void configureChannelBuilder_registersMetricSink() {
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder().build();
+    TestChannelBuilder testBuilder = new TestChannelBuilder();
+    grpcOpenTelemetry.configureChannelBuilder(testBuilder);
+    assertThat(testBuilder.metricSink).isSameInstanceAs(grpcOpenTelemetry.getSink());
+    assertThat(testBuilder.interceptorFactory).isNotNull();
+  }
 
+  private static class TestChannelBuilder extends ForwardingChannelBuilder2<TestChannelBuilder> {
+    Object interceptorFactory;
+    MetricSink metricSink;
+
+    @Override
+    protected ManagedChannelBuilder<?> delegate() {
+      return null;
+    }
+
+    @Override
+    protected TestChannelBuilder interceptWithTarget(InterceptorFactory factory) {
+      this.interceptorFactory = factory;
+      return this;
+    }
+
+    @Override
+    public TestChannelBuilder addMetricSink(MetricSink metricSink) {
+      this.metricSink = metricSink;
+      return this;
+    }
+  }
+
+  // TODO(dnvindhya): Add tests for configurator
 }

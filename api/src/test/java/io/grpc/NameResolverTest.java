@@ -105,6 +105,7 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
+    ChannelConfigurator channelConfigurator = builder -> { };
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -116,7 +117,44 @@ public class NameResolverTest {
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
         .setArg(FOO_ARG_KEY, customArgValue)
+        .setChildChannelConfigurator(channelConfigurator)
         .build();
+  }
+
+  @Test
+  public void args_childChannelConfigurator() {
+    final ManagedChannelBuilder<?>[] capturedBuilder = new ManagedChannelBuilder<?>[1];
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        capturedBuilder[0] = builder;
+      }
+    };
+
+    SynchronizationContext realSyncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(realSyncContext)
+        .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurator(channelConfigurator)
+        .build();
+
+    ChannelConfigurator configurator = args.getChildChannelConfigurator();
+    assertThat(configurator).isSameInstanceAs(channelConfigurator);
+    
+    // Validate configurator accepts builders
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+    configurator.configureChannelBuilder(mockBuilder);
+    assertThat(capturedBuilder[0]).isSameInstanceAs(mockBuilder);
   }
 
   @Test
