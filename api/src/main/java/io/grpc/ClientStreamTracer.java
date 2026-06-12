@@ -58,6 +58,23 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
+   * A delay segment started with a specific reason during load balancing.
+   *
+   * @param reasonToken the reason for the delay, e.g., "pick_first:connecting"
+   * @since 1.82.0
+   */
+  public void delayStarted(String reasonToken) {
+  }
+
+  /**
+   * The current delay segment ended.
+   *
+   * @since 1.82.0
+   */
+  public void delayEnded() {
+  }
+
+  /**
    * Headers has been sent to the socket.
    */
   public void outboundHeaders() {

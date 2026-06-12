@@ -41,8 +41,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
+  private static final PickResult CONNECTING_RESULT = 
+      PickResult.withNoResult("round_robin:connecting");
   private final AtomicInteger sequence = new AtomicInteger(new Random().nextInt());
-  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+  private SubchannelPicker currentPicker = new FixedResultPicker(CONNECTING_RESULT);
 
   public RoundRobinLoadBalancer(Helper helper) {
     super(helper);
@@ -68,7 +70,7 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+        updateBalancingState(CONNECTING, new FixedResultPicker(CONNECTING_RESULT));
       } else {
         updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
       }

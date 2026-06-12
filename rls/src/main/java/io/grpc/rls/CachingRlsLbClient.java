@@ -1050,7 +1050,7 @@ final class CachingRlsLbClient {
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
-        return PickResult.withNoResult();
+        return PickResult.withNoResult("rls:lookup_pending");
       }
     }
 

@@ -39,6 +39,16 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
+  public void delayStarted(String reasonToken) {
+    delegate().delayStarted(reasonToken);
+  }
+
+  @Override
+  public void delayEnded() {
+    delegate().delayEnded();
+  }
+
+  @Override
   public void outboundHeaders() {
     delegate().outboundHeaders();
   }

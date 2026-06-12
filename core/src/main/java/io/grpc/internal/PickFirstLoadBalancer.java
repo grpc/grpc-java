@@ -38,6 +38,8 @@ import javax.annotation.Nullable;
  * list and sticking to the first that works.
  */
 final class PickFirstLoadBalancer extends LoadBalancer {
+  private static final PickResult CONNECTING_RESULT = 
+      PickResult.withNoResult("pick_first:connecting");
   private final Helper helper;
   private Subchannel subchannel;
   private ConnectivityState currentState = IDLE;
@@ -83,7 +85,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+      updateBalancingState(CONNECTING, new FixedResultPicker(CONNECTING_RESULT));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -135,7 +137,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       case CONNECTING:
         // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
         // the current picker in-place. But ignoring the potential optimization is simpler.
-        picker = new FixedResultPicker(PickResult.withNoResult());
+        picker = new FixedResultPicker(CONNECTING_RESULT);
         break;
       case READY:
         picker = new FixedResultPicker(PickResult.withSubchannel(subchannel));
