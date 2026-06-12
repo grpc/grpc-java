@@ -524,7 +524,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void activateCall() {
-      if ((extProcStreamState.get() == ExtProcStreamState.FAILED && !config.getFailureModeAllow())
+      if ((extProcStreamState.get() == ExtProcStreamState.FAILED
+              && !config.getFailureModeAllow()
+              && !config.getObservabilityMode())
           || !dataPlaneCallState.compareAndSet(
               DataPlaneCallState.IDLE, DataPlaneCallState.ACTIVE)) {
         return;
@@ -785,7 +787,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             synchronized (streamLock) {
               extProcClientCallRequestObserver = null;
             }
-            if (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get()) {
+            if (config.getObservabilityMode()
+                || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
               handleFailOpen(wrappedListener);
             } else {
               String message = "External processor stream failed";
@@ -906,7 +909,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             extProcClientCallRequestObserver = null;
           }
         }
-        if (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get()) {
+        if (config.getObservabilityMode()
+            || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
           handleFailOpen(wrappedListener);
         } else {
           String message = "External processor stream failed";
@@ -1340,6 +1344,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       DataPlaneClientCall.ExtProcStreamState extProcStreamState =
           dataPlaneClientCall.getExtProcStreamState().get();
       if (extProcStreamState.isFailed()
+          && !dataPlaneClientCall.getConfig().getObservabilityMode()
           && (!dataPlaneClientCall.getConfig().getFailureModeAllow()
               || dataPlaneClientCall.bodyMessageSentToExtProc.get())) {
         if (dataPlaneClientCall.markDataPlaneCallClosed()) {
