@@ -49,6 +49,7 @@ package io.grpc;
  * @since 1.83.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+@FunctionalInterface
 public interface ChannelConfigurator {
 
   /**
@@ -56,6 +57,13 @@ public interface ChannelConfigurator {
    *
    * <p>This method is invoked synchronously during the creation of the child channel,
    * before {@link ManagedChannelBuilder#build()} is called.
+   *
+   * <p><strong>Note:</strong> Implementations must only apply configurations to the
+   * provided builder and must NOT call {@code builder.build()} themselves.
+   *
+   * <p><strong>Note:</strong> The provided {@code builder} is generic ({@code ?}). Implementations
+   * should use universal configuration methods (like {@code intercept()}, {@code userAgent()}) on the builder
+   * rather than casting it to specific implementation types.
    *
    * @param builder the mutable channel builder for the new child channel
    */
