@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.xds.client.LoadStatsManager2.isEnabledOrcaLrsPropagation;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -535,12 +534,10 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
      */
     @Override
     public void onLoadReport(MetricReport report) {
-      if (isEnabledOrcaLrsPropagation) {
-        stats.recordTopLevelMetrics(
-            report.getCpuUtilization(),
-            report.getMemoryUtilization(),
-            report.getApplicationUtilization());
-      }
+      stats.recordTopLevelMetrics(
+          report.getCpuUtilization(),
+          report.getMemoryUtilization(),
+          report.getApplicationUtilization());
       stats.recordBackendLoadMetricStats(report.getNamedMetrics());
     }
   }

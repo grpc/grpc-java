@@ -317,7 +317,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void recordLoadStats() {
+  public void recordLoadStats_orcaMetricsPropagation() {
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
     WeightedTargetConfig weightedTargetConfig =
         buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
@@ -406,9 +406,7 @@ public class ClusterImplLoadBalancerTest {
   }
 
   @Test
-  public void recordLoadStats_orcaLrsPropagationEnabled() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = true;
+  public void recordLoadStats() {
     BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
         Arrays.asList("application_utilization", "cpu_utilization", "named_metrics.named1"));
     LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
@@ -459,60 +457,6 @@ public class ClusterImplLoadBalancerTest {
         .isWithin(TOLERANCE).of(3.14159);
     assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
     subchannel.shutdown();
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
-  }
-
-  @Test
-  public void recordLoadStats_orcaLrsPropagationDisabled() {
-    boolean originalVal = LoadStatsManager2.isEnabledOrcaLrsPropagation;
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = false;
-    BackendMetricPropagation backendMetricPropagation = BackendMetricPropagation.fromMetricSpecs(
-        Arrays.asList("application_utilization", "cpu_utilization", "named_metrics.named1"));
-    LoadBalancerProvider weightedTargetProvider = new WeightedTargetLoadBalancerProvider();
-    WeightedTargetConfig weightedTargetConfig =
-        buildWeightedTargetConfig(ImmutableMap.of(locality, 10));
-    ClusterImplConfig config = new ClusterImplConfig(CLUSTER, EDS_SERVICE_NAME, LRS_SERVER_INFO,
-        null, Collections.<DropOverload>emptyList(),
-        GracefulSwitchLoadBalancer.createLoadBalancingPolicyConfig(
-            weightedTargetProvider, weightedTargetConfig),
-        null, Collections.emptyMap(), backendMetricPropagation);
-    EquivalentAddressGroup endpoint = makeAddress("endpoint-addr", locality);
-    deliverAddressesAndConfig(Collections.singletonList(endpoint), config);
-    FakeLoadBalancer leafBalancer = Iterables.getOnlyElement(downstreamBalancers);
-    Subchannel subchannel = leafBalancer.createSubChannel();
-    FakeSubchannel fakeSubchannel = helper.subchannels.poll();
-    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.CONNECTING));
-    fakeSubchannel.setConnectedEagIndex(0);
-    fakeSubchannel.updateState(ConnectivityStateInfo.forNonError(ConnectivityState.READY));
-    assertThat(currentState).isEqualTo(ConnectivityState.READY);
-    PickResult result = currentPicker.pickSubchannel(pickSubchannelArgs);
-    assertThat(result.getStatus().isOk()).isTrue();
-    ClientStreamTracer streamTracer = result.getStreamTracerFactory().newClientStreamTracer(
-        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
-    Metadata trailersWithOrcaLoadReport = new Metadata();
-    trailersWithOrcaLoadReport.put(ORCA_ENDPOINT_LOAD_METRICS_KEY,
-        OrcaLoadReport.newBuilder()
-            .setApplicationUtilization(1.414)
-            .setCpuUtilization(0.5)
-            .setMemUtilization(0.034)
-            .putNamedMetrics("named1", 3.14159)
-            .putNamedMetrics("named2", -1.618).build());
-    streamTracer.inboundTrailers(trailersWithOrcaLoadReport);
-    streamTracer.streamClosed(Status.OK);
-    ClusterStats clusterStats =
-        Iterables.getOnlyElement(loadStatsManager.getClusterStatsReports(CLUSTER));
-    UpstreamLocalityStats localityStats =
-        Iterables.getOnlyElement(clusterStats.upstreamLocalityStatsList());
-
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("application_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("cpu_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("mem_utilization");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named1");
-    assertThat(localityStats.loadMetricStatsMap()).doesNotContainKey("named_metrics.named2");
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named1")).isTrue();
-    assertThat(localityStats.loadMetricStatsMap().containsKey("named2")).isTrue();
-    subchannel.shutdown();
-    LoadStatsManager2.isEnabledOrcaLrsPropagation = originalVal;
   }
 
   // Verifies https://github.com/grpc/grpc-java/issues/11434.
