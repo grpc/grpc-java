@@ -63,7 +63,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   }
 
   private XdsNameResolverProvider(String scheme,
-                                 @Nullable Map<String, ?> bootstrapOverride) {
+      @Nullable Map<String, ?> bootstrapOverride) {
     this.scheme = checkNotNull(scheme, "scheme");
     this.bootstrapOverride = bootstrapOverride;
   }
@@ -73,7 +73,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
    * and bootstrap.
    */
   public static XdsNameResolverProvider createForTest(String scheme,
-                                                      @Nullable Map<String, ?> bootstrapOverride) {
+      @Nullable Map<String, ?> bootstrapOverride) {
     return new XdsNameResolverProvider(scheme, bootstrapOverride);
   }
 

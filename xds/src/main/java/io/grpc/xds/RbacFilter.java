@@ -33,6 +33,8 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import io.grpc.xds.internal.rbac.engine.GrpcAuthorizationEngine;
@@ -89,7 +91,7 @@ final class RbacFilter implements Filter {
     }
 
     @Override
-    public RbacFilter newInstance(String name) {
+    public RbacFilter newInstance(FilterContext context) {
       return INSTANCE;
     }
 

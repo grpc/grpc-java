@@ -67,10 +67,15 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
@@ -79,11 +84,14 @@ import io.grpc.internal.JsonUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.PickSubchannelArgsImpl;
 import io.grpc.internal.ScParser;
+import io.grpc.stub.ClientCalls;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.ClusterSpecifierPlugin.NamedPluginConfig;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.VirtualHost.Route;
@@ -103,7 +111,11 @@ import io.grpc.xds.client.Bootstrapper.ServerInfo;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsResourceType;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -148,6 +160,8 @@ public class XdsNameResolverTest {
   private static final String STATEFUL_1 = "test.stateful.filter.1";
   private static final String STATEFUL_2 = "test.stateful.filter.2";
 
+  @Rule
+  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -223,7 +237,7 @@ public class XdsNameResolverTest {
     // Lenient: suppress [MockitoHint] Unused warning, only used in resolved_fault* tests.
     lenient()
         .doReturn(new FaultFilter(mockRandom, new AtomicLong()))
-        .when(faultFilterProvider).newInstance(any(String.class));
+        .when(faultFilterProvider).newInstance(any(FilterContext.class));
 
     FilterRegistry filterRegistry = FilterRegistry.newRegistry().register(
         ROUTER_FILTER_PROVIDER,
@@ -1989,7 +2003,7 @@ public class XdsNameResolverTest {
 
     // timeout and retry with empty retriable status codes
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            timeoutNano, retryPolicyWithEmptyStatusCodes))
+        timeoutNano, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
 
     // retry only
@@ -2042,7 +2056,7 @@ public class XdsNameResolverTest {
 
     // retry with emtry retriable status codes only
     assertThat(XdsNameResolver.generateServiceConfigWithMethodConfig(
-            null, retryPolicyWithEmptyStatusCodes))
+        null, retryPolicyWithEmptyStatusCodes))
         .isEqualTo(expectedServiceConfig);
   }
 
@@ -2546,9 +2560,9 @@ public class XdsNameResolverTest {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends ResourceUpdate> void watchXdsResource(XdsResourceType<T> resourceType,
-            String resourceName,
-            ResourceWatcher<T> watcher,
-            Executor syncContext) {
+        String resourceName,
+        ResourceWatcher<T> watcher,
+        Executor syncContext) {
 
       switch (resourceType.typeName()) {
         case "LDS":
@@ -2577,8 +2591,8 @@ public class XdsNameResolverTest {
     @SuppressWarnings("unchecked")
     @Override
     public <T extends ResourceUpdate> void cancelXdsResourceWatch(XdsResourceType<T> type,
-                                                                  String resourceName,
-                                                                  ResourceWatcher<T> watcher) {
+        String resourceName,
+        ResourceWatcher<T> watcher) {
       switch (type.typeName()) {
         case "LDS":
           assertThat(ldsResource).isNotNull();
@@ -2956,5 +2970,72 @@ public class XdsNameResolverTest {
     void deliverErrorStatus() {
       listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
+  }
+
+  private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
+    @Override
+    public InputStream stream(String value) {
+      return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public String parse(InputStream stream) {
+      try {
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        int nRead;
+        byte[] data = new byte[1024];
+        while ((nRead = stream.read(data, 0, data.length)) != -1) {
+          buffer.write(data, 0, nRead);
+        }
+        buffer.flush();
+        return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private static final MethodDescriptor<String, String> METHOD_SAY_HELLO =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setFullMethodName("test.TestService/SayHello")
+          .setRequestMarshaller(new StringMarshaller())
+          .setResponseMarshaller(new StringMarshaller())
+          .build();
+
+  @Test
+  public void rawMessageClientInterceptor_unaryRpc() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_SAY_HELLO, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.request(1);
+            return new ServerCall.Listener<String>() {
+              @Override
+              public void onMessage(String message) {
+                call.sendHeaders(new Metadata());
+                call.sendMessage("Hello " + message);
+                call.close(Status.OK, new Metadata());
+              }
+            };
+          }
+        }).build();
+
+    grpcCleanup.register(InProcessServerBuilder.forName(serverName)
+        .directExecutor()
+        .addService(serviceDef)
+        .build()
+        .start());
+
+    Channel channel = grpcCleanup.register(InProcessChannelBuilder.forName(serverName)
+        .directExecutor()
+        .intercept(new XdsNameResolver.RawMessageClientInterceptor())
+        .build());
+
+    String response = ClientCalls.blockingUnaryCall(
+        channel, METHOD_SAY_HELLO, CallOptions.DEFAULT, "World");
+    assertThat(response).isEqualTo("Hello World");
   }
 }

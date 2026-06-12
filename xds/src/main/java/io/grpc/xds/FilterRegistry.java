@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.internal.GrpcUtil;
 import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -39,6 +40,9 @@ final class FilterRegistry {
               new RouterFilter.Provider(),
               new RbacFilter.Provider(),
               new GcpAuthenticationFilter.Provider());
+      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+        instance.register(new ExternalProcessorFilter.Provider());
+      }
     }
     return instance;
   }
