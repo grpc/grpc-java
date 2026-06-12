@@ -65,21 +65,38 @@ abstract class VirtualHost {
 
     abstract ImmutableMap<String, FilterConfig> filterConfigOverrides();
 
+    @Nullable
+    abstract ImmutableMap<String, com.google.protobuf.Struct> filterMetadata();
+
     static Route forAction(RouteMatch routeMatch, RouteAction routeAction,
         Map<String, FilterConfig> filterConfigOverrides) {
-      return create(routeMatch, routeAction, filterConfigOverrides);
+      return create(routeMatch, routeAction, filterConfigOverrides, null);
+    }
+
+    static Route forAction(RouteMatch routeMatch, RouteAction routeAction,
+        Map<String, FilterConfig> filterConfigOverrides,
+        @Nullable Map<String, com.google.protobuf.Struct> filterMetadata) {
+      return create(routeMatch, routeAction, filterConfigOverrides, filterMetadata);
     }
 
     static Route forNonForwardingAction(RouteMatch routeMatch,
         Map<String, FilterConfig> filterConfigOverrides) {
-      return create(routeMatch, null, filterConfigOverrides);
+      return create(routeMatch, null, filterConfigOverrides, null);
+    }
+
+    static Route forNonForwardingAction(RouteMatch routeMatch,
+        Map<String, FilterConfig> filterConfigOverrides,
+        @Nullable Map<String, com.google.protobuf.Struct> filterMetadata) {
+      return create(routeMatch, null, filterConfigOverrides, filterMetadata);
     }
 
     private static Route create(
         RouteMatch routeMatch, @Nullable RouteAction routeAction,
-        Map<String, FilterConfig> filterConfigOverrides) {
+        Map<String, FilterConfig> filterConfigOverrides,
+        @Nullable Map<String, com.google.protobuf.Struct> filterMetadata) {
       return new AutoValue_VirtualHost_Route(
-          routeMatch, routeAction, ImmutableMap.copyOf(filterConfigOverrides));
+          routeMatch, routeAction, ImmutableMap.copyOf(filterConfigOverrides),
+          filterMetadata == null ? null : ImmutableMap.copyOf(filterMetadata));
     }
 
     @AutoValue

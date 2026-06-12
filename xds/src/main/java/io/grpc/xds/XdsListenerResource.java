@@ -230,7 +230,7 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
     // FilterChain contains L4 filters, so we ensure it contains only HCM.
     if (proto.getFiltersCount() != 1) {
       throw new ResourceInvalidException("FilterChain " + filterChainName
-          + " should contain exact one HttpConnectionManager filter");
+          + " should contain exactly one HttpConnectionManager filter");
     }
     io.envoyproxy.envoy.config.listener.v3.Filter l4Filter = proto.getFiltersList().get(0);
     if (!l4Filter.hasTypedConfig()) {
@@ -617,7 +617,6 @@ class XdsListenerResource extends XdsResourceType<LdsUpdate> {
           "HttpFilter [" + filterName + "](" + typeUrl + ") is required but unsupported for " + (
               isForClient ? "client" : "server"));
     }
-
     Filter.FilterConfigParseContext filterContext = Filter.FilterConfigParseContext.builder()
         .bootstrapInfo(args.getBootstrapInfo())
         .serverInfo(args.getServerInfo())
