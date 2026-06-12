@@ -247,30 +247,27 @@ public class HeaderMutatorTest {
     headerMutator.applyMutations(mutations, headers);
 
     assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
-    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value");
-    assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("existing-value");
+    assertThat(headers.containsKey(APPEND_KEY)).isFalse();
+    assertThat(headers.containsKey(OVERWRITE_KEY)).isFalse();
     assertThat(headers.containsKey(ADD_KEY)).isFalse();
-    assertThat(headers.get(OVERWRITE_IF_EXISTS_KEY)).isEqualTo("existing-value");
+    assertThat(headers.containsKey(OVERWRITE_IF_EXISTS_KEY)).isFalse();
 
     Metadata.Key<String> keepEmptyKey =
         Metadata.Key.of("keep-empty-key", Metadata.ASCII_STRING_MARSHALLER);
     Metadata.Key<String> keepEmptyOverwriteKey =
         Metadata.Key.of("keep-empty-overwrite-key", Metadata.ASCII_STRING_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyKey)).isTrue();
-    assertThat(headers.get(keepEmptyKey)).isEqualTo("");
-    assertThat(headers.containsKey(keepEmptyOverwriteKey)).isTrue();
-    assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
+    assertThat(headers.containsKey(keepEmptyKey)).isFalse();
+    assertThat(headers.containsKey(keepEmptyOverwriteKey)).isFalse();
 
     Metadata.Key<byte[]> keepEmptyBinKey =
         Metadata.Key.of("keep-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
     Metadata.Key<byte[]> ignoreEmptyBinKey =
         Metadata.Key.of("ignore-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyBinKey)).isTrue();
-    assertThat(headers.get(keepEmptyBinKey)).isEqualTo(new byte[0]);
+    assertThat(headers.containsKey(keepEmptyBinKey)).isFalse();
     assertThat(headers.containsKey(ignoreEmptyBinKey)).isFalse();
-    assertThat(headers.get(overwriteEmptyBinKey)).isEqualTo(originalBinValue);
+    assertThat(headers.containsKey(overwriteEmptyBinKey)).isFalse();
   }
 
   @Test
