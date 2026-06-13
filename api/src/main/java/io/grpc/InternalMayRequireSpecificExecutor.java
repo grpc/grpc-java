@@ -16,6 +16,10 @@
 
 package io.grpc;
 
+/**
+ * Indicates that a component may require a specific executor for certain operations.
+ * This is an internal interface.
+ */
 @Internal
 public interface InternalMayRequireSpecificExecutor {
   boolean isSpecificExecutorRequired();
