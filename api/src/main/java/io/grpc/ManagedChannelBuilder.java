@@ -247,6 +247,21 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
+   * Sets a custom {@link java.security.Provider} to use for secure connections,
+   * preferring the JDK's built-in SSL/TLS implementation with that provider.
+   *
+   * @param provider the Provider to use, or {@code null} to use defaults.
+   * @throws UnsupportedOperationException if the transport implementation does not support
+   *         configuring SSL provider preferences or custom JDK {@code Provider}.
+   * @since 1.69.0
+   */
+  public T preferJdkSslWithSecurityProvider(java.security.Provider provider) {
+    throw new UnsupportedOperationException();
+  }
+
+
+
+  /**
    * Provides a custom {@link NameResolver.Factory} for the channel. If this method is not called,
    * the builder will try the providers registered in the default {@link NameResolverRegistry} for
    * the given target.

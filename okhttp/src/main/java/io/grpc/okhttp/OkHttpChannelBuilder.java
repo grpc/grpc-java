@@ -487,6 +487,25 @@ public final class OkHttpChannelBuilder extends ForwardingChannelBuilder2<OkHttp
     return this;
   }
 
+  @Override
+  public OkHttpChannelBuilder preferJdkSslWithSecurityProvider(java.security.Provider provider) {
+    Preconditions.checkState(!freezeSecurityConfiguration,
+        "Cannot change security when using ChannelCredentials");
+    if (provider == null) {
+      return this;
+    }
+    try {
+      javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS", provider);
+      sslContext.init(null, null, null);
+      sslSocketFactory(sslContext.getSocketFactory());
+      return this;
+    } catch (java.security.GeneralSecurityException e) {
+      throw new RuntimeException("Failed to initialize SSLContext with provider", e);
+    }
+  }
+
+
+
   /**
    * Provides a custom scheduled executor service.
    *

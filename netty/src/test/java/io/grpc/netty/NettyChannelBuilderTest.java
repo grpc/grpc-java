@@ -141,7 +141,7 @@ public class NettyChannelBuilderTest {
   @Test
   public void sslContextCanBeNull() {
     NettyChannelBuilder builder = new NettyChannelBuilder(getTestSocketAddress());
-    builder.sslContext(null);
+    builder.sslContext(noSslContext);
   }
 
   @Test
@@ -327,4 +327,43 @@ public class NettyChannelBuilderTest {
         NettyChannelCredentials.create(new PlaintextProtocolNegotiatorClientFactory()));
     assertThat(result).isNotNull();
   }
+
+  @Test
+  public void preferJdkSslWithSecurityProvider_configuresJdkSslContext() throws Exception {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    java.security.Provider provider = javax.net.ssl.SSLContext.getDefault().getProvider();
+    builder.preferJdkSslWithSecurityProvider(provider);
+
+    java.lang.reflect.Field factoryField = NettyChannelBuilder.class.getDeclaredField("protocolNegotiatorFactory");
+    factoryField.setAccessible(true);
+    Object factory = factoryField.get(builder);
+
+    java.lang.reflect.Field sslContextField = factory.getClass().getDeclaredField("sslContext");
+    sslContextField.setAccessible(true);
+    SslContext nettySslContext = (SslContext) sslContextField.get(factory);
+
+    assertThat(nettySslContext).isInstanceOf(io.netty.handler.ssl.JdkSslContext.class);
+  }
+
+  @Test
+  public void preferJdkSslWithSecurityProvider_null_isNoop() throws Exception {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    SslContext customContext = mock(SslContext.class);
+    org.mockito.Mockito.when(customContext.isClient()).thenReturn(true);
+    io.netty.handler.ssl.ApplicationProtocolNegotiator apn = mock(io.netty.handler.ssl.ApplicationProtocolNegotiator.class);
+    org.mockito.Mockito.when(apn.protocols()).thenReturn(java.util.Arrays.asList("h2"));
+    org.mockito.Mockito.when(customContext.applicationProtocolNegotiator()).thenReturn(apn);
+    builder.sslContext(customContext);
+
+    builder.preferJdkSslWithSecurityProvider(null);
+
+    java.lang.reflect.Field factoryField = NettyChannelBuilder.class.getDeclaredField("protocolNegotiatorFactory");
+    factoryField.setAccessible(true);
+    Object factory = factoryField.get(builder);
+
+    java.lang.reflect.Field sslContextField = factory.getClass().getDeclaredField("sslContext");
+    sslContextField.setAccessible(true);
+    assertThat(sslContextField.get(factory)).isSameInstanceAs(customContext);
+  }
 }
+
