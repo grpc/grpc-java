@@ -27,7 +27,6 @@ import io.grpc.benchmarks.proto.Control.ServerArgs.ArgtypeCase;
 import io.grpc.benchmarks.proto.WorkerServiceGrpc;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,11 +44,13 @@ public class LoadWorker {
 
   LoadWorker(int driverPort, int serverPort) throws Exception {
     this.serverPort = serverPort;
-    NioEventLoopGroup singleThreadGroup = new NioEventLoopGroup(1,
-        new ThreadFactoryBuilder()
-            .setDaemon(true)
-            .setNameFormat("load-worker-%d")
-            .build());
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup singleThreadGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(1,
+            new ThreadFactoryBuilder()
+                .setDaemon(true)
+                .setNameFormat("load-worker-%d")
+                .build());
     this.driverServer = NettyServerBuilder.forPort(driverPort, InsecureServerCredentials.create())
         .directExecutor()
         .channelType(NioServerSocketChannel.class)

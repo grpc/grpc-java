@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.StatusOr;
@@ -76,14 +77,12 @@ final class XdsConfig {
 
   @Override
   public String toString() {
-    StringBuilder builder = new StringBuilder();
-    builder.append("XdsConfig{")
-        .append("\n  listener=").append(listener)
-        .append(",\n  route=").append(route)
-        .append(",\n  virtualHost=").append(virtualHost)
-        .append(",\n  clusters=").append(clusters)
-        .append("\n}");
-    return builder.toString();
+    return MoreObjects.toStringHelper(this)
+        .add("listener", listener)
+        .add("route", route)
+        .add("virtualHost", virtualHost)
+        .add("clusters", clusters)
+        .toString();
   }
 
   public LdsUpdate getListener() {

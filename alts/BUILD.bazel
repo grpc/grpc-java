@@ -22,7 +22,7 @@ java_library(
         artifact("com.google.errorprone:error_prone_annotations"),
         artifact("com.google.guava:guava"),
         artifact("io.netty:netty-buffer"),
-        artifact("io.netty:netty-codec"),
+        artifact("io.netty:netty-codec-base"),
         artifact("io.netty:netty-common"),
         artifact("io.netty:netty-handler"),
         artifact("io.netty:netty-transport"),

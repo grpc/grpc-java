@@ -35,7 +35,6 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.io.IOException;
@@ -141,8 +140,12 @@ public class UdsNettyChannelProviderTest {
   }
 
   private void createUdsServer(String name) throws IOException {
-    elg = new EpollEventLoopGroup();
-    boss = new EpollEventLoopGroup(1);
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup epollElg = new io.netty.channel.epoll.EpollEventLoopGroup();
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    EventLoopGroup epollBoss = new io.netty.channel.epoll.EpollEventLoopGroup(1);
+    elg = epollElg;
+    boss = epollBoss;
     cleanupRule.register(
         NettyServerBuilder.forAddress(new DomainSocketAddress(name))
             .bossEventLoopGroup(boss)
