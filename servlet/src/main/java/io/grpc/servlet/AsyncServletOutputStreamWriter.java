@@ -57,8 +57,18 @@ final class AsyncServletOutputStreamWriter {
    *
    * <p>There are two threads, the container thread (calling {@code onWritePossible()}) and the
    * application thread (calling {@code runOrBuffer()}) that read and update the
-   * writeState. Only onWritePossible() may turn {@code readyAndDrained} from false to true, and
-   * only runOrBuffer() may turn it from true to false.
+   * {@code writeState}. The state machine has three states:
+   * <ul>
+   *   <li>{@code READY_AND_DRAINED}: The stream is ready to receive writes, and the write queue
+   *       is empty.
+   *   <li>{@code NOT_READY_OR_NOT_DRAINED}: The stream is not ready or there is buffered data
+   *       in the write queue.
+   *   <li>{@code WRITING}: An application thread is actively executing a direct write.
+   * </ul>
+   * Only {@code onWritePossible()} may transition from {@code NOT_READY_OR_NOT_DRAINED} to
+   * {@code READY_AND_DRAINED}. Only {@code runOrBuffer()} may transition from
+   * {@code READY_AND_DRAINED} to {@code WRITING}, and from {@code WRITING} back to
+   * {@code READY_AND_DRAINED} or {@code NOT_READY_OR_NOT_DRAINED}.
    */
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
 
