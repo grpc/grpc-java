@@ -16,13 +16,11 @@
 
 package io.grpc.servlet;
 
-import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.InternalLogId;
 import io.grpc.servlet.ServletServerStream.ServletTransportState;
 import java.io.IOException;
@@ -215,6 +213,7 @@ final class AsyncServletOutputStreamWriter {
       while (writeState.get().state == WriteState.WRITING) {
         LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1));
         if (Thread.interrupted()) {
+          Thread.currentThread().interrupt();
           log.fine("Thread interrupted while parked");
           return false;
         }
@@ -244,7 +243,7 @@ final class AsyncServletOutputStreamWriter {
               if (itemToWrite != null) {
                 itemToWrite.run();
                 if (itemToWrite == completeAction) {
-                  writeState.set(WriteState.DEFAULT);
+                  writeState.set(new WriteState(WriteState.NOT_READY_OR_NOT_DRAINED));
                   LockSupport.unpark(parkingThread);
                   successfulExited = true;
                   return;
@@ -258,7 +257,8 @@ final class AsyncServletOutputStreamWriter {
                 }
                 WriteState latestState = writeState.get();
                 if (latestState.state == WriteState.WRITING) {
-                  if (writeState.compareAndSet(latestState, new WriteState(WriteState.READY_AND_DRAINED))) {
+                  if (writeState.compareAndSet(
+                      latestState, new WriteState(WriteState.READY_AND_DRAINED))) {
                     LockSupport.unpark(parkingThread);
                     successfulExited = true;
                     return;
@@ -271,7 +271,8 @@ final class AsyncServletOutputStreamWriter {
               } else {
                 WriteState latestState = writeState.get();
                 if (latestState.state == WriteState.WRITING) {
-                  if (writeState.compareAndSet(latestState, WriteState.DEFAULT)) {
+                  if (writeState.compareAndSet(
+                      latestState, new WriteState(WriteState.NOT_READY_OR_NOT_DRAINED))) {
                     LockSupport.unpark(parkingThread);
                     log.finest("the servlet output stream becomes not ready");
                     successfulExited = true;
@@ -287,7 +288,7 @@ final class AsyncServletOutputStreamWriter {
             }
           } finally {
             if (!successfulExited) {
-              writeState.set(WriteState.DEFAULT);
+              writeState.set(new WriteState(WriteState.NOT_READY_OR_NOT_DRAINED));
               LockSupport.unpark(parkingThread);
             }
           }
