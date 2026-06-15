@@ -251,7 +251,18 @@ final class AsyncServletOutputStreamWriter {
           try {
             while (true) {
               if (itemToWrite != null) {
-                itemToWrite.run();
+                try {
+                  itemToWrite.run();
+                } catch (IllegalStateException e) {
+                  if (itemToWrite == flushAction || itemToWrite == completeAction) {
+                    throw e;
+                  }
+                  writeChain.offer(itemToWrite);
+                  writeState.set(new WriteState(WriteState.NOT_READY_OR_NOT_DRAINED));
+                  LockSupport.unpark(parkingThread);
+                  successfulExited = true;
+                  return;
+                }
                 if (itemToWrite == completeAction) {
                   writeState.set(new WriteState(WriteState.NOT_READY_OR_NOT_DRAINED));
                   LockSupport.unpark(parkingThread);

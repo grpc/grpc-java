@@ -287,10 +287,11 @@ public class AsyncServletOutputStreamWriterTest {
     AtomicReference<Object> writeState =
         (AtomicReference<Object>) writeStateField.get(writer);
     Object curState = writeState.get();
-    Method withReadyAndDrained = curState.getClass().getDeclaredMethod(
-        "withReadyAndDrained", boolean.class);
-    withReadyAndDrained.setAccessible(true);
-    writeState.set(withReadyAndDrained.invoke(curState, true));
+    java.lang.reflect.Constructor<?> constructor =
+        curState.getClass().getDeclaredConstructor(int.class);
+    constructor.setAccessible(true);
+    Object newState = constructor.newInstance(0 /* READY_AND_DRAINED */);
+    writeState.set(newState);
   }
 
   @Test
