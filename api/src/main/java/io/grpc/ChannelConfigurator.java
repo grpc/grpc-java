@@ -62,8 +62,8 @@ public interface ChannelConfigurator {
    * provided builder and must NOT call {@code builder.build()} themselves.
    *
    * <p><strong>Note:</strong> The provided {@code builder} is generic ({@code ?}). Implementations
-   * should use universal configuration methods (like {@code intercept()}, {@code userAgent()}) on the builder
-   * rather than casting it to specific implementation types.
+   * should use universal configuration methods (like {@code intercept()}, {@code userAgent()})
+   * on the builder rather than casting it to specific implementation types.
    *
    * @param builder the mutable channel builder for the new child channel
    */
