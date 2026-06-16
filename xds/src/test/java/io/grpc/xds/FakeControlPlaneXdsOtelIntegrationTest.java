@@ -35,6 +35,7 @@ import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -118,22 +119,22 @@ public class FakeControlPlaneXdsOtelIntegrationTest {
         SimpleServiceGrpc.newBlockingStub(channel);
     blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
 
+    // Shut down the channel to complete the RPC cycle.
+    channel.shutdownNow();
+    channel.awaitTermination(5, TimeUnit.SECONDS);
+
     // Verify that OpenTelemetry metrics specifically from the xDS Control Plane ADS stream
-    // successfully propagated, method name is recorded as 'other' because dynamic descriptors
-    // are not sampled to local tracing by default.
-    boolean foundXdsMetrics = false;
-    for (int i = 0; i < 50; i++) {
-      for (MetricData metric : metricReader.collectAllMetrics()) {
-        if (metric.toString().contains("grpc.client.") && metric.toString().contains("other")) {
-          foundXdsMetrics = true;
+    // successfully propagated, with the exact stream method name preserved.
+    boolean foundTargetMethod = false;
+    for (MetricData metric : metricReader.collectAllMetrics()) {
+      String name = metric.getName();
+      if ("grpc.client.attempt.started".equals(name) || "grpc.client.call.duration".equals(name)) {
+        if (metric.toString().contains("envoy.service.discovery.v3.AggregatedDiscoveryService")) {
+          foundTargetMethod = true;
           break;
         }
       }
-      if (foundXdsMetrics) {
-        break;
-      }
-      Thread.sleep(100);
     }
-    assertThat(foundXdsMetrics).isTrue();
+    assertThat(foundTargetMethod).isTrue();
   }
 }

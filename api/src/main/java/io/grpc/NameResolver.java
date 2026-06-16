@@ -561,9 +561,7 @@ public abstract class NameResolver {
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
       builder.setNameResolverRegistry(nameResolverRegistry);
-      if (channelConfigurator != null) {
-        builder.setChildChannelConfigurator(channelConfigurator);
-      }
+      builder.setChildChannelConfigurator(channelConfigurator);
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }

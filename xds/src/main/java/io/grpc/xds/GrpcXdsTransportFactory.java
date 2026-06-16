@@ -185,6 +185,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
                     .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
                     .setRequestMarshaller(reqMarshaller)
                     .setResponseMarshaller(respMarshaller)
+                    .setSampledToLocalTracing(true)
                     .build(),
                 CallOptions.DEFAULT.withCallCredentials(
                     callCredentials)); // TODO(zivy): support waitForReady

@@ -73,7 +73,8 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -427,8 +428,7 @@ public class FakeControlPlaneXdsIntegrationTest {
   }
 
   private static final class CountingMetricSink extends NoopMetricSink {
-    private final AtomicInteger count =
-        new AtomicInteger();
+    private final CountDownLatch latch = new CountDownLatch(1);
 
     @Override
     public void addLongCounter(
@@ -436,16 +436,12 @@ public class FakeControlPlaneXdsIntegrationTest {
         long value,
         List<String> requiredLabelValues,
         List<String> optionalLabelValues) {
-      count.incrementAndGet();
+      latch.countDown();
     }
 
     public void awaitCall() throws InterruptedException {
-      long start = System.currentTimeMillis();
-      while (count.get() == 0) {
-        if (System.currentTimeMillis() - start > 5000) {
-          throw new AssertionError("Timed out waiting for metric sink call");
-        }
-        Thread.sleep(50);
+      if (!latch.await(5, TimeUnit.SECONDS)) {
+        throw new AssertionError("Timed out waiting for metric sink call");
       }
     }
   }
