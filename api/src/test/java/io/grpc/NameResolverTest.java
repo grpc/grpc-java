@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Objects;
+import io.grpc.ChannelConfigurator;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.Listener2;
 import io.grpc.NameResolver.ResolutionResult;
@@ -72,6 +73,8 @@ public class NameResolverTest {
   private final int customArgValue = 42;
   @Mock NameResolver.Listener mockListener;
 
+  private final ChannelConfigurator channelConfigurator = builder -> { };
+
   @Test
   public void args() {
     NameResolver.Args args = createArgs();
@@ -84,6 +87,7 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
     assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
@@ -97,6 +101,7 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args2.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
     assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
@@ -105,7 +110,6 @@ public class NameResolverTest {
   }
 
   private NameResolver.Args createArgs() {
-    ChannelConfigurator channelConfigurator = builder -> { };
     return NameResolver.Args.newBuilder()
         .setDefaultPort(defaultPort)
         .setProxyDetector(proxyDetector)
@@ -116,8 +120,8 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
-        .setArg(FOO_ARG_KEY, customArgValue)
         .setChildChannelConfigurator(channelConfigurator)
+        .setArg(FOO_ARG_KEY, customArgValue)
         .build();
   }
 

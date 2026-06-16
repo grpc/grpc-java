@@ -26,6 +26,7 @@ import io.grpc.InternalFeatureFlags;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.opentelemetry.api.OpenTelemetry;
@@ -44,15 +45,19 @@ import org.junit.runners.Parameterized.Parameters;
 
 /**
  * xDS + OpenTelemetry E2E integration test using a fake control plane.
+ * This class is skipped from Bazel builds because Bazel doesn't compile the
+ * grpc-opentelemetry module.
  */
 @RunWith(Parameterized.class)
 public class FakeControlPlaneXdsOtelIntegrationTest {
 
   @Rule(order = 0)
-  public ControlPlaneRule controlPlane = new ControlPlaneRule();
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
   @Rule(order = 1)
-  public DataPlaneRule dataPlane = new DataPlaneRule(controlPlane);
+  public final ControlPlaneRule controlPlane = new ControlPlaneRule();
   @Rule(order = 2)
+  public final DataPlaneRule dataPlane = new DataPlaneRule(controlPlane);
+  @Rule(order = 3)
   public final FlagResetRule flagResetRule = new FlagResetRule();
 
   @Parameters(name = "enableRfc3986UrisParam={0}")
@@ -61,6 +66,21 @@ public class FakeControlPlaneXdsOtelIntegrationTest {
   }
 
   @Parameter public boolean enableRfc3986UrisParam;
+
+  @Test
+  public void testInMemoryMetricReader() {
+    InMemoryMetricReader metricReader = InMemoryMetricReader.create();
+    SdkMeterProvider meterProvider = SdkMeterProvider.builder()
+        .registerMetricReader(metricReader)
+        .build();
+    io.opentelemetry.api.metrics.LongCounter counter = meterProvider
+        .meterBuilder("test-scope")
+        .build()
+        .counterBuilder("test-counter")
+        .build();
+    counter.add(10);
+    assertThat(metricReader.collectAllMetrics()).isNotEmpty();
+  }
 
   @Before
   public void setupRfc3986UrisFeatureFlag() throws Exception {
@@ -88,32 +108,32 @@ public class FakeControlPlaneXdsOtelIntegrationTest {
       }
     };
 
-    ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
+    ManagedChannel channel = grpcCleanupRule.register(
+        Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
         .childChannelConfigurator(configurator)
-        .build();
+        .build());
 
-    try {
-      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
-          channel);
-      blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        SimpleServiceGrpc.newBlockingStub(channel);
+    blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
 
-      boolean hasMetrics = false;
-      for (int i = 0; i < 20; i++) {
-        for (MetricData metric : metricReader.collectAllMetrics()) {
-          if (metric.getName().startsWith("grpc.client.")) {
-            hasMetrics = true;
-            break;
-          }
-        }
-        if (hasMetrics) {
+    // Verify that OpenTelemetry metrics specifically from the xDS Control Plane ADS stream
+    // successfully propagated, method name is recorded as 'other' because dynamic descriptors
+    // are not sampled to local tracing by default.
+    boolean foundXdsMetrics = false;
+    for (int i = 0; i < 50; i++) {
+      for (MetricData metric : metricReader.collectAllMetrics()) {
+        if (metric.toString().contains("grpc.client.") && metric.toString().contains("other")) {
+          foundXdsMetrics = true;
           break;
         }
-        Thread.sleep(100);
       }
-      assertThat(hasMetrics).isTrue();
-    } finally {
-      channel.shutdownNow();
+      if (foundXdsMetrics) {
+        break;
+      }
+      Thread.sleep(100);
     }
+    assertThat(foundXdsMetrics).isTrue();
   }
 }

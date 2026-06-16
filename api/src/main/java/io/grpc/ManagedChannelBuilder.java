@@ -666,7 +666,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Sets a configurator that will be applied to all internal child channels created by this
    * channel.
    *
-   * <p>This allows injecting configuration (like credentials, interceptors, or flow control)
+   * <p>This allows injecting universal configuration (like interceptors)
    * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
    *
    * @param channelConfigurator the configurator to apply.

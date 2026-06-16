@@ -478,7 +478,7 @@ public abstract class NameResolver {
      *
      * @since 1.83.0
      */
-    @Internal
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
     public ChannelConfigurator getChildChannelConfigurator() {
       return channelConfigurator;
     }
@@ -561,6 +561,9 @@ public abstract class NameResolver {
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
       builder.setNameResolverRegistry(nameResolverRegistry);
+      if (channelConfigurator != null) {
+        builder.setChildChannelConfigurator(channelConfigurator);
+      }
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
@@ -712,6 +715,7 @@ public abstract class NameResolver {
        *
        * @since 1.83.0
        */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
       public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurator) {
         this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
         return this;

@@ -349,4 +349,15 @@ public class XdsServerBuilderTest {
     verify(mockPoolFactory).getOrCreate(
         any(), any(), any(), eq(configurer));
   }
+
+  @Test
+  public void childChannelConfigurator_nullThrows() throws IOException {
+    buildBuilder(null);
+    try {
+      builder.childChannelConfigurator(null);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("channelConfigurator");
+    }
+  }
 }
