@@ -116,7 +116,7 @@ public final class Grpc {
    * @return a {@link ManagedChannelBuilder} instance configured with the given parameters
    * @throws IllegalArgumentException if no provider is available for the given target
    *     or credentials
-   * @since 1.81.0
+   * @since 1.83.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12694")
   public static ManagedChannelBuilder<?> newChannelBuilder(
