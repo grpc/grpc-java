@@ -27,7 +27,6 @@ import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterOverrideConfig;
@@ -305,7 +304,7 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenOverrideConfigWithResponseBodyModeGrpcAndTrailerModeNotSend_whenParsed_thenError()
+  public void givenOverrideConfigWithBodyGrpcAndTrailerNotSend_whenParsed_thenError()
       throws Exception {
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
         .setOverrides(ExtProcOverrides.newBuilder()
@@ -321,5 +320,23 @@ public class ExternalProcessorFilterTest {
 
     assertThat(result.errorDetail).contains(
         "response_trailer_mode must be SEND if response_body_mode is GRPC");
+  }
+
+  @Test
+  public void givenInvalidProto_whenParseFilterConfig_thenReturnsError() throws Exception {
+    com.google.protobuf.Struct structMessage = com.google.protobuf.Struct.newBuilder().build();
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(structMessage), filterContext);
+
+    assertThat(result.errorDetail).contains("Invalid proto:");
+  }
+
+  @Test
+  public void givenInvalidProto_whenParseFilterConfigOverride_thenReturnsError() throws Exception {
+    com.google.protobuf.Struct structMessage = com.google.protobuf.Struct.newBuilder().build();
+    ConfigOrError<ExternalProcessorFilterOverrideConfig> result =
+        provider.parseFilterConfigOverride(Any.pack(structMessage), filterContext);
+
+    assertThat(result.errorDetail).contains("Invalid proto:");
   }
 }
