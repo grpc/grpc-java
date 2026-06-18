@@ -33,7 +33,10 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -49,6 +52,16 @@ public final class ServerSecurityPolicyTest {
   private static final int OTHER_UID = MY_UID + 1;
 
   ServerSecurityPolicy policy;
+
+  private final ExecutorService executor = Executors.newSingleThreadExecutor();
+
+  @After
+  public void tearDown() throws Exception {
+    executor.shutdownNow();
+    if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+      throw new AssertionError("executor failed to terminate promptly");
+    }
+  }
 
   @Test
   public void testDefaultInternalOnly() throws Exception {
@@ -181,7 +194,7 @@ public final class ServerSecurityPolicyTest {
             .build();
 
     ListenableFuture<Status> statusFuture =
-        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1);
+        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1, executor);
 
     assertThrows(ExecutionException.class, statusFuture::get);
   }
@@ -194,7 +207,7 @@ public final class ServerSecurityPolicyTest {
             .build();
 
     ListenableFuture<Status> statusFuture =
-        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1);
+        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1, executor);
 
     assertThrows(CancellationException.class, statusFuture::get);
   }
@@ -231,7 +244,7 @@ public final class ServerSecurityPolicyTest {
                     }))
             .build();
     ListenableFuture<Status> statusFuture =
-        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1);
+        policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1, executor);
 
     assertThrows(InterruptedException.class, statusFuture::get);
     listeningExecutorService.shutdownNow();
@@ -337,10 +350,10 @@ public final class ServerSecurityPolicyTest {
    * Shortcut for invoking {@link ServerSecurityPolicy#checkAuthorizationForServiceAsync} without
    * dealing with concurrency details. Returns a {link @Status.Code} for convenience.
    */
-  private static Status.Code checkAuthorizationForServiceAsync(
+  private Status.Code checkAuthorizationForServiceAsync(
       ServerSecurityPolicy policy, int callerUid, String service) throws ExecutionException {
     ListenableFuture<Status> statusFuture =
-        policy.checkAuthorizationForServiceAsync(callerUid, service);
+        policy.checkAuthorizationForServiceAsync(callerUid, service, executor);
     return Uninterruptibles.getUninterruptibly(statusFuture).getCode();
   }
 

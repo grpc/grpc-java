@@ -69,17 +69,20 @@ public final class BinderTransportSecurity {
    * @param remoteUid The remote UID of the transport.
    * @param serverPolicyChecker The policy checker for this transport.
    * @param executor used for calling into the application. Must outlive the transport.
+   * @param offloadExecutor used for potentially blocking work. Must outlive the transport.
    */
   @Internal
   public static void attachAuthAttrs(
       Attributes.Builder builder,
       int remoteUid,
       ServerPolicyChecker serverPolicyChecker,
-      Executor executor) {
+      Executor executor,
+      Executor offloadExecutor) {
     builder
         .set(
             TRANSPORT_AUTHORIZATION_STATE,
-            new TransportAuthorizationState(remoteUid, serverPolicyChecker, executor))
+            new TransportAuthorizationState(
+                remoteUid, serverPolicyChecker, executor, offloadExecutor))
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 
@@ -97,9 +100,8 @@ public final class BinderTransportSecurity {
       ListenableFuture<Status> authStatusFuture =
           transportAuthState.checkAuthorization(call.getMethodDescriptor());
 
-      // Most SecurityPolicy will have synchronous implementations that provide an
-      // immediately-resolved Future. In that case, short-circuit to avoid unnecessary allocations
-      // and asynchronous code if the authorization result is already present.
+      // Short-circuit in the common case where the checkAuthorization() result is cached and
+      // completed. This avoids unnecessary allocations and asynchronous code.
       if (!authStatusFuture.isDone()) {
         return newServerCallListenerForPendingAuthResult(
             authStatusFuture, transportAuthState.executor, call, headers, next);
@@ -166,15 +168,21 @@ public final class BinderTransportSecurity {
     private final ServerPolicyChecker serverPolicyChecker;
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
     private final Executor executor;
+    private final Executor offloadExecutor;
 
     /**
      * @param executor used for calling into the application. Must outlive the transport.
+     * @param offloadExecutor used for offloading synchronous security policy checks.
      */
     TransportAuthorizationState(
-        int uid, ServerPolicyChecker serverPolicyChecker, Executor executor) {
+        int uid,
+        ServerPolicyChecker serverPolicyChecker,
+        Executor executor,
+        Executor offloadExecutor) {
       this.uid = uid;
       this.serverPolicyChecker = serverPolicyChecker;
       this.executor = executor;
+      this.offloadExecutor = offloadExecutor;
       serviceAuthorization = new ConcurrentHashMap<>(8);
     }
 
@@ -202,7 +210,7 @@ public final class BinderTransportSecurity {
       // TODO(10669): evaluate if there should be at most a single pending authorization check per
       //  (uid, serviceName) pair at any given time.
       ListenableFuture<Status> authorization =
-          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
+          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName, offloadExecutor);
       if (useCache) {
         serviceAuthorization.putIfAbsent(serviceName, authorization);
         Futures.addCallback(
@@ -240,9 +248,12 @@ public final class BinderTransportSecurity {
      *
      * @param uid The Android UID to authenticate.
      * @param serviceName The name of the gRPC service being called.
+     * @param offloadExecutor Where to run potentially blocking auth checks in case the
+     *     SecurityPolicy in question is not async
      * @return a future with the result of the authorization check. A failed future represents a
      *     failure to perform the authorization check, not that the access is denied.
      */
-    ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName);
+    ListenableFuture<Status> checkAuthorizationForServiceAsync(
+        int uid, String serviceName, Executor offloadExecutor);
   }
 }

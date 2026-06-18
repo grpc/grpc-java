@@ -24,6 +24,8 @@ import io.grpc.Status;
 import java.util.HashMap;
 import java.util.Map;
 
+import java.util.concurrent.Executor;
+
 /**
  * A security policy for a gRPC server.
  *
@@ -61,27 +63,24 @@ public final class ServerSecurityPolicy {
   /**
    * Returns whether the given Android UID is authorized to access a particular service.
    *
-   * <p>This method never throws an exception. If the execution of the security policy check fails,
-   * a failed future with such exception is returned.
+   * <p>This method does not block and never throws an exception. If the execution of the security
+   * policy check fails, a failed future with such exception is returned.
    *
    * @param uid The Android UID to authenticate.
    * @param serviceName The name of the gRPC service being called.
+   * @param offloadExecutor Where to submit synchronous security policy checks.
    * @return a future with the result of the authorization check. A failed future represents a
    *     failure to perform the authorization check, not that the access is denied.
    */
   @CheckReturnValue
-  ListenableFuture<Status> checkAuthorizationForServiceAsync(int uid, String serviceName) {
+  ListenableFuture<Status> checkAuthorizationForServiceAsync(
+      int uid, String serviceName, Executor offloadExecutor) {
     SecurityPolicy securityPolicy = perServicePolicies.getOrDefault(serviceName, defaultPolicy);
     if (securityPolicy instanceof AsyncSecurityPolicy) {
       return ((AsyncSecurityPolicy) securityPolicy).checkAuthorizationAsync(uid);
     }
 
-    try {
-      Status status = securityPolicy.checkAuthorization(uid);
-      return Futures.immediateFuture(status);
-    } catch (Exception e) {
-      return Futures.immediateFailedFuture(e);
-    }
+    return Futures.submit(() -> securityPolicy.checkAuthorization(uid), offloadExecutor);
   }
 
   public static Builder newBuilder() {
