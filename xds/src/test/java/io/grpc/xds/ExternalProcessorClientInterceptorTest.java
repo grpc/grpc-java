@@ -10304,6 +10304,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
         .addRequestAttributes("request.path")
+        .addRequestAttributes("request.url_path")
         .addRequestAttributes("request.host")
         .addRequestAttributes("request.method")
         .addRequestAttributes("request.query")
@@ -10395,6 +10396,8 @@ public class ExternalProcessorClientInterceptorTest {
     ProcessingRequest request = capturedRequest.get();
     java.util.Map<String, com.google.protobuf.Struct> attributes = request.getAttributesMap();
     assertThat(attributes.get("request.path").getFieldsOrThrow("").getStringValue())
+        .isEqualTo("/test.TestService/SayHello");
+    assertThat(attributes.get("request.url_path").getFieldsOrThrow("").getStringValue())
         .isEqualTo("/test.TestService/SayHello");
     assertThat(attributes.get("request.host").getFieldsOrThrow("").getStringValue())
         .isEqualTo(dataPlaneChannel.authority());

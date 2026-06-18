@@ -48,6 +48,11 @@ final class FilterRegistry {
   }
 
   @VisibleForTesting
+  static synchronized void reset() {
+    instance = null;
+  }
+
+  @VisibleForTesting
   static FilterRegistry newRegistry() {
     return new FilterRegistry();
   }
