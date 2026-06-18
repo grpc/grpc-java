@@ -148,14 +148,8 @@ public class ExternalProcessorFilterTest {
     // Test with flag true
     System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
     try {
-      FilterRegistry registry = FilterRegistry.newRegistry().register(
-          new FaultFilter.Provider(),
-          new RouterFilter.Provider(),
-          new RbacFilter.Provider(),
-          new GcpAuthenticationFilter.Provider());
-      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-        registry.register(new ExternalProcessorFilter.Provider());
-      }
+      FilterRegistry.reset();
+      FilterRegistry registry = FilterRegistry.getDefaultRegistry();
       assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
@@ -164,18 +158,17 @@ public class ExternalProcessorFilterTest {
     // Test with flag false
     System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "false");
     try {
-      FilterRegistry registry = FilterRegistry.newRegistry().register(
-          new FaultFilter.Provider(),
-          new RouterFilter.Provider(),
-          new RbacFilter.Provider(),
-          new GcpAuthenticationFilter.Provider());
-      if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-        registry.register(new ExternalProcessorFilter.Provider());
-      }
+      FilterRegistry.reset();
+      FilterRegistry registry = FilterRegistry.getDefaultRegistry();
       assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNull();
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
     }
+
+    // Restore default for other tests
+    System.setProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", "true");
+    FilterRegistry.reset();
+    FilterRegistry.getDefaultRegistry();
   }
 
   // --- Category 2: Configuration Parsing & Provider ---
@@ -193,7 +186,7 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenUnsupportedBodyMode_whenParsed_thenReturnsError() throws Exception {
+  public void givenUnsupportedRequestBodyMode_whenParsed_thenReturnsError() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.BUFFERED) // Unsupported
@@ -207,7 +200,21 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenInvalidGrpcService_whenParsed_thenReturnsError() throws Exception {
+  public void givenUnsupportedResponseBodyMode_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setResponseBodyMode(ProcessingMode.BodySendMode.BUFFERED) // Unsupported
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Invalid response_body_mode");
+  }
+
+  @Test
+  public void givenNonGoogleGrpcService_whenParsed_thenReturnsError() throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder().build()) // Invalid: no GoogleGrpc
         .build();
@@ -216,6 +223,42 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(proto), filterContext);
 
     assertThat(result.errorDetail).contains("GrpcService must have GoogleGrpc");
+  }
+
+  @Test
+  public void givenInvalidGrpcService_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                // Invalid: no channel credentials plugin
+                .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Error parsing GrpcService config");
+    assertThat(result.errorDetail).contains("No valid supported channel_credentials found");
+  }
+
+  @Test
+  public void givenInvalidMutationRules_whenParsed_thenReturnsError() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setMutationRules(
+            io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules.newBuilder()
+                .setAllowExpression(io.envoyproxy.envoy.type.matcher.v3.RegexMatcher.newBuilder()
+                    .setRegex("allow-[") // Invalid regex pattern
+                    .build())
+                .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> result =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+
+    assertThat(result.errorDetail).contains("Error parsing HeaderMutationRules");
+    assertThat(result.errorDetail).contains("Invalid regex pattern for allow_expression");
   }
 
   @Test
@@ -232,7 +275,7 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenNegativeDeferredCloseTimeout_whenParsed_thenReturnsError() throws Exception {
+  public void givenNonPositiveDeferredCloseTimeout_whenParsed_thenReturnsError() throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setDeferredCloseTimeout(
             com.google.protobuf.Duration.newBuilder().setSeconds(0).setNanos(0).build())
@@ -245,12 +288,12 @@ public class ExternalProcessorFilterTest {
   }
 
   @Test
-  public void givenResponseBodyModeGrpcWithResponseHeaderModeNotSend_whenParsed_thenReturnsError()
+  public void givenResponseBodyModeGrpcWithResponseTrailerModeNotSend_whenParsed_thenReturnsError()
       throws Exception {
     ExternalProcessor proto = createBaseProto(extProcServerName)
         .setProcessingMode(ProcessingMode.newBuilder()
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
-            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
             .build())
         .build();
 
@@ -258,17 +301,17 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfig(Any.pack(proto), filterContext);
 
     assertThat(result.errorDetail).contains(
-        "response_header_mode must be SEND if response_body_mode is GRPC");
+        "response_trailer_mode must be SEND if response_body_mode is GRPC");
   }
 
   @Test
-  public void givenOverrideConfigWithResponseBodyModeGrpcAndHeaderModeNotSend_whenParsed_thenError()
+  public void givenOverrideConfigWithResponseBodyModeGrpcAndTrailerModeNotSend_whenParsed_thenError()
       throws Exception {
     ExtProcPerRoute perRoute = ExtProcPerRoute.newBuilder()
         .setOverrides(ExtProcOverrides.newBuilder()
             .setProcessingMode(ProcessingMode.newBuilder()
                 .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
-                .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
                 .build())
             .build())
         .build();
@@ -277,6 +320,6 @@ public class ExternalProcessorFilterTest {
         provider.parseFilterConfigOverride(Any.pack(perRoute), filterContext);
 
     assertThat(result.errorDetail).contains(
-        "response_header_mode must be SEND if response_body_mode is GRPC");
+        "response_trailer_mode must be SEND if response_body_mode is GRPC");
   }
 }
