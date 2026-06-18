@@ -76,7 +76,6 @@ import io.grpc.xds.internal.headermutations.HeaderMutator;
 import io.grpc.xds.internal.headermutations.HeaderValueOption;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -1014,7 +1013,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         bodyMessageSentToExtProc.set(true);
 
         if (config.getObservabilityMode()) {
-          super.sendMessage(new OutboundZeroCopyInputStream(bodyByteString));
+          super.sendMessage(new KnownLengthInputStream(bodyByteString));
         }
       } catch (IOException e) {
         rawCall.cancel("Failed to serialize message for External Processor", e);
@@ -1083,7 +1082,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
           if (!streamed.getEndOfStreamWithoutMessage()) {
-            super.sendMessage(new OutboundZeroCopyInputStream(streamed.getBody()));
+            super.sendMessage(new KnownLengthInputStream(streamed.getBody()));
           }
           if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
             if (requestSideClosed.compareAndSet(false, true)) {
@@ -1554,13 +1553,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     return ByteString.readFrom(message);
   }
 
-  private static final class OutboundZeroCopyInputStream extends InputStream
-      implements Drainable, KnownLength {
-    private final ByteString byteString;
+  private static final class KnownLengthInputStream extends InputStream
+      implements KnownLength {
     private final InputStream delegate;
 
-    OutboundZeroCopyInputStream(ByteString byteString) {
-      this.byteString = byteString;
+    KnownLengthInputStream(ByteString byteString) {
       this.delegate = byteString.newInput();
     }
 
@@ -1582,13 +1579,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void close() throws IOException {
       delegate.close();
-    }
-
-    @Override
-    public int drainTo(OutputStream target) throws IOException {
-      int size = byteString.size();
-      byteString.writeTo(target);
-      return size;
     }
   }
 }
