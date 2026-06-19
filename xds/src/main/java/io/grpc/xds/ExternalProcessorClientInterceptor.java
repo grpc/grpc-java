@@ -991,7 +991,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         ExtProcStreamState state = extProcStreamState.get();
         if (state.isDraining() || state.isCompleted()) {
-          pendingDrainingMessages.add(message);
+          try {
+            ByteString copiedBody = ByteString.readFrom(message);
+            pendingDrainingMessages.add(new KnownLengthInputStream(copiedBody));
+          } catch (IOException e) {
+            rawCall.cancel("Failed to copy outbound message for buffering", e);
+          }
           return;
         }
       }
@@ -1301,7 +1306,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         if (savedHeaders != null
             || dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
-          savedMessages.add(message);
+          try {
+            ByteString copiedBody = ByteString.readFrom(message);
+            savedMessages.add(new KnownLengthInputStream(copiedBody));
+          } catch (IOException e) {
+            rawCall.cancel("Failed to copy inbound message for buffering", e);
+          }
           return;
         }
       }
