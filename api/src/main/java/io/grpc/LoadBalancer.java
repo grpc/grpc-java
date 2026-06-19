@@ -549,30 +549,32 @@ public abstract class LoadBalancer {
     // True if the result is created by withDrop()
     private final boolean drop;
     @Nullable private final String authorityOverride;
-    @Nullable private final String delayReasonToken;
+    @Nullable private final String delayType;
+    @Nullable private final String delayReason;
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop) {
-      this(subchannel, streamTracerFactory, status, drop, null, null);
+      this(subchannel, streamTracerFactory, status, drop, null, null, null);
     }
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop, @Nullable String authorityOverride) {
-      this(subchannel, streamTracerFactory, status, drop, authorityOverride, null);
+      this(subchannel, streamTracerFactory, status, drop, authorityOverride, null, null);
     }
 
     private PickResult(
         @Nullable Subchannel subchannel, @Nullable ClientStreamTracer.Factory streamTracerFactory,
         Status status, boolean drop, @Nullable String authorityOverride,
-        @Nullable String delayReasonToken) {
+        @Nullable String delayType, @Nullable String delayReason) {
       this.subchannel = subchannel;
       this.streamTracerFactory = streamTracerFactory;
       this.status = checkNotNull(status, "status");
       this.drop = drop;
       this.authorityOverride = authorityOverride;
-      this.delayReasonToken = delayReasonToken;
+      this.delayType = delayType;
+      this.delayReason = delayReason;
     }
 
     /**
@@ -684,7 +686,7 @@ public abstract class LoadBalancer {
      */
     public PickResult copyWithSubchannel(Subchannel subchannel) {
       return new PickResult(checkNotNull(subchannel, "subchannel"), streamTracerFactory,
-          status, drop, authorityOverride);
+          status, drop, authorityOverride, delayType, delayReason);
     }
 
     /**
@@ -695,7 +697,7 @@ public abstract class LoadBalancer {
      */
     public PickResult copyWithStreamTracerFactory(
         @Nullable ClientStreamTracer.Factory streamTracerFactory) {
-      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride);
+      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride, delayType, delayReason);
     }
 
     /**
@@ -733,19 +735,28 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * No decision could be made.  The RPC will stay buffered with a specific reason.
+     * No decision could be made.  The RPC will stay buffered with a specific delay type and reason.
      *
+     * @param delayType low-cardinality root cause label (e.g., "connecting")
+     * @param delayReason high-cardinality diagnostic string for trace events
      * @since 1.82.0
      */
-    public static PickResult withNoResult(String delayReasonToken) {
-      Preconditions.checkNotNull(delayReasonToken, "delayReasonToken");
-      return new PickResult(null, null, Status.OK, false, null, delayReasonToken);
+    public static PickResult withNoResult(String delayType, String delayReason) {
+      Preconditions.checkNotNull(delayType, "delayType");
+      Preconditions.checkNotNull(delayReason, "delayReason");
+      return new PickResult(null, null, Status.OK, false, null, delayType, delayReason);
     }
 
-    /** Returns the delay reason token if any. */
+    /** Returns the delay type label if any. */
     @Nullable
-    public String getDelayReasonToken() {
-      return delayReasonToken;
+    public String getDelayType() {
+      return delayType;
+    }
+
+    /** Returns the diagnostic delay reason if any. */
+    @Nullable
+    public String getDelayReason() {
+      return delayReason;
     }
 
     /** Returns the authority override if any. */

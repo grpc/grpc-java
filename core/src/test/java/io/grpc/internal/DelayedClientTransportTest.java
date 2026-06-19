@@ -779,22 +779,24 @@ public class DelayedClientTransportTest {
     
     SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
     when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+        .thenReturn(PickResult.withNoResult("connecting", "pick_first: attempting to connect"));
         
     delayedTransport.reprocess(connectingPicker);
     delayedTransport.newStream(method, headers, callOptions, customTracers);
     
     InOrder inOrder = inOrder(mockTracer);
-    inOrder.verify(mockTracer).delayStarted("pick_first:connecting");
+    inOrder.verify(mockTracer).delayTypeStarted("connecting");
+    inOrder.verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
     
     SubchannelPicker customDelayPicker = mock(SubchannelPicker.class);
     when(customDelayPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("rls:lookup_pending"));
+        .thenReturn(PickResult.withNoResult("rls_lookup_pending", "RLS request pending."));
         
     delayedTransport.reprocess(customDelayPicker);
     
     inOrder.verify(mockTracer).delayEnded();
-    inOrder.verify(mockTracer).delayStarted("rls:lookup_pending");
+    inOrder.verify(mockTracer).delayTypeStarted("rls_lookup_pending");
+    inOrder.verify(mockTracer).delayReasonAttached("RLS request pending.");
     
     delayedTransport.reprocess(mockPicker);
     
@@ -808,13 +810,14 @@ public class DelayedClientTransportTest {
     
     SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
     when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+        .thenReturn(PickResult.withNoResult("connecting", "pick_first: attempting to connect"));
         
     delayedTransport.reprocess(connectingPicker);
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
     stream.start(streamListener);
     
-    verify(mockTracer).delayStarted("pick_first:connecting");
+    verify(mockTracer).delayTypeStarted("connecting");
+    verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
     
     stream.cancel(Status.CANCELLED);
     
@@ -828,13 +831,14 @@ public class DelayedClientTransportTest {
 
     SubchannelPicker connectingPicker = mock(SubchannelPicker.class);
     when(connectingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("pick_first:connecting"));
+        .thenReturn(PickResult.withNoResult("connecting", "pick_first: attempting to connect"));
 
     delayedTransport.reprocess(connectingPicker);
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
     stream.start(streamListener);
 
-    verify(mockTracer).delayStarted("pick_first:connecting");
+    verify(mockTracer).delayTypeStarted("connecting");
+    verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
 
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
 

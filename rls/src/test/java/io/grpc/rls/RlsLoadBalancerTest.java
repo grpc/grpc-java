@@ -262,7 +262,8 @@ public class RlsLoadBalancerTest {
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(res.getSubchannel()).isNull();
-    assertThat(res.getDelayReasonToken()).isEqualTo("rls:lookup_pending");
+    assertThat(res.getDelayType()).isEqualTo("rls_lookup_pending");
+    assertThat(res.getDelayReason()).isEqualTo("RLS request pending.");
     // Cache is warm, but still unconnected
     res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));
@@ -494,7 +495,8 @@ public class RlsLoadBalancerTest {
     PickResult res = picker.pickSubchannel(searchSubchannelArgs);
     assertThat(res.getStatus().isOk()).isTrue();
     assertThat(res.getSubchannel()).isNull();
-    assertThat(res.getDelayReasonToken()).isEqualTo("rls:lookup_pending");
+    assertThat(res.getDelayType()).isEqualTo("rls_lookup_pending");
+    assertThat(res.getDelayReason()).isEqualTo("RLS request pending.");
     // Cache is warm, but still unconnected
     res = picker.pickSubchannel(searchSubchannelArgs);
     inOrder.verify(helper).createSubchannel(any(CreateSubchannelArgs.class));

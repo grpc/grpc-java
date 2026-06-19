@@ -121,7 +121,10 @@ final class CdsLoadBalancer2 extends LoadBalancer {
       }
       // The dynamic cluster must not have loaded yet
       helper.updateBalancingState(
-          CONNECTING, new FixedResultPicker(PickResult.withNoResult("cds:discovery_pending")));
+          CONNECTING,
+          new FixedResultPicker(
+              PickResult.withNoResult(
+                  "cds_dynamic_discovery", "cds: fetching xDS cluster metadata")));
       return Status.OK;
     }
     if (!clusterConfigOr.hasValue()) {

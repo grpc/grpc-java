@@ -158,8 +158,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {
-            String token = pickResult != null ? pickResult.getDelayReasonToken() : null;
-            return createPendingStream(args, tracers, pickResult, token);
+            String delayType = determineQueuingDelayType(pickResult, callOptions.isWaitForReady());
+            String delayReason = determineQueuingDelayReason(pickResult, callOptions.isWaitForReady());
+            return createPendingStream(args, tracers, pickResult, delayType, delayReason);
           }
           state = newerState;
         }
@@ -175,8 +176,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
    */
   @GuardedBy("lock")
   private PendingStream createPendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
-      PickResult pickResult, @Nullable String delayReasonToken) {
-    PendingStream pendingStream = new PendingStream(args, tracers, delayReasonToken);
+      PickResult pickResult, @Nullable String delayType, @Nullable String delayReason) {
+    PendingStream pendingStream = new PendingStream(args, tracers, delayType, delayReason);
     if (args.getCallOptions().isWaitForReady() && pickResult != null && pickResult.hasResult()) {
       pendingStream.lastPickStatus = pickResult.getStatus();
     }
@@ -319,7 +320,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
         toRemove.add(stream);
       } else { // stay pending
-        stream.updateDelayReason(pickResult.getDelayReasonToken());
+        String delayType = determineQueuingDelayType(
+            pickResult, stream.args.getCallOptions().isWaitForReady());
+        String delayReason = determineQueuingDelayReason(
+            pickResult, stream.args.getCallOptions().isWaitForReady());
+        stream.updateDelay(delayType, delayReason);
       }
     }
 
@@ -361,48 +366,97 @@ final class DelayedClientTransport implements ManagedClientTransport {
     return logId;
   }
 
+  private static String determineQueuingDelayType(
+      @Nullable PickResult pickResult, boolean isWaitForReady) {
+    if (pickResult == null) {
+      return "client_channel_init";
+    }
+    if (pickResult.getSubchannel() != null) {
+      return "subchannel_state_mismatch";
+    }
+    if (!pickResult.getStatus().isOk()) {
+      return "wait_for_ready_failed";
+    }
+    if (pickResult.getDelayType() != null) {
+      return pickResult.getDelayType();
+    }
+    return "client_channel_init";
+  }
+
+  private static String determineQueuingDelayReason(
+      @Nullable PickResult pickResult, boolean isWaitForReady) {
+    if (pickResult == null) {
+      return "client channel: created LB policy.";
+    }
+    if (pickResult.getSubchannel() != null) {
+      return "subchannel returned by LB picker has no connected subchannel";
+    }
+    if (!pickResult.getStatus().isOk()) {
+      return "wait_for_ready RPC failed with status: " + pickResult.getStatus();
+    }
+    if (pickResult.getDelayReason() != null) {
+      return pickResult.getDelayReason();
+    }
+    return "client channel: waiting for picker";
+  }
+
   private class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
     private volatile Status lastPickStatus;
-    @Nullable private String delayReasonToken;
+    @Nullable private String activeDelayType;
+    @Nullable private String activeDelayReason;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
-        @Nullable String initialToken) {
+        @Nullable String initialType, @Nullable String initialReason) {
       super("connecting_and_lb");
       this.args = args;
       this.tracers = tracers;
-      this.delayReasonToken = initialToken;
-      if (initialToken != null) {
+      this.activeDelayType = initialType;
+      this.activeDelayReason = initialReason;
+      if (initialType != null) {
         for (ClientStreamTracer tracer : tracers) {
-          tracer.delayStarted(initialToken);
+          tracer.delayTypeStarted(initialType);
+        }
+      }
+      if (initialReason != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.delayReasonAttached(initialReason);
         }
       }
     }
 
-    void updateDelayReason(String newToken) {
-      if (!Objects.equals(delayReasonToken, newToken)) {
-        if (delayReasonToken != null) {
+    void updateDelay(@Nullable String newType, @Nullable String newReason) {
+      if (!Objects.equals(activeDelayType, newType)) {
+        if (activeDelayType != null) {
           for (ClientStreamTracer tracer : tracers) {
             tracer.delayEnded();
           }
         }
-        delayReasonToken = newToken;
-        if (newToken != null) {
+        activeDelayType = newType;
+        activeDelayReason = null;
+        if (newType != null) {
           for (ClientStreamTracer tracer : tracers) {
-            tracer.delayStarted(newToken);
+            tracer.delayTypeStarted(newType);
           }
+        }
+      }
+      if (newType != null && newReason != null && !Objects.equals(activeDelayReason, newReason)) {
+        activeDelayReason = newReason;
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.delayReasonAttached(newReason);
         }
       }
     }
 
     void endDelay() {
-      if (delayReasonToken != null) {
+      if (activeDelayType != null) {
         for (ClientStreamTracer tracer : tracers) {
           tracer.delayEnded();
         }
-        delayReasonToken = null;
+        activeDelayType = null;
+        activeDelayReason = null;
       }
     }
 

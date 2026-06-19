@@ -368,7 +368,8 @@ public class CdsLoadBalancer2Test {
         
     verify(helper).updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
     PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
-    assertThat(result.getDelayReasonToken()).isEqualTo("cds:discovery_pending");
+    assertThat(result.getDelayType()).isEqualTo("cds_dynamic_discovery");
+    assertThat(result.getDelayReason()).isEqualTo("cds: fetching xDS cluster metadata");
   }
 
   @Test

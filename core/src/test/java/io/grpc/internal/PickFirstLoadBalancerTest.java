@@ -148,7 +148,8 @@ public class PickFirstLoadBalancerTest {
 
     // Calling pickSubchannel() twice gave the same result
     PickResult result = pickerCaptor.getValue().pickSubchannel(mockArgs);
-    assertThat(result.getDelayReasonToken()).isEqualTo("pick_first:connecting");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("pick_first: attempting to connect");
     assertEquals(result, pickerCaptor.getValue().pickSubchannel(mockArgs));
 
     verifyNoMoreInteractions(mockHelper);

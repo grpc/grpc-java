@@ -374,9 +374,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       PickResult childResult = delegate.pickSubchannel(args);
-      if (!childResult.hasResult() && childResult.getDelayReasonToken() != null) {
-        return PickResult.withNoResult(
-            "priority_" + priority + ":" + childResult.getDelayReasonToken());
+      if (!childResult.hasResult() && childResult.getDelayType() != null) {
+        String childReason = childResult.getDelayReason();
+        String reason = "priority_" + priority + ":" + (childReason != null ? childReason : "");
+        return PickResult.withNoResult(childResult.getDelayType(), reason);
       }
       return childResult;
     }

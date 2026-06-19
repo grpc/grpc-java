@@ -356,8 +356,8 @@ final class RingHashLoadBalancer extends MultiChildLoadBalancer {
   }
 
   private static final class RingHashPicker extends SubchannelPicker {
-    private static final PickResult RING_HASH_CONNECTING_RESULT = 
-        PickResult.withNoResult("ring_hash:connecting");
+    private static final PickResult RING_HASH_CONNECTING_RESULT =
+        PickResult.withNoResult("connecting", "ring_hash: waiting for connection");
     private final SynchronizationContext syncContext;
     private final List<RingEntry> ring;
     // Avoid synchronization between pickSubchannel and subchannel's connectivity state change,

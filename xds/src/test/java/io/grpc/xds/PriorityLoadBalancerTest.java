@@ -928,7 +928,7 @@ public class PriorityLoadBalancerTest {
     
     SubchannelPicker mockChildPicker = mock(SubchannelPicker.class);
     when(mockChildPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("child_token"));
+        .thenReturn(PickResult.withNoResult("connecting", "child_reason"));
         
     helper0.updateBalancingState(CONNECTING, mockChildPicker);
     
@@ -938,7 +938,8 @@ public class PriorityLoadBalancerTest {
     SubchannelPicker priorityPicker = pickerCaptor.getValue();
     PickResult result = priorityPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     
-    assertThat(result.getDelayReasonToken()).isEqualTo("priority_p0:child_token");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("priority_p0:child_reason");
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {

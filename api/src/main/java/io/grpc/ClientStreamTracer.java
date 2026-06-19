@@ -58,12 +58,21 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
-   * A delay segment started with a specific reason during load balancing.
+   * A delay segment started with a canonical root cause.
    *
-   * @param reasonToken the reason for the delay, e.g., "pick_first:connecting"
+   * @param delayType the canonical root cause label (e.g., "connecting", "client_channel_init")
    * @since 1.82.0
    */
-  public void delayStarted(String reasonToken) {
+  public void delayTypeStarted(String delayType) {
+  }
+
+  /**
+   * High-cardinality diagnostic context attached to the active delay span.
+   *
+   * @param delayReason verbose diagnostic description of the delay
+   * @since 1.82.0
+   */
+  public void delayReasonAttached(String delayReason) {
   }
 
   /**

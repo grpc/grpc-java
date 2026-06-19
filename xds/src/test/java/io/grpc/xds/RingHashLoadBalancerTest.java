@@ -160,7 +160,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = pickerCaptor.getValue().pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull();
-    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
     Subchannel subchannel = Iterables.getOnlyElement(subchannels.values());
     int expectedTimes = PickFirstLoadBalancerProvider.isEnabledNewPickFirst()
                             && !PickFirstLoadBalancerProvider.isEnabledHappyEyeballs() ? 1 : 2;
@@ -525,7 +526,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = picker.pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
-    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
     verifyConnection(0);
   }
 
@@ -548,7 +550,8 @@ public class RingHashLoadBalancerTest {
     PickResult result = picker.pickSubchannel(args);
     assertThat(result.getStatus().isOk()).isTrue();
     assertThat(result.getSubchannel()).isNull(); // buffer request
-    assertThat(result.getDelayReasonToken()).isEqualTo("ring_hash:connecting");
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("ring_hash: waiting for connection");
     verifyConnection(1);
   }
 

@@ -86,7 +86,8 @@ import org.mockito.junit.MockitoRule;
 public class RoundRobinLoadBalancerTest {
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
   private static final SubchannelPicker EMPTY_PICKER =
-      new FixedResultPicker(PickResult.withNoResult("round_robin:connecting"));
+      new FixedResultPicker(
+          PickResult.withNoResult("connecting", "round_robin: attempting to connect"));
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
