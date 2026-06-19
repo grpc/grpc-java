@@ -35,7 +35,6 @@ import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
 
@@ -78,8 +77,6 @@ final class AsyncServletOutputStreamWriter {
   private final Queue<ActionItem> writeChain = new ConcurrentLinkedQueue<>();
   // for a theoretical race condition that onWritePossible() is called immediately after isReady()
   // returns false and before writeState.compareAndSet()
-  @Nullable
-  private volatile Thread parkingThread;
 
   AsyncServletOutputStreamWriter(
       AsyncContext asyncContext,
@@ -202,11 +199,9 @@ final class AsyncServletOutputStreamWriter {
     // readyAndDrained should have been set to false already.
     // Just in case due to a race condition readyAndDrained is still true at this moment and is
     // being set to false by runOrBuffer() concurrently.
-    parkingThread = Thread.currentThread();
     while (writeState.get().readyAndDrained) {
       LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1)); // should return immediately
     }
-    parkingThread = null;
   }
 
   /**
@@ -218,52 +213,41 @@ final class AsyncServletOutputStreamWriter {
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
 
+    // --- NEW: Tomcat Spontaneous State Change Mitigation ---
+    // If our cache says true, but the container is secretly not ready,
+    // intercept the stale state and sync it before proceeding.
+    if (curState.readyAndDrained && !isReady.getAsBoolean()) {
+      boolean successful = writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+      checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+      // Update local state so it gracefully bypasses the 
+      // direct write and falls into the buffer block
+      curState = writeState.get(); 
+    }
+    // -------------------------------------------------------
+
+    // The rest is the standard, original gRPC code!
     if (curState.readyAndDrained) {
-      if (isReady.getAsBoolean()) {
-        // Path 1: Container is truly ready. Write directly.
-        actionItem.run();
-        if (actionItem == completeAction) {
-          return;
-        }
-        if (!isReady.getAsBoolean()) {
-          boolean successful =
-              writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-          LockSupport.unpark(parkingThread);
-          checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-          log.finest("the servlet output stream becomes not ready");
-        }
+      actionItem.run();
+      if (actionItem == completeAction) {
         return;
       }
+      if (!isReady.getAsBoolean()) {
+        boolean successful =
+            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+      }
+      return;
     }
 
-    // Path 2: Container is secretly not ready (Tomcat bug) OR already known to be false.
-    // We must safely buffer the item and ensure the state reflects reality.
     writeChain.offer(actionItem);
     if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-      // CAS failed. State changed mid-flight.
-      if (curState.readyAndDrained) {
-        // Started as true, but CAS failed because another thread 
-        // concurrently buffered and flipped it to false.
-        // Safe to do nothing. The winning thread handles the unpark.
-      } else {
-        // Started as false, CAS failed because onWritePossible flipped it to true.
-        // Original logic: retry the write since it's ready again.
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
-        }
-      }
-    } else {
-      // CAS succeeded! 
-      // CRITICAL FIX: If we just flipped the state from true to false,
-      //  we MUST wake up the container!
-      if (curState.readyAndDrained) {
-        LockSupport.unpark(parkingThread);
-        log.finest("the servlet output stream becomes not ready");
+      checkState(
+          writeState.get().readyAndDrained,
+          "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+      ActionItem lastItem = writeChain.poll();
+      if (lastItem != null) {
+        checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+        runOrBuffer(lastItem);
       }
     }
   }
