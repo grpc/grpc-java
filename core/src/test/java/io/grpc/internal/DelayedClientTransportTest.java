@@ -845,6 +845,83 @@ public class DelayedClientTransportTest {
     verify(mockTracer).delayEnded();
   }
 
+  @Test
+  public void streamDelayMetrics_cadenceReasonUpdate_doesNotStartNewTypeSegment() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    when(picker1.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("connecting", "attempt 1"));
+
+    delayedTransport.reprocess(picker1);
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    verify(mockTracer, times(1)).delayTypeStarted("connecting");
+    verify(mockTracer).delayReasonAttached("attempt 1");
+
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withNoResult("connecting", "attempt 2"));
+
+    delayedTransport.reprocess(picker2);
+
+    verify(mockTracer, times(1)).delayTypeStarted("connecting");
+    verify(mockTracer).delayReasonAttached("attempt 2");
+    verify(mockTracer, never()).delayEnded();
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_clientChannelInit() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+
+    // No picker reprocessed yet (lastPicker == null)
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    verify(mockTracer).delayTypeStarted("client_channel_init");
+    verify(mockTracer).delayReasonAttached("client channel: created LB policy.");
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_subchannelStateMismatch() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+
+    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel = mock(io.grpc.LoadBalancer.Subchannel.class);
+    when(disconnectedSubchannel.getInternalSubchannel())
+        .thenReturn(newTransportProvider(null));
+
+    SubchannelPicker stalePicker = mock(SubchannelPicker.class);
+    when(stalePicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(disconnectedSubchannel));
+
+    delayedTransport.reprocess(stalePicker);
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    verify(mockTracer).delayTypeStarted("subchannel_state_mismatch");
+    verify(mockTracer).delayReasonAttached(
+        "subchannel returned by LB picker has no connected subchannel");
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_waitForReadyFailed() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
+
+    SubchannelPicker failPicker = mock(SubchannelPicker.class);
+    when(failPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withError(Status.UNAVAILABLE));
+
+    delayedTransport.reprocess(failPicker);
+    CallOptions wfrOptions = callOptions.withWaitForReady();
+    delayedTransport.newStream(method, headers, wfrOptions, customTracers);
+
+    verify(mockTracer).delayTypeStarted("wait_for_ready_failed");
+    verify(mockTracer).delayReasonAttached(
+        "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override
