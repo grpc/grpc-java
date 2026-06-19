@@ -257,10 +257,10 @@ public class CelStateMatcherTest {
     // request.headers == {'a':'1','b':'2','c':'3'} requires entrySet(),
     // which throws UnsupportedOperationException
     // We want to ensure this is caught and treated as a mismatch or error, not a crash.
-    // HeadersWrapper has 3 pseudo headers by default, so size is 3.
+    // HeadersWrapper has 3 pseudo headers and 1 host alias by default, so size is 4.
     // We match size to force entrySet check.
     CelMatcher celMatcher = createCelMatcher(
-        "request.headers == {'a':'1','b':'2','c':'3'}");
+        "request.headers == {'a':'1','b':'2','c':'3','d':'4'}");
     Matcher proto = Matcher.newBuilder()
         .setMatcherList(Matcher.MatcherList.newBuilder()
             .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
