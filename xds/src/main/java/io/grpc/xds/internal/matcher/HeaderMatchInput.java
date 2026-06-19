@@ -19,6 +19,7 @@ package io.grpc.xds.internal.matcher;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
+import com.google.common.io.BaseEncoding;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
@@ -28,7 +29,11 @@ import java.util.Locale;
  * MatchInput for extracting HTTP headers.
  */
 final class HeaderMatchInput implements MatchInput {
+  private static final BaseEncoding BASE64 = BaseEncoding.base64();
   private final String headerName;
+  private final Metadata.Key<byte[]> binaryKey;
+  private final Metadata.Key<String> stringKey;
+
   static final String TYPE_URL =
       "type.googleapis.com/envoy.type.matcher.v3.HttpRequestHeaderMatchInput";
     
@@ -43,9 +48,11 @@ final class HeaderMatchInput implements MatchInput {
     }
     try {
       if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+        this.binaryKey = Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER);
+        this.stringKey = null;
       } else {
-        Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
+        this.binaryKey = null;
+        this.stringKey = Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER);
       }
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("Invalid header name: " + headerName, e);
@@ -57,9 +64,8 @@ final class HeaderMatchInput implements MatchInput {
     if ("te".equals(headerName)) {
       return null;
     }
-    if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-      Iterable<byte[]> values = context.getMetadata().getAll(
-          Metadata.Key.of(headerName, Metadata.BINARY_BYTE_MARSHALLER));
+    if (binaryKey != null) {
+      Iterable<byte[]> values = context.getMetadata().getAll(binaryKey);
       if (values == null) {
         return null;
       }
@@ -70,13 +76,12 @@ final class HeaderMatchInput implements MatchInput {
           sb.append(",");
         }
         first = false;
-        sb.append(com.google.common.io.BaseEncoding.base64().encode(value));
+        sb.append(BASE64.encode(value));
       }
       return sb.toString();
     }
     Metadata metadata = context.getMetadata();
-    Iterable<String> values = metadata.getAll(
-        Metadata.Key.of(headerName, Metadata.ASCII_STRING_MARSHALLER));
+    Iterable<String> values = metadata.getAll(stringKey);
     if (values == null) {
       return null;
     }
