@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.grpcservice;
 
+import com.google.protobuf.ByteString;
 import java.util.Locale;
 
 /**
@@ -53,15 +54,39 @@ public final class HeaderValueValidationUtils {
    * @param header The HeaderValue containing key and values
    */
   public static boolean isDisallowed(HeaderValue header) {
+    if (!header.isValid()) {
+      return true;
+    }
     if (isDisallowed(header.key())) {
       return true;
     }
-    if (header.value().isPresent() && header.value().get().length() > MAX_HEADER_LENGTH) {
-      return true;
+    if (header.value().isPresent()) {
+      String val = header.value().get();
+      if (!header.key().endsWith("-bin") && !isValidAsciiHeaderValue(val)) {
+        return true;
+      }
     }
-    if (header.rawValue().isPresent() && header.rawValue().get().size() > MAX_HEADER_LENGTH) {
-      return true;
+    if (header.rawValue().isPresent()) {
+      ByteString rawVal = header.rawValue().get();
+      if (!header.key().endsWith("-bin") && !isValidAsciiHeaderValue(rawVal.toStringUtf8())) {
+        return true;
+      }
     }
     return false;
+  }
+
+  /**
+   * Validates that the header value contains only allowed ASCII characters as specified by
+   * {@link io.grpc.Metadata.AsciiMarshaller}: horizontal tab (0x09), space (0x20), and visible
+   * ASCII characters (0x21 - 0x7E).
+   */
+  private static boolean isValidAsciiHeaderValue(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if (c != 0x09 && (c < 0x20 || c > 0x7E)) {
+        return false;
+      }
+    }
+    return true;
   }
 }

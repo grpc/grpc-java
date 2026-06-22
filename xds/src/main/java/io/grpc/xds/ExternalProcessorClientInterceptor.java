@@ -68,6 +68,7 @@ import io.grpc.xds.ExternalProcessorFilter.HeaderForwardingRulesConfig;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
 import io.grpc.xds.internal.grpcservice.HeaderValue;
+import io.grpc.xds.internal.grpcservice.HeaderValueValidationUtils;
 import io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException;
 import io.grpc.xds.internal.headermutations.HeaderMutationFilter;
 import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
@@ -245,10 +246,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         Iterable<byte[]> values = metadata.getAll(binKey);
         if (values != null) {
           for (byte[] binValue : values) {
+            String base64Value = BaseEncoding.base64().encode(binValue);
             io.envoyproxy.envoy.config.core.v3.HeaderValue headerValue =
                 io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
                     .setKey(key.toLowerCase(Locale.ROOT))
-                    .setRawValue(ByteString.copyFrom(binValue))
+                    .setRawValue(ByteString.copyFromUtf8(base64Value))
                     .build();
             builder.addHeaders(headerValue);
           }
@@ -261,7 +263,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             io.envoyproxy.envoy.config.core.v3.HeaderValue headerValue =
                 io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
                     .setKey(key.toLowerCase(Locale.ROOT))
-                    .setValue(value)
+                    .setRawValue(ByteString.copyFromUtf8(value))
                     .build();
             builder.addHeaders(headerValue);
           }
@@ -594,12 +596,26 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           : mutation.getSetHeadersList()) {
         io.envoyproxy.envoy.config.core.v3.HeaderValue protoHeader = protoOption.getHeader();
         HeaderValue headerValue;
-        if (protoHeader.getKey().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          headerValue = HeaderValue.create(protoHeader.getKey(),
-              ByteString.copyFrom(
-                  BaseEncoding.base64().decode(protoHeader.getValue())));
+        
+        ByteString rawBytes = protoHeader.getRawValue();
+        if (rawBytes.isEmpty()) {
+          rawBytes = ByteString.copyFromUtf8(protoHeader.getValue());
+        }
+
+        if (rawBytes.size() > HeaderValueValidationUtils.MAX_HEADER_LENGTH) {
+          headerValue = HeaderValue.createInvalid(protoHeader.getKey());
+        } else if (protoHeader.getKey().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          try {
+            byte[] decodedBytes = BaseEncoding.base64().decode(rawBytes.toStringUtf8());
+            headerValue = HeaderValue.create(
+                protoHeader.getKey(), ByteString.copyFrom(decodedBytes));
+          } catch (IllegalArgumentException e) {
+            // Mark as invalid so HeaderMutationFilter can either silently ignore it or
+            // throw an exception based on the disallow_is_error configuration.
+            headerValue = HeaderValue.createInvalid(protoHeader.getKey());
+          }
         } else {
-          headerValue = HeaderValue.create(protoHeader.getKey(), protoHeader.getValue());
+          headerValue = HeaderValue.create(protoHeader.getKey(), rawBytes.toStringUtf8());
         }
         headersToModify.add(HeaderValueOption.create(
             headerValue,

@@ -34,11 +34,6 @@ public class HeaderMutationFilterTest {
 
   private static final int MAX_HEADER_LENGTH = 16384;
 
-  private static HeaderValueOption header(String key, ByteString value) {
-    return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
-  }
-
   private static HeaderValueOption header(String key, String value) {
     return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
         HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
@@ -49,7 +44,6 @@ public class HeaderMutationFilterTest {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
     @SuppressWarnings("InlineMeInliner")
     String longString = Strings.repeat("a", MAX_HEADER_LENGTH + 1);
-    ByteString longBytes = ByteString.copyFrom(new byte[MAX_HEADER_LENGTH + 1]);
 
     HeaderMutations mutations = HeaderMutations.create(
         ImmutableList.of(
@@ -59,7 +53,10 @@ public class HeaderMutationFilterTest {
             header(":path", "/new-path"), header(":grpc-trace-bin", "binary-value"),
             header(":alt-svc", "h3=:443"), header("user-agent", "new-agent"),
             header("Valid-Key", "value"), header("", "value"), header(longString, "value"),
-            header("long-value-key", longString), header("long-bin-key-bin", longBytes),
+            HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.createInvalid("long-value-key"),
+                HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false),
+            HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.createInvalid("long-bin-key-bin"),
+                HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false),
             header("grpc-timeout", "10S"), header("valid-key-lower", "value")),
         ImmutableList.of("remove-key", "host", ":authority", ":scheme", ":method", ":foo", ":bar",
             "Valid-Key", "", longString, "grpc-timeout", "UPPER-REMOVE", "lower-remove"));

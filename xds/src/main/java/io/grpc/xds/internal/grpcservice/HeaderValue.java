@@ -28,17 +28,22 @@ import java.util.Optional;
 public abstract class HeaderValue {
 
   public static HeaderValue create(String key, String value) {
-    return new AutoValue_HeaderValue(key, Optional.of(value), Optional.empty());
+    return new AutoValue_HeaderValue(key, Optional.of(value), Optional.empty(), true);
   }
 
   public static HeaderValue create(String key, ByteString rawValue) {
-    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.of(rawValue));
+    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.of(rawValue), true);
   }
 
+  public static HeaderValue createInvalid(String key) {
+    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.empty(), false);
+  }
 
   public abstract String key();
 
   public abstract Optional<String> value();
 
   public abstract Optional<ByteString> rawValue();
+
+  public abstract boolean isValid();
 }

@@ -66,22 +66,49 @@ public class HeaderValueValidationUtilsTest {
   }
 
   @Test
-  public void isDisallowed_headerValue_tooLongValue() {
-    String longValue = new String(new char[16385]).replace('\0', 'v');
-    HeaderValue header = HeaderValue.create("content-type", longValue);
-    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
-  }
-
-  @Test
-  public void isDisallowed_headerValue_tooLongRawValue() {
-    ByteString longRawValue = ByteString.copyFrom(new byte[16385]);
-    HeaderValue header = HeaderValue.create("content-type", longRawValue);
-    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
-  }
-
-  @Test
   public void isDisallowed_headerValue_valid() {
     HeaderValue header = HeaderValue.create("content-type", "application/grpc");
     assertThat(HeaderValueValidationUtils.isDisallowed(header)).isFalse();
+  }
+
+  @Test
+  public void isDisallowed_headerValue_invalid() {
+    HeaderValue header = HeaderValue.createInvalid("content-type");
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
+  }
+
+  @Test
+  public void isDisallowed_headerValue_invalidAsciiString() {
+    // 0x0A (newline) is not allowed in ASCII header values (only 0x09 tab and 0x20-0x7E are
+    // allowed)
+    HeaderValue header = HeaderValue.create("content-type", "application/grpc\n");
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
+  }
+
+  @Test
+  public void isDisallowed_headerValue_invalidAsciiRaw() {
+    // 0x7F (DEL) is not allowed in ASCII header values
+    HeaderValue header = HeaderValue.create(
+        "content-type", ByteString.copyFrom(new byte[]{0x61, 0x7F}));
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
+  }
+
+  @Test
+  public void isDisallowed_headerValue_validAsciiWithTab() {
+    HeaderValue header = HeaderValue.create("content-type", "application/grpc\t");
+    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isFalse();
+  }
+
+  @Test
+  public void isDisallowed_headerValue_binaryHeaderWithArbitraryBytes() {
+    // Binary headers ending in -bin can contain any arbitrary bytes (like 0x00, 0x7F, etc.)
+    HeaderValue headerString = HeaderValue.create(
+        "custom-bin",
+        new String(new byte[]{0x00, 0x7F}, java.nio.charset.StandardCharsets.UTF_8));
+    assertThat(HeaderValueValidationUtils.isDisallowed(headerString)).isFalse();
+
+    HeaderValue headerRaw = HeaderValue.create(
+        "custom-bin", ByteString.copyFrom(new byte[]{0x00, 0x7F}));
+    assertThat(HeaderValueValidationUtils.isDisallowed(headerRaw)).isFalse();
   }
 }
