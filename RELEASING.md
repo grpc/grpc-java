@@ -250,3 +250,7 @@ gRPC for things that will need a migration effort.
 When happy with the dependency upgrades, update the versions in `MODULE.bazel`,
 `repositories.bzl`, and the various `pom.xml` and `build.gradle` files in
 `examples/`.
+
+Upgrade the `uses:` for actions in `.github/workflows` to newer versions. Make
+sure to see what changed in each new major version, but it is most often just
+requiring a newer Node.js version.

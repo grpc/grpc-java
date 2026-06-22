@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.PriorityLoadBalancerProvider.PriorityLbConfig;
@@ -73,6 +74,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
   private SubchannelPicker currentPicker;
   // Set to true if currently in the process of handling resolved addresses.
   private boolean handlingResolvedAddresses;
+  static boolean enablePriorityLbChildPolicyCache =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_PRIORITY_LB_CHILD_POLICY_CACHE", false);
 
   PriorityLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -98,7 +101,12 @@ final class PriorityLoadBalancer extends LoadBalancer {
       if (!prioritySet.contains(priority)) {
         ChildLbState childLbState = children.get(priority);
         if (childLbState != null) {
-          childLbState.deactivate();
+          if (enablePriorityLbChildPolicyCache) {
+            childLbState.deactivate();
+          } else {
+            childLbState.tearDown();
+            children.remove(priority);
+          }
         }
       }
     }

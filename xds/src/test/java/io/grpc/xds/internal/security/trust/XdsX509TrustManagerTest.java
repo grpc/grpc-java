@@ -27,6 +27,7 @@ import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_P
 import static io.grpc.xds.internal.security.CommonTlsContextTestsUtil.SERVER_1_SPIFFE_PEM_FILE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -553,7 +554,7 @@ public class XdsX509TrustManagerTest {
     X509Certificate[] serverCerts =
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
-    verify(sslEngine, times(1)).getHandshakeSession();
+    verify(sslEngine, atLeastOnce()).getHandshakeSession();
     assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 

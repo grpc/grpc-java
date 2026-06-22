@@ -1,0 +1,23 @@
+load("@rules_android//rules:rules.bzl", "android_library")
+load("@rules_jvm_external//:defs.bzl", "artifact")
+
+licenses(["notice"])
+
+android_library(
+    name = "android",
+    srcs = glob([
+        "src/main/java/**/*.java",
+    ]),
+    manifest = "src/main/AndroidManifest.xml",
+    custom_package = "io.grpc.android",
+    # TODO(jdcormie): Figure out how to expose this publicly without making
+    # existing non-android users configure rules_android and maven.google.com.
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//api",
+        "//core:internal",
+        artifact("com.google.code.findbugs:jsr305"),
+        artifact("com.google.errorprone:error_prone_annotations"),
+        artifact("com.google.guava:guava"),
+    ],
+)

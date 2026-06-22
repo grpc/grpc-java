@@ -79,7 +79,8 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
     Long oobReportingPeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "oobReportingPeriod");
     Boolean enableOobLoadReport = JsonUtil.getBoolean(rawConfig, "enableOobLoadReport");
     Long weightUpdatePeriodNanos = JsonUtil.getStringAsDuration(rawConfig, "weightUpdatePeriod");
-    Float errorUtilizationPenalty = JsonUtil.getNumberAsFloat(rawConfig, "errorUtilizationPenalty");
+    Double errorUtilizationPenalty =
+        JsonUtil.getNumberAsDouble(rawConfig, "errorUtilizationPenalty");
     List<String> metricNamesForComputingUtilization = JsonUtil.getListOfStrings(rawConfig,
         "metricNamesForComputingUtilization");
 
@@ -104,7 +105,7 @@ public final class WeightedRoundRobinLoadBalancerProvider extends LoadBalancerPr
       }
     }
     if (errorUtilizationPenalty != null) {
-      configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty);
+      configBuilder.setErrorUtilizationPenalty(errorUtilizationPenalty.floatValue());
     }
     if (metricNamesForComputingUtilization != null
         && GrpcUtil.getFlag("GRPC_EXPERIMENTAL_WRR_CUSTOM_METRICS", false)) {

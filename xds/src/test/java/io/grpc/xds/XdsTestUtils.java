@@ -51,7 +51,6 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.StatusOr;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.JsonParser;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Endpoints.LbEndpoint;
 import io.grpc.xds.Endpoints.LocalityLbEndpoints;
@@ -278,7 +277,7 @@ public class XdsTestUtils {
         EDS_NAME, lbEndpointsMap, Collections.emptyList());
     XdsClusterResource.CdsUpdate cdsUpdate = XdsClusterResource.CdsUpdate.forEds(
         CLUSTER_NAME, EDS_NAME, null, null, null, null, false, null)
-        .lbPolicyConfig(getWrrLbConfigAsMap()).build();
+        .lbPolicyConfigJsonForTesting(getWrrLbConfigAsMap()).build();
     XdsConfig.XdsClusterConfig clusterConfig = new XdsConfig.XdsClusterConfig(
         CLUSTER_NAME, cdsUpdate, new EndpointConfig(StatusOr.fromValue(edsUpdate)));
 
@@ -301,12 +300,9 @@ public class XdsTestUtils {
     return lbEndpointsMap;
   }
 
-  @SuppressWarnings("unchecked")
-  static ImmutableMap<String, ?> getWrrLbConfigAsMap() throws IOException {
-    String lbConfigStr = "{\"wrr_locality_experimental\" : "
-        + "{ \"childPolicy\" : [{\"round_robin\" : {}}]}}";
-
-    return ImmutableMap.copyOf((Map<String, ?>) JsonParser.parse(lbConfigStr));
+  static ImmutableMap<String, ?> getWrrLbConfigAsMap() {
+    return ImmutableMap.of("wrr_locality_experimental", ImmutableMap.of("childPolicy",
+          ImmutableList.of(ImmutableMap.of("round_robin", ImmutableMap.of()))));
   }
 
   static RouteConfiguration buildRouteConfiguration(String authority, String rdsName,

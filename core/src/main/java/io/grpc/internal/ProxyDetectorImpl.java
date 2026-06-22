@@ -207,6 +207,14 @@ class ProxyDetectorImpl implements ProxyDetector {
     }
 
     List<Proxy> proxies = proxySelector.select(uri);
+    // ProxySelector.select(URI) is contractually required to return a non-null, non-empty list.
+    // Surface the offending implementation's class name so a broken ProxySelector can be fixed.
+    if (proxies == null || proxies.isEmpty()) {
+      throw new IOException(
+          "ProxySelector " + proxySelector.getClass().getName()
+              + " returned " + (proxies == null ? "null" : "an empty list")
+              + ", which violates the java.net.ProxySelector#select(URI) contract");
+    }
     if (proxies.size() > 1) {
       log.warning("More than 1 proxy detected, gRPC will select the first one");
     }

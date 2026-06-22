@@ -36,12 +36,12 @@ public class HeaderMutationFilterTest {
 
   private static HeaderValueOption header(String key, ByteString value) {
     return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
   }
 
   private static HeaderValueOption header(String key, String value) {
     return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
   }
 
   @Test

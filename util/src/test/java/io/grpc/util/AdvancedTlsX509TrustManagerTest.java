@@ -44,6 +44,7 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Before;
@@ -161,6 +162,7 @@ public class AdvancedTlsX509TrustManagerTest {
     SSLSocket sslSocket = mock(SSLSocket.class);
     when(sslSocket.isConnected()).thenReturn(true);
     when(sslSocket.getHandshakeSession()).thenReturn(null);
+    when(sslSocket.getSSLParameters()).thenReturn(new SSLParameters());
     CertificateException ce = assertThrows(CertificateException.class, () -> trustManager
         .checkClientTrusted(serverCert0, "RSA", sslSocket));
     assertEquals("No handshake session", ce.getMessage());

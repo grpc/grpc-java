@@ -37,6 +37,9 @@ checkstyle = "com.puppycrawl.tools:checkstyle:10.26.1"
 # checkstyle 10.0+ requires Java 11+
 # See https://checkstyle.sourceforge.io/releasenotes_old_8-35_10-26.html#Release_10.0
 # checkForUpdates: checkstylejava8:9.+
+cel-runtime = "dev.cel:runtime:0.13.0"
+cel-protobuf = "dev.cel:protobuf:0.13.0"
+cel-compiler = "dev.cel:compiler:0.13.0"
 checkstylejava8 = "com.puppycrawl.tools:checkstyle:9.3"
 commons-math3 = "org.apache.commons:commons-math3:3.6.1"
 conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
@@ -45,7 +48,7 @@ conscrypt = "org.conscrypt:conscrypt-openjdk-uber:2.5.2"
 cronet-api = "org.chromium.net:cronet-api:119.6045.31"
 # checkForUpdates: cronet-embedded:119.6045.31
 cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
-errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.48.0"
+errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.50.0"
 # 2.32.0+ requires Java 17+
 # checkForUpdates: errorprone-core:2.31.+
 errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
@@ -64,13 +67,13 @@ google-auth-oauth2Http = "com.google.auth:google-auth-library-oauth2-http:1.42.1
 # 3.23.11+ require protobuf 4.x
 # checkForUpdates: google-cloud-logging:3.23.10
 google-cloud-logging = "com.google.cloud:google-cloud-logging:3.23.10"
-gson = "com.google.code.gson:gson:2.13.2"
-guava = "com.google.guava:guava:33.5.0-android"
+gson = "com.google.code.gson:gson:2.14.0"
+guava = "com.google.guava:guava:33.6.0-android"
 guava-betaChecker = "com.google.guava:guava-beta-checker:1.0"
-guava-testlib = "com.google.guava:guava-testlib:33.5.0-android"
+guava-testlib = "com.google.guava:guava-testlib:33.6.0-android"
 # JRE version is needed for projects where its a transitive dependency, f.e. gcp-observability.
 # May be different from the -android version.
-guava-jre = "com.google.guava:guava:33.5.0-jre"
+guava-jre = "com.google.guava:guava:33.6.0-jre"
 hdrhistogram = "org.hdrhistogram:HdrHistogram:2.2.2"
 # 6.0.0+ use java.lang.Deprecated forRemoval and since from Java 9
 # checkForUpdates: jakarta-servlet-api:5.+
@@ -79,16 +82,16 @@ javax-servlet-api = "javax.servlet:javax.servlet-api:4.0.1"
 # 12.0.0+ require Java 17+
 # checkForUpdates: jetty-client:11.+
 jetty-client = "org.eclipse.jetty:jetty-client:11.0.26"
-jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.1.7"
+jetty-http2-server = "org.eclipse.jetty.http2:jetty-http2-server:12.1.10"
 # 10.0.25+ uses uses @Deprecated(since=/forRemoval=) from Java 9
 # checkForUpdates: jetty-http2-server10:10.0.24
 jetty-http2-server10 = "org.eclipse.jetty.http2:http2-server:10.0.24"
-jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.1.7"
+jetty-servlet = "org.eclipse.jetty.ee10:jetty-ee10-servlet:12.1.10"
 # checkForUpdates: jetty-servlet10:10.0.24
 jetty-servlet10 = "org.eclipse.jetty:jetty-servlet:10.0.24"
 jsr305 = "com.google.code.findbugs:jsr305:3.0.2"
 junit = "junit:junit:4.13.2"
-lincheck = "org.jetbrains.lincheck:lincheck:3.4"
+lincheck = "org.jetbrains.lincheck:lincheck:3.6"
 # Update notes / 2023-07-19 sergiitk:
 #    Couldn't update to 5.4.0, updated to the last in 4.x line. Version 5.x breaks some tests.
 #    Error log: https://github.com/grpc/grpc-java/pull/10359#issuecomment-1632834435
@@ -99,19 +102,14 @@ lincheck = "org.jetbrains.lincheck:lincheck:3.4"
 mockito-android = "org.mockito:mockito-android:4.4.0"
 # checkForUpdates: mockito-core:4.4.+
 mockito-core = "org.mockito:mockito-core:4.4.0"
-# Need to decide when we require users to absorb the breaking changes in 4.2
-# checkForUpdates: netty-codec-http2:4.1.+
-netty-codec-http2 = "io.netty:netty-codec-http2:4.1.132.Final"
-# checkForUpdates: netty-handler-proxy:4.1.+
-netty-handler-proxy = "io.netty:netty-handler-proxy:4.1.132.Final"
+netty-codec-http2 = "io.netty:netty-codec-http2:4.2.15.Final"
+netty-handler-proxy = "io.netty:netty-handler-proxy:4.2.15.Final"
 # Keep the following references of tcnative version in sync whenever it's updated:
 #   SECURITY.md
 netty-tcnative = "io.netty:netty-tcnative-boringssl-static:2.0.75.Final"
 netty-tcnative-classes = "io.netty:netty-tcnative-classes:2.0.75.Final"
-# checkForUpdates: netty-transport-epoll:4.1.+
-netty-transport-epoll = "io.netty:netty-transport-native-epoll:4.1.132.Final"
-# checkForUpdates: netty-unix-common:4.1.+
-netty-unix-common = "io.netty:netty-transport-native-unix-common:4.1.132.Final"
+netty-transport-epoll = "io.netty:netty-transport-native-epoll:4.2.15.Final"
+netty-unix-common = "io.netty:netty-transport-native-unix-common:4.2.15.Final"
 okhttp = "com.squareup.okhttp:okhttp:2.7.5"
 # okio 3.5+ uses Kotlin 1.9+ which requires Android Gradle Plugin 9+
 # checkForUpdates: okio:3.4.+
@@ -121,22 +119,22 @@ opencensus-contrib-grpc-metrics = { module = "io.opencensus:opencensus-contrib-g
 opencensus-exporter-stats-stackdriver = { module = "io.opencensus:opencensus-exporter-stats-stackdriver", version.ref = "opencensus" }
 opencensus-exporter-trace-stackdriver = { module = "io.opencensus:opencensus-exporter-trace-stackdriver", version.ref = "opencensus" }
 opencensus-impl = { module = "io.opencensus:opencensus-impl", version.ref = "opencensus" }
-opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.60.1"
-opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.60.1-alpha"
-opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.54.0-alpha"
-opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.60.1"
-opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.60.1"
+opentelemetry-api = "io.opentelemetry:opentelemetry-api:1.63.0"
+opentelemetry-exporter-prometheus = "io.opentelemetry:opentelemetry-exporter-prometheus:1.63.0-alpha"
+opentelemetry-gcp-resources = "io.opentelemetry.contrib:opentelemetry-gcp-resources:1.57.0-alpha"
+opentelemetry-sdk-extension-autoconfigure = "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.63.0"
+opentelemetry-sdk-testing = "io.opentelemetry:opentelemetry-sdk-testing:1.63.0"
 perfmark-api = "io.perfmark:perfmark-api:0.27.0"
 # Not upgrading to 4.x as it is not yet ABI compatible.
 # https://github.com/protocolbuffers/protobuf/issues/17247
 # checkForUpdates: protobuf-java:3.+
-protobuf-java = "com.google.protobuf:protobuf-java:3.25.8"
+protobuf-java = "com.google.protobuf:protobuf-java:3.25.9"
 # checkForUpdates: protobuf-java-util:3.+
-protobuf-java-util = "com.google.protobuf:protobuf-java-util:3.25.8"
+protobuf-java-util = "com.google.protobuf:protobuf-java-util:3.25.9"
 # checkForUpdates: protobuf-javalite:3.+
-protobuf-javalite = "com.google.protobuf:protobuf-javalite:3.25.8"
+protobuf-javalite = "com.google.protobuf:protobuf-javalite:3.25.9"
 # checkForUpdates: protobuf-protoc:3.+
-protobuf-protoc = "com.google.protobuf:protoc:3.25.8"
+protobuf-protoc = "com.google.protobuf:protoc:3.25.9"
 re2j = "com.google.re2j:re2j:1.8"
 robolectric = "org.robolectric:robolectric:4.16.1"
 s2a-proto = "com.google.s2a.proto.v2:s2a-proto:0.1.3"
@@ -144,10 +142,16 @@ signature-android = "net.sf.androidscents.signature:android-api-level-21:5.0.1_r
 signature-java = "org.codehaus.mojo.signature:java18:1.0"
 # 11.0.0+ require Java 17+
 # checkForUpdates: tomcat-embed-core:10.+
-tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.52"
+tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.55"
 # checkForUpdates: tomcat-embed-core9:9.+
-tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.115"
+tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.118"
 truth = "com.google.truth:truth:1.4.5"
-# checkForUpdates: undertow-servlet22:2.2.+
+# 2.2.39 fails UndertowInteropTest.veryLargeRequest()
+# https://github.com/grpc/grpc-java/issues/12859
+# (disabled) checkForUpdates: undertow-servlet22:2.2.+
+# checkForUpdates: undertow-servlet22:2.2.38.Final
 undertow-servlet22 = "io.undertow:undertow-servlet:2.2.38.Final"
+# 2.3.21 fails UndertowInteropTest.veryLargeRequest()
+# https://github.com/grpc/grpc-java/issues/12859
+# checkForUpdates: undertow-servlet:2.3.20.Final
 undertow-servlet = "io.undertow:undertow-servlet:2.3.20.Final"

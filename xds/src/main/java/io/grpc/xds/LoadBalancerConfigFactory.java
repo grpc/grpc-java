@@ -155,7 +155,7 @@ class LoadBalancerConfigFactory {
       configBuilder.put(WEIGHT_UPDATE_PERIOD, weightUpdatePeriod);
     }
     if (errorUtilizationPenalty != null) {
-      configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty);
+      configBuilder.put(ERROR_UTILIZATION_PENALTY, errorUtilizationPenalty.doubleValue());
     }
     if (metricNamesForComputingUtilization != null
         && !metricNamesForComputingUtilization.isEmpty()) {

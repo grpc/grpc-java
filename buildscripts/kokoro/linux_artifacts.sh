@@ -17,7 +17,5 @@ trap spongify_logs EXIT
   SKIP_TESTS=true ARCH=aarch_64 /grpc-java/buildscripts/kokoro/unix.sh
 "$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
   SKIP_TESTS=true ARCH=ppcle_64 /grpc-java/buildscripts/kokoro/unix.sh
-# Use a newer GCC version. GCC 7 in multiarch has a bug:
-#   internal compiler error: output_operand: invalid %-code
-"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-ubuntu2004 env \
+"$GRPC_JAVA_DIR"/buildscripts/run_in_docker.sh grpc-java-artifacts-multiarch env \
   SKIP_TESTS=true ARCH=s390_64 /grpc-java/buildscripts/kokoro/unix.sh

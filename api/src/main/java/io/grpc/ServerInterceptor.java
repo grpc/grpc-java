@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface for intercepting incoming calls before they are dispatched by
@@ -34,8 +33,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * without completing the previous ones first. Refer to the
  * {@link io.grpc.ServerCall.Listener ServerCall.Listener} docs for more details regarding thread
  * safety of the returned listener.
+ *
+ * <p>This interface is thread-safe.
  */
-@ThreadSafe
 public interface ServerInterceptor {
   /**
    * Intercept {@link ServerCall} dispatch by the {@code next} {@link ServerCallHandler}. General

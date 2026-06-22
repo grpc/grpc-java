@@ -51,6 +51,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.client.BackendMetricPropagation;
 import io.grpc.xds.client.EnvoyProtoData;
 import io.grpc.xds.client.LoadReportClient;
 import io.grpc.xds.client.LoadStatsManager2;
@@ -58,6 +59,7 @@ import io.grpc.xds.client.LoadStatsManager2.ClusterDropStats;
 import io.grpc.xds.client.LoadStatsManager2.ClusterLocalityStats;
 import io.grpc.xds.client.Locality;
 import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -91,6 +93,8 @@ public class LoadReportClientTest {
   private static final String EDS_SERVICE_NAME2 = "backend-service-bar.googleapis.com";
   private static final Locality LOCALITY1 = Locality.create("region1", "zone1", "subZone1");
   private static final Locality LOCALITY2 = Locality.create("region2", "zone2", "subZone2");
+  private static final BackendMetricPropagation PROPAGATE_ALL =
+      BackendMetricPropagation.fromMetricSpecs(Arrays.asList("named_metrics.*"));
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -205,7 +209,8 @@ public class LoadReportClientTest {
       dropStats2.recordDroppedRequest("throttle");
     }
     ClusterLocalityStats localityStats1 =
-        loadStatsManager.getClusterLocalityStats(CLUSTER1, EDS_SERVICE_NAME1, LOCALITY1);
+        loadStatsManager.getClusterLocalityStats(
+            CLUSTER1, EDS_SERVICE_NAME1, LOCALITY1, PROPAGATE_ALL);
     for (int i = 0; i < 31; i++) {
       localityStats1.recordCallStarted();
     }
@@ -213,7 +218,8 @@ public class LoadReportClientTest {
     localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", 1.618));
     localityStats1.recordBackendLoadMetricStats(ImmutableMap.of("named1", -2.718));
     ClusterLocalityStats localityStats2 =
-        loadStatsManager.getClusterLocalityStats(CLUSTER2, EDS_SERVICE_NAME2, LOCALITY2);
+        loadStatsManager.getClusterLocalityStats(
+            CLUSTER2, EDS_SERVICE_NAME2, LOCALITY2, PROPAGATE_ALL);
     for (int i = 0; i < 45; i++) {
       localityStats2.recordCallStarted();
     }
@@ -263,7 +269,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getLoadMetricStatsCount()).isEqualTo(1);
     EndpointLoadMetricStats loadMetricStats = Iterables.getOnlyElement(
         localityStats.getLoadMetricStatsList());
-    assertThat(loadMetricStats.getMetricName()).isEqualTo("named1");
+    assertThat(loadMetricStats.getMetricName()).isEqualTo("named_metrics.named1");
     assertThat(loadMetricStats.getNumRequestsFinishedWithMetric()).isEqualTo(3L);
     assertThat(loadMetricStats.getTotalMetricValue()).isEqualTo(3.14159 + 1.618 - 2.718);
 
@@ -353,7 +359,7 @@ public class LoadReportClientTest {
     assertThat(localityStats2.getLoadMetricStatsCount()).isEqualTo(1);
     EndpointLoadMetricStats loadMetricStats2 = Iterables.getOnlyElement(
         localityStats2.getLoadMetricStatsList());
-    assertThat(loadMetricStats2.getMetricName()).isEqualTo("named2");
+    assertThat(loadMetricStats2.getMetricName()).isEqualTo("named_metrics.named2");
     assertThat(loadMetricStats2.getNumRequestsFinishedWithMetric()).isEqualTo(1L);
     assertThat(loadMetricStats2.getTotalMetricValue()).isEqualTo(1.414);
 
@@ -530,7 +536,7 @@ public class LoadReportClientTest {
     assertThat(localityStats.getLoadMetricStatsCount()).isEqualTo(1);
     EndpointLoadMetricStats loadMetricStats = Iterables.getOnlyElement(
         localityStats.getLoadMetricStatsList());
-    assertThat(loadMetricStats.getMetricName()).isEqualTo("named1");
+    assertThat(loadMetricStats.getMetricName()).isEqualTo("named_metrics.named1");
     assertThat(loadMetricStats.getNumRequestsFinishedWithMetric()).isEqualTo(3L);
     assertThat(loadMetricStats.getTotalMetricValue()).isEqualTo(3.14159 + 1.618 - 2.718);
 

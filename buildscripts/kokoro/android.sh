@@ -19,7 +19,9 @@ cat <<EOF >> gradle.properties
 org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m
 EOF
 
-export ANDROID_HOME=/tmp/Android/Sdk
+# https://bazel.build/versions/9.1.0/docs/sandboxing gives each worker its own
+# isolated and ephemeral /tmp. Install the Android SDK anywhere but there.
+export ANDROID_HOME=$HOME/Android/Sdk
 mkdir -p "${ANDROID_HOME}/cmdline-tools"
 curl -Ls -o cmdline.zip \
     "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip"
@@ -27,6 +29,27 @@ unzip -qd "${ANDROID_HOME}/cmdline-tools" cmdline.zip
 rm cmdline.zip
 mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
 (yes || true) | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses
+
+# Bazel/android_rules requires build-tools at least version 35.0.0 and, unlike
+# gradle, won't download anything for itself.
+# TODO(jdcormie): Keep this version in sync with AGP's default and any
+# `buildToolsVersion` config.
+"${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;35.0.1"
+
+# TODO(jdcormie): Use the same SDK version as build.gradle's compileSdkVersion.
+"${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-34"
+
+# Bazelisk takes care of installing Bazel.
+mkdir -p /tmp/bazelisk
+curl -Ls -o /tmp/bazelisk/bazelisk https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+chmod +x /tmp/bazelisk/bazelisk
+export PATH=/tmp/bazelisk:$PATH
+
+export USE_BAZEL_VERSION=9.1.0
+bazelisk build \
+  //android \
+  //binder
+
 curl -Ls https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.tar.gz | \
     tar xz -C /tmp
 export PATH=/tmp/cmake-3.26.3-linux-x86_64/bin:$PATH
