@@ -1343,7 +1343,112 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 4: Request attributes propagation ---
+  // --- Category 4: GrpcService Initial Metadata ---
+
+  @Test
+  public void givenGrpcServiceWithInitialMetadata_whenCallIntercepted_thenSendsMetadata()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    String uniqueDataPlaneServerName = dataPlaneServerName;
+
+    ExternalProcessor proto = createBaseProto(uniqueExtProcServerName)
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + uniqueExtProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service."
+                        + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .addInitialMetadata(io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                .setKey("x-init-key").setValue("init-val").build())
+            .addInitialMetadata(
+                io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+                    .setKey("x-bin-key-bin")
+                    .setRawValue(ByteString.copyFrom(new byte[] {1, 2, 3}))
+                    .build())
+            .build())
+        .build();
+
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server
+    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {}
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    ServerServiceDefinition interceptedExtProc = ServerInterceptors.intercept(
+        extProcImpl,
+        new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+            capturedHeaders.set(headers);
+            return next.startCall(call, headers);
+          }
+        });
+
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(interceptedExtProc)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    ManagedChannel dataPlaneChannel =
+        grpcCleanup.register(
+            InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
+
+    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+
+    assertThat(capturedHeaders.get()).isNotNull();
+    assertThat(
+            capturedHeaders
+                .get()
+                .get(Metadata.Key.of("x-init-key", Metadata.ASCII_STRING_MARSHALLER)))
+        .isEqualTo("init-val");
+    assertThat(
+            capturedHeaders
+                .get()
+                .get(Metadata.Key.of("x-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER)))
+        .isEqualTo(new byte[] {1, 2, 3});
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  // --- Category 5: Request attributes propagation ---
 
   @Test
   public void requestAttributes_onHeaders()
@@ -1662,7 +1767,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 5: Request Header Processing ---
+  // --- Category 6: Request Header Processing ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -2251,7 +2356,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 6: Body Mutation: Outbound/Request (GRPC Mode) ---
+  // --- Category 7: Body Mutation: Outbound/Request (GRPC Mode) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -2905,7 +3010,7 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
 
-  // --- Category 7: Response Header Mutation ---
+  // --- Category 8: Response Header Mutation ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -3194,7 +3299,7 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
 
-  // --- Category 8: Body Mutation: Inbound/Response (GRPC Mode) ---
+  // --- Category 9: Body Mutation: Inbound/Response (GRPC Mode) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -3513,7 +3618,7 @@ public class ExternalProcessorClientInterceptorTest {
   }
 
 
-  // --- Category 9: Response Trailers ---
+  // --- Category 10: Response Trailers ---
 
   @Test
   public void
@@ -4136,7 +4241,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 10: Trailers-only response handling ---
+  // --- Category 11: Trailers-only response handling ---
 
   @Test
   public void
@@ -4581,7 +4686,7 @@ public class ExternalProcessorClientInterceptorTest {
 
 
 
-  // --- Category 11: Half-Close handling ---
+  // --- Category 12: Half-Close handling ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -5360,7 +5465,7 @@ public class ExternalProcessorClientInterceptorTest {
 
 
 
-  // --- Category 12: Outbound Backpressure (isReady / onReady) ---
+  // --- Category 13: Outbound Backpressure (isReady / onReady) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -5995,7 +6100,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 13: Ext-proc request draining ---
+  // --- Category 14: Ext-proc request draining ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -7308,7 +7413,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 14: Inbound Backpressure (request(n) / pendingRequests) ---
+  // --- Category 15: Inbound Backpressure (request(n) / pendingRequests) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -7839,7 +7944,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 15: Error Handling & Security ---
+  // --- Category 16: Error Handling & Security ---
 
   @Test
   @SuppressWarnings("FutureReturnValueIgnored")
@@ -8958,7 +9063,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
   }
 
-  // --- Category 16: Immediate Response Handling ---
+  // --- Category 17: Immediate Response Handling ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -9442,7 +9547,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 17: Resource Management ---
+  // --- Category 18: Resource Management ---
 
   @Test
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
@@ -9455,7 +9560,7 @@ public class ExternalProcessorClientInterceptorTest {
     Mockito.verify(mockChannelManager).close();
   }
 
-  // --- Category 18: Data plane rpc cancellation ---
+  // --- Category 19: Data plane rpc cancellation ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -9552,7 +9657,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 19: Flow Control when side stream is full ---
+  // --- Category 20: Flow Control when side stream is full ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -9851,7 +9956,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 20: Streaming Completeness (Client & Bi-Di) ---
+  // --- Category 21: Streaming Completeness (Client & Bi-Di) ---
 
   @Test
   @SuppressWarnings({"unchecked", "FutureReturnValueIgnored"})
@@ -10417,7 +10522,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 21: Header Forwarding ---
+  // --- Category 22: Header Forwarding ---
 
   @Test
   public void
@@ -10941,7 +11046,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 22: Request Attributes ---
+  // --- Category 23: Request Attributes ---
 
   @Test
   public void parseFilterConfig_withUnrecognizedRequestAttribute_isIgnored() {
@@ -11198,7 +11303,7 @@ public class ExternalProcessorClientInterceptorTest {
 
 
 
-  // --- Category 23: Response Ordering Checks ---
+  // --- Category 24: Response Ordering Checks ---
 
   @Test
   public void givenOutOfOrderReqResponses_whenMessageArrivesBeforeHeaders_thenFails()
@@ -11941,7 +12046,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 24: Header Response Status Checks ---
+  // --- Category 25: Header Response Status Checks ---
 
   @Test
   public void givenRequestHeadersResponse_whenStatusIsContinueAndReplace_thenFails()
@@ -12486,7 +12591,7 @@ public class ExternalProcessorClientInterceptorTest {
     realScheduler.shutdown();
   }
 
-  // --- Category 25: Call activation with failure mode allow on and off ---
+  // --- Category 26: Call activation with failure mode allow on and off ---
   @Test
   public void
       givenRequestHeaderModeSend_Fma_true_whenExtProcTerminates_thenCallIsActivated()
@@ -13033,7 +13138,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 26: Request-Scoped Context Propagation ---
+  // --- Category 27: Request-Scoped Context Propagation ---
 
   @Test
   public void clientInterceptor_contextPropagatedToStartCall() throws Exception {
@@ -13380,7 +13485,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
   }
 
-  // --- Category 27: Header Option Value Spec Compliance and Validation ---
+  // --- Category 28: Header Option Value Spec Compliance and Validation ---
 
   @Test
   @SuppressWarnings("unchecked")

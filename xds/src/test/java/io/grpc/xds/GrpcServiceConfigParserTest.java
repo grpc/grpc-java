@@ -154,6 +154,49 @@ public class GrpcServiceConfigParserTest {
   }
 
   @Test
+  public void parse_withInitialMetadata() throws GrpcServiceParseException {
+    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
+    io.envoyproxy.envoy.config.core.v3.HeaderValue asciiHeader =
+        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+            .setKey("test_key").setValue("test_value").build();
+    io.envoyproxy.envoy.config.core.v3.HeaderValue binaryHeader =
+        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+            .setKey("test_key-bin")
+            .setRawValue(ByteString.copyFromUtf8("test_value_binary"))
+            .build();
+    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder().setTargetUri("test_uri")
+        .addChannelCredentialsPlugin(insecureCreds).build();
+    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc)
+        .addInitialMetadata(asciiHeader).addInitialMetadata(binaryHeader).build();
+
+    GrpcServiceConfig config = parse(grpcService, dummyBootstrapInfo(), dummyServerInfo());
+
+    // Assert initial metadata
+    assertThat(config.initialMetadata()).hasSize(2);
+    assertThat(config.initialMetadata().get(0).key()).isEqualTo("test_key");
+    assertThat(config.initialMetadata().get(0).value().get()).isEqualTo("test_value");
+    assertThat(config.initialMetadata().get(1).key()).isEqualTo("test_key-bin");
+    assertThat(config.initialMetadata().get(1).rawValue().get())
+        .isEqualTo(ByteString.copyFromUtf8("test_value_binary"));
+  }
+
+  @Test
+  public void parse_disallowedInitialMetadata() {
+    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
+    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder().setTargetUri("test_uri")
+        .addChannelCredentialsPlugin(insecureCreds).build();
+    io.envoyproxy.envoy.config.core.v3.HeaderValue disallowedHeader =
+        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+            .setKey("host").setValue("test_value").build();
+    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc)
+        .addInitialMetadata(disallowedHeader).build();
+
+    GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
+        () -> parse(grpcService, dummyBootstrapInfo(), dummyServerInfo()));
+    assertThat(exception).hasMessageThat().contains("Invalid initial metadata header: host");
+  }
+
+  @Test
   public void parse_missingGoogleGrpc() {
     GrpcService grpcService = GrpcService.newBuilder().build();
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,

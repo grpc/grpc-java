@@ -206,7 +206,28 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         extProcStub = extProcStub.withDeadlineAfter(timeoutNanos, TimeUnit.NANOSECONDS);
       }
     }
-
+    if (filterConfig.getGrpcServiceConfig().initialMetadata() != null
+        && !filterConfig.getGrpcServiceConfig().initialMetadata().isEmpty()) {
+      Metadata extraHeaders = new Metadata();
+      for (HeaderValue headerValue : filterConfig.getGrpcServiceConfig().initialMetadata()) {
+        String key = headerValue.key();
+        if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          if (headerValue.rawValue().isPresent()) {
+            Metadata.Key<byte[]> metadataKey =
+                Metadata.Key.of(key, Metadata.BINARY_BYTE_MARSHALLER);
+            extraHeaders.put(metadataKey, headerValue.rawValue().get().toByteArray());
+          }
+        } else {
+          if (headerValue.value().isPresent()) {
+            Metadata.Key<String> metadataKey =
+                Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+            extraHeaders.put(metadataKey, headerValue.value().get());
+          }
+        }
+      }
+      extProcStub = extProcStub.withInterceptors(
+          io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
+    }
 
 
     // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
@@ -619,8 +640,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
         headersToModify.add(HeaderValueOption.create(
             headerValue,
-            HeaderValueOption.HeaderAppendAction.valueOf(protoOption.getAppendAction().name()),
-            protoOption.getKeepEmptyValue()));
+            HeaderValueOption.HeaderAppendAction.valueOf(protoOption.getAppendAction().name())));
       }
 
       HeaderMutations mutations = HeaderMutations.create(
@@ -1566,9 +1586,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
 
   private static ByteString outboundStreamToByteString(InputStream message) throws IOException {
-    if (message == null) {
-      return ByteString.EMPTY;
-    }
     if (message instanceof Drainable) {
       int size = message.available();
       ByteString.Output output =
