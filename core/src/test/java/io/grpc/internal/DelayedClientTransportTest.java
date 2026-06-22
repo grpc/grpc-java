@@ -888,7 +888,8 @@ public class DelayedClientTransportTest {
     ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     ClientStreamTracer[] customTracers = new ClientStreamTracer[] { mockTracer };
 
-    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel = mock(io.grpc.LoadBalancer.Subchannel.class);
+    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel =
+        mock(io.grpc.LoadBalancer.Subchannel.class);
     when(disconnectedSubchannel.getInternalSubchannel())
         .thenReturn(newTransportProvider(null));
 

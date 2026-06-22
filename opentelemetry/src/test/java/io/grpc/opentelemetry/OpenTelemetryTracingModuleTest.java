@@ -275,6 +275,31 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void clientDelayTracingMocking() {
+    Span mockDelaySpan = mock(Span.class);
+    when(mockSpanBuilder.setAttribute(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(mockSpanBuilder);
+    when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan, mockDelaySpan);
+
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(mockClientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.delayTypeStarted("connecting");
+    clientStreamTracer.delayReasonAttached("pick_first: attempting to connect");
+    clientStreamTracer.delayEnded();
+
+    verify(mockTracer).spanBuilder(eq("Attempt Delay: connecting"));
+    verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("connecting"));
+    verify(mockDelaySpan).addEvent(eq("pick_first: attempting to connect"));
+    verify(mockDelaySpan).end();
+  }
+
+  @Test
   public void clientBasicTracingRule() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
@@ -379,6 +404,34 @@ public class OpenTelemetryTracingModuleTest {
         attemptSpanEvents.get(3).getAttributes());
 
     assertEquals(attemptSpanData.hasEnded(), true);
+  }
+
+  @Test
+  public void clientDelayTracingRule() {
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    clientStreamTracer.delayTypeStarted("connecting");
+    clientStreamTracer.delayReasonAttached("pick_first: attempting to connect");
+    clientStreamTracer.delayEnded();
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    assertEquals(3, spans.size());
+    SpanData delaySpanData = spans.get(0);
+
+    assertEquals("Attempt Delay: connecting", delaySpanData.getName());
+    assertEquals("connecting", delaySpanData.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals(1, delaySpanData.getEvents().size());
+    assertEquals("pick_first: attempting to connect", delaySpanData.getEvents().get(0).getName());
   }
 
   @Test

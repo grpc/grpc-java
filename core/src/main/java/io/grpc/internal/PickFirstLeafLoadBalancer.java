@@ -167,7 +167,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
-      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+      updateBalancingState(
+          CONNECTING,
+          new FixedResultPicker(
+              PickResult.withNoResult("connecting", "pick_first: address list updated")));
     }
 
     if (rawConnectivityState == READY) {
@@ -333,7 +336,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
 
       case CONNECTING:
         rawConnectivityState = CONNECTING;
-        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+        updateBalancingState(
+            CONNECTING,
+            new FixedResultPicker(
+                PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
         break;
 
       case READY:
@@ -653,7 +659,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (connectionRequested.compareAndSet(false, true)) {
         helper.getSynchronizationContext().execute(pickFirstLeafLoadBalancer::requestConnection);
       }
-      return PickResult.withNoResult();
+      return PickResult.withNoResult(
+          "connecting", "pick_first: requesting connection");
     }
   }
 

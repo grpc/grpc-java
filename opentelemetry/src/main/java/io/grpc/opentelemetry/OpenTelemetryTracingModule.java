@@ -192,6 +192,7 @@ final class OpenTelemetryTracingModule {
     private final Span parentSpan;
     volatile int seqNo;
     boolean isPendingStream;
+    @Nullable private volatile Span activeDelaySpan;
 
     ClientTracer(Span span, Span parentSpan) {
       this.span = checkNotNull(span, "span");
@@ -200,6 +201,7 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public void streamCreated(Attributes transportAtts, Metadata headers) {
+      delayEnded();
       contextPropagators.getTextMapPropagator().inject(Context.current().with(span), headers,
           metadataSetter);
       if (isPendingStream) {
@@ -210,6 +212,36 @@ final class OpenTelemetryTracingModule {
     @Override
     public void createPendingStream() {
       isPendingStream = true;
+    }
+
+    @Override
+    public void delayTypeStarted(String delayType) {
+      if (activeDelaySpan != null) {
+        activeDelaySpan.end();
+      }
+      activeDelaySpan = otelTracer.spanBuilder("Attempt Delay: " + delayType)
+          .setParent(Context.current().with(span))
+          .setAttribute("grpc.delay_type", delayType)
+          .startSpan();
+    }
+
+    @Override
+    public void delayReasonAttached(String delayReason) {
+      Span delaySpan = activeDelaySpan;
+      if (delaySpan != null) {
+        delaySpan.addEvent(delayReason);
+      } else {
+        span.addEvent("delay_reason: " + delayReason);
+      }
+    }
+
+    @Override
+    public void delayEnded() {
+      Span delaySpan = activeDelaySpan;
+      if (delaySpan != null) {
+        delaySpan.end();
+        activeDelaySpan = null;
+      }
     }
 
     @Override
@@ -238,6 +270,7 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public void streamClosed(io.grpc.Status status) {
+      delayEnded();
       endSpanWithStatus(span, status);
     }
   }

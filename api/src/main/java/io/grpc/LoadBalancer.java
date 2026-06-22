@@ -697,7 +697,9 @@ public abstract class LoadBalancer {
      */
     public PickResult copyWithStreamTracerFactory(
         @Nullable ClientStreamTracer.Factory streamTracerFactory) {
-      return new PickResult(subchannel, streamTracerFactory, status, drop, authorityOverride, delayType, delayReason);
+      return new PickResult(
+          subchannel, streamTracerFactory, status, drop, authorityOverride, delayType,
+          delayReason);
     }
 
     /**

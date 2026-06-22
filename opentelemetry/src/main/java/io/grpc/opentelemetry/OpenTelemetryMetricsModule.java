@@ -203,6 +203,8 @@ final class OpenTelemetryMetricsModule {
     volatile String backendService;
     long attemptNanos;
     Code statusCode;
+    @Nullable private volatile Stopwatch activeDelayStopwatch;
+    @Nullable private volatile String activeDelayType;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
         StreamInfo info, String target, String fullMethodName,
@@ -214,6 +216,59 @@ final class OpenTelemetryMetricsModule {
       this.fullMethodName = fullMethodName;
       this.streamPlugins = streamPlugins;
       this.stopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public void streamCreated(io.grpc.Attributes transportAtts, Metadata headers) {
+      delayEnded();
+    }
+
+    @Override
+    public void delayTypeStarted(String delayType) {
+      delayEnded();
+      activeDelayType = delayType;
+      activeDelayStopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public void delayEnded() {
+      Stopwatch delayStopwatch = activeDelayStopwatch;
+      String delayType = activeDelayType;
+      if (delayStopwatch != null && delayType != null) {
+        delayStopwatch.stop();
+        long delayNanos = delayStopwatch.elapsed(TimeUnit.NANOSECONDS);
+        activeDelayStopwatch = null;
+        activeDelayType = null;
+        if (module.resource.clientAttemptDelayCounter() != null) {
+          AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+              .put(METHOD_KEY, fullMethodName)
+              .put(TARGET_KEY, target)
+              .put("grpc.delay_type", delayType);
+          if (module.localityEnabled) {
+            String savedLocality = locality;
+            if (savedLocality == null) {
+              savedLocality = "";
+            }
+            builder.put(LOCALITY_KEY, savedLocality);
+          }
+          if (module.backendServiceEnabled) {
+            String savedBackendService = backendService;
+            if (savedBackendService == null) {
+              savedBackendService = "";
+            }
+            builder.put(BACKEND_SERVICE_KEY, savedBackendService);
+          }
+          if (module.customLabelEnabled) {
+            builder.put(
+                CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+          }
+          for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+            plugin.addLabels(builder);
+          }
+          module.resource.clientAttemptDelayCounter()
+              .record(delayNanos * SECONDS_PER_NANO, builder.build(), attemptsState.otelContext);
+        }
+      }
     }
 
     @Override
@@ -262,6 +317,7 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamClosed(Status status) {
+      delayEnded();
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();

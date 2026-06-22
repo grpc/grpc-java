@@ -180,7 +180,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       if (connectionRequested.compareAndSet(false, true)) {
         helper.getSynchronizationContext().execute(PickFirstLoadBalancer.this::requestConnection);
       }
-      return PickResult.withNoResult();
+      return PickResult.withNoResult(
+          "connecting", "pick_first: requesting connection");
     }
   }
 

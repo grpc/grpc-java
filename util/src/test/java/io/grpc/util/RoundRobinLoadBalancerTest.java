@@ -577,6 +577,16 @@ public class RoundRobinLoadBalancerTest {
     testHelperInst.deliverSubchannelState(subchannel, newState);
   }
 
+  @Test
+  public void roundRobin_delayAttributes() {
+    acceptAddresses(servers, affinity);
+    verify(mockHelper, atLeastOnce())
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult res = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertThat(res.getDelayType()).isEqualTo("connecting");
+    assertThat(res.getDelayReason()).contains("attempting to connect");
+  }
+
   private static class FakeSocketAddress extends SocketAddress {
     final String name;
 

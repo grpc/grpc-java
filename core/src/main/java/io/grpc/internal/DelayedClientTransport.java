@@ -158,8 +158,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
         synchronized (lock) {
           PickerState newerState = pickerState;
           if (state == newerState) {
-            String delayType = determineQueuingDelayType(pickResult, callOptions.isWaitForReady());
-            String delayReason = determineQueuingDelayReason(pickResult, callOptions.isWaitForReady());
+            String delayType = determineQueuingDelayType(pickResult);
+            String delayReason = determineQueuingDelayReason(pickResult);
             return createPendingStream(args, tracers, pickResult, delayType, delayReason);
           }
           state = newerState;
@@ -320,10 +320,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
         toRemove.add(stream);
       } else { // stay pending
-        String delayType = determineQueuingDelayType(
-            pickResult, stream.args.getCallOptions().isWaitForReady());
-        String delayReason = determineQueuingDelayReason(
-            pickResult, stream.args.getCallOptions().isWaitForReady());
+        String delayType = determineQueuingDelayType(pickResult);
+        String delayReason = determineQueuingDelayReason(pickResult);
         stream.updateDelay(delayType, delayReason);
       }
     }
@@ -366,8 +364,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     return logId;
   }
 
-  private static String determineQueuingDelayType(
-      @Nullable PickResult pickResult, boolean isWaitForReady) {
+  private static String determineQueuingDelayType(@Nullable PickResult pickResult) {
     if (pickResult == null) {
       return "client_channel_init";
     }
@@ -383,8 +380,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     return "client_channel_init";
   }
 
-  private static String determineQueuingDelayReason(
-      @Nullable PickResult pickResult, boolean isWaitForReady) {
+  private static String determineQueuingDelayReason(@Nullable PickResult pickResult) {
     if (pickResult == null) {
       return "client channel: created LB policy.";
     }

@@ -107,7 +107,8 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private final Ticker ticker;
   private String locality = "";
   private String backendService = "";
-  private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+  private SubchannelPicker currentPicker = new FixedResultPicker(
+      PickResult.withNoResult("connecting", "weighted_round_robin: initializing"));
 
   // The metric instruments are only registered once and shared by all instances of this LB.
   static {
@@ -227,7 +228,9 @@ final class WeightedRoundRobinLoadBalancer extends MultiChildLoadBalancer {
 
       if (isConnecting) {
         updateBalancingState(
-            ConnectivityState.CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+            ConnectivityState.CONNECTING,
+            new FixedResultPicker(
+                PickResult.withNoResult("connecting", "weighted_round_robin: connecting")));
       } else {
         updateBalancingState(
             ConnectivityState.TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));

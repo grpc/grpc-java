@@ -232,6 +232,16 @@ public final class GrpcOpenTelemetry {
               .build());
     }
 
+    if (isMetricEnabled("grpc.client.attempt.delay", enableMetrics, disableDefault)) {
+      builder.clientAttemptDelayCounter(
+          meter.histogramBuilder(
+                  "grpc.client.attempt.delay")
+              .setUnit("s")
+              .setDescription("Time taken to complete a client call attempt delay")
+              .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
+              .build());
+    }
+
     if (isMetricEnabled("grpc.client.attempt.sent_total_compressed_message_size", enableMetrics,
         disableDefault)) {
       builder.clientTotalSentCompressedMessageSizeCounter(
