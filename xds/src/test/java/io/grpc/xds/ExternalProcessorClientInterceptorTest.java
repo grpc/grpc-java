@@ -9288,7 +9288,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void givenImmediateResponseDisabled_whenReceived_thenSidecarStreamErrored()
+  public void givenImmediateResponseDisabled_whenReceivedBeforeActivation_thenSidecarStreamErrored()
       throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -9382,9 +9382,132 @@ public class ExternalProcessorClientInterceptorTest {
       }
       // Verify app listener notified with an error (not the sidecar's UNAUTHENTICATED)
       assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-      // It might be INTERNAL (from our onError) or UNAVAILABLE (if stream cancels)
-      assertThat(closedStatus.get().getCode())
-          .isAnyOf(Status.Code.INTERNAL, Status.Code.UNAVAILABLE);
+      assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+      
+      proxyCall.cancel("Cleanup", null);
+    } finally {
+      dataPlaneChannel.shutdownNow();
+      extProcServer.shutdownNow();
+      for (int i = 0;
+          i < 100 && (!dataPlaneChannel.isTerminated() || !extProcServer.isTerminated());
+          i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      channelManager.close();
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void givenImmediateResponseDisabled_whenReceivedAfterActivation_thenSidecarStreamErrored()
+      throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl("type.googleapis.com/envoy.extensions.grpc_service." 
+                + "channel_credentials.insecure.v3.InsecureCredentials")
+                    .build())
+                .build())
+            .build())
+        .setDisableImmediateResponse(true)
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server sends request headers first (activating the call)
+    // and then schedules an immediate response (which is disabled)
+    final io.grpc.Server extProcServer =
+        grpcCleanup.register(
+            InProcessServerBuilder.forName(extProcServerName)
+        .addService(new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // 1. Send request headers response to activate the call
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                  
+                  // 2. Schedule the immediate response to be sent after 2 seconds
+                  @SuppressWarnings("unused")
+                  java.util.concurrent.ScheduledFuture<?> unused =
+                      fakeClock.getScheduledExecutorService().schedule(() -> {
+                        responseObserver.onNext(ProcessingResponse.newBuilder()
+                            .setImmediateResponse(
+                                ImmediateResponse.newBuilder()
+                                    .setGrpcStatus(
+                                        io.envoyproxy.envoy.service.ext_proc
+                                            .v3.GrpcStatus.newBuilder()
+                                            .setStatus(Status.UNAUTHENTICATED.getCode().value())
+                                            .build())
+                                    .build())
+                            .build());
+                      }, 2, TimeUnit.SECONDS);
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {
+              }
+
+              @Override
+              public void onCompleted() {
+              }
+            };
+          }
+        })
+        .executor(fakeClock.getScheduledExecutorService())
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(extProcServerName)
+              .executor(fakeClock.getScheduledExecutorService())
+              .build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .executor(fakeClock.getScheduledExecutorService())
+            .build());
+
+    try {
+      final AtomicReference<Status> closedStatus = new AtomicReference<>();
+      final CountDownLatch closedLatch = new CountDownLatch(1);
+      ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+        @Override public void onClose(Status status, Metadata trailers) {
+          closedStatus.set(status);
+          closedLatch.countDown();
+        }
+      };
+      
+      CallOptions callOptions =
+          DEFAULT_CALL_OPTIONS.withExecutor(fakeClock.getScheduledExecutorService());
+      ClientCall<String, String> proxyCall =
+          interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(appListener, new Metadata());
+
+      for (int i = 0; i < 1000 && closedLatch.getCount() > 0; i++) {
+        fakeClock.forwardTime(1, TimeUnit.SECONDS);
+        Thread.sleep(1);
+      }
+      // Verify app listener notified with UNIMPLEMENTED because data plane connection succeeded
+      // but the method was not registered, and it failed before the ext-proc stream failed
+      assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNIMPLEMENTED);
       
       proxyCall.cancel("Cleanup", null);
     } finally {
