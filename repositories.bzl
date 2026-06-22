@@ -120,9 +120,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "bc670a4e34992c175137ddda24e76562bb928f849d712a0e3c2fb2e19249bea1",
-        strip_prefix = "protobuf-33.4",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v33.4/protobuf-33.4.tar.gz"],
+        sha256 = "f0b6838e7522a8da96126d487068c959bc624926368f3024ac8fd03abd0a1ac4",
+        strip_prefix = "protobuf-35.1",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v35.1/protobuf-35.1.tar.gz"],
     )
 
 def io_grpc_grpc_proto():
