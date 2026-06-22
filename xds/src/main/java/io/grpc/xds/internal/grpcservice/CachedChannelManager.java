@@ -18,12 +18,9 @@ package io.grpc.xds.internal.grpcservice;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ManagedChannel;
-import io.grpc.xds.client.ConfiguredChannelCredentials.ChannelCredsConfig;
 import io.grpc.xds.internal.grpcservice.GrpcServiceConfig.GoogleGrpcConfig;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /**
@@ -31,10 +28,6 @@ import java.util.function.Function;
  */
 public class CachedChannelManager {
   private final Function<GrpcServiceConfig, ManagedChannel> channelCreator;
-  private final Object lock = new Object();
-
-  private final AtomicReference<ChannelHolder> channelHolder = new AtomicReference<>();
-  private boolean closed;
 
   /**
    * Default constructor for production that creates a channel using the config's target and
@@ -57,82 +50,14 @@ public class CachedChannelManager {
   }
 
   /**
-   * Returns a ManagedChannel for the given configuration. If the target or credentials config
-   * changes, the old channel is shut down and a new one is created.
+   * Returns a ManagedChannel for the given configuration.
    */
   public ManagedChannel getChannel(GrpcServiceConfig config) {
-    GoogleGrpcConfig googleGrpc = config.googleGrpc();
-    ChannelKey newChannelKey = ChannelKey.of(
-        googleGrpc.target(),
-        googleGrpc.configuredChannelCredentials().channelCredsConfig());
-
-    // 1. Fast path: Lock-free read
-    ChannelHolder holder = channelHolder.get();
-    if (holder != null && holder.channelKey().equals(newChannelKey)) {
-      return holder.channel();
-    }
-
-    ManagedChannel oldChannel = null;
-    ManagedChannel newChannel;
-
-    // 2. Slow path: Update with locking
-    synchronized (lock) {
-      if (closed) {
-        throw new IllegalStateException("CachedChannelManager is closed");
-      }
-      holder = channelHolder.get(); // Double check
-      if (holder != null && holder.channelKey().equals(newChannelKey)) {
-        return holder.channel();
-      }
-
-      // 3. Create inside lock to avoid creation storms
-      newChannel = channelCreator.apply(config);
-      ChannelHolder newHolder = ChannelHolder.create(newChannelKey, newChannel);
-
-      if (holder != null) {
-        oldChannel = holder.channel();
-      }
-      channelHolder.set(newHolder);
-    }
-
-    // 4. Shutdown outside lock
-    if (oldChannel != null) {
-      oldChannel.shutdown();
-    }
-
-    return newChannel;
+    return channelCreator.apply(config);
   }
 
   /** Removes underlying resources on shutdown. */
   public void close() {
-    synchronized (lock) {
-      closed = true;
-      ChannelHolder holder = channelHolder.getAndSet(null);
-      if (holder != null) {
-        holder.channel().shutdown();
-      }
-    }
-  }
-
-  @AutoValue
-  abstract static class ChannelKey {
-    static ChannelKey of(String target, ChannelCredsConfig credentialsConfig) {
-      return new AutoValue_CachedChannelManager_ChannelKey(target, credentialsConfig);
-    }
-
-    abstract String target();
-
-    abstract ChannelCredsConfig channelCredsConfig();
-  }
-
-  @AutoValue
-  abstract static class ChannelHolder {
-    static ChannelHolder create(ChannelKey channelKey, ManagedChannel channel) {
-      return new AutoValue_CachedChannelManager_ChannelHolder(channelKey, channel);
-    }
-
-    abstract ChannelKey channelKey();
-
-    abstract ManagedChannel channel();
+    // No-op as channel caching and lifecycle management is removed.
   }
 }
