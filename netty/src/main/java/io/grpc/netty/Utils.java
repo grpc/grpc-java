@@ -47,7 +47,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.DecoderException;
@@ -513,7 +512,10 @@ class Utils {
       ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
       switch (eventLoopGroupType) {
         case NIO:
-          return new NioEventLoopGroup(numEventLoops, threadFactory);
+          @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+          EventLoopGroup group =
+              new io.netty.channel.nio.NioEventLoopGroup(numEventLoops, threadFactory);
+          return group;
         case EPOLL:
           return createEpollEventLoopGroup(numEventLoops, threadFactory);
         default:

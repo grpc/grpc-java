@@ -28,17 +28,19 @@ import com.google.s2a.proto.v2.ValidatePeerCertificateChainReq.VerificationMode;
 import com.google.s2a.proto.v2.ValidatePeerCertificateChainResp;
 import io.grpc.s2a.internal.handshaker.S2AIdentity;
 import java.io.IOException;
+import java.net.Socket;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Optional;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.X509ExtendedTrustManager;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Offloads verification of the peer certificate chain to S2A. */
 @NotThreadSafe
-final class S2ATrustManager implements X509TrustManager {
+final class S2ATrustManager extends X509ExtendedTrustManager {
   private final Optional<S2AIdentity> localIdentity;
   private final S2AStub stub;
   private final String hostname;
@@ -71,6 +73,18 @@ final class S2ATrustManager implements X509TrustManager {
     checkPeerTrusted(chain, /* isCheckingClientCertificateChain= */ true);
   }
 
+  @Override
+  public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
+      throws CertificateException {
+    checkClientTrusted(chain, authType);
+  }
+
+  @Override
+  public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+      throws CertificateException {
+    checkClientTrusted(chain, authType);
+  }
+
   /**
    * Validates the given certificate chain provided by the peer.
    *
@@ -84,6 +98,18 @@ final class S2ATrustManager implements X509TrustManager {
   public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
     checkPeerTrusted(chain, /* isCheckingClientCertificateChain= */ false);
+  }
+
+  @Override
+  public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
+      throws CertificateException {
+    checkServerTrusted(chain, authType);
+  }
+
+  @Override
+  public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine)
+      throws CertificateException {
+    checkServerTrusted(chain, authType);
   }
 
   /**

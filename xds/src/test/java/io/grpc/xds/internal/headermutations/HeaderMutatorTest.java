@@ -73,7 +73,7 @@ public class HeaderMutatorTest {
   }
 
   private static HeaderValueOption header(String key, String value, HeaderAppendAction action) {
-    return HeaderValueOption.create(HeaderValue.create(key, value), action, false);
+    return HeaderValueOption.create(HeaderValue.create(key, value), action);
   }
 
   @Test
@@ -147,8 +147,7 @@ public class HeaderMutatorTest {
     HeaderValueOption option =
         HeaderValueOption.create(
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
-            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-            false);
+            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
@@ -195,15 +194,14 @@ public class HeaderMutatorTest {
     HeaderValueOption option =
         HeaderValueOption.create(
             HeaderValue.create(BINARY_KEY.name(), ByteString.copyFrom(value)),
-            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-            false);
+            HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
     assertThat(headers.get(BINARY_KEY)).isEqualTo(value);
   }
 
   @Test
-  public void applyMutations_keepEmptyValue() {
+  public void applyMutations_emptyValuesAreKept() {
     Metadata headers = new Metadata();
     headers.put(APPEND_KEY, "existing-value");
     headers.put(OVERWRITE_KEY, "existing-value");
@@ -219,21 +217,19 @@ public class HeaderMutatorTest {
                 header(OVERWRITE_IF_EXISTS_KEY.name(), "", HeaderAppendAction.OVERWRITE_IF_EXISTS),
                     HeaderValueOption.create(
                     HeaderValue.create("keep-empty-key", ""),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD,
-                    true),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("keep-empty-overwrite-key", ""),
-                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD,
-                    true),
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD),
                     HeaderValueOption.create(
                     HeaderValue.create("keep-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, true),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("ignore-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false),
+                    HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD),
                 HeaderValueOption.create(
                     HeaderValue.create("overwrite-empty-bin-key-bin", ByteString.EMPTY),
-                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD, false)),
+                    HeaderAppendAction.OVERWRITE_IF_EXISTS_OR_ADD)),
             ImmutableList.of());
 
     headers.put(
@@ -246,20 +242,18 @@ public class HeaderMutatorTest {
 
     headerMutator.applyMutations(mutations, headers);
 
-    assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
-    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value");
-    assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("existing-value");
-    assertThat(headers.containsKey(ADD_KEY)).isFalse();
-    assertThat(headers.get(OVERWRITE_IF_EXISTS_KEY)).isEqualTo("existing-value");
+    assertThat(headers.get(NEW_ADD_KEY)).isEqualTo("");
+    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value", "");
+    assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("");
+    assertThat(headers.get(ADD_KEY)).isEqualTo("");
+    assertThat(headers.get(OVERWRITE_IF_EXISTS_KEY)).isEqualTo("");
 
     Metadata.Key<String> keepEmptyKey =
         Metadata.Key.of("keep-empty-key", Metadata.ASCII_STRING_MARSHALLER);
     Metadata.Key<String> keepEmptyOverwriteKey =
         Metadata.Key.of("keep-empty-overwrite-key", Metadata.ASCII_STRING_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyKey)).isTrue();
     assertThat(headers.get(keepEmptyKey)).isEqualTo("");
-    assertThat(headers.containsKey(keepEmptyOverwriteKey)).isTrue();
     assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
 
     Metadata.Key<byte[]> keepEmptyBinKey =
@@ -267,10 +261,9 @@ public class HeaderMutatorTest {
     Metadata.Key<byte[]> ignoreEmptyBinKey =
         Metadata.Key.of("ignore-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyBinKey)).isTrue();
     assertThat(headers.get(keepEmptyBinKey)).isEqualTo(new byte[0]);
-    assertThat(headers.containsKey(ignoreEmptyBinKey)).isFalse();
-    assertThat(headers.get(overwriteEmptyBinKey)).isEqualTo(originalBinValue);
+    assertThat(headers.get(ignoreEmptyBinKey)).isEqualTo(new byte[0]);
+    assertThat(headers.get(overwriteEmptyBinKey)).isEqualTo(new byte[0]);
   }
 
   @Test
@@ -290,7 +283,7 @@ public class HeaderMutatorTest {
   public void applyMutations_stringValueWithBinaryKey_ignored() {
     Metadata headers = new Metadata();
     HeaderValueOption option = HeaderValueOption.create(HeaderValue.create("some-key-bin", "value"),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);
@@ -304,7 +297,7 @@ public class HeaderMutatorTest {
     Metadata headers = new Metadata();
     HeaderValueOption option = HeaderValueOption.create(
         HeaderValue.create("some-key", ByteString.copyFrom(new byte[] {1})),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD, false);
+        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     headerMutator.applyMutations(
         HeaderMutations.create(ImmutableList.of(option), ImmutableList.of()), headers);

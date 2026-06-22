@@ -84,7 +84,7 @@ final class TcpMetrics {
     } catch (ReflectiveOperationException e) {
       log.log(Level.FINE, "Failed to initialize Epoll tcp_info reflection", e);
     } finally {
-      log.log(Level.INFO, "Epoll available during static init of TcpMetrics:"
+      log.log(Level.FINE, "Epoll available during static init of TcpMetrics:"
           + "{0}", epollAvailable);
     }
     return null;

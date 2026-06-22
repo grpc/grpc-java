@@ -32,7 +32,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.junit.Before;
@@ -71,11 +70,15 @@ public class AltsHandshakerTest {
   public void setup() throws Exception {
     // create new EventLoopGroups to avoid deadlock at server side handshake negotiation, e.g.
     // happens when handshakerServer and testServer child channels are on the same eventloop.
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup bossGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-boss"));
+    @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+    io.netty.channel.EventLoopGroup workerGroup =
+        new io.netty.channel.nio.NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-worker"));
     handshakerServer = grpcCleanup.register(NettyServerBuilder.forPort(0)
-        .bossEventLoopGroup(
-            new NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-boss")))
-        .workerEventLoopGroup(
-            new NioEventLoopGroup(0, new DefaultThreadFactory("test-alts-worker")))
+        .bossEventLoopGroup(bossGroup)
+        .workerEventLoopGroup(workerGroup)
         .channelType(NioServerSocketChannel.class)
         .addService(new AltsHandshakerTestService())
         .build()).start();
