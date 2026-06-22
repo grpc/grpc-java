@@ -201,7 +201,7 @@ public class HeaderMutatorTest {
   }
 
   @Test
-  public void applyMutations_keepEmptyValue() {
+  public void applyMutations_emptyValuesAreKept() {
     Metadata headers = new Metadata();
     headers.put(APPEND_KEY, "existing-value");
     headers.put(OVERWRITE_KEY, "existing-value");
@@ -242,28 +242,28 @@ public class HeaderMutatorTest {
 
     headerMutator.applyMutations(mutations, headers);
 
-    assertThat(headers.containsKey(NEW_ADD_KEY)).isFalse();
-    assertThat(headers.containsKey(APPEND_KEY)).isFalse();
-    assertThat(headers.containsKey(OVERWRITE_KEY)).isFalse();
-    assertThat(headers.containsKey(ADD_KEY)).isFalse();
-    assertThat(headers.containsKey(OVERWRITE_IF_EXISTS_KEY)).isFalse();
+    assertThat(headers.get(NEW_ADD_KEY)).isEqualTo("");
+    assertThat(headers.getAll(APPEND_KEY)).containsExactly("existing-value", "");
+    assertThat(headers.get(OVERWRITE_KEY)).isEqualTo("");
+    assertThat(headers.get(ADD_KEY)).isEqualTo("");
+    assertThat(headers.get(OVERWRITE_IF_EXISTS_KEY)).isEqualTo("");
 
     Metadata.Key<String> keepEmptyKey =
         Metadata.Key.of("keep-empty-key", Metadata.ASCII_STRING_MARSHALLER);
     Metadata.Key<String> keepEmptyOverwriteKey =
         Metadata.Key.of("keep-empty-overwrite-key", Metadata.ASCII_STRING_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyKey)).isFalse();
-    assertThat(headers.containsKey(keepEmptyOverwriteKey)).isFalse();
+    assertThat(headers.get(keepEmptyKey)).isEqualTo("");
+    assertThat(headers.get(keepEmptyOverwriteKey)).isEqualTo("");
 
     Metadata.Key<byte[]> keepEmptyBinKey =
         Metadata.Key.of("keep-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
     Metadata.Key<byte[]> ignoreEmptyBinKey =
         Metadata.Key.of("ignore-empty-bin-key-bin", Metadata.BINARY_BYTE_MARSHALLER);
 
-    assertThat(headers.containsKey(keepEmptyBinKey)).isFalse();
-    assertThat(headers.containsKey(ignoreEmptyBinKey)).isFalse();
-    assertThat(headers.containsKey(overwriteEmptyBinKey)).isFalse();
+    assertThat(headers.get(keepEmptyBinKey)).isEqualTo(new byte[0]);
+    assertThat(headers.get(ignoreEmptyBinKey)).isEqualTo(new byte[0]);
+    assertThat(headers.get(overwriteEmptyBinKey)).isEqualTo(new byte[0]);
   }
 
   @Test

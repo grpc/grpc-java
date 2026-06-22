@@ -72,9 +72,6 @@ public class HeaderMutator {
       if (header.rawValue().isPresent()) {
         Metadata.Key<byte[]> key = Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER);
         updateHeader(action, key, header.rawValue().get().toByteArray(), mutableHeaders);
-        if (containsEmpty(key, mutableHeaders)) {
-          mutableHeaders.discardAll(key);
-        }
       } else {
         logger.fine("Missing binary rawValue for header: " + header.key());
       }
@@ -82,9 +79,6 @@ public class HeaderMutator {
       if (header.value().isPresent()) {
         Metadata.Key<String> key = Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER);
         updateHeader(action, key, header.value().get(), mutableHeaders);
-        if (containsEmpty(key, mutableHeaders)) {
-          mutableHeaders.discardAll(key);
-        }
       } else {
         logger.fine("Missing value for header: " + header.key());
       }
@@ -117,25 +111,6 @@ public class HeaderMutator {
         // Should be unreachable unless there's a proto schema mismatch.
         logger.fine("Unknown HeaderAppendAction: " + action);
     }
-  }
-
-  private <T> boolean containsEmpty(Metadata.Key<T> key, Metadata headers) {
-    Iterable<T> values = headers.getAll(key);
-    if (values == null) {
-      return false;
-    }
-    for (T val : values) {
-      if (val instanceof String) {
-        if (((String) val).isEmpty()) {
-          return true;
-        }
-      } else if (val instanceof byte[]) {
-        if (((byte[]) val).length == 0) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 }
 
