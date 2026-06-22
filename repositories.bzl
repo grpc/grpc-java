@@ -104,6 +104,13 @@ def grpc_java_repositories():
                 "https://github.com/googleapis/googleapis/archive/1dbb1a14e079f78d9214f8e48bf083f32e3ddb96.tar.gz",
             ],
         )
+    if not native.existing_rule("rules_proto"):
+        http_archive(
+            name = "rules_proto",
+            sha256 = "14a225870ab4e91869652cfd69ef2028277fc1dc4910d65d353b62d6e0ae21f4",
+            strip_prefix = "rules_proto-7.1.0",
+            urls = ["https://github.com/bazelbuild/rules_proto/releases/download/7.1.0/rules_proto-7.1.0.tar.gz"],
+        )
     if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
     if not native.existing_rule("bazel_jar_jar"):
