@@ -20,6 +20,8 @@ import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import java.net.SocketAddress;
 import java.util.Collection;
 
@@ -58,6 +60,21 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
     }
     return NewChannelBuilderResult.channelBuilder(new OkHttpChannelBuilder(
         target, creds, result.callCredentials, result.factory));
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
+                                                   NameResolverRegistry nameResolverRegistry,
+                                                   NameResolverProvider nameResolverProvider) {
+    OkHttpChannelBuilder.SslSocketFactoryResult result =
+        OkHttpChannelBuilder.sslSocketFactoryFrom(creds);
+    if (result.error != null) {
+      return NewChannelBuilderResult.error(result.error);
+    }
+    OkHttpChannelBuilder builder = new OkHttpChannelBuilder(
+        target, creds, result.callCredentials, result.factory,
+        nameResolverRegistry, nameResolverProvider);
+    return NewChannelBuilderResult.channelBuilder(builder);
   }
 
   @Override

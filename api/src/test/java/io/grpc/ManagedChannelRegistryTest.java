@@ -244,6 +244,53 @@ public class ManagedChannelRegistryTest {
   }
 
   @Test
+  public void newChannelBuilder_propagatesRegistry() {
+    final NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
+    class SocketAddress1 extends SocketAddress {
+    }
+
+    ManagedChannelRegistry registry = new ManagedChannelRegistry();
+    class MockChannelBuilder extends ForwardingChannelBuilder2<MockChannelBuilder> {
+      @Override
+      public ManagedChannelBuilder<?> delegate() {
+        throw new UnsupportedOperationException();
+      }
+    }
+
+    final ManagedChannelBuilder<?> mcb = new MockChannelBuilder();
+    registry.register(new BaseProvider(true, 4) {
+      @Override
+      protected Collection<Class<? extends SocketAddress>> getSupportedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+
+      @Override
+      public NewChannelBuilderResult newChannelBuilder(
+          String passedTarget, ChannelCredentials passedCreds,
+          NameResolverRegistry passedRegistry, NameResolverProvider passedProvider) {
+        assertThat(passedRegistry).isSameInstanceAs(nameResolverRegistry);
+        return NewChannelBuilderResult.channelBuilder(mcb);
+      }
+    });
+
+    // ManagedChannelRegistry.newChannelBuilder(NameResolverRegistry, String, ChannelCredentials)
+    // gets the scheme from target. Then it gets NameResolverProvider from registry for that scheme.
+    // Then it gets producedSocketAddressTypes from that provider.
+    // Then it finds a ManagedChannelProvider that supports those types.
+    // So we need a registered NameResolverProvider for the scheme.
+    nameResolverRegistry.register(new BaseNameResolverProvider(true, 5, "sc1") {
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(SocketAddress1.class);
+      }
+    });
+
+    assertThat(
+        registry.newChannelBuilder(nameResolverRegistry, "sc1:" + target, creds)).isSameInstanceAs(
+            mcb);
+  }
+
+  @Test
   public void newChannelBuilder_unsupportedSocketAddressTypes() {
     NameResolverRegistry nameResolverRegistry = new NameResolverRegistry();
     class SocketAddress1 extends SocketAddress {
