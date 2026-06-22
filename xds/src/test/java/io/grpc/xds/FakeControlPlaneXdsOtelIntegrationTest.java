@@ -18,13 +18,11 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.ChannelConfigurator;
 import io.grpc.FlagResetRule;
 import io.grpc.Grpc;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.InternalFeatureFlags;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.opentelemetry.GrpcOpenTelemetry;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
@@ -102,17 +100,10 @@ public class FakeControlPlaneXdsOtelIntegrationTest {
         .sdk(openTelemetry)
         .build();
 
-    ChannelConfigurator configurator = new ChannelConfigurator() {
-      @Override
-      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        grpcOtel.configureChannelBuilder(builder);
-      }
-    };
-
     ManagedChannel channel = grpcCleanupRule.register(
         Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
-        .childChannelConfigurator(configurator)
+        .childChannelConfigurator(grpcOtel::configureChannelBuilder)
         .build());
 
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
