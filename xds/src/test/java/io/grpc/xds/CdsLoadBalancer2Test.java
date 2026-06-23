@@ -667,6 +667,18 @@ public class CdsLoadBalancer2Test {
     fakeClock.forwardTime(10, TimeUnit.MINUTES);
   }
 
+  @Test
+  public void cds_resolutionError_updatesAttemptDelay() {
+    loadBalancer.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("cds lookup failed"));
+    verify(helper, atLeastOnce()).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult pick = pickerCaptor.getValue().pickSubchannel(
+        mock(PickSubchannelArgs.class));
+    assertThat(pick.getDelayType()).isEqualTo("connecting");
+    assertThat(pick.getDelayReason()).contains("cds lookup failed");
+  }
+
   private static void assertPickerStatus(SubchannelPicker picker, Status expectedStatus)  {
     PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
     Status actualStatus = result.getStatus();

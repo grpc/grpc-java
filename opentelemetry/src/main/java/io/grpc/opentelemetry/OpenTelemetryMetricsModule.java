@@ -56,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
@@ -220,18 +221,28 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamCreated(io.grpc.Attributes transportAtts, Metadata headers) {
-      delayEnded();
+      recordAttemptDelayEnd();
     }
 
     @Override
-    public void delayTypeStarted(String delayType) {
-      delayEnded();
+    public void recordAttemptDelayStart(String delayType, String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
+          || (activeDelayStopwatch != null && Objects.equals(activeDelayType, delayType))) {
+        // If delay metrics are disabled or canonical delay type is unchanged, skip timer reset.
+        return;
+      }
+      recordAttemptDelayEnd();
       activeDelayType = delayType;
       activeDelayStopwatch = module.stopwatchSupplier.get().start();
     }
 
     @Override
-    public void delayEnded() {
+    public void recordAttemptDelayReasonChanged(String delayReason) {
+      // Reason strings are high-cardinality diagnostics intended strictly for tracing spans.
+    }
+
+    @Override
+    public void recordAttemptDelayEnd() {
       Stopwatch delayStopwatch = activeDelayStopwatch;
       String delayType = activeDelayType;
       if (delayStopwatch != null && delayType != null) {
@@ -240,6 +251,7 @@ final class OpenTelemetryMetricsModule {
         activeDelayStopwatch = null;
         activeDelayType = null;
         if (module.resource.clientAttemptDelayCounter() != null) {
+          // Export elapsed duration to grpc.client.attempt.delay.duration histogram (seconds).
           AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
               .put(METHOD_KEY, fullMethodName)
               .put(TARGET_KEY, target)
@@ -317,7 +329,7 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamClosed(Status status) {
-      delayEnded();
+      recordAttemptDelayEnd();
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();

@@ -608,6 +608,24 @@ public class CachingRlsLbClientTest {
   }
 
   @Test
+  public void rls_pendingLookup_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("service1/create").build(),
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
+    assertThat(pickResult.getDelayType()).isEqualTo("rls_lookup_pending");
+    assertThat(pickResult.getDelayReason()).contains("Route Lookup Service query pending");
+  }
+
+  @Test
   public void timeout_not_changing_picked_subchannel() throws Exception {
     setUpRlsLbClient();
     RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =

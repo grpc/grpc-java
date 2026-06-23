@@ -58,29 +58,42 @@ public abstract class ClientStreamTracer extends StreamTracer {
   }
 
   /**
-   * A delay segment started with a canonical root cause.
+   * Called when an attempt-level delay segment (such as waiting for a load balancing pick or
+   * connection establishment) starts.
    *
-   * @param delayType the canonical root cause label (e.g., "connecting", "client_channel_init")
+   * <p>This method is invoked synchronously on the attempt thread. Implementations should start
+   * internal timers or child tracing spans (named strictly {@code "Attempt Delay"}) carrying the
+   * canonical {@code grpc.delay_type} attribute.
+   *
+   * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
+   * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
    * @since 1.82.0
    */
-  public void delayTypeStarted(String delayType) {
+  public void recordAttemptDelayStart(String delayType, String delayReason) {
   }
 
   /**
-   * High-cardinality diagnostic context attached to the active delay span.
+   * Called when an attempt-level delay reason changes while the overall delay type remains
+   * constant (for example, when a priority load balancing policy fails over between tiers).
    *
-   * @param delayReason verbose diagnostic description of the delay
+   * <p>Implementations should record structured events (such as {@code "Delay state transition"})
+   * on the active delay span without recreating the span or resetting cumulative timers.
+   *
+   * @param delayReason updated high-cardinality diagnostic string describing new conditions
    * @since 1.82.0
    */
-  public void delayReasonAttached(String delayReason) {
+  public void recordAttemptDelayReasonChanged(String delayReason) {
   }
 
   /**
-   * The current delay segment ended.
+   * Called when an attempt-level delay segment ends upon successful pick or stream creation.
+   *
+   * <p>Implementations should simultaneously close active child tracing spans and record elapsed
+   * duration to the {@code grpc.client.attempt.delay.duration} histogram.
    *
    * @since 1.82.0
    */
-  public void delayEnded() {
+  public void recordAttemptDelayEnd() {
   }
 
   /**

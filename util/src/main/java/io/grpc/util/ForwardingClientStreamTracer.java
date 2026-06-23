@@ -39,18 +39,18 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
-  public void delayTypeStarted(String delayType) {
-    delegate().delayTypeStarted(delayType);
+  public void recordAttemptDelayStart(String delayType, String delayReason) {
+    delegate().recordAttemptDelayStart(delayType, delayReason);
   }
 
   @Override
-  public void delayReasonAttached(String delayReason) {
-    delegate().delayReasonAttached(delayReason);
+  public void recordAttemptDelayReasonChanged(String delayReason) {
+    delegate().recordAttemptDelayReasonChanged(delayReason);
   }
 
   @Override
-  public void delayEnded() {
-    delegate().delayEnded();
+  public void recordAttemptDelayEnd() {
+    delegate().recordAttemptDelayEnd();
   }
 
   @Override

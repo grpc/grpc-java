@@ -86,6 +86,7 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -184,6 +185,7 @@ public class OpenTelemetryTracingModuleTest {
 
   @Before
   public void setUp() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
     tracerRule = openTelemetryRule.getOpenTelemetry().getTracer(
         OpenTelemetryConstants.INSTRUMENTATION_SCOPE);
     TracerProvider mockTracerProvider = mock(TracerProvider.class);
@@ -197,6 +199,11 @@ public class OpenTelemetryTracingModuleTest {
     when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan);
     when(mockSpanBuilder.setParent(any())).thenReturn(mockSpanBuilder);
     when(mockTracer.spanBuilder(any())).thenReturn(mockSpanBuilder);
+  }
+
+  @After
+  public void tearDown() {
+    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
   }
 
   // Use mock instead of OpenTelemetryRule to verify inOrder and propagator.
@@ -289,13 +296,14 @@ public class OpenTelemetryTracingModuleTest {
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
-    clientStreamTracer.delayTypeStarted("connecting");
-    clientStreamTracer.delayReasonAttached("pick_first: attempting to connect");
-    clientStreamTracer.delayEnded();
+    clientStreamTracer.recordAttemptDelayStart("connecting", "pick_first: attempting to connect");
+    clientStreamTracer.recordAttemptDelayEnd();
 
-    verify(mockTracer).spanBuilder(eq("Attempt Delay: connecting"));
+    verify(mockTracer).spanBuilder(eq("Attempt Delay"));
     verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("connecting"));
-    verify(mockDelaySpan).addEvent(eq("pick_first: attempting to connect"));
+    verify(mockDelaySpan).addEvent(
+        eq("Delay state transition"),
+        org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
     verify(mockDelaySpan).end();
   }
 
@@ -407,7 +415,7 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
-  public void clientDelayTracingRule() {
+  public void clientAttemptDelayTracing_reasonChangedInvariant() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
     Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
@@ -416,9 +424,10 @@ public class OpenTelemetryTracingModuleTest {
     ClientStreamTracer clientStreamTracer =
         callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
 
-    clientStreamTracer.delayTypeStarted("connecting");
-    clientStreamTracer.delayReasonAttached("pick_first: attempting to connect");
-    clientStreamTracer.delayEnded();
+    clientStreamTracer.recordAttemptDelayStart("connecting", "reason1");
+    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
+    clientStreamTracer.recordAttemptDelayStart("connecting", "reason3");
+    clientStreamTracer.recordAttemptDelayEnd();
     clientStreamTracer.streamClosed(Status.OK);
     callTracer.callEnded(Status.OK);
     clientSpan.end();
@@ -427,11 +436,59 @@ public class OpenTelemetryTracingModuleTest {
     assertEquals(3, spans.size());
     SpanData delaySpanData = spans.get(0);
 
-    assertEquals("Attempt Delay: connecting", delaySpanData.getName());
+    assertEquals("Attempt Delay", delaySpanData.getName());
     assertEquals("connecting", delaySpanData.getAttributes().get(
         io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
-    assertEquals(1, delaySpanData.getEvents().size());
-    assertEquals("pick_first: attempting to connect", delaySpanData.getEvents().get(0).getName());
+    assertEquals(3, delaySpanData.getEvents().size());
+
+    EventData event1 = delaySpanData.getEvents().get(0);
+    assertEquals("Delay state transition", event1.getName());
+    assertEquals("connecting", event1.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason1", event1.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+
+    EventData event2 = delaySpanData.getEvents().get(1);
+    assertEquals("Delay state transition", event2.getName());
+    assertEquals("connecting", event2.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason2", event2.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+
+    EventData event3 = delaySpanData.getEvents().get(2);
+    assertEquals("Delay state transition", event3.getName());
+    assertEquals("connecting", event3.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+    assertEquals("reason3", event3.getAttributes().get(
+        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+  }
+
+  @Test
+  public void clientAttemptDelayStart_featureFlagDisabled_zeroChildSpans() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "false");
+    try {
+      OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+          openTelemetryRule.getOpenTelemetry());
+      Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+      CallAttemptsTracerFactory callTracer =
+          tracingModule.newClientCallTracer(clientSpan, method);
+      ClientStreamTracer clientStreamTracer =
+          callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+      clientStreamTracer.recordAttemptDelayStart("connecting", "attempting to connect");
+      clientStreamTracer.recordAttemptDelayEnd();
+      clientStreamTracer.streamClosed(Status.OK);
+      callTracer.callEnded(Status.OK);
+      clientSpan.end();
+
+      List<SpanData> spans = openTelemetryRule.getSpans();
+      assertEquals(2, spans.size());
+      for (SpanData span : spans) {
+        assertTrue(!span.getName().equals("Attempt Delay"));
+      }
+    } finally {
+      System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    }
   }
 
   @Test

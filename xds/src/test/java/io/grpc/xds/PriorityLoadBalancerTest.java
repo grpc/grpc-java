@@ -438,6 +438,18 @@ public class PriorityLoadBalancerTest {
   }
 
   @Test
+  public void handleNameResolutionError_updatesDelayAttributes() {
+    priorityLb.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("priority dns error"));
+    verify(helper, atLeastOnce()).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult pick = pickerCaptor.getValue().pickSubchannel(
+        mock(PickSubchannelArgs.class));
+    assertThat(pick.getDelayType()).isEqualTo("connecting");
+    assertThat(pick.getDelayReason()).contains("priority dns error");
+  }
+
+  @Test
   public void typicalPriorityFailOverFlow() {
     PriorityChildConfig priorityChildConfig0 =
         new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
