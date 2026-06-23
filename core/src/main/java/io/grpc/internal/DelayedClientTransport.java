@@ -366,7 +366,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
   private static String determineQueuingDelayType(@Nullable PickResult pickResult) {
     if (pickResult == null) {
-      return "client_channel_init";
+      return "connecting";
     }
     if (pickResult.getSubchannel() != null) {
       return "subchannel_state_mismatch";
@@ -377,7 +377,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     if (pickResult.getDelayType() != null) {
       return pickResult.getDelayType();
     }
-    return "client_channel_init";
+    return "connecting";
   }
 
   private static String determineQueuingDelayReason(@Nullable PickResult pickResult) {

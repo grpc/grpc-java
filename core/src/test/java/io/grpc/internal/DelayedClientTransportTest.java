@@ -879,7 +879,7 @@ public class DelayedClientTransportTest {
     delayedTransport.newStream(method, headers, callOptions, customTracers);
 
     verify(mockTracer).recordAttemptDelayStart(
-        "client_channel_init", "client channel: created LB policy.");
+        "connecting", "client channel: created LB policy.");
   }
 
   @Test
