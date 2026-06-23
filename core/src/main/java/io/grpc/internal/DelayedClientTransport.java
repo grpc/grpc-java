@@ -413,43 +413,52 @@ final class DelayedClientTransport implements ManagedClientTransport {
       this.activeDelayReason = initialReason;
       if (initialType != null) {
         for (ClientStreamTracer tracer : tracers) {
-          tracer.delayTypeStarted(initialType);
-        }
-      }
-      if (initialReason != null) {
-        for (ClientStreamTracer tracer : tracers) {
-          tracer.delayReasonAttached(initialReason);
+          tracer.recordAttemptDelayStart(initialType, initialReason != null ? initialReason : "");
         }
       }
     }
 
+    /**
+     * Updates active attempt delay telemetry state upon load balancing state transitions.
+     *
+     * <p>If {@code newType} differs from the active delay type, active segment timers and child
+     * spans are ended and a new segment is initiated. If only {@code newReason} changes, a
+     * structured transition event is appended to the active span without span re-creation.
+     */
     void updateDelay(@Nullable String newType, @Nullable String newReason) {
       if (!Objects.equals(activeDelayType, newType)) {
+        // Delay categorization changed (e.g., from RLS lookup to TCP connecting).
+        // Close prior active segment across all tracers before starting new canonical segment.
         if (activeDelayType != null) {
           for (ClientStreamTracer tracer : tracers) {
-            tracer.delayEnded();
+            tracer.recordAttemptDelayEnd();
           }
         }
         activeDelayType = newType;
         activeDelayReason = null;
         if (newType != null) {
           for (ClientStreamTracer tracer : tracers) {
-            tracer.delayTypeStarted(newType);
+            tracer.recordAttemptDelayStart(newType, newReason != null ? newReason : "");
           }
         }
       }
       if (newType != null && newReason != null && !Objects.equals(activeDelayReason, newReason)) {
+        // Categorization remained constant, but granular runtime diagnostics updated
+        // (e.g., priority policy failover between tiers). Emit transition event.
         activeDelayReason = newReason;
         for (ClientStreamTracer tracer : tracers) {
-          tracer.delayReasonAttached(newReason);
+          tracer.recordAttemptDelayReasonChanged(newReason);
         }
       }
     }
 
+    /**
+     * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
+     */
     void endDelay() {
       if (activeDelayType != null) {
         for (ClientStreamTracer tracer : tracers) {
-          tracer.delayEnded();
+          tracer.recordAttemptDelayEnd();
         }
         activeDelayType = null;
         activeDelayReason = null;

@@ -41,6 +41,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -48,6 +49,7 @@ import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
 import io.opentelemetry.context.propagation.ContextPropagators;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -142,6 +144,8 @@ final class OpenTelemetryTracingModule {
     volatile int callEnded;
     private final Span clientSpan;
     private final String fullMethodName;
+    @Nullable private volatile Span activeCallDelaySpan;
+    @Nullable private volatile String activeCallDelayType;
 
     CallAttemptsTracerFactory(Span clientSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
@@ -185,6 +189,52 @@ final class OpenTelemetryTracingModule {
       }
       endSpanWithStatus(clientSpan, status);
     }
+
+    @Override
+    public void recordCallDelayStart(String delayType, String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
+        return;
+      }
+      if (activeCallDelaySpan != null && Objects.equals(activeCallDelayType, delayType)) {
+        recordCallDelayReasonChanged(delayReason);
+        return;
+      }
+      recordCallDelayEnd();
+      activeCallDelayType = delayType;
+      Span delaySpan = otelTracer.spanBuilder("Call Delay")
+          .setParent(Context.current().with(clientSpan))
+          .setAttribute("grpc.delay_type", delayType)
+          .startSpan();
+      activeCallDelaySpan = delaySpan;
+      delaySpan.addEvent(
+          "Delay state transition",
+          io.opentelemetry.api.common.Attributes.of(
+              AttributeKey.stringKey("grpc.delay_type"), delayType,
+              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+    }
+
+    @Override
+    public void recordCallDelayReasonChanged(String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeCallDelaySpan == null) {
+        return;
+      }
+      String type = activeCallDelayType;
+      activeCallDelaySpan.addEvent(
+          "Delay state transition",
+          io.opentelemetry.api.common.Attributes.of(
+              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
+              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
+    }
+
+    @Override
+    public void recordCallDelayEnd() {
+      Span delaySpan = activeCallDelaySpan;
+      if (delaySpan != null) {
+        delaySpan.end();
+        activeCallDelaySpan = null;
+        activeCallDelayType = null;
+      }
+    }
   }
 
   private final class ClientTracer extends ClientStreamTracer {
@@ -193,6 +243,7 @@ final class OpenTelemetryTracingModule {
     volatile int seqNo;
     boolean isPendingStream;
     @Nullable private volatile Span activeDelaySpan;
+    @Nullable private volatile String activeDelayType;
 
     ClientTracer(Span span, Span parentSpan) {
       this.span = checkNotNull(span, "span");
@@ -201,7 +252,7 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public void streamCreated(Attributes transportAtts, Metadata headers) {
-      delayEnded();
+      recordAttemptDelayEnd();
       contextPropagators.getTextMapPropagator().inject(Context.current().with(span), headers,
           metadataSetter);
       if (isPendingStream) {
@@ -215,32 +266,55 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void delayTypeStarted(String delayType) {
-      if (activeDelaySpan != null) {
-        activeDelaySpan.end();
+    public void recordAttemptDelayStart(String delayType, String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
+        return;
       }
-      activeDelaySpan = otelTracer.spanBuilder("Attempt Delay: " + delayType)
+      if (activeDelaySpan != null && Objects.equals(activeDelayType, delayType)) {
+        // Active Span Retention invariant: If canonical delay type remains identical
+        // (e.g., priority failover between tiers), delegate to reason changed hook.
+        recordAttemptDelayReasonChanged(delayReason);
+        return;
+      }
+      // Close any previous delay segment before starting a new canonical segment.
+      recordAttemptDelayEnd();
+      activeDelayType = delayType;
+      // All attempt queuing segments use the strict child span name "Attempt Delay".
+      Span delaySpan = otelTracer.spanBuilder("Attempt Delay")
           .setParent(Context.current().with(span))
           .setAttribute("grpc.delay_type", delayType)
           .startSpan();
+      activeDelaySpan = delaySpan;
+      // Emit structured transition event containing explicit categorization attributes.
+      delaySpan.addEvent(
+          "Delay state transition",
+          io.opentelemetry.api.common.Attributes.of(
+              AttributeKey.stringKey("grpc.delay_type"), delayType,
+              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
     }
 
     @Override
-    public void delayReasonAttached(String delayReason) {
-      Span delaySpan = activeDelaySpan;
-      if (delaySpan != null) {
-        delaySpan.addEvent(delayReason);
-      } else {
-        span.addEvent("delay_reason: " + delayReason);
+    public void recordAttemptDelayReasonChanged(String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeDelaySpan == null) {
+        return;
       }
+      String type = activeDelayType;
+      // Append granular runtime diagnostics to active child span without span re-creation.
+      activeDelaySpan.addEvent(
+          "Delay state transition",
+          io.opentelemetry.api.common.Attributes.of(
+              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
+              AttributeKey.stringKey("grpc.delay_reason"), delayReason));
     }
 
     @Override
-    public void delayEnded() {
+    public void recordAttemptDelayEnd() {
       Span delaySpan = activeDelaySpan;
       if (delaySpan != null) {
+        // End active child span upon pick completion or transport cancellation.
         delaySpan.end();
         activeDelaySpan = null;
+        activeDelayType = null;
       }
     }
 
@@ -270,7 +344,7 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public void streamClosed(io.grpc.Status status) {
-      delayEnded();
+      recordAttemptDelayEnd();
       endSpanWithStatus(span, status);
     }
   }

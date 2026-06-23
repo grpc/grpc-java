@@ -785,8 +785,8 @@ public class DelayedClientTransportTest {
     delayedTransport.newStream(method, headers, callOptions, customTracers);
     
     InOrder inOrder = inOrder(mockTracer);
-    inOrder.verify(mockTracer).delayTypeStarted("connecting");
-    inOrder.verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
+    inOrder.verify(mockTracer).recordAttemptDelayStart(
+        "connecting", "pick_first: attempting to connect");
     
     SubchannelPicker customDelayPicker = mock(SubchannelPicker.class);
     when(customDelayPicker.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -794,13 +794,13 @@ public class DelayedClientTransportTest {
         
     delayedTransport.reprocess(customDelayPicker);
     
-    inOrder.verify(mockTracer).delayEnded();
-    inOrder.verify(mockTracer).delayTypeStarted("rls_lookup_pending");
-    inOrder.verify(mockTracer).delayReasonAttached("RLS request pending.");
+    inOrder.verify(mockTracer).recordAttemptDelayEnd();
+    inOrder.verify(mockTracer).recordAttemptDelayStart(
+        "rls_lookup_pending", "RLS request pending.");
     
     delayedTransport.reprocess(mockPicker);
     
-    inOrder.verify(mockTracer).delayEnded();
+    inOrder.verify(mockTracer).recordAttemptDelayEnd();
   }
 
   @Test
@@ -816,12 +816,12 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
     stream.start(streamListener);
     
-    verify(mockTracer).delayTypeStarted("connecting");
-    verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
+    verify(mockTracer).recordAttemptDelayStart(
+        "connecting", "pick_first: attempting to connect");
     
     stream.cancel(Status.CANCELLED);
     
-    verify(mockTracer).delayEnded();
+    verify(mockTracer).recordAttemptDelayEnd();
   }
 
   @Test
@@ -837,12 +837,12 @@ public class DelayedClientTransportTest {
     ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
     stream.start(streamListener);
 
-    verify(mockTracer).delayTypeStarted("connecting");
-    verify(mockTracer).delayReasonAttached("pick_first: attempting to connect");
+    verify(mockTracer).recordAttemptDelayStart(
+        "connecting", "pick_first: attempting to connect");
 
     delayedTransport.shutdownNow(Status.UNAVAILABLE);
 
-    verify(mockTracer).delayEnded();
+    verify(mockTracer).recordAttemptDelayEnd();
   }
 
   @Test
@@ -857,8 +857,7 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(picker1);
     delayedTransport.newStream(method, headers, callOptions, customTracers);
 
-    verify(mockTracer, times(1)).delayTypeStarted("connecting");
-    verify(mockTracer).delayReasonAttached("attempt 1");
+    verify(mockTracer, times(1)).recordAttemptDelayStart("connecting", "attempt 1");
 
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     when(picker2.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -866,9 +865,9 @@ public class DelayedClientTransportTest {
 
     delayedTransport.reprocess(picker2);
 
-    verify(mockTracer, times(1)).delayTypeStarted("connecting");
-    verify(mockTracer).delayReasonAttached("attempt 2");
-    verify(mockTracer, never()).delayEnded();
+    verify(mockTracer, times(1)).recordAttemptDelayStart("connecting", "attempt 1");
+    verify(mockTracer).recordAttemptDelayReasonChanged("attempt 2");
+    verify(mockTracer, never()).recordAttemptDelayEnd();
   }
 
   @Test
@@ -879,8 +878,8 @@ public class DelayedClientTransportTest {
     // No picker reprocessed yet (lastPicker == null)
     delayedTransport.newStream(method, headers, callOptions, customTracers);
 
-    verify(mockTracer).delayTypeStarted("client_channel_init");
-    verify(mockTracer).delayReasonAttached("client channel: created LB policy.");
+    verify(mockTracer).recordAttemptDelayStart(
+        "client_channel_init", "client channel: created LB policy.");
   }
 
   @Test
@@ -900,8 +899,8 @@ public class DelayedClientTransportTest {
     delayedTransport.reprocess(stalePicker);
     delayedTransport.newStream(method, headers, callOptions, customTracers);
 
-    verify(mockTracer).delayTypeStarted("subchannel_state_mismatch");
-    verify(mockTracer).delayReasonAttached(
+    verify(mockTracer).recordAttemptDelayStart(
+        "subchannel_state_mismatch",
         "subchannel returned by LB picker has no connected subchannel");
   }
 
@@ -918,8 +917,8 @@ public class DelayedClientTransportTest {
     CallOptions wfrOptions = callOptions.withWaitForReady();
     delayedTransport.newStream(method, headers, wfrOptions, customTracers);
 
-    verify(mockTracer).delayTypeStarted("wait_for_ready_failed");
-    verify(mockTracer).delayReasonAttached(
+    verify(mockTracer).recordAttemptDelayStart(
+        "wait_for_ready_failed",
         "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE);
   }
 

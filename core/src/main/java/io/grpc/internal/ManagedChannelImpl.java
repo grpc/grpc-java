@@ -993,10 +993,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
         this.method = method;
         this.callOptions = callOptions;
         this.callCreationTime = ticker.nanoTime();
+        // Category A (Resolver delay): Notify all registered tracer factories that this RPC
+        // is queued waiting for initial name resolution or service configuration parsing.
+        for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+          factory.recordCallDelayStart(
+              "resolving", "waiting for name resolution or service config");
+        }
       }
 
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
+        // Name resolution succeeded; end Call-Level delay segment before launching attempts.
+        for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+          factory.recordCallDelayEnd();
+        }
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
@@ -1022,6 +1032,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       @Override
       protected void callCancelled() {
+        for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+          factory.recordCallDelayEnd();
+        }
         super.callCancelled();
         syncContext.execute(new PendingCallRemoval());
       }

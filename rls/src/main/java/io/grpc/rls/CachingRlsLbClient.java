@@ -1028,7 +1028,10 @@ final class CachingRlsLbClient {
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
         if (picker == null) {
-          return PickResult.withNoResult();
+          // Category F (Pass-Through container): Preserve leaf "connecting" delay type while
+          // recording RLS child policy context.
+          return PickResult.withNoResult(
+              "connecting", "RLS child policy connecting");
         }
         // Happy path
         PickResult pickResult = picker.pickSubchannel(args);
@@ -1050,7 +1053,11 @@ final class CachingRlsLbClient {
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
-        return PickResult.withNoResult("rls_lookup_pending", "RLS request pending.");
+        // Category B (Control-Plane scenario): RPC is blocked executing an RLS control-plane
+        // query. Report canonical "rls_lookup_pending" type and target server address.
+        return PickResult.withNoResult(
+            "rls_lookup_pending",
+            "Route Lookup Service query pending on " + lookupService);
       }
     }
 
@@ -1058,7 +1065,8 @@ final class CachingRlsLbClient {
     private PickResult useFallback(PickSubchannelArgs args) {
       SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
       if (picker == null) {
-        return PickResult.withNoResult();
+        return PickResult.withNoResult(
+            "connecting", "RLS fallback child policy connecting");
       }
       PickResult pickResult = picker.pickSubchannel(args);
       if (pickResult.hasResult()) {
