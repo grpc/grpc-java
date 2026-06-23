@@ -918,7 +918,7 @@ public class DelayedClientTransportTest {
     delayedTransport.newStream(method, headers, wfrOptions, customTracers);
 
     verify(mockTracer).recordAttemptDelayStart(
-        "wait_for_ready_failed",
+        "picker_failing_with_wait_for_ready",
         "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE);
   }
 

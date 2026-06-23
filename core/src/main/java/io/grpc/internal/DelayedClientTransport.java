@@ -372,7 +372,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       return "subchannel_state_mismatch";
     }
     if (!pickResult.getStatus().isOk()) {
-      return "wait_for_ready_failed";
+      return "picker_failing_with_wait_for_ready";
     }
     if (pickResult.getDelayType() != null) {
       return pickResult.getDelayType();
@@ -427,8 +427,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
      */
     void updateDelay(@Nullable String newType, @Nullable String newReason) {
       if (!Objects.equals(activeDelayType, newType)) {
-        // Delay categorization changed (e.g., from RLS lookup to TCP connecting).
-        // Close prior active segment across all tracers before starting new canonical segment.
+        // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
         if (activeDelayType != null) {
           for (ClientStreamTracer tracer : tracers) {
             tracer.recordAttemptDelayEnd();
@@ -443,8 +442,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
       }
       if (newType != null && newReason != null && !Objects.equals(activeDelayReason, newReason)) {
-        // Categorization remained constant, but granular runtime diagnostics updated
-        // (e.g., priority policy failover between tiers). Emit transition event.
+        // Delay type is unchanged, but the reason changed (e.g., priority failover).
         activeDelayReason = newReason;
         for (ClientStreamTracer tracer : tracers) {
           tracer.recordAttemptDelayReasonChanged(newReason);

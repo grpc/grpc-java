@@ -445,8 +445,8 @@ public class PriorityLoadBalancerTest {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult pick = pickerCaptor.getValue().pickSubchannel(
         mock(PickSubchannelArgs.class));
-    assertThat(pick.getDelayType()).isEqualTo("connecting");
-    assertThat(pick.getDelayReason()).contains("priority dns error");
+    assertThat(pick.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(pick.getStatus().getDescription()).contains("priority dns error");
   }
 
   @Test
@@ -1053,8 +1053,9 @@ public class PriorityLoadBalancerTest {
     SubchannelPicker priorityPicker = pickerCaptor.getValue();
     PickResult result = priorityPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     
-    assertThat(result.getDelayType()).isEqualTo("connecting");
-    assertThat(result.getDelayReason()).isEqualTo("priority_p0:child_reason");
+    assertThat(result.getDelayType()).isEqualTo("p0:connecting");
+    assertThat(result.getDelayReason())
+        .isEqualTo("waiting on priority group p0 (child_reason)");
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {

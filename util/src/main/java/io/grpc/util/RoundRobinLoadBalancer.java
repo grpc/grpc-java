@@ -44,10 +44,15 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
   private static final PickResult CONNECTING_RESULT =
       PickResult.withNoResult("connecting", "round_robin: attempting to connect");
   private final AtomicInteger sequence = new AtomicInteger(new Random().nextInt());
-  private SubchannelPicker currentPicker = new FixedResultPicker(CONNECTING_RESULT);
+  private SubchannelPicker currentPicker = new FixedResultPicker(connectingResult());
 
   public RoundRobinLoadBalancer(Helper helper) {
     super(helper);
+  }
+
+  private PickResult connectingResult() {
+    return PickResult.withNoResult("connecting",
+        "round_robin connecting: TCP/TLS handshake in progress to child balancers");
   }
 
   /**
@@ -70,7 +75,7 @@ final class RoundRobinLoadBalancer extends MultiChildLoadBalancer {
       }
 
       if (isConnecting) {
-        updateBalancingState(CONNECTING, new FixedResultPicker(CONNECTING_RESULT));
+        updateBalancingState(CONNECTING, new FixedResultPicker(connectingResult()));
       } else {
         updateBalancingState(TRANSIENT_FAILURE, createReadyPicker(getChildLbStates()));
       }

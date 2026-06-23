@@ -123,7 +123,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           CONNECTING,
           new FixedResultPicker(
               PickResult.withNoResult(
-                  "cds_dynamic_discovery", "cds: fetching xDS cluster metadata")));
+                  "cds_dynamic_discovery",
+                  "waiting for CDS resource definition for cluster " + clusterName)));
       return Status.OK;
     }
     if (!clusterConfigOr.hasValue()) {

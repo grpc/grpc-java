@@ -150,7 +150,13 @@ class ClusterManagerLoadBalancer extends MultiChildLoadBalancer {
                   Status.UNAVAILABLE.withDescription("CDS encountered error: unable to find "
                       + "available subchannel for cluster " + clusterName));
         }
-        return childPicker.pickSubchannel(args);
+        PickResult childResult = childPicker.pickSubchannel(args);
+        if (!childResult.hasResult() && childResult.getDelayType() != null) {
+          String reason = "xds_cluster_manager: child '" + clusterName + "': "
+              + (childResult.getDelayReason() != null ? childResult.getDelayReason() : "");
+          return PickResult.withNoResult(childResult.getDelayType(), reason);
+        }
+        return childResult;
       }
 
       @Override
