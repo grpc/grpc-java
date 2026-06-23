@@ -172,7 +172,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   }
 
   private PickResult connectingResult() {
-    return PickResult.withNoResult("connecting", "pick_first: attempting to connect");
+    return CONNECTING_RESULT;
   }
 
   /** Picker that requests connection during the first pick, and returns noResult. */
