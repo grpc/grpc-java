@@ -382,7 +382,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
   private static String determineQueuingDelayReason(@Nullable PickResult pickResult) {
     if (pickResult == null) {
-      return "client channel: created LB policy.";
+      return "client channel: waiting for picker";
     }
     if (pickResult.getSubchannel() != null) {
       return "subchannel returned by LB picker has no connected subchannel";
