@@ -50,6 +50,7 @@ import io.grpc.StreamTracer;
 import io.grpc.internal.StatsTraceContext.ServerCallMethodListener;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
 import java.util.ArrayList;
@@ -251,7 +252,7 @@ final class OpenTelemetryMetricsModule {
         activeDelayStopwatch = null;
         activeDelayType = null;
         if (module.resource.clientAttemptDelayCounter() != null) {
-          AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          AttributesBuilder builder = Attributes.builder()
               .put(METHOD_KEY, fullMethodName)
               .put(TARGET_KEY, target)
               .put("grpc.delay_type", delayType);

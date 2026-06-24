@@ -364,7 +364,7 @@ public final class GrpcOpenTelemetry {
    * Checks whether experimental client attempt and call delay observability is globally enabled.
    *
    * <p>Guarded strictly by the {@code GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY} environment
-   * variable or JVM system property (defaults to {@code false}). When disabled, delay spans and
+   * variable (defaults to {@code false}). When disabled, delay spans and
    * duration histograms are suppressed to avoid runtime overhead.
    */
   static boolean isDelayObservabilityEnabled() {
