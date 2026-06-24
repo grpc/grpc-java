@@ -255,20 +255,6 @@ final class OpenTelemetryMetricsModule {
               .put(METHOD_KEY, fullMethodName)
               .put(TARGET_KEY, target)
               .put("grpc.delay_type", delayType);
-          if (module.localityEnabled) {
-            String savedLocality = locality;
-            if (savedLocality == null) {
-              savedLocality = "";
-            }
-            builder.put(LOCALITY_KEY, savedLocality);
-          }
-          if (module.backendServiceEnabled) {
-            String savedBackendService = backendService;
-            if (savedBackendService == null) {
-              savedBackendService = "";
-            }
-            builder.put(BACKEND_SERVICE_KEY, savedBackendService);
-          }
           if (module.customLabelEnabled) {
             builder.put(
                 CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));

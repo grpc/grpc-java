@@ -1641,6 +1641,8 @@ public class OpenTelemetryMetricsModuleTest {
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
                           point.hasSum(0.25);
+                          point.hasAttribute(METHOD_KEY, method.getFullMethodName());
+                          point.hasAttribute(TARGET_KEY, "target:///");
                           point.hasAttribute(
                               AttributeKey.stringKey("grpc.delay_type"), "connecting");
                         })));
