@@ -42,10 +42,18 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.KnownLength;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.NoopServerCall;
 import io.grpc.Server;
 import io.grpc.ServerCall;
@@ -436,6 +444,146 @@ public class OpenTelemetryTracingModuleTest {
         AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason3", event3.getAttributes().get(
         AttributeKey.stringKey("grpc.delay_reason")));
+  }
+
+  @Test
+  public void clientAttemptDelayTracing_endToEnd_inProcessTransport() throws Exception {
+    final java.util.concurrent.CountDownLatch latch =
+        new java.util.concurrent.CountDownLatch(1);
+    LoadBalancerProvider slowLbProvider = new LoadBalancerProvider() {
+      @Override
+      public boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      public int getPriority() {
+        return 5;
+      }
+
+      @Override
+      public String getPolicyName() {
+        return "slow_connecting_policy";
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+        return new LoadBalancer() {
+          @Override
+          public Status acceptResolvedAddresses(LoadBalancer.ResolvedAddresses resolvedAddresses) {
+            helper.updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withNoResult("connecting",
+                    "Simulated slow TLS handshake with backend");
+              }
+            });
+            latch.countDown();
+            return Status.OK;
+          }
+
+          @Override
+          public void handleNameResolutionError(Status error) {}
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    LoadBalancerRegistry.getDefaultRegistry().register(slowLbProvider);
+
+    NameResolverProvider customResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "inproce2e";
+      }
+
+      @Override
+      public java.util.Collection<Class<? extends java.net.SocketAddress>>
+          getProducedSocketAddressTypes() {
+        return java.util.Collections.singleton(io.grpc.inprocess.InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(java.net.URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "inproce2e";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            listener.onResult(ResolutionResult.newBuilder()
+                .setAddresses(java.util.Collections.singletonList(new EquivalentAddressGroup(
+                    new io.grpc.inprocess.InProcessSocketAddress("test-e2e"))))
+                .build());
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(customResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryRule.getOpenTelemetry())
+        .enableTracing(true)
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("inproce2e:///test-e2e")
+            .defaultLoadBalancingPolicy("slow_connecting_policy");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+      Thread.sleep(50);
+      call.cancel("End test delay segment", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+      LoadBalancerRegistry.getDefaultRegistry().deregister(slowLbProvider);
+      NameResolverRegistry.getDefaultRegistry().deregister(customResolverProvider);
+    }
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData delaySpanData = null;
+    for (SpanData s : spans) {
+      if ("Attempt Delay".equals(s.getName())) {
+        delaySpanData = s;
+        break;
+      }
+    }
+    assertNotNull(delaySpanData);
+    assertEquals("connecting",
+        delaySpanData.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+
+    boolean foundTransition = false;
+    for (io.opentelemetry.sdk.trace.data.EventData event : delaySpanData.getEvents()) {
+      if ("Delay state transition".equals(event.getName())
+          && "Simulated slow TLS handshake with backend".equals(
+              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
+        foundTransition = true;
+        break;
+      }
+    }
+    assertTrue(foundTransition);
   }
 
   @Test
