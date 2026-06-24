@@ -1041,11 +1041,13 @@ public class PriorityLoadBalancerTest {
             
     Helper helper0 = Iterables.getOnlyElement(fooHelpers);  // priority p0
     
-    SubchannelPicker mockChildPicker = mock(SubchannelPicker.class);
-    when(mockChildPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("connecting", "child_reason"));
-        
-    helper0.updateBalancingState(CONNECTING, mockChildPicker);
+    SubchannelPicker fakeChildPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "child_reason");
+      }
+    };
+    helper0.updateBalancingState(CONNECTING, fakeChildPicker);
     
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());

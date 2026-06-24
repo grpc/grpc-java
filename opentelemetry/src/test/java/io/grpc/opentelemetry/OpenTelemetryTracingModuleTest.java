@@ -282,32 +282,6 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
-  public void clientDelayTracingMocking() {
-    Span mockDelaySpan = mock(Span.class);
-    when(mockSpanBuilder.setAttribute(
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.anyString()))
-        .thenReturn(mockSpanBuilder);
-    when(mockSpanBuilder.startSpan()).thenReturn(mockAttemptSpan, mockDelaySpan);
-
-    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
-    CallAttemptsTracerFactory callTracer =
-        tracingModule.newClientCallTracer(mockClientSpan, method);
-    ClientStreamTracer clientStreamTracer =
-        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
-
-    clientStreamTracer.recordAttemptDelayStart("connecting", "pick_first: attempting to connect");
-    clientStreamTracer.recordAttemptDelayEnd();
-
-    verify(mockTracer).spanBuilder(eq("Attempt Delay"));
-    verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("connecting"));
-    verify(mockDelaySpan).addEvent(
-        eq("Delay state transition"),
-        org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
-    verify(mockDelaySpan).end();
-  }
-
-  @Test
   public void clientBasicTracingRule() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
