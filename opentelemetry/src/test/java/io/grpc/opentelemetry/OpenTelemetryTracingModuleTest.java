@@ -65,6 +65,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.opentelemetry.OpenTelemetryTracingModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
@@ -92,8 +93,14 @@ import io.opentelemetry.sdk.trace.data.EventData;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
@@ -448,8 +455,7 @@ public class OpenTelemetryTracingModuleTest {
 
   @Test
   public void clientAttemptDelayTracing_endToEnd_inProcessTransport() throws Exception {
-    final java.util.concurrent.CountDownLatch latch =
-        new java.util.concurrent.CountDownLatch(1);
+    final CountDownLatch latch = new CountDownLatch(1);
     LoadBalancerProvider slowLbProvider = new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
@@ -509,13 +515,12 @@ public class OpenTelemetryTracingModuleTest {
       }
 
       @Override
-      public java.util.Collection<Class<? extends java.net.SocketAddress>>
-          getProducedSocketAddressTypes() {
-        return java.util.Collections.singleton(io.grpc.inprocess.InProcessSocketAddress.class);
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
       }
 
       @Override
-      public NameResolver newNameResolver(java.net.URI targetUri, NameResolver.Args args) {
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         return new NameResolver() {
           @Override
           public String getServiceAuthority() {
@@ -525,8 +530,8 @@ public class OpenTelemetryTracingModuleTest {
           @Override
           public void start(Listener2 listener) {
             listener.onResult(ResolutionResult.newBuilder()
-                .setAddresses(java.util.Collections.singletonList(new EquivalentAddressGroup(
-                    new io.grpc.inprocess.InProcessSocketAddress("test-e2e"))))
+                .setAddresses(Collections.singletonList(new EquivalentAddressGroup(
+                    new InProcessSocketAddress("test-e2e"))))
                 .build());
           }
 
@@ -552,12 +557,12 @@ public class OpenTelemetryTracingModuleTest {
       call.start(new ClientCall.Listener<String>() {}, new Metadata());
       call.request(1);
 
-      latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+      latch.await(5, TimeUnit.SECONDS);
       Thread.sleep(50);
       call.cancel("End test delay segment", null);
     } finally {
       channel.shutdownNow();
-      channel.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS);
+      channel.awaitTermination(5, TimeUnit.SECONDS);
       LoadBalancerRegistry.getDefaultRegistry().deregister(slowLbProvider);
       NameResolverRegistry.getDefaultRegistry().deregister(customResolverProvider);
     }
@@ -575,7 +580,7 @@ public class OpenTelemetryTracingModuleTest {
         delaySpanData.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
 
     boolean foundTransition = false;
-    for (io.opentelemetry.sdk.trace.data.EventData event : delaySpanData.getEvents()) {
+    for (EventData event : delaySpanData.getEvents()) {
       if ("Delay state transition".equals(event.getName())
           && "Simulated slow TLS handshake with backend".equals(
               event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
