@@ -63,6 +63,7 @@ import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.inprocess.InProcessSocketAddress;
@@ -530,8 +531,8 @@ public class OpenTelemetryTracingModuleTest {
           @Override
           public void start(Listener2 listener) {
             listener.onResult(ResolutionResult.newBuilder()
-                .setAddresses(Collections.singletonList(new EquivalentAddressGroup(
-                    new InProcessSocketAddress("test-e2e"))))
+                .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
+                    new EquivalentAddressGroup(new InProcessSocketAddress("test-e2e")))))
                 .build());
           }
 

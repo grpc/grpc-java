@@ -62,6 +62,7 @@ import io.grpc.ServerStreamTracer.ServerCallInfo;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
+import io.grpc.StatusOr;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.inprocess.InProcessSocketAddress;
@@ -1739,8 +1740,9 @@ public class OpenTelemetryMetricsModuleTest {
           @Override
           public void start(Listener2 listener) {
             listener.onResult(ResolutionResult.newBuilder()
-                .setAddresses(Collections.singletonList(new EquivalentAddressGroup(
-                    new InProcessSocketAddress("test-metrics-e2e"))))
+                .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
+                    new EquivalentAddressGroup(
+                        new InProcessSocketAddress("test-metrics-e2e")))))
                 .build());
           }
 
