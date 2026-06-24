@@ -566,42 +566,7 @@ public class TestServiceClient {
       }
       
       case MAX_CONCURRENT_STREAMS_CONNECTION_SCALING: {
-        ChannelCredentials channelCredentials;
-        if (useTls) {
-          if (!useTestCa) {
-            channelCredentials = TlsChannelCredentials.create();
-          } else {
-            try {
-              channelCredentials = TlsChannelCredentials.newBuilder()
-                  .trustManager(TlsTesting.loadCert("ca.pem"))
-                  .build();
-            } catch (Exception ex) {
-              throw new RuntimeException(ex);
-            }
-          }
-        } else {
-          channelCredentials = InsecureChannelCredentials.create();
-        }
-        ManagedChannelBuilder<?> channelBuilder;
-        if (serverPort == 0) {
-          channelBuilder = Grpc.newChannelBuilder(serverHost, channelCredentials);
-        } else {
-          channelBuilder =
-              Grpc.newChannelBuilderForAddress(serverHost, serverPort, channelCredentials);
-        }
-        if (serverHostOverride != null) {
-          channelBuilder.overrideAuthority(serverHostOverride);
-        }
-        channelBuilder.disableServiceConfigLookUp();
-        try {
-          @SuppressWarnings("unchecked")
-          Map<String, ?> serviceConfigMap = (Map<String, ?>) JsonParser.parse(
-              "{\"connection_scaling\":{\"max_connections_per_subchannel\": 2}}");
-          channelBuilder.defaultServiceConfig(serviceConfigMap);
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-        tester.testMcs(TestServiceGrpc.newStub(channelBuilder.build()));
+        tester.testMcs(TestServiceGrpc.newStub(tester.createChannelBuilder().build()));
         break;
       }
       default:

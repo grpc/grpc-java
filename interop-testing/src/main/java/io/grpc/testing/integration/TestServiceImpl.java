@@ -65,7 +65,7 @@ import java.util.concurrent.TimeUnit;
  * sent in response streams.
  */
 public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
-  static Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
+  static final Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
   private final Random random = new Random();
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
@@ -529,7 +529,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
         echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY),
-        new McsScalingTestcaseInterceptor());
+        new AddPeerAddressToContextInterceptor());
   }
 
   /**
@@ -564,7 +564,7 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     };
   }
 
-  static class McsScalingTestcaseInterceptor implements ServerInterceptor {
+  static class AddPeerAddressToContextInterceptor implements ServerInterceptor {
     @Override
     public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
         Metadata headers, ServerCallHandler<ReqT, RespT> next) {
