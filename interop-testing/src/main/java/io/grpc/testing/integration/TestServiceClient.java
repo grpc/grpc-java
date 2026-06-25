@@ -565,7 +565,7 @@ public class TestServiceClient {
       }
       
       case MAX_CONCURRENT_STREAMS_CONNECTION_SCALING: {
-        tester.testMcs(TestServiceGrpc.newStub(tester.createChannelBuilder().build()));
+        tester.testMcs();
         break;
       }
       default:
@@ -1076,7 +1076,7 @@ public class TestServiceClient {
       }
     }
 
-    public void testMcs(TestServiceGrpc.TestServiceStub asyncStub) throws Exception {
+    public void testMcs() throws Exception {
       final Object lastItem = new Object();
       StreamingOutputCallResponseObserver responseObserver1 =
           new StreamingOutputCallResponseObserver(lastItem);
