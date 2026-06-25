@@ -67,7 +67,8 @@ public class TestCasesTest {
       "cancel_after_first_response",
       "timeout_on_sleeping_server",
       "orca_per_rpc",
-      "orca_oob"
+      "orca_oob",
+      "max_concurrent_streams_connection_scaling",
     };
 
     // additional test cases
