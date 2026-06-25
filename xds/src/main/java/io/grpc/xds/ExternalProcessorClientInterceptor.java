@@ -52,6 +52,7 @@ import io.grpc.Drainable;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.KnownLength;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MetricInstrumentRegistry;
@@ -167,10 +168,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
   }
 
-  private final CachedChannelManager cachedChannelManager;
   private final ExternalProcessorFilterConfig filterConfig;
   private final ScheduledExecutorService scheduler;
   private final MetricRecorder metricsRecorder;
+  private final ManagedChannel extProcChannel;
 
   @VisibleForTesting
   ExternalProcessorClientInterceptor(ExternalProcessorFilterConfig filterConfig,
@@ -178,14 +179,20 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       ScheduledExecutorService scheduler,
       FilterContext context) {
     this.filterConfig = filterConfig;
-    this.cachedChannelManager = checkNotNull(cachedChannelManager, "cachedChannelManager");
+    checkNotNull(cachedChannelManager, "cachedChannelManager");
     this.scheduler = checkNotNull(scheduler, "scheduler");
     this.metricsRecorder = checkNotNull(context.metricsRecorder(), "metricsRecorder");
+    this.extProcChannel = cachedChannelManager.getChannel(filterConfig.getGrpcServiceConfig());
   }
 
   @VisibleForTesting
   ExternalProcessorFilterConfig getFilterConfig() {
     return filterConfig;
+  }
+
+  @VisibleForTesting
+  ManagedChannel getExtProcChannel() {
+    return extProcChannel;
   }
 
   @Override
@@ -197,7 +204,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     SerializingExecutor serializingExecutor = new SerializingExecutor(callOptions.getExecutor());
     
     ExternalProcessorGrpc.ExternalProcessorStub extProcStub = ExternalProcessorGrpc.newStub(
-        cachedChannelManager.getChannel(filterConfig.getGrpcServiceConfig()))
+        extProcChannel)
         .withExecutor(serializingExecutor);
     
     if (filterConfig.getGrpcServiceConfig().timeout().isPresent()) {
