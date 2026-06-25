@@ -27,6 +27,8 @@ interface ThreadSafeRandom {
 
   long nextLong(long bound);
 
+  double nextDouble();
+
   final class ThreadSafeRandomImpl implements ThreadSafeRandom {
 
     static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();
@@ -46,6 +48,11 @@ interface ThreadSafeRandom {
     @Override
     public long nextLong(long bound) {
       return ThreadLocalRandom.current().nextLong(bound);
+    }
+
+    @Override
+    public double nextDouble() {
+      return ThreadLocalRandom.current().nextDouble();
     }
   }
 }

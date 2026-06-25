@@ -75,7 +75,9 @@ envoy/config/trace/v3/service.proto
 envoy/config/trace/v3/zipkin.proto
 envoy/data/accesslog/v3/accesslog.proto
 envoy/extensions/clusters/aggregate/v3/cluster.proto
+envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/common/fault/v3/fault.proto
+envoy/extensions/filters/http/composite/v3/composite.proto
 envoy/extensions/filters/http/ext_authz/v3/ext_authz.proto
 envoy/extensions/common/matching/v3/extension_matcher.proto
 envoy/extensions/filters/http/fault/v3/fault.proto
@@ -114,6 +116,7 @@ envoy/type/http/v3/path_transformation.proto
 envoy/type/matcher/v3/address.proto
 envoy/type/matcher/v3/filter_state.proto
 envoy/type/matcher/v3/http_inputs.proto
+envoy/config/common/matcher/v3/matcher.proto
 envoy/type/matcher/v3/metadata.proto
 envoy/type/matcher/v3/node.proto
 envoy/config/common/matcher/v3/matcher.proto
@@ -133,6 +136,7 @@ envoy/type/v3/ratelimit_strategy.proto
 envoy/type/v3/ratelimit_unit.proto
 envoy/type/v3/semantic_version.proto
 envoy/type/v3/token_bucket.proto
+envoy/extensions/matching/common_inputs/network/v3/network_inputs.proto
 )
 
 pushd "$(git rev-parse --show-toplevel)/xds/third_party/envoy" > /dev/null

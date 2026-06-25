@@ -1373,6 +1373,11 @@ public class RingHashLoadBalancerTest {
     public long nextLong(long bound) {
       throw new UnsupportedOperationException("Should not be called");
     }
+
+    @Override
+    public double nextDouble() {
+      throw new UnsupportedOperationException("Should not be called");
+    }
   }
 
   enum InitializationFlags {
