@@ -33,7 +33,7 @@ public final class MatcherRunner {
   @Nullable
   public static List<TypedExtensionConfig> checkMatch(
       UnifiedMatcher matcher, MatchContext context) {
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     if (!result.matched) {
       return null;
     }

@@ -45,15 +45,11 @@ final class MatcherList extends UnifiedMatcher {
   }
 
   @Override
-  public MatchResult match(MatchContext context, int depth) {
-    if (depth > MAX_RECURSION_DEPTH) {
-      return MatchResult.noMatch();
-    }
-
+  public MatchResult match(MatchContext context) {
     List<TypedExtensionConfig> accumulated = new ArrayList<>();
     for (FieldMatcher matcher : matchers) {
       if (matcher.matches(context)) {
-        MatchResult result = matcher.onMatch.evaluate(context, depth);
+        MatchResult result = matcher.onMatch.evaluate(context);
         accumulated.addAll(result.keepMatchingActions);
         
         if (result.matched) {
@@ -64,16 +60,12 @@ final class MatcherList extends UnifiedMatcher {
           } else {
             return MatchResult.create(result.action, accumulated);
           }
-        } else {
-          if (!matcher.onMatch.keepMatching) {
-            return MatchResult.noMatch(accumulated);
-          }
         }
       }
     }
     
     if (onNoMatch != null) {
-      MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+      MatchResult noMatchResult = onNoMatch.evaluate(context);
       accumulated.addAll(noMatchResult.keepMatchingActions);
       if (noMatchResult.matched) {
         return MatchResult.create(noMatchResult.action, accumulated);

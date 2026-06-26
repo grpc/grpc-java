@@ -46,9 +46,9 @@ final class OnMatch {
     }
   }
   
-  MatchResult evaluate(MatchContext context, int depth) {
+  MatchResult evaluate(MatchContext context) {
     if (nestedMatcher != null) {
-      return nestedMatcher.match(context, depth + 1);
+      return nestedMatcher.match(context);
     }
     return MatchResult.create(action);
   }

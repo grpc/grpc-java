@@ -77,23 +77,6 @@ public class MatcherTreeTest {
   }
 
   @Test
-  public void matcherTree_maxRecursionDepth_returnsNoMatch() {
-    Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
-        .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(
-            Any.pack(HttpRequestHeaderMatchInput.newBuilder()
-                .setHeaderName("path").build())))
-        .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
-            .putMap("val", Matcher.OnMatch.newBuilder()
-                .setAction(TypedExtensionConfig.newBuilder().setName("action")).build()))
-        .build();
-    
-    MatcherTree tree = new MatcherTree(proto, null, s -> true);
-    MatchContext context = MatchContext.newBuilder().build();
-    MatchResult result = tree.match(context, 17);
-    assertThat(result.matched).isFalse();
-  }
-
-  @Test
   public void matcherTree_nonStringInput_fallsBack() {
     
     Matcher.MatcherTree proto = Matcher.MatcherTree.newBuilder()
@@ -114,7 +97,7 @@ public class MatcherTreeTest {
         .setMetadata(new Metadata())
         .build();
     
-    MatchResult result = tree.match(context, 0);
+    MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue(); // onNoMatch matched
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("fallback");
@@ -143,7 +126,7 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = tree.match(context, 0);
+    MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("fallback");
@@ -185,7 +168,7 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
     
-    MatchResult result = tree.match(context, 0);
+    MatchResult result = tree.match(context);
     
     assertThat(result.matched).isFalse();
     assertThat(result.action).isNull();
@@ -252,7 +235,7 @@ public class MatcherTreeTest {
         .setMetadata(headers)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action.getName()).isEqualTo("matched_foo");
   }
@@ -281,10 +264,38 @@ public class MatcherTreeTest {
         .setMetadata(headers)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // Longest prefix wins
     assertThat(result.action.getName()).isEqualTo("apiv1");
+  }
+
+  @Test
+  public void matcherTree_prefixMatch_emptyPrefix() {
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherTree(Matcher.MatcherTree.newBuilder()
+            .setInput(TypedExtensionConfig.newBuilder()
+                .setTypedConfig(Any.pack(
+                    HttpRequestHeaderMatchInput.newBuilder()
+                        .setHeaderName("path").build())))
+            .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                .putMap("", Matcher.OnMatch.newBuilder()
+                    .setAction(TypedExtensionConfig.newBuilder().setName("empty_prefix")).build())))
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("no_match")))
+        .build();
+
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    Metadata headers = new Metadata();
+    headers.put(Metadata.Key.of("path", Metadata.ASCII_STRING_MARSHALLER), "/any/path");
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(headers)
+        .build();
+
+    MatchResult result = matcher.match(context);
+    assertThat(result.matched).isTrue();
+    // Empty prefix matches anything
+    assertThat(result.action.getName()).isEqualTo("empty_prefix");
   }
 
   @Test
@@ -315,12 +326,12 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // Correct behavior per gRFC A106: onNoMatch is ONLY for when no match is found.
     // If we only find keepMatching actions, and onNoMatch matches, we get onNoMatch action.
     
-    result = matcher.match(context, 0);
+    result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("A2");
@@ -358,7 +369,7 @@ public class MatcherTreeTest {
         .setMetadata(metadataWith("path", "/abc"))
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto, (t) -> true);
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
 
     assertThat(result.matched).isTrue();
     // Implementation sorts longest to shortest: /abc, /ab, /a
@@ -394,7 +405,7 @@ public class MatcherTreeTest {
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadataWith("x-user-segment", "grpc.channelz.v1.Channelz/GetTopChannels"))
         .build();
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
 
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
@@ -444,7 +455,7 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = tree.match(context, 0);
+    MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("actionB");
@@ -474,7 +485,7 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // exact match matched (A1), keepMatching=true -> continue to onNoMatch (A2)
     // onNoMatch matched -> A2 is the terminal action
@@ -519,11 +530,10 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
-    assertThat(result.matched).isTrue();
-    // nested matcher failed, but allowed to continue because keepMatching=true
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("A2");
+    MatchResult result = matcher.match(context);
+    assertThat(result.matched).isFalse();
+    // nested matcher failed, so it should abort unconditionally, keepMatching=true is ignored.
+    assertThat(result.action).isNull();
     assertThat(result.keepMatchingActions).isEmpty();
   }
 
@@ -550,7 +560,7 @@ public class MatcherTreeTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
     assertThat(result.action).isNull();
     

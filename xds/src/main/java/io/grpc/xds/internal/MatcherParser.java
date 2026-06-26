@@ -110,12 +110,13 @@ public final class MatcherParser {
       case SUFFIX:
         return Matchers.StringMatcher.forSuffix(
             checkNonEmpty(proto.getSuffix(), "suffix"), proto.getIgnoreCase());
-      case CONTAINS:
-        return Matchers.StringMatcher.forContains(
-            checkNonEmpty(proto.getContains(), "contains"), proto.getIgnoreCase());
       case SAFE_REGEX:
         String regex = checkNonEmpty(proto.getSafeRegex().getRegex(), "regex");
         return Matchers.StringMatcher.forSafeRegEx(Pattern.compile(regex));
+      case CONTAINS:
+        return Matchers.StringMatcher.forContains(
+            checkNonEmpty(proto.getContains(), "contains"), proto.getIgnoreCase());
+      case MATCHPATTERN_NOT_SET:
       default:
         throw new IllegalArgumentException(
             "Unknown StringMatcher match pattern: " + proto.getMatchPatternCase());

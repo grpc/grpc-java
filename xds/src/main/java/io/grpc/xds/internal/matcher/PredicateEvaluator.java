@@ -18,7 +18,6 @@ package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher.MatcherList.Predicate;
-import com.github.xds.type.matcher.v3.StringMatcher;
 import io.grpc.xds.internal.MatcherParser;
 import io.grpc.xds.internal.Matchers;
 import java.util.ArrayList;
@@ -55,7 +54,8 @@ abstract class PredicateEvaluator {
       this.input = UnifiedMatcher.resolveInput(proto.getInput());
       
       if (proto.hasValueMatch()) {
-        Matchers.StringMatcher stringMatcher = fromStringMatcherProto(proto.getValueMatch());
+        Matchers.StringMatcher stringMatcher =
+            MatcherParser.parseStringMatcher(proto.getValueMatch());
         this.matcher = new StringMatcherAdapter(stringMatcher);
       } else if (proto.hasCustomMatch()) {
         TypedExtensionConfig customConfig = proto.getCustomMatch();
@@ -82,10 +82,7 @@ abstract class PredicateEvaluator {
       return matcher.match(input.apply(context));
     }
     
-    private static Matchers.StringMatcher fromStringMatcherProto(
-        StringMatcher proto) {
-      return MatcherParser.parseStringMatcher(proto);
-    }
+
 
     private static final class StringMatcherAdapter implements Matcher {
       private final Matchers.StringMatcher stringMatcher;

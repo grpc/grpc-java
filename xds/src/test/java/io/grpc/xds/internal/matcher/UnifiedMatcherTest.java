@@ -35,10 +35,11 @@ import org.junit.runners.JUnit4;
 public class UnifiedMatcherTest {
 
   @Test
-  public void matcherList_firstMatchWins_evenIfNestedNoMatch() {
-    // matcher1: matches -> nested "no-match" (matched=false)
-    // matcher2: matches -> action "action2"
-    // Expect: matcher1 returns matched=false, so we proceed to matcher2, which returns action2.
+  public void matcherList_proceedsToNextMatcher_ifNestedNoMatch() {
+    // matcher1: predicate matches, but nested matcher returns no-match (matched=false)
+    // matcher2: predicate matches, and returns action "action2"
+    // Expect: matcher1 fails to match, so we proceed to evaluate matcher2,
+    // which successfully matches and returns action2.
     
     Matcher.MatcherList.FieldMatcher fm1 = Matcher.MatcherList.FieldMatcher.newBuilder()
         .setPredicate(createHeaderMatchPredicate("h", "v"))
@@ -63,8 +64,9 @@ public class UnifiedMatcherTest {
         .setMetadata(metadataWith("h", "v"))
         .build();
     
-    MatchResult result = matcher.match(context, 0);
-    assertThat(result.matched).isFalse();
+    MatchResult result = matcher.match(context);
+    assertThat(result.matched).isTrue();
+    assertThat(result.action.getName()).isEqualTo("action2");
   }
 
   @Test
@@ -89,7 +91,7 @@ public class UnifiedMatcherTest {
         .setMetadata(metadataWith("key", "found"))
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
     assertThat(result.action).isNull();
     assertThat(result.keepMatchingActions).isEmpty();
@@ -275,7 +277,7 @@ public class UnifiedMatcherTest {
             .setAction(TypedExtensionConfig.newBuilder().setName("no-match-action")))
         .build();
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcher.match(MatchContext.newBuilder().build(), 0);
+    MatchResult result = matcher.match(MatchContext.newBuilder().build());
     
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
@@ -406,7 +408,7 @@ public class UnifiedMatcherTest {
         .setMetadata(metadata)
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("action2");
@@ -435,7 +437,7 @@ public class UnifiedMatcherTest {
         .setMetadata(metadataWith("h1", "v"))
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // onNoMatch IS executed because m1 had keepMatching=true and we reached end of list
     assertThat(result.action).isNotNull();
@@ -465,7 +467,7 @@ public class UnifiedMatcherTest {
         .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("action2");
@@ -497,7 +499,7 @@ public class UnifiedMatcherTest {
         .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("action2");
@@ -532,39 +534,13 @@ public class UnifiedMatcherTest {
         .build();
     
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("action2");
     assertThat(result.keepMatchingActions).isEmpty();
   }
   
-  @Test
-  public void noOpMatcher_runtimeRecursionLimit_returnsNoMatch() {
-    Matcher proto = Matcher.getDefaultInstance();
-    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
-    
-    // Manually calling with depth > 16
-    MatchResult result = matcher.match(MatchContext.newBuilder().build(), 17);
-    assertThat(result.matched).isFalse();
-  }
-
-  @Test
-  public void matcherList_maxRecursionDepth_returnsNoMatch() {
-    // We construct a valid MatcherList but call it with a depth value that exceeds the limit.
-    Matcher.MatcherList.FieldMatcher matcher = Matcher.MatcherList.FieldMatcher.newBuilder()
-        .setPredicate(createHeaderMatchPredicate("h", "v"))
-        .setOnMatch(Matcher.OnMatch.newBuilder()
-            .setAction(TypedExtensionConfig.newBuilder().setName("action")))
-        .build();
-    Matcher proto = Matcher.newBuilder()
-        .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(matcher))
-        .build();
-    
-    UnifiedMatcher matcherList = UnifiedMatcher.fromProto(proto);
-    MatchResult result = matcherList.match(MatchContext.newBuilder().build(), 17);
-    assertThat(result.matched).isFalse();
-  }
 
   @Test
   public void matcherList_keepMatching_verification() {
@@ -600,7 +576,7 @@ public class UnifiedMatcherTest {
         .setMetadata(metadataWith("h", "v"))
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();
     assertThat(result.action.getName()).isEqualTo("a3");

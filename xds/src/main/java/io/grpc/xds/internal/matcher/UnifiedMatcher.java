@@ -29,7 +29,7 @@ public abstract class UnifiedMatcher {
   static final int MAX_RECURSION_DEPTH = 16;
  
   @Nullable
-  public abstract MatchResult match(MatchContext context, int depth);
+  public abstract MatchResult match(MatchContext context);
 
   static MatchInput resolveInput(TypedExtensionConfig config) {
     String typeUrl = config.getTypedConfig().getTypeUrl();
@@ -111,12 +111,9 @@ public abstract class UnifiedMatcher {
     }
 
     @Override
-    public MatchResult match(MatchContext context, int depth) {
-      if (depth > MAX_RECURSION_DEPTH) {
-        return MatchResult.noMatch();
-      }
+    public MatchResult match(MatchContext context) {
       if (onNoMatch != null) {
-        return onNoMatch.evaluate(context, depth);
+        return onNoMatch.evaluate(context);
       }
       return MatchResult.noMatch();
     }

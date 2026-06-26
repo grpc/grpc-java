@@ -42,7 +42,6 @@ final class MatcherTree extends UnifiedMatcher {
     if (!proto.hasInput()) {
       throw new IllegalArgumentException("MatcherTree must have input");
     }
-    this.input = UnifiedMatcher.resolveInput(proto.getInput());
     if (proto.getInput().getTypedConfig().getTypeUrl()
         .equals(TYPE_URL_HTTP_ATTRIBUTES_CEL_INPUT)) {
       throw new IllegalArgumentException(
@@ -52,6 +51,8 @@ final class MatcherTree extends UnifiedMatcher {
     if (proto.hasCustomMatch()) {
       throw new IllegalArgumentException("MatcherTree does not support custom_match");
     }
+    
+    this.input = UnifiedMatcher.resolveInput(proto.getInput());
     
     if (proto.hasExactMatchMap()) {
       Matcher.MatcherTree.MatchMap matchMap = proto.getExactMatchMap();
@@ -80,8 +81,6 @@ final class MatcherTree extends UnifiedMatcher {
       }
       this.exactMatchMap = null;
     } else {
-      this.exactMatchMap = null;
-      this.prefixTrie = null;
       throw new IllegalArgumentException(
           "MatcherTree must have either exact_match_map or prefix_match_map");
     }
@@ -93,29 +92,26 @@ final class MatcherTree extends UnifiedMatcher {
   }
 
   @Override
-  public MatchResult match(MatchContext context, int depth) {
-    if (depth > MAX_RECURSION_DEPTH) {
-      return MatchResult.noMatch();
-    }
+  public MatchResult match(MatchContext context) {
 
     Object valueObj = input.apply(context);
     if (!(valueObj instanceof String)) {
-      return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+      return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
     }
     String value = (String) valueObj;
     if (exactMatchMap != null) {
-      return matchExact(value, context, depth);
+      return matchExact(value, context);
     } else if (prefixTrie != null) {
-      return matchPrefix(value, context, depth);
+      return matchPrefix(value, context);
     }
 
-    return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+    return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
   }
 
-  private MatchResult matchExact(String value, MatchContext context, int depth) {
+  private MatchResult matchExact(String value, MatchContext context) {
     OnMatch match = exactMatchMap.get(value);
     if (match != null) {
-      MatchResult result = match.evaluate(context, depth);
+      MatchResult result = match.evaluate(context);
 
       List<TypedExtensionConfig> accumulated = new ArrayList<>(result.keepMatchingActions);
 
@@ -123,20 +119,19 @@ final class MatcherTree extends UnifiedMatcher {
         return MatchResult.create(result.action, accumulated);
       }
 
-      if (result.matched) { // && keepMatching=true
-        if (result.action != null) {
-          accumulated.add(result.action);
-        }
-      } else {
-        if (!match.keepMatching) {
-          return MatchResult.noMatch(accumulated);
-        }
+      if (!result.matched) {
+        return MatchResult.noMatch(accumulated);
+      }
+      
+      // result.matched is true
+      if (result.action != null) {
+        accumulated.add(result.action);
       }
 
       // If keepMatching=true, OR (matched=true and keepMatching=true), then continue
       // to onNoMatch
       if (onNoMatch != null) {
-        MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+        MatchResult noMatchResult = onNoMatch.evaluate(context);
         accumulated.addAll(noMatchResult.keepMatchingActions);
         if (noMatchResult.matched) {
           return MatchResult.create(noMatchResult.action, accumulated);
@@ -144,20 +139,21 @@ final class MatcherTree extends UnifiedMatcher {
       }
       return MatchResult.noMatch(accumulated);
     }
-    return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+    return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
   }
 
-  private MatchResult matchPrefix(String value, MatchContext context, int depth) {
+  private MatchResult matchPrefix(String value, MatchContext context) {
     List<OnMatch> matchingPrefixes = prefixTrie.matchPrefixes(value);
 
     if (matchingPrefixes.isEmpty()) {
-      return onNoMatch != null ? onNoMatch.evaluate(context, depth) : MatchResult.noMatch();
+      return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
     }
 
     List<TypedExtensionConfig> accumulatedActions = new ArrayList<>();
 
+    boolean anySuccessfulMatch = false;
     for (OnMatch onMatch : matchingPrefixes) {
-      MatchResult result = onMatch.evaluate(context, depth);
+      MatchResult result = onMatch.evaluate(context);
       accumulatedActions.addAll(result.keepMatchingActions);
 
       if (result.matched && !onMatch.keepMatching) {
@@ -165,22 +161,19 @@ final class MatcherTree extends UnifiedMatcher {
       }
 
       if (result.matched) { // AND keepMatching=true
+        anySuccessfulMatch = true;
         if (result.action != null) {
           accumulatedActions.add(result.action);
-        }
-      } else {
-        if (!onMatch.keepMatching) {
-          return MatchResult.noMatch(accumulatedActions);
         }
       }
 
       // If keepMatching=true, we continue regardless of inner match result.
     }
 
-    // If we fall through, we either found no matches or all matches had
-    // keepMatching=true.
-    if (onNoMatch != null) {
-      MatchResult noMatchResult = onNoMatch.evaluate(context, depth);
+    // If we fall through, we only evaluate onNoMatch if there was at least one successful match
+    // with keepMatching=true. If no prefixes matched successfully, we return noMatch.
+    if (anySuccessfulMatch && onNoMatch != null) {
+      MatchResult noMatchResult = onNoMatch.evaluate(context);
       accumulatedActions.addAll(noMatchResult.keepMatchingActions);
       if (noMatchResult.matched) {
         return MatchResult.create(noMatchResult.action, accumulatedActions);

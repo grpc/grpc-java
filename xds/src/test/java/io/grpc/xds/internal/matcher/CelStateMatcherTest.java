@@ -109,7 +109,7 @@ public class CelStateMatcherTest {
         .setMetadata(new Metadata())
         .setId("123")
         .build();
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     TypedExtensionConfig action = result.action;
     assertThat(action.getName()).isEqualTo("action1");
@@ -119,7 +119,7 @@ public class CelStateMatcherTest {
         .setMetadata(new Metadata())
         .setId("123")
         .build();
-    result = matcher.match(context, 0);
+    result = matcher.match(context);
     TypedExtensionConfig noMatchAction = result.action;
     assertThat(noMatchAction.getName()).isEqualTo("no-match");
   }
@@ -166,7 +166,7 @@ public class CelStateMatcherTest {
         .setId("1")
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action.getName()).isEqualTo("no-match");
   }
@@ -215,7 +215,7 @@ public class CelStateMatcherTest {
         .setId("123")
         .build();
 
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     TypedExtensionConfig action = result.action;
     assertThat(action.getName()).isEqualTo("matched");
   }
@@ -247,7 +247,7 @@ public class CelStateMatcherTest {
         .setId("123")
         .build();
     
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.action.getName()).isEqualTo("matched");
   }
@@ -282,7 +282,7 @@ public class CelStateMatcherTest {
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(new Metadata())
         .build();
-    MatchResult result = matcher.match(context, 0);
+    MatchResult result = matcher.match(context);
 
     assertThat(result.matched).isTrue();
     assertThat(result.action).isNotNull();

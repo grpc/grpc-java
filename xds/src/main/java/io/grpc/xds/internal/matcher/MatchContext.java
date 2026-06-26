@@ -18,22 +18,17 @@ package io.grpc.xds.internal.matcher;
 
 import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
-import javax.annotation.Nullable;
 
 public final class MatchContext {
   private final Metadata metadata;
-  @Nullable 
   private final String path;
-  @Nullable 
   private final String host;
-  @Nullable 
   private final String method;
-  @Nullable 
   private final String id;
 
-  public MatchContext(Metadata metadata, @Nullable String path,
-      @Nullable String host, @Nullable String method,
-      @Nullable String id) {
+  public MatchContext(Metadata metadata, String path,
+      String host, String method,
+      String id) {
     this.metadata = Preconditions.checkNotNull(metadata, "metadata");
     this.path = path;
     this.host = host;
@@ -45,22 +40,18 @@ public final class MatchContext {
     return metadata;
   }
   
-  @Nullable
   public String getPath() {
     return path;
   }
   
-  @Nullable
   public String getHost() {
     return host;
   }
   
-  @Nullable
   public String getMethod() {
     return method;
   }
   
-  @Nullable
   public String getId() {
     return id;
   }
