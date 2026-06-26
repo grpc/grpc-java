@@ -739,10 +739,6 @@ final class XdsNameResolver extends NameResolver {
       Set<String> filtersToShutdown = new HashSet<>(activeFilters.keySet());
       for (NamedFilterConfig namedFilter : filterConfigs) {
         String typeUrl = namedFilter.filterConfig.typeUrl();
-        if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)
-            && !GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-          continue;
-        }
         String filterKey = namedFilter.filterStateKey();
 
         Filter.Provider provider = filterRegistry.get(typeUrl);
@@ -893,12 +889,6 @@ final class XdsNameResolver extends NameResolver {
 
       ImmutableList.Builder<ClientInterceptor> filterInterceptors = ImmutableList.builder();
       for (NamedFilterConfig namedFilter : filterConfigs) {
-        String typeUrl = namedFilter.filterConfig.typeUrl();
-        if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)) {
-          if (!GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
-            continue;
-          }
-        }
         String name = namedFilter.name;
         FilterConfig config = namedFilter.filterConfig;
         FilterConfig overrideConfig = selectedOverrideConfigs.get(name);

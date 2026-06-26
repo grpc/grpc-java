@@ -32,6 +32,7 @@ import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.HeaderForwardingRules;
 import io.envoyproxy.envoy.extensions.filters.http.ext_proc.v3.ProcessingMode;
 import io.grpc.ClientInterceptor;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Filter.FilterConfigParseContext;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.MatcherParser;
@@ -82,7 +83,7 @@ public class ExternalProcessorFilter implements Filter {
 
     @Override
     public boolean isClientFilter() {
-      return true;
+      return GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false);
     }
 
     @Override

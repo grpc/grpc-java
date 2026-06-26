@@ -71,26 +71,14 @@ public class HeaderValueValidationUtilsTest {
     assertThat(HeaderValueValidationUtils.isDisallowed(header)).isFalse();
   }
 
-  @Test
-  public void isDisallowed_headerValue_invalid() {
-    HeaderValue header = HeaderValue.createInvalid("content-type");
-    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
-  }
-
-  @Test
+  @Test(expected = IllegalArgumentException.class)
   public void isDisallowed_headerValue_invalidAsciiString() {
-    // 0x0A (newline) is not allowed in ASCII header values (only 0x09 tab and 0x20-0x7E are
-    // allowed)
-    HeaderValue header = HeaderValue.create("content-type", "application/grpc\n");
-    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
+    HeaderValue.create("content-type", "application/grpc\n");
   }
 
-  @Test
+  @Test(expected = IllegalArgumentException.class)
   public void isDisallowed_headerValue_invalidAsciiRaw() {
-    // 0x7F (DEL) is not allowed in ASCII header values
-    HeaderValue header = HeaderValue.create(
-        "content-type", ByteString.copyFrom(new byte[]{0x61, 0x7F}));
-    assertThat(HeaderValueValidationUtils.isDisallowed(header)).isTrue();
+    HeaderValue.create("content-type", ByteString.copyFrom(new byte[]{0x61, 0x7F}));
   }
 
   @Test

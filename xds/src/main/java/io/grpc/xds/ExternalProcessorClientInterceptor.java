@@ -623,36 +623,40 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       for (io.envoyproxy.envoy.config.core.v3.HeaderValueOption protoOption
           : mutation.getSetHeadersList()) {
         io.envoyproxy.envoy.config.core.v3.HeaderValue protoHeader = protoOption.getHeader();
-        HeaderValue headerValue;
-        
+        String key = protoHeader.getKey();
+        HeaderValueValidationUtils.validateHeaderKey(key);
+
         ByteString rawBytes = protoHeader.getRawValue();
         if (rawBytes.isEmpty()) {
           rawBytes = ByteString.copyFromUtf8(protoHeader.getValue());
         }
 
         if (rawBytes.size() > HeaderValueValidationUtils.MAX_HEADER_LENGTH) {
-          headerValue = HeaderValue.createInvalid(protoHeader.getKey());
-        } else if (protoHeader.getKey().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          try {
-            byte[] decodedBytes = BaseEncoding.base64().decode(rawBytes.toStringUtf8());
-            headerValue = HeaderValue.create(
-                protoHeader.getKey(), ByteString.copyFrom(decodedBytes));
-          } catch (IllegalArgumentException e) {
-            // Mark as invalid so HeaderMutationFilter can either silently ignore it or
-            // throw an exception based on the disallow_is_error configuration.
-            headerValue = HeaderValue.createInvalid(protoHeader.getKey());
-          }
+          throw new IllegalArgumentException(
+              "Header value length exceeds maximum allowed length: " + rawBytes.size());
+        }
+
+        HeaderValue headerValue;
+        if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          byte[] decodedBytes = BaseEncoding.base64().decode(rawBytes.toStringUtf8());
+          headerValue = HeaderValue.create(key, ByteString.copyFrom(decodedBytes));
         } else {
-          headerValue = HeaderValue.create(protoHeader.getKey(), rawBytes.toStringUtf8());
+          headerValue = HeaderValue.create(key, rawBytes.toStringUtf8());
         }
         headersToModify.add(HeaderValueOption.create(
             headerValue,
             HeaderValueOption.HeaderAppendAction.valueOf(protoOption.getAppendAction().name())));
       }
 
+      ImmutableList.Builder<String> headersToRemove = ImmutableList.builder();
+      for (String headerToRemove : mutation.getRemoveHeadersList()) {
+        HeaderValueValidationUtils.validateHeaderKey(headerToRemove);
+        headersToRemove.add(headerToRemove);
+      }
+
       HeaderMutations mutations = HeaderMutations.create(
           headersToModify.build(),
-          ImmutableList.copyOf(mutation.getRemoveHeadersList()));
+          headersToRemove.build());
 
       HeaderMutations filteredMutations = mutationFilter.filter(mutations);
       mutator.applyMutations(filteredMutations, metadata);

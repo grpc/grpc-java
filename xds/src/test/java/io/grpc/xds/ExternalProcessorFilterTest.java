@@ -150,6 +150,7 @@ public class ExternalProcessorFilterTest {
       FilterRegistry.reset();
       FilterRegistry registry = FilterRegistry.getDefaultRegistry();
       assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL).isClientFilter()).isTrue();
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
     }
@@ -159,7 +160,8 @@ public class ExternalProcessorFilterTest {
     try {
       FilterRegistry.reset();
       FilterRegistry registry = FilterRegistry.getDefaultRegistry();
-      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNull();
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL)).isNotNull();
+      assertThat(registry.get(ExternalProcessorFilter.TYPE_URL).isClientFilter()).isFalse();
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT");
     }

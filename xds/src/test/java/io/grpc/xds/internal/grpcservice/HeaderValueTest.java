@@ -33,7 +33,6 @@ public class HeaderValueTest {
     assertThat(headerValue.value().isPresent()).isTrue();
     assertThat(headerValue.value().get()).isEqualTo("value1");
     assertThat(headerValue.rawValue().isPresent()).isFalse();
-    assertThat(headerValue.isValid()).isTrue();
   }
 
   @Test
@@ -44,16 +43,17 @@ public class HeaderValueTest {
     assertThat(headerValue.rawValue().isPresent()).isTrue();
     assertThat(headerValue.rawValue().get()).isEqualTo(rawValue);
     assertThat(headerValue.value().isPresent()).isFalse();
-    assertThat(headerValue.isValid()).isTrue();
   }
 
-  @Test
-  public void createInvalid_success() {
-    HeaderValue headerValue = HeaderValue.createInvalid("key3");
-    assertThat(headerValue.key()).isEqualTo("key3");
-    assertThat(headerValue.value().isPresent()).isFalse();
-    assertThat(headerValue.rawValue().isPresent()).isFalse();
-    assertThat(headerValue.isValid()).isFalse();
+  @Test(expected = IllegalArgumentException.class)
+  public void create_emptyKey_throws() {
+    HeaderValue.create("", "value");
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void create_tooLongValue_throws() {
+    String longVal = new String(new char[16385]).replace('\0', 'v');
+    HeaderValue.create("key", longVal);
   }
 
 

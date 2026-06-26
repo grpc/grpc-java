@@ -13963,7 +13963,7 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void deserialization_binaryHeader_invalidBase64_ignored() throws Exception {
+  public void deserialization_binaryHeader_invalidBase64_noError_fails() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
     ExternalProcessor proto = ExternalProcessor.newBuilder()
@@ -14038,31 +14038,6 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
-    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
-    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
-        .fallbackHandlerRegistry(uniqueRegistry)
-        .directExecutor()
-        .build().start());
-    uniqueRegistry.addService(ServerInterceptors.intercept(
-        ServerServiceDefinition.builder("test.TestService")
-            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-                (request, responseObserver) -> {
-                  responseObserver.onNext("Hello " + request);
-                  responseObserver.onCompleted();
-                }))
-            .build(),
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            capturedHeaders.set(headers);
-            dataPlaneLatch.countDown();
-            return next.startCall(call, headers);
-          }
-        }));
-
     ManagedChannel dataPlaneChannel =
         grpcCleanup.register(
             InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
@@ -14070,17 +14045,21 @@ public class ExternalProcessorClientInterceptorTest {
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    Metadata headersApplied = capturedHeaders.get();
-    // It should NOT have set "custom-bin" since it was invalid base64 and silently ignored
-    assertThat(
-        headersApplied.containsKey(
-            Metadata.Key.of("custom-bin", Metadata.BINARY_BYTE_MARSHALLER)))
-        .isFalse();
+    final AtomicReference<Status> capturedStatus = new AtomicReference<>();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        capturedStatus.set(status);
+        callClosedLatch.countDown();
+      }
+    }, new Metadata());
 
-    proxyCall.cancel("Cleanup", null);
+    assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
+
     channelManager.close();
   }
 
@@ -14089,7 +14068,6 @@ public class ExternalProcessorClientInterceptorTest {
   public void deserialization_binaryHeader_invalidBase64_failsCall() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    // Enable disallowIsError = true in mutation rules
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
@@ -14186,18 +14164,15 @@ public class ExternalProcessorClientInterceptorTest {
     }, new Metadata());
 
     assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    // The call should fail since disallowIsError is true
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(capturedStatus.get().getCause())
-        .isInstanceOf(
-            io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException.class);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
 
     channelManager.close();
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  public void deserialization_asciiHeader_invalidCharacters_ignored() throws Exception {
+  public void deserialization_asciiHeader_invalidChars_noError_fails() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
     ExternalProcessor proto = ExternalProcessor.newBuilder()
@@ -14273,31 +14248,6 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
-    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
-    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
-        .fallbackHandlerRegistry(uniqueRegistry)
-        .directExecutor()
-        .build().start());
-    uniqueRegistry.addService(ServerInterceptors.intercept(
-        ServerServiceDefinition.builder("test.TestService")
-            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-                (request, responseObserver) -> {
-                  responseObserver.onNext("Hello " + request);
-                  responseObserver.onCompleted();
-                }))
-            .build(),
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            capturedHeaders.set(headers);
-            dataPlaneLatch.countDown();
-            return next.startCall(call, headers);
-          }
-        }));
-
     ManagedChannel dataPlaneChannel =
         grpcCleanup.register(
             InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
@@ -14305,18 +14255,21 @@ public class ExternalProcessorClientInterceptorTest {
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    Metadata headersApplied = capturedHeaders.get();
-    // It should NOT have set "custom-ascii" since it contained an invalid character and is
-    // silently ignored
-    assertThat(
-        headersApplied.containsKey(
-            Metadata.Key.of("custom-ascii", Metadata.ASCII_STRING_MARSHALLER)))
-        .isFalse();
+    final AtomicReference<Status> capturedStatus = new AtomicReference<>();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        capturedStatus.set(status);
+        callClosedLatch.countDown();
+      }
+    }, new Metadata());
 
-    proxyCall.cancel("Cleanup", null);
+    assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
+
     channelManager.close();
   }
 
@@ -14325,7 +14278,6 @@ public class ExternalProcessorClientInterceptorTest {
   public void deserialization_asciiHeader_invalidCharacters_failsCall() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
-    // Enable disallowIsError = true in mutation rules
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
             .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
@@ -14423,18 +14375,15 @@ public class ExternalProcessorClientInterceptorTest {
     }, new Metadata());
 
     assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    // The call should fail since disallowIsError is true
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(capturedStatus.get().getCause())
-        .isInstanceOf(
-            io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException.class);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
 
     channelManager.close();
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  public void deserialization_headerValue_tooLong_ignored() throws Exception {
+  public void deserialization_headerValue_tooLong_noError_fails() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
     ExternalProcessor proto = ExternalProcessor.newBuilder()
@@ -14454,7 +14403,6 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig =
         provider.parseFilterConfig(Any.pack(proto), filterContext).config;
 
-    // Create a value that is 16385 characters long (exceeding 16384 limit)
     String longValue = new String(new char[16385]).replace('\0', 'v');
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -14511,31 +14459,6 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final AtomicReference<Metadata> capturedHeaders = new AtomicReference<>();
-    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    MutableHandlerRegistry uniqueRegistry = new MutableHandlerRegistry();
-    grpcCleanup.register(InProcessServerBuilder.forName(uniqueDataPlaneServerName)
-        .fallbackHandlerRegistry(uniqueRegistry)
-        .directExecutor()
-        .build().start());
-    uniqueRegistry.addService(ServerInterceptors.intercept(
-        ServerServiceDefinition.builder("test.TestService")
-            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-                (request, responseObserver) -> {
-                  responseObserver.onNext("Hello " + request);
-                  responseObserver.onCompleted();
-                }))
-            .build(),
-        new ServerInterceptor() {
-          @Override
-          public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-              ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-            capturedHeaders.set(headers);
-            dataPlaneLatch.countDown();
-            return next.startCall(call, headers);
-          }
-        }));
-
     ManagedChannel dataPlaneChannel =
         grpcCleanup.register(
             InProcessChannelBuilder.forName(uniqueDataPlaneServerName).directExecutor().build());
@@ -14543,18 +14466,21 @@ public class ExternalProcessorClientInterceptorTest {
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    Metadata headersApplied = capturedHeaders.get();
-    // It should NOT have set "custom-ascii" since its wire length exceeded 16384 and is
-    // silently ignored
-    assertThat(
-        headersApplied.containsKey(
-            Metadata.Key.of("custom-ascii", Metadata.ASCII_STRING_MARSHALLER)))
-        .isFalse();
+    final AtomicReference<Status> capturedStatus = new AtomicReference<>();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        capturedStatus.set(status);
+        callClosedLatch.countDown();
+      }
+    }, new Metadata());
 
-    proxyCall.cancel("Cleanup", null);
+    assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
+
     channelManager.close();
   }
 
@@ -14580,7 +14506,7 @@ public class ExternalProcessorClientInterceptorTest {
         .setMutationRules(
             io.envoyproxy.envoy.config.common.mutation_rules.v3.HeaderMutationRules
                 .newBuilder()
-                .setDisallowIsError(com.google.protobuf.BoolValue.of(true))
+                .setDisallowIsError(com.google.protobuf.BoolValue.of(false))
                 .build())
         .build();
     ExternalProcessorFilterConfig filterConfig =
@@ -14662,11 +14588,9 @@ public class ExternalProcessorClientInterceptorTest {
     }, new Metadata());
 
     assertThat(callClosedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    // The call should fail since disallowIsError is true
+    // The call should fail unconditionally due to IllegalArgumentException
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
-    assertThat(capturedStatus.get().getCause())
-        .isInstanceOf(
-            io.grpc.xds.internal.headermutations.HeaderMutationDisallowedException.class);
+    assertThat(capturedStatus.get().getCause()).isInstanceOf(IllegalArgumentException.class);
 
     channelManager.close();
   }

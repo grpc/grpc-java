@@ -197,6 +197,24 @@ public class GrpcServiceConfigParserTest {
   }
 
   @Test
+  public void parse_invalidInitialMetadataValue() {
+    Any insecureCreds = Any.pack(InsecureCredentials.getDefaultInstance());
+    GrpcService.GoogleGrpc googleGrpc = GrpcService.GoogleGrpc.newBuilder().setTargetUri("test_uri")
+        .addChannelCredentialsPlugin(insecureCreds).build();
+    io.envoyproxy.envoy.config.core.v3.HeaderValue invalidHeader =
+        io.envoyproxy.envoy.config.core.v3.HeaderValue.newBuilder()
+            .setKey("custom-header").setValue("invalid_value\n").build();
+    GrpcService grpcService = GrpcService.newBuilder().setGoogleGrpc(googleGrpc)
+        .addInitialMetadata(invalidHeader).build();
+
+    GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,
+        () -> parse(grpcService, dummyBootstrapInfo(), dummyServerInfo()));
+    assertThat(exception).hasMessageThat()
+        .contains("Invalid initial metadata header: custom-header");
+    assertThat(exception).hasCauseThat().isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   public void parse_missingGoogleGrpc() {
     GrpcService grpcService = GrpcService.newBuilder().build();
     GrpcServiceParseException exception = assertThrows(GrpcServiceParseException.class,

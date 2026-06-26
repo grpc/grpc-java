@@ -28,7 +28,47 @@ public final class HeaderValueValidationUtils {
   private HeaderValueValidationUtils() {}
 
   /**
-   * Returns true if the header key is disallowed for mutations or validation.
+   * Validates that the header key is non-empty and within allowed length.
+   * Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderKey(String key) {
+    if (key == null || key.isEmpty() || key.length() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Invalid header key: " + key);
+    }
+  }
+
+  /**
+   * Validates that the header value is within allowed length and contains valid ASCII characters.
+   * Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderValue(String key, String value) {
+    validateHeaderKey(key);
+    if (value == null || value.length() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Header value length exceeds maximum allowed length");
+    }
+    if (!key.endsWith("-bin") && !isValidAsciiHeaderValue(value)) {
+      throw new IllegalArgumentException(
+          "Invalid ASCII characters in header value for key: " + key);
+    }
+  }
+
+  /**
+   * Validates that the raw header value is within allowed length and contains valid ASCII
+   * characters. Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderValue(String key, ByteString rawValue) {
+    validateHeaderKey(key);
+    if (rawValue == null || rawValue.size() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Header value length exceeds maximum allowed length");
+    }
+    if (!key.endsWith("-bin") && !isValidAsciiHeaderValue(rawValue.toStringUtf8())) {
+      throw new IllegalArgumentException(
+          "Invalid ASCII characters in header value for key: " + key);
+    }
+  }
+
+  /**
+   * Returns true if the header key is disallowed for mutations.
    *
    * @param key The header key (e.g., "content-type")
    */
@@ -49,30 +89,12 @@ public final class HeaderValueValidationUtils {
   }
 
   /**
-   * Returns true if the header value is disallowed.
+   * Returns true if the header is disallowed for mutations.
    *
-   * @param header The HeaderValue containing key and values
+   * @param header The HeaderValue
    */
   public static boolean isDisallowed(HeaderValue header) {
-    if (!header.isValid()) {
-      return true;
-    }
-    if (isDisallowed(header.key())) {
-      return true;
-    }
-    if (header.value().isPresent()) {
-      String val = header.value().get();
-      if (!header.key().endsWith("-bin") && !isValidAsciiHeaderValue(val)) {
-        return true;
-      }
-    }
-    if (header.rawValue().isPresent()) {
-      ByteString rawVal = header.rawValue().get();
-      if (!header.key().endsWith("-bin") && !isValidAsciiHeaderValue(rawVal.toStringUtf8())) {
-        return true;
-      }
-    }
-    return false;
+    return isDisallowed(header.key());
   }
 
   /**
