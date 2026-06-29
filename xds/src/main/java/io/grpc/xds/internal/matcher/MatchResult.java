@@ -22,52 +22,45 @@ import com.github.xds.core.v3.TypedExtensionConfig;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import javax.annotation.Nullable;
 
 /**
  * Result of a matching operation.
  */
 public final class MatchResult {
-  @Nullable
-  public final TypedExtensionConfig action;
-  public final List<TypedExtensionConfig> keepMatchingActions;
+  public final List<TypedExtensionConfig> actions;
   public final boolean matched;
 
   private MatchResult(
-      @Nullable TypedExtensionConfig action,
-      List<TypedExtensionConfig> keepMatchingActions,
+      List<TypedExtensionConfig> actions,
       boolean matched) {
-    this.action = action;
-    this.keepMatchingActions =
+    this.actions =
         Collections.unmodifiableList(
-            new ArrayList<>(checkNotNull(keepMatchingActions, "keepMatchingActions")));
+            new ArrayList<>(checkNotNull(actions, "actions")));
     this.matched = matched;
   }
 
   /**
    * Creates a result indicating a successful match with a terminal action.
    */
-  public static MatchResult create(
-      @Nullable TypedExtensionConfig action,
-      List<TypedExtensionConfig> keepMatchingActions) {
-    return new MatchResult(action, keepMatchingActions, true);
+  public static MatchResult create(List<TypedExtensionConfig> actions) {
+    return new MatchResult(actions, true);
   }
 
   /**
    * Creates a result indicating a match with a terminal action and no accumulated actions.
    */
   public static MatchResult create(TypedExtensionConfig action) {
-    return new MatchResult(action, Collections.emptyList(), true);
+    return new MatchResult(Collections.singletonList(action), true);
   }
 
   /**
    * Creates a result indicating no terminal match, but potentially with accumulated actions.
    */
-  public static MatchResult noMatch(List<TypedExtensionConfig> keepMatchingActions) {
-    return new MatchResult(null, keepMatchingActions, false);
+  public static MatchResult noMatch(List<TypedExtensionConfig> actions) {
+    return new MatchResult(actions, false);
   }
   
   public static MatchResult noMatch() {
-    return new MatchResult(null, Collections.emptyList(), false);
+    return new MatchResult(Collections.emptyList(), false);
   }
 }

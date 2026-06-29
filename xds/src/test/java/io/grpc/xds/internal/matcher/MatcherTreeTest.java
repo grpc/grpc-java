@@ -99,9 +99,8 @@ public class MatcherTreeTest {
     
     MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue(); // onNoMatch matched
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("fallback");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("fallback");
   }
 
   @Test
@@ -128,9 +127,8 @@ public class MatcherTreeTest {
 
     MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("fallback");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("fallback");
   }
 
   @Test
@@ -171,9 +169,9 @@ public class MatcherTreeTest {
     MatchResult result = tree.match(context);
     
     assertThat(result.matched).isFalse();
-    assertThat(result.action).isNull();
-    if (!result.keepMatchingActions.isEmpty()) {
-      assertThat(result.keepMatchingActions.get(0).getName()).isNotEqualTo("should-not-be-called");
+    assertThat(result.actions).isEmpty();
+    if (!result.actions.isEmpty()) {
+      assertThat(result.actions.get(0).getName()).isNotEqualTo("should-not-be-called");
     }
   }
 
@@ -237,7 +235,7 @@ public class MatcherTreeTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action.getName()).isEqualTo("matched_foo");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("matched_foo");
   }
 
   @Test
@@ -267,7 +265,7 @@ public class MatcherTreeTest {
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // Longest prefix wins
-    assertThat(result.action.getName()).isEqualTo("apiv1");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("apiv1");
   }
 
   @Test
@@ -295,7 +293,7 @@ public class MatcherTreeTest {
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // Empty prefix matches anything
-    assertThat(result.action.getName()).isEqualTo("empty_prefix");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("empty_prefix");
   }
 
   @Test
@@ -327,16 +325,9 @@ public class MatcherTreeTest {
         .build();
 
     MatchResult result = matcher.match(context);
-    assertThat(result.matched).isTrue();
-    // Correct behavior per gRFC A106: onNoMatch is ONLY for when no match is found.
-    // If we only find keepMatching actions, and onNoMatch matches, we get onNoMatch action.
-    
-    result = matcher.match(context);
-    assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("A2");
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+    assertThat(result.matched).isFalse();
+    assertThat(result.actions).hasSize(1);
+    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
   }
 
   @Test
@@ -376,12 +367,10 @@ public class MatcherTreeTest {
     // 1. /abc matches -> A1. keep=true.
     // 2. /ab matches  -> A2. keep=true.
     // 3. /a matches   -> A3. keep=false -> STOP.
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("A3");
-    
-    assertThat(result.keepMatchingActions).hasSize(2);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
-    assertThat(result.keepMatchingActions.get(1).getName()).isEqualTo("A2");
+    assertThat(result.actions).hasSize(3);
+    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
+    assertThat(result.actions.get(1).getName()).isEqualTo("A2");
+    assertThat(result.actions.get(2).getName()).isEqualTo("A3");
   }
 
   @Test
@@ -408,9 +397,8 @@ public class MatcherTreeTest {
     MatchResult result = matcher.match(context);
 
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("longer_prefix");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("longer_prefix");
   }
 
   @Test
@@ -457,9 +445,8 @@ public class MatcherTreeTest {
 
     MatchResult result = tree.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("actionB");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("actionB");
   }
 
   @Test
@@ -486,13 +473,9 @@ public class MatcherTreeTest {
         .build();
 
     MatchResult result = matcher.match(context);
-    assertThat(result.matched).isTrue();
-    // exact match matched (A1), keepMatching=true -> continue to onNoMatch (A2)
-    // onNoMatch matched -> A2 is the terminal action
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("A2");
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+    assertThat(result.matched).isFalse();
+    assertThat(result.actions).hasSize(1);
+    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
   }
 
   @Test
@@ -533,8 +516,7 @@ public class MatcherTreeTest {
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
     // nested matcher failed, so it should abort unconditionally, keepMatching=true is ignored.
-    assertThat(result.action).isNull();
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isEmpty();
   }
 
   @Test
@@ -562,10 +544,8 @@ public class MatcherTreeTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
-    assertThat(result.action).isNull();
-    
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("A1");
+    assertThat(result.actions).hasSize(1);
+    assertThat(result.actions.get(0).getName()).isEqualTo("A1");
   }
 
   private Metadata metadataWith(String key, String value) {

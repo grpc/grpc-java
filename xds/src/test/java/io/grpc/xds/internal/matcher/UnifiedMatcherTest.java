@@ -66,7 +66,7 @@ public class UnifiedMatcherTest {
     
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action.getName()).isEqualTo("action2");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("action2");
   }
 
   @Test
@@ -93,8 +93,7 @@ public class UnifiedMatcherTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
-    assertThat(result.action).isNull();
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isEmpty();
   }
 
   @Test
@@ -280,9 +279,9 @@ public class UnifiedMatcherTest {
     MatchResult result = matcher.match(MatchContext.newBuilder().build());
     
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("no-match-action");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName())
+        .isEqualTo("no-match-action");
   }
 
   @Test
@@ -410,10 +409,9 @@ public class UnifiedMatcherTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("action2");
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions).hasSize(2);
+    assertThat(result.actions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions.get(1).getName()).isEqualTo("action2");
   }
 
   @Test
@@ -440,10 +438,9 @@ public class UnifiedMatcherTest {
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     // onNoMatch IS executed because m1 had keepMatching=true and we reached end of list
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("no-match");
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions).hasSize(2);
+    assertThat(result.actions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions.get(1).getName()).isEqualTo("no-match");
   }
 
   @Test
@@ -469,9 +466,8 @@ public class UnifiedMatcherTest {
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("action2");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("action2");
   }
 
   @Test
@@ -501,10 +497,9 @@ public class UnifiedMatcherTest {
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("action2");
-    assertThat(result.keepMatchingActions).hasSize(1);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions).hasSize(2);
+    assertThat(result.actions.get(0).getName()).isEqualTo("action1");
+    assertThat(result.actions.get(1).getName()).isEqualTo("action2");
   }
 
   @Test
@@ -536,9 +531,8 @@ public class UnifiedMatcherTest {
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("action2");
-    assertThat(result.keepMatchingActions).isEmpty();
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("action2");
   }
   
 
@@ -578,12 +572,10 @@ public class UnifiedMatcherTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("a3");
-    
-    assertThat(result.keepMatchingActions).hasSize(2);
-    assertThat(result.keepMatchingActions.get(0).getName()).isEqualTo("a1");
-    assertThat(result.keepMatchingActions.get(1).getName()).isEqualTo("a2");
+    assertThat(result.actions).hasSize(3);
+    assertThat(result.actions.get(0).getName()).isEqualTo("a1");
+    assertThat(result.actions.get(1).getName()).isEqualTo("a2");
+    assertThat(result.actions.get(2).getName()).isEqualTo("a3");
   }
 
   private static Matcher.MatcherList.Predicate createHeaderMatchPredicate(

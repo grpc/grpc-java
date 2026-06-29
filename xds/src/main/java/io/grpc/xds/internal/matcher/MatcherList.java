@@ -50,15 +50,11 @@ final class MatcherList extends UnifiedMatcher {
     for (FieldMatcher matcher : matchers) {
       if (matcher.matches(context)) {
         MatchResult result = matcher.onMatch.evaluate(context);
-        accumulated.addAll(result.keepMatchingActions);
+        accumulated.addAll(result.actions);
         
         if (result.matched) {
-          if (matcher.onMatch.keepMatching) {
-            if (result.action != null) {
-              accumulated.add(result.action);
-            }
-          } else {
-            return MatchResult.create(result.action, accumulated);
+          if (!matcher.onMatch.keepMatching) {
+            return MatchResult.create(accumulated);
           }
         }
       }
@@ -66,9 +62,9 @@ final class MatcherList extends UnifiedMatcher {
     
     if (onNoMatch != null) {
       MatchResult noMatchResult = onNoMatch.evaluate(context);
-      accumulated.addAll(noMatchResult.keepMatchingActions);
+      accumulated.addAll(noMatchResult.actions);
       if (noMatchResult.matched) {
-        return MatchResult.create(noMatchResult.action, accumulated);
+        return MatchResult.create(accumulated);
       }
     }
     return MatchResult.noMatch(accumulated);

@@ -17,7 +17,6 @@
 package io.grpc.xds.internal.matcher;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
-import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -34,20 +33,10 @@ public final class MatcherRunner {
   public static List<TypedExtensionConfig> checkMatch(
       UnifiedMatcher matcher, MatchContext context) {
     MatchResult result = matcher.match(context);
-    if (!result.matched) {
+    if (!result.matched || result.actions.isEmpty()) {
       return null;
     }
-    
-    List<TypedExtensionConfig> allActions = 
-        new ArrayList<>(result.keepMatchingActions);
-    if (result.action != null) {
-      allActions.add(result.action);
-    }
-    
-    if (allActions.isEmpty()) {
-      return null;
-    }
-    return allActions;
+    return result.actions;
   }
 
 }

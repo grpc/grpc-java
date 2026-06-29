@@ -113,30 +113,12 @@ final class MatcherTree extends UnifiedMatcher {
     if (match != null) {
       MatchResult result = match.evaluate(context);
 
-      List<TypedExtensionConfig> accumulated = new ArrayList<>(result.keepMatchingActions);
+      List<TypedExtensionConfig> accumulated = new ArrayList<>(result.actions);
 
       if (result.matched && !match.keepMatching) {
-        return MatchResult.create(result.action, accumulated);
+        return MatchResult.create(accumulated);
       }
 
-      if (!result.matched) {
-        return MatchResult.noMatch(accumulated);
-      }
-      
-      // result.matched is true
-      if (result.action != null) {
-        accumulated.add(result.action);
-      }
-
-      // If keepMatching=true, OR (matched=true and keepMatching=true), then continue
-      // to onNoMatch
-      if (onNoMatch != null) {
-        MatchResult noMatchResult = onNoMatch.evaluate(context);
-        accumulated.addAll(noMatchResult.keepMatchingActions);
-        if (noMatchResult.matched) {
-          return MatchResult.create(noMatchResult.action, accumulated);
-        }
-      }
       return MatchResult.noMatch(accumulated);
     }
     return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
@@ -151,34 +133,15 @@ final class MatcherTree extends UnifiedMatcher {
 
     List<TypedExtensionConfig> accumulatedActions = new ArrayList<>();
 
-    boolean anySuccessfulMatch = false;
     for (OnMatch onMatch : matchingPrefixes) {
       MatchResult result = onMatch.evaluate(context);
-      accumulatedActions.addAll(result.keepMatchingActions);
+      accumulatedActions.addAll(result.actions);
 
       if (result.matched && !onMatch.keepMatching) {
-        return MatchResult.create(result.action, accumulatedActions);
-      }
-
-      if (result.matched) { // AND keepMatching=true
-        anySuccessfulMatch = true;
-        if (result.action != null) {
-          accumulatedActions.add(result.action);
-        }
-      }
-
-      // If keepMatching=true, we continue regardless of inner match result.
-    }
-
-    // If we fall through, we only evaluate onNoMatch if there was at least one successful match
-    // with keepMatching=true. If no prefixes matched successfully, we return noMatch.
-    if (anySuccessfulMatch && onNoMatch != null) {
-      MatchResult noMatchResult = onNoMatch.evaluate(context);
-      accumulatedActions.addAll(noMatchResult.keepMatchingActions);
-      if (noMatchResult.matched) {
-        return MatchResult.create(noMatchResult.action, accumulatedActions);
+        return MatchResult.create(accumulatedActions);
       }
     }
+
     return MatchResult.noMatch(accumulatedActions);
   }
 

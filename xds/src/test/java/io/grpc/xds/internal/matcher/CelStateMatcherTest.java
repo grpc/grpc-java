@@ -111,7 +111,7 @@ public class CelStateMatcherTest {
         .build();
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    TypedExtensionConfig action = result.action;
+    TypedExtensionConfig action = result.actions.get(result.actions.size() - 1);
     assertThat(action.getName()).isEqualTo("action1");
     
     context = MatchContext.newBuilder()
@@ -120,7 +120,7 @@ public class CelStateMatcherTest {
         .setId("123")
         .build();
     result = matcher.match(context);
-    TypedExtensionConfig noMatchAction = result.action;
+    TypedExtensionConfig noMatchAction = result.actions.get(result.actions.size() - 1);
     assertThat(noMatchAction.getName()).isEqualTo("no-match");
   }
 
@@ -168,7 +168,7 @@ public class CelStateMatcherTest {
 
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action.getName()).isEqualTo("no-match");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("no-match");
   }
 
   @Test
@@ -216,7 +216,7 @@ public class CelStateMatcherTest {
         .build();
 
     MatchResult result = matcher.match(context);
-    TypedExtensionConfig action = result.action;
+    TypedExtensionConfig action = result.actions.get(result.actions.size() - 1);
     assertThat(action.getName()).isEqualTo("matched");
   }
 
@@ -249,7 +249,7 @@ public class CelStateMatcherTest {
     
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
-    assertThat(result.action.getName()).isEqualTo("matched");
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("matched");
   }
 
   @Test
@@ -285,8 +285,8 @@ public class CelStateMatcherTest {
     MatchResult result = matcher.match(context);
 
     assertThat(result.matched).isTrue();
-    assertThat(result.action).isNotNull();
-    assertThat(result.action.getName()).isEqualTo("no-match");
+    assertThat(result.actions).isNotEmpty();
+    assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("no-match");
   }
 
   @Test
