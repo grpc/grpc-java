@@ -225,7 +225,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
+    SubchannelPicker picker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "priority child state uninitialized"));
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;

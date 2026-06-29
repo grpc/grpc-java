@@ -1095,6 +1095,28 @@ public class PriorityLoadBalancerTest {
         "waiting on priority group p0 (waiting on priority group p1 (child_reason))");
   }
 
+  @Test
+  public void initialChildPicker_returnsAnnotatedDelayAttributes() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker initialPicker = pickerCaptor.getAllValues().get(0);
+    PickResult result = initialPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo(
+        "priority child state uninitialized");
+  }
+
   private void assertLatestConnectivityState(ConnectivityState expectedState) {
     verify(helper, atLeastOnce())
         .updateBalancingState(connectivityStateCaptor.capture(), pickerCaptor.capture());
