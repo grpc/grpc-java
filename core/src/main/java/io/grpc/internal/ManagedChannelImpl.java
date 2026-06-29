@@ -986,9 +986,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final CallOptions callOptions;
       private final long callCreationTime;
 
-      PendingCall(
-          Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
-        super(getCallExecutor(callOptions), scheduledExecutor, callOptions.getDeadline());
+      PendingCall(Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
+        super(
+            "name_resolver",
+            getCallExecutor(callOptions),
+            scheduledExecutor,
+            callOptions.getDeadline());
         this.context = context;
         this.method = method;
         this.callOptions = callOptions;

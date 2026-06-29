@@ -414,7 +414,7 @@ final class FaultFilter implements Filter {
         long delayNanos, Executor callExecutor, ScheduledExecutorService scheduler,
         @Nullable Deadline deadline,
         final Supplier<? extends ClientCall<ReqT, RespT>> callSupplier) {
-      super(callExecutor, scheduler, deadline);
+      super("httpfault_filter", callExecutor, scheduler, deadline);
       activeFaultCounter.incrementAndGet();
       ScheduledFuture<?> task = scheduler.schedule(
           new Runnable() {
