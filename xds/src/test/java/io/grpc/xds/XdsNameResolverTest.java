@@ -3029,6 +3029,8 @@ public class XdsNameResolverTest {
     assertThat(xdsClientPoolFactory.savedChannelConfigurator).isSameInstanceAs(channelConfigurator);
 
     resolver.shutdown();
+  }
+
   private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {
     @Override
     public InputStream stream(String value) {
