@@ -397,7 +397,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   private static class DataPlaneDelayedCall<ReqT, RespT> extends DelayedClientCall<ReqT, RespT> {
     DataPlaneDelayedCall(
         Executor executor, ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
-      super(executor, scheduler, deadline);
+      super("ext_proc", executor, scheduler, deadline);
     }
   }
 
