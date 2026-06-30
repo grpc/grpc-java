@@ -137,8 +137,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     QueryParams queryParams = QueryParams.fromRawQuery(grpcUri.getRawQuery());
     this.forceXds = checkForceXds(queryParams);
     this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
-    stripForceXds(queryParams);
-    String newQuery = queryParams.toRawQuery();
 
     Preconditions.checkArgument(
         targetPath.startsWith("/"),
@@ -149,7 +147,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
 
     Uri.Builder modifiedTargetBuilder = grpcUri.toBuilder().setScheme(schemeOverride);
-    modifiedTargetBuilder.setRawQuery(newQuery);
+    modifiedTargetBuilder.setRawQuery(null);
     if (schemeOverride.equals("xds")) {
       modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
     }
@@ -183,8 +181,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     QueryParams queryParams = QueryParams.fromRawQuery(targetUri.getRawQuery());
     this.forceXds = checkForceXds(queryParams);
     this.schemeOverride = (forceXds || isOnGcp) ? "xds" : "dns";
-    stripForceXds(queryParams);
-    String newQuery = queryParams.toRawQuery();
 
     Preconditions.checkArgument(
         targetUri.isPathAbsolute(),
@@ -198,11 +194,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     authority = GrpcUtil.checkAuthority(pathSegments.get(0));
     syncContext = checkNotNull(args, "args").getSynchronizationContext();
     Uri.Builder modifiedTargetBuilder = targetUri.toBuilder().setScheme(schemeOverride);
-    if (newQuery != null) {
-      modifiedTargetBuilder.setRawQuery(newQuery);
-    } else {
-      modifiedTargetBuilder.setRawQuery(null);
-    }
+    modifiedTargetBuilder.setRawQuery(null);
 
     if (schemeOverride.equals("xds")) {
       modifiedTargetBuilder.setRawAuthority(C2P_AUTHORITY);
@@ -415,9 +407,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     return false;
   }
 
-  private static void stripForceXds(QueryParams params) {
-    params.asList().removeIf(entry -> "force-xds".equals(entry.getKey()));
-  }
+
 
   private enum HttpConnectionFactory implements HttpConnectionProvider {
     INSTANCE;

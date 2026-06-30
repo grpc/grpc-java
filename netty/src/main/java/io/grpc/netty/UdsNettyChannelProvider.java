@@ -20,6 +20,8 @@ import com.google.common.base.Preconditions;
 import io.grpc.ChannelCredentials;
 import io.grpc.Internal;
 import io.grpc.ManagedChannelProvider;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.internal.SharedResourcePool;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.net.SocketAddress;
@@ -54,6 +56,21 @@ public final class UdsNettyChannelProvider extends ManagedChannelProvider {
   public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds) {
     Preconditions.checkState(isAvailable());
     NewChannelBuilderResult result = new NettyChannelProvider().newChannelBuilder(target, creds);
+    if (result.getChannelBuilder() != null) {
+      ((NettyChannelBuilder) result.getChannelBuilder())
+          .eventLoopGroupPool(SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))
+          .channelType(Utils.EPOLL_DOMAIN_CLIENT_CHANNEL_TYPE, DomainSocketAddress.class);
+    }
+    return result;
+  }
+
+  @Override
+  public NewChannelBuilderResult newChannelBuilder(String target, ChannelCredentials creds,
+                                                   NameResolverRegistry nameResolverRegistry,
+                                                   NameResolverProvider nameResolverProvider) {
+    Preconditions.checkState(isAvailable());
+    NewChannelBuilderResult result = new NettyChannelProvider().newChannelBuilder(
+        target, creds, nameResolverRegistry, nameResolverProvider);
     if (result.getChannelBuilder() != null) {
       ((NettyChannelBuilder) result.getChannelBuilder())
           .eventLoopGroupPool(SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP))

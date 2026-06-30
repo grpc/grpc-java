@@ -60,6 +60,7 @@ import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.StatefulFilter.Config;
@@ -1295,7 +1296,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
+    when(filterProvider.newInstance(any(FilterContext.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -1368,7 +1369,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
+    when(filterProvider.newInstance(any(FilterContext.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);

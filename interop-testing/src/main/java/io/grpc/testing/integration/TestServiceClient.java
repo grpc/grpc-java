@@ -563,7 +563,11 @@ public class TestServiceClient {
         tester.testOrcaOob();
         break;
       }
-
+      
+      case MAX_CONCURRENT_STREAMS_CONNECTION_SCALING: {
+        tester.testMcs();
+        break;
+      }
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
@@ -596,6 +600,7 @@ public class TestServiceClient {
   }
 
   private class Tester extends AbstractInteropTest {
+
     @Override
     protected ManagedChannelBuilder<?> createChannelBuilder() {
       boolean useGeneric = false;
@@ -979,31 +984,17 @@ public class TestServiceClient {
           .build();
 
       final int retryLimit = 5;
-      BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
       final Object lastItem = new Object();
+      StreamingOutputCallResponseObserver streamingOutputCallResponseObserver =
+          new StreamingOutputCallResponseObserver(lastItem);
       StreamObserver<StreamingOutputCallRequest> streamObserver =
-          asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
-
-            @Override
-            public void onNext(StreamingOutputCallResponse value) {
-              queue.add(value);
-            }
-
-            @Override
-            public void onError(Throwable t) {
-              queue.add(t);
-            }
-
-            @Override
-            public void onCompleted() {
-              queue.add(lastItem);
-            }
-          });
+          asyncStub.fullDuplexCall(streamingOutputCallResponseObserver);
 
       streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
           .setOrcaOobReport(answer)
           .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      assertThat(streamingOutputCallResponseObserver.take())
+          .isInstanceOf(StreamingOutputCallResponse.class);
       int i = 0;
       for (; i < retryLimit; i++) {
         Thread.sleep(1000);
@@ -1016,7 +1007,8 @@ public class TestServiceClient {
       streamObserver.onNext(StreamingOutputCallRequest.newBuilder()
           .setOrcaOobReport(answer2)
           .addResponseParameters(ResponseParameters.newBuilder().setSize(1).build()).build());
-      assertThat(queue.take()).isInstanceOf(StreamingOutputCallResponse.class);
+      assertThat(streamingOutputCallResponseObserver.take())
+          .isInstanceOf(StreamingOutputCallResponse.class);
 
       for (i = 0; i < retryLimit; i++) {
         Thread.sleep(1000);
@@ -1027,7 +1019,7 @@ public class TestServiceClient {
       }
       assertThat(i).isLessThan(retryLimit);
       streamObserver.onCompleted();
-      assertThat(queue.take()).isSameInstanceAs(lastItem);
+      assertThat(streamingOutputCallResponseObserver.take()).isSameInstanceAs(lastItem);
     }
 
     @Override
@@ -1053,6 +1045,85 @@ public class TestServiceClient {
     @Override
     protected int operationTimeoutMillis() {
       return 15000;
+    }
+
+    class StreamingOutputCallResponseObserver implements
+        StreamObserver<StreamingOutputCallResponse> {
+      private final Object lastItem;
+      private final BlockingQueue<Object> queue = new LinkedBlockingQueue<>();
+
+      public StreamingOutputCallResponseObserver(Object lastItem) {
+        this.lastItem = lastItem;
+      }
+
+      @Override
+      public void onNext(StreamingOutputCallResponse value) {
+        queue.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        queue.add(t);
+      }
+
+      @Override
+      public void onCompleted() {
+        queue.add(lastItem);
+      }
+
+      Object take() throws InterruptedException {
+        return queue.take();
+      }
+    }
+
+    public void testMcs() throws Exception {
+      final Object lastItem = new Object();
+      StreamingOutputCallResponseObserver responseObserver1 =
+          new StreamingOutputCallResponseObserver(lastItem);
+      StreamObserver<StreamingOutputCallRequest> streamObserver1 =
+          asyncStub.fullDuplexCall(responseObserver1);
+      StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
+          .addResponseParameters(ResponseParameters.newBuilder()
+              .setFillPeerSocketAddress(
+                  Messages.BoolValue.newBuilder().setValue(true).build())
+              .build())
+          .build();
+      streamObserver1.onNext(request);
+      Object responseObj = responseObserver1.take();
+      StreamingOutputCallResponse callResponse = (StreamingOutputCallResponse) responseObj;
+      String clientSocketAddressInCall1 = callResponse.getPeerSocketAddress();
+      assertThat(clientSocketAddressInCall1).isNotEmpty();
+
+      StreamingOutputCallResponseObserver responseObserver2 =
+          new StreamingOutputCallResponseObserver(lastItem);
+      StreamObserver<StreamingOutputCallRequest> streamObserver2 =
+          asyncStub.fullDuplexCall(responseObserver2);
+      streamObserver2.onNext(request);
+      callResponse = (StreamingOutputCallResponse) responseObserver2.take();
+      String clientSocketAddressInCall2 = callResponse.getPeerSocketAddress();
+
+      assertThat(clientSocketAddressInCall1).isEqualTo(clientSocketAddressInCall2);
+
+      // The first connection is at max rpc call count of 2, so the 3rd rpc will cause a new
+      // connection to be created in the same subchannel and not get queued.
+      StreamingOutputCallResponseObserver responseObserver3 =
+          new StreamingOutputCallResponseObserver(lastItem);
+      StreamObserver<StreamingOutputCallRequest> streamObserver3 =
+          asyncStub.fullDuplexCall(responseObserver3);
+      streamObserver3.onNext(request);
+      callResponse = (StreamingOutputCallResponse) responseObserver3.take();
+      String clientSocketAddressInCall3 = callResponse.getPeerSocketAddress();
+
+      // This assertion is currently failing because connection scaling when MCS limit has been
+      // reached is not yet implemented in gRPC Java.
+      assertThat(clientSocketAddressInCall3).isNotEqualTo(clientSocketAddressInCall1);
+
+      streamObserver1.onCompleted();
+      streamObserver2.onCompleted();
+      streamObserver3.onCompleted();
+      assertThat(responseObserver1.take()).isSameInstanceAs(lastItem);
+      assertThat(responseObserver2.take()).isSameInstanceAs(lastItem);
+      assertThat(responseObserver3.take()).isSameInstanceAs(lastItem);
     }
   }
 

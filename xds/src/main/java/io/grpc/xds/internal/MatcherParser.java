@@ -16,11 +16,22 @@
 
 package io.grpc.xds.internal;
 
+import com.google.common.collect.ImmutableList;
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 
 // TODO(zivy@): may reuse common matchers parsers.
 public final class MatcherParser {
+  /** Translate ListStringMatcher envoy proto to a list of internal StringMatcher. */
+  public static ImmutableList<Matchers.StringMatcher> parseListStringMatcher(
+          io.envoyproxy.envoy.type.matcher.v3.ListStringMatcher proto) {
+    ImmutableList.Builder<Matchers.StringMatcher> matchers = ImmutableList.builder();
+    for (io.envoyproxy.envoy.type.matcher.v3.StringMatcher matcherProto : proto.getPatternsList()) {
+      matchers.add(parseStringMatcher(matcherProto));
+    }
+    return matchers.build();
+  }
+
   /** Translates envoy proto HeaderMatcher to internal HeaderMatcher.*/
   public static Matchers.HeaderMatcher parseHeaderMatcher(
           io.envoyproxy.envoy.config.route.v3.HeaderMatcher proto) {

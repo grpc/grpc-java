@@ -29,7 +29,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TlsTesting;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
@@ -94,8 +93,12 @@ public class AsyncServer {
     ThreadFactory tf = new DefaultThreadFactory("server-elg-", true /*daemon */);
     switch (config.transport) {
       case NETTY_NIO: {
-        boss = new NioEventLoopGroup(1, tf);
-        worker = new NioEventLoopGroup(0, tf);
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        EventLoopGroup nioBoss = new io.netty.channel.nio.NioEventLoopGroup(1, tf);
+        @SuppressWarnings("deprecation") // Wait a bit before migrating to the Netty 4.2 API
+        EventLoopGroup nioWorker = new io.netty.channel.nio.NioEventLoopGroup(0, tf);
+        boss = nioBoss;
+        worker = nioWorker;
         channelType = NioServerSocketChannel.class;
         break;
       }

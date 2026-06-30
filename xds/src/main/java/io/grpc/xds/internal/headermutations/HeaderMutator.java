@@ -67,25 +67,18 @@ public class HeaderMutator {
   private void updateHeader(final HeaderValueOption option, Metadata mutableHeaders) {
     HeaderValue header = option.header();
     HeaderAppendAction action = option.appendAction();
-    boolean keepEmptyValue = option.keepEmptyValue();
 
     if (header.key().endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
       if (header.rawValue().isPresent()) {
-        byte[] value = header.rawValue().get().toByteArray();
-        if (value.length > 0 || keepEmptyValue) {
-          updateHeader(action, Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER),
-                  value, mutableHeaders);
-        }
+        Metadata.Key<byte[]> key = Metadata.Key.of(header.key(), Metadata.BINARY_BYTE_MARSHALLER);
+        updateHeader(action, key, header.rawValue().get().toByteArray(), mutableHeaders);
       } else {
         logger.fine("Missing binary rawValue for header: " + header.key());
       }
     } else {
       if (header.value().isPresent()) {
-        String value = header.value().get();
-        if (!value.isEmpty() || keepEmptyValue) {
-          updateHeader(action, Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER),
-                  value, mutableHeaders);
-        }
+        Metadata.Key<String> key = Metadata.Key.of(header.key(), Metadata.ASCII_STRING_MARSHALLER);
+        updateHeader(action, key, header.value().get(), mutableHeaders);
       } else {
         logger.fine("Missing value for header: " + header.key());
       }

@@ -16,13 +16,18 @@
 
 package io.grpc.testing.integration;
 
+import static io.grpc.Grpc.TRANSPORT_ATTR_REMOTE_ADDR;
+
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
 import com.google.protobuf.ByteString;
+import io.grpc.Context;
+import io.grpc.Contexts;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
@@ -42,6 +47,7 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.grpc.testing.integration.TestServiceGrpc.AsyncService;
+import java.net.SocketAddress;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -59,8 +65,8 @@ import java.util.concurrent.TimeUnit;
  * sent in response streams.
  */
 public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
+  static final Context.Key<SocketAddress> PEER_ADDRESS_CONTEXT_KEY = Context.key("peer-address");
   private final Random random = new Random();
-
   private final ScheduledExecutorService executor;
   private final ByteString compressableBuffer;
   private final MetricRecorder metricRecorder;
@@ -441,7 +447,13 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     Queue<Chunk> chunkQueue = new ArrayDeque<>();
     int offset = 0;
     for (ResponseParameters params : request.getResponseParametersList()) {
-      chunkQueue.add(new Chunk(params.getIntervalUs(), offset, params.getSize()));
+      String peerSocketAddress = null;
+      if (params.getFillPeerSocketAddress().getValue()) {
+        SocketAddress peerAddress = PEER_ADDRESS_CONTEXT_KEY.get();
+        peerSocketAddress = peerAddress != null ? peerAddress.toString() : "";
+      }
+      chunkQueue.add(
+          new Chunk(params.getIntervalUs(), offset, params.getSize(), peerSocketAddress));
 
       // Increment the offset past this chunk. Buffer need to be circular.
       offset = (offset + params.getSize()) % compressableBuffer.size();
@@ -459,11 +471,17 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     private final int delayMicroseconds;
     private final int offset;
     private final int length;
+    private final String peerSocketAddress;
 
     public Chunk(int delayMicroseconds, int offset, int length) {
+      this(delayMicroseconds, offset, length, null);
+    }
+
+    public Chunk(int delayMicroseconds, int offset, int length, String peerSocketAddress) {
       this.delayMicroseconds = delayMicroseconds;
       this.offset = offset;
       this.length = length;
+      this.peerSocketAddress = peerSocketAddress;
     }
 
     /**
@@ -472,10 +490,15 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     private StreamingOutputCallResponse toResponse() {
       StreamingOutputCallResponse.Builder responseBuilder =
           StreamingOutputCallResponse.newBuilder();
-      ByteString payload = generatePayload(compressableBuffer, offset, length);
-      responseBuilder.setPayload(
-          Payload.newBuilder()
-              .setBody(payload));
+      if (length > 0) {
+        ByteString payload = generatePayload(compressableBuffer, offset, length);
+        responseBuilder.setPayload(
+            Payload.newBuilder()
+                .setBody(payload));
+      }
+      if (peerSocketAddress != null) {
+        responseBuilder.setPeerSocketAddress(peerSocketAddress);
+      }
       return responseBuilder.build();
     }
   }
@@ -505,7 +528,8 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
     return Arrays.asList(
         echoRequestHeadersInterceptor(Util.METADATA_KEY),
         echoRequestMetadataInHeaders(Util.ECHO_INITIAL_METADATA_KEY),
-        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY));
+        echoRequestMetadataInTrailers(Util.ECHO_TRAILING_METADATA_KEY),
+        new AddPeerAddressToContextInterceptor());
   }
 
   /**
@@ -538,6 +562,22 @@ public class TestServiceImpl implements io.grpc.BindableService, AsyncService {
             }, requestHeaders);
       }
     };
+  }
+
+  static class AddPeerAddressToContextInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call,
+        Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      SocketAddress peerAddress = call.getAttributes().get(TRANSPORT_ATTR_REMOTE_ADDR);
+
+      // Create a new context with the peer address value
+      Context newContext = Context.current().withValue(PEER_ADDRESS_CONTEXT_KEY, peerAddress);
+      try {
+        return Contexts.interceptCall(newContext, call, headers, next);
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    }
   }
 
   /**

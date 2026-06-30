@@ -18,32 +18,32 @@ IO_GRPC_GRPC_JAVA_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.11.0",
     "com.google.auto.value:auto-value:1.11.0",
     "com.google.code.findbugs:jsr305:3.0.2",
-    "com.google.code.gson:gson:2.13.2",
-    "com.google.errorprone:error_prone_annotations:2.48.0",
+    "com.google.code.gson:gson:2.14.0",
+    "com.google.errorprone:error_prone_annotations:2.50.0",
     "com.google.guava:failureaccess:1.0.1",
-    "com.google.guava:guava:33.5.0-android",
+    "com.google.guava:guava:33.6.0-android",
     "com.google.re2j:re2j:1.8",
     "com.google.s2a.proto.v2:s2a-proto:0.1.3",
     "com.google.truth:truth:1.4.5",
-    "dev.cel:runtime:0.12.0",
-    "dev.cel:protobuf:0.12.0",
-    "dev.cel:common:0.12.0",
+    "dev.cel:runtime:0.13.0",
+    "dev.cel:protobuf:0.13.0",
+    "dev.cel:common:0.13.0",
     "com.squareup.okhttp:okhttp:2.7.5",
     "com.squareup.okio:okio:2.10.0",  # 3.0+ needs swapping to -jvm; need work to avoid flag-day
-    "io.netty:netty-buffer:4.1.133.Final",
-    "io.netty:netty-codec-http2:4.1.133.Final",
-    "io.netty:netty-codec-http:4.1.133.Final",
-    "io.netty:netty-codec-socks:4.1.133.Final",
-    "io.netty:netty-codec:4.1.133.Final",
-    "io.netty:netty-common:4.1.133.Final",
-    "io.netty:netty-handler-proxy:4.1.133.Final",
-    "io.netty:netty-handler:4.1.133.Final",
-    "io.netty:netty-resolver:4.1.133.Final",
+    "io.netty:netty-buffer:4.2.15.Final",
+    "io.netty:netty-codec-base:4.2.15.Final",
+    "io.netty:netty-codec-http2:4.2.15.Final",
+    "io.netty:netty-codec-http:4.2.15.Final",
+    "io.netty:netty-codec-socks:4.2.15.Final",
+    "io.netty:netty-common:4.2.15.Final",
+    "io.netty:netty-handler-proxy:4.2.15.Final",
+    "io.netty:netty-handler:4.2.15.Final",
+    "io.netty:netty-resolver:4.2.15.Final",
     "io.netty:netty-tcnative-boringssl-static:2.0.75.Final",
     "io.netty:netty-tcnative-classes:2.0.75.Final",
-    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.133.Final",
-    "io.netty:netty-transport-native-unix-common:4.1.133.Final",
-    "io.netty:netty-transport:4.1.133.Final",
+    "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.2.15.Final",
+    "io.netty:netty-transport-native-unix-common:4.2.15.Final",
+    "io.netty:netty-transport:4.2.15.Final",
     "io.opencensus:opencensus-api:0.31.0",
     "io.opencensus:opencensus-contrib-grpc-metrics:0.31.0",
     "io.perfmark:perfmark-api:0.27.0",
@@ -104,6 +104,13 @@ def grpc_java_repositories():
                 "https://github.com/googleapis/googleapis/archive/1dbb1a14e079f78d9214f8e48bf083f32e3ddb96.tar.gz",
             ],
         )
+    if not native.existing_rule("rules_proto"):
+        http_archive(
+            name = "rules_proto",
+            sha256 = "14a225870ab4e91869652cfd69ef2028277fc1dc4910d65d353b62d6e0ae21f4",
+            strip_prefix = "rules_proto-7.1.0",
+            urls = ["https://github.com/bazelbuild/rules_proto/releases/download/7.1.0/rules_proto-7.1.0.tar.gz"],
+        )
     if not native.existing_rule("io_grpc_grpc_proto"):
         io_grpc_grpc_proto()
     if not native.existing_rule("bazel_jar_jar"):
@@ -120,9 +127,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "bc670a4e34992c175137ddda24e76562bb928f849d712a0e3c2fb2e19249bea1",
-        strip_prefix = "protobuf-33.4",
-        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v33.4/protobuf-33.4.tar.gz"],
+        sha256 = "f0b6838e7522a8da96126d487068c959bc624926368f3024ac8fd03abd0a1ac4",
+        strip_prefix = "protobuf-35.1",
+        urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v35.1/protobuf-35.1.tar.gz"],
     )
 
 def io_grpc_grpc_proto():
