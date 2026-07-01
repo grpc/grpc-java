@@ -26,9 +26,9 @@ import java.util.List;
 /**
  * Result of a matching operation.
  */
-public final class MatchResult {
-  public final List<TypedExtensionConfig> actions;
-  public final boolean matched;
+final class MatchResult {
+  final List<TypedExtensionConfig> actions;
+  final boolean matched;
 
   private MatchResult(
       List<TypedExtensionConfig> actions,
@@ -42,25 +42,25 @@ public final class MatchResult {
   /**
    * Creates a result indicating a successful match with a terminal action.
    */
-  public static MatchResult create(List<TypedExtensionConfig> actions) {
+  static MatchResult create(List<TypedExtensionConfig> actions) {
     return new MatchResult(actions, true);
   }
 
   /**
    * Creates a result indicating a match with a terminal action and no accumulated actions.
    */
-  public static MatchResult create(TypedExtensionConfig action) {
+  static MatchResult create(TypedExtensionConfig action) {
     return new MatchResult(Collections.singletonList(action), true);
   }
 
   /**
    * Creates a result indicating no terminal match, but potentially with accumulated actions.
    */
-  public static MatchResult noMatch(List<TypedExtensionConfig> actions) {
+  static MatchResult noMatch(List<TypedExtensionConfig> actions) {
     return new MatchResult(actions, false);
   }
   
-  public static MatchResult noMatch() {
+  static MatchResult noMatch() {
     return new MatchResult(Collections.emptyList(), false);
   }
 }

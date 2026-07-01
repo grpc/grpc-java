@@ -27,6 +27,7 @@ import com.google.protobuf.Any;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
 import java.util.List;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -62,11 +63,41 @@ public class UnifiedMatcherTest {
     UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
     MatchContext context = MatchContext.newBuilder()
         .setMetadata(metadataWith("h", "v"))
+        .setPath("/test/path")
+        .setHost("test.host")
+        .setMethod("GET")
+        .setId("test-id")
         .build();
+    
+    assertThat(context.getId()).isEqualTo("test-id");
+    assertThat(context.getPath()).isEqualTo("/test/path");
+    assertThat(context.getHost()).isEqualTo("test.host");
+    assertThat(context.getMethod()).isEqualTo("GET");
     
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isTrue();
     assertThat(result.actions.get(result.actions.size() - 1).getName()).isEqualTo("action2");
+  }
+
+  @Test
+  public void matcherList_noMatch_returnsNoMatch() {
+    Matcher.MatcherList.FieldMatcher fm1 = Matcher.MatcherList.FieldMatcher.newBuilder()
+        .setPredicate(createHeaderMatchPredicate("h", "missing"))
+        .setOnMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("action1")))
+        .build();
+    Matcher proto = Matcher.newBuilder()
+        .setMatcherList(Matcher.MatcherList.newBuilder().addMatchers(fm1))
+        .build();
+
+    UnifiedMatcher matcher = UnifiedMatcher.fromProto(proto);
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
+    
+    MatchResult result = matcher.match(context);
+    assertThat(result.matched).isFalse();
+    assertThat(result.actions).isEmpty();
   }
 
   @Test
@@ -94,6 +125,28 @@ public class UnifiedMatcherTest {
     MatchResult result = matcher.match(context);
     assertThat(result.matched).isFalse();
     assertThat(result.actions).isEmpty();
+  }
+
+  @Test
+  public void stringMatcherAdapter_nonStringInputThrows() throws Exception {
+    io.grpc.xds.internal.Matchers.StringMatcher stringMatcher = 
+        io.grpc.xds.internal.Matchers.StringMatcher.forExact("val", false);
+    Class<?> adapterClass = Class.forName(
+        "io.grpc.xds.internal.matcher.PredicateEvaluator"
+            + "$SinglePredicateEvaluator$StringMatcherAdapter");
+    java.lang.reflect.Constructor<?> constructor = 
+        adapterClass.getDeclaredConstructor(io.grpc.xds.internal.Matchers.StringMatcher.class);
+    constructor.setAccessible(true);
+    io.grpc.xds.internal.matcher.Matcher adapter = 
+        (io.grpc.xds.internal.matcher.Matcher) constructor.newInstance(stringMatcher);
+    
+    try {
+      adapter.match(123);
+      Assert.fail("Should have thrown IllegalArgumentException");
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains(
+          "StringMatcher expected a String input, but received: java.lang.Integer");
+    }
   }
 
   @Test
@@ -165,6 +218,22 @@ public class UnifiedMatcherTest {
         .setMetadata(metadataWith("h", "v"))
         .build();
     assertThat(eval.evaluate(context)).isTrue();
+  }
+
+  @Test
+  public void orMatcher_allFalse_fails() {
+    Matcher.MatcherList.Predicate h1 = createHeaderMatchPredicate("h", "x"); // fail
+    Matcher.MatcherList.Predicate h2 = createHeaderMatchPredicate("h", "y"); // fail
+    
+    PredicateEvaluator eval = PredicateEvaluator.fromProto(
+        Matcher.MatcherList.Predicate.newBuilder()
+            .setOrMatcher(Matcher.MatcherList.Predicate.PredicateList.newBuilder()
+                .addPredicate(h1).addPredicate(h2)).build());
+    
+    MatchContext context = MatchContext.newBuilder()
+        .setMetadata(metadataWith("h", "v"))
+        .build();
+    assertThat(eval.evaluate(context)).isFalse();
   }
 
   @Test

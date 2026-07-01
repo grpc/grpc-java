@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
 /**
  * Registry for {@link MatcherProvider}.
  */
-public final class MatcherRegistry {
+final class MatcherRegistry {
   private static MatcherRegistry instance;
 
   private final Map<String, MatcherProvider> matcherProviders = new HashMap<>();
@@ -32,7 +32,7 @@ public final class MatcherRegistry {
   private MatcherRegistry() {
   }
 
-  public static synchronized MatcherRegistry getDefaultRegistry() {
+  static synchronized MatcherRegistry getDefaultRegistry() {
     if (instance == null) {
       instance = newRegistry().register(
           new CelStateMatcher.Provider());
@@ -41,12 +41,12 @@ public final class MatcherRegistry {
   }
 
   @VisibleForTesting
-  public static MatcherRegistry newRegistry() {
+  static MatcherRegistry newRegistry() {
     return new MatcherRegistry();
   }
 
   @VisibleForTesting
-  public MatcherRegistry register(MatcherProvider... providers) {
+  MatcherRegistry register(MatcherProvider... providers) {
     for (MatcherProvider provider : providers) {
       matcherProviders.put(provider.typeUrl(), provider);
     }
@@ -54,7 +54,7 @@ public final class MatcherRegistry {
   }
 
   @Nullable
-  public MatcherProvider getMatcherProvider(String typeUrl) {
+  MatcherProvider getMatcherProvider(String typeUrl) {
     return matcherProviders.get(typeUrl);
   }
 }

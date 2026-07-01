@@ -23,14 +23,14 @@ import javax.annotation.Nullable;
 /**
  * Executes a UnifiedMatcher against a request.
  */
-public final class MatcherRunner {
+final class MatcherRunner {
   private MatcherRunner() {}
 
   /**
    * runs the matcher.
    */
   @Nullable
-  public static List<TypedExtensionConfig> checkMatch(
+  static List<TypedExtensionConfig> checkMatch(
       UnifiedMatcher matcher, MatchContext context) {
     MatchResult result = matcher.match(context);
     if (!result.matched || result.actions.isEmpty()) {

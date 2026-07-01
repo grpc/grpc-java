@@ -184,6 +184,32 @@ public class CelStateMatcherTest {
   }
 
   @Test
+  public void celMatcher_unsupportedInputThrows() {
+    try {
+      io.grpc.xds.internal.matcher.CelMatcher celMatcher = CelMatcherTestHelper.compile("true");
+      celMatcher.match("Not a CelVariableResolver");
+      fail("Should have thrown CelEvaluationException");
+    } catch (Exception e) {
+      assertThat(e.getClass().getName())
+          .isEqualTo("dev.cel.runtime.CelEvaluationException");
+      assertThat(e).hasMessageThat()
+          .contains("Unsupported input type for CEL evaluation: java.lang.String");
+    }
+  }
+
+  @Test
+  public void celMatcher_nullInputThrows() {
+    try {
+      io.grpc.xds.internal.matcher.CelMatcher celMatcher = CelMatcherTestHelper.compile("true");
+      celMatcher.match(null);
+      fail("Should have thrown CelEvaluationException");
+    } catch (Exception e) {
+      assertThat(e.getClass().getName()).isEqualTo("dev.cel.runtime.CelEvaluationException");
+      assertThat(e).hasMessageThat().contains("Unsupported input type for CEL evaluation: null");
+    }
+  }
+
+  @Test
   public void celMatcher_headers() {
     CelMatcher celMatcher = createCelMatcher("request.headers['x-test'] == 'value'");
     Matcher.MatcherList.Predicate.SinglePredicate predicate = 

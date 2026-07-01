@@ -24,12 +24,11 @@ import javax.annotation.Nullable;
 /**
  * Represents a compiled xDS Matcher.
  */
-public abstract class UnifiedMatcher {
+abstract class UnifiedMatcher {
 
   static final int MAX_RECURSION_DEPTH = 16;
  
-  @Nullable
-  public abstract MatchResult match(MatchContext context);
+  abstract MatchResult match(MatchContext context);
 
   static MatchInput resolveInput(TypedExtensionConfig config) {
     String typeUrl = config.getTypedConfig().getTypeUrl();
@@ -46,7 +45,7 @@ public abstract class UnifiedMatcher {
    * @param proto the proto matcher
    * @param actionValidator a predicate that returns true if the action type URL is supported
    */
-  public static UnifiedMatcher fromProto(Matcher proto,
+  static UnifiedMatcher fromProto(Matcher proto,
       Predicate<String> actionValidator) {
     checkRecursionDepth(proto, 0);
     Matcher.OnMatch onNoMatch = proto.hasOnNoMatch() ? proto.getOnNoMatch() : null;
@@ -61,7 +60,7 @@ public abstract class UnifiedMatcher {
   /**
    * Parses a proto Matcher into a UnifiedMatcher, allowing all actions.
    */
-  public static UnifiedMatcher fromProto(Matcher proto) {
+  static UnifiedMatcher fromProto(Matcher proto) {
     return fromProto(proto, (typeUrl) -> true);
   }
 
@@ -111,7 +110,7 @@ public abstract class UnifiedMatcher {
     }
 
     @Override
-    public MatchResult match(MatchContext context) {
+    MatchResult match(MatchContext context) {
       if (onNoMatch != null) {
         return onNoMatch.evaluate(context);
       }

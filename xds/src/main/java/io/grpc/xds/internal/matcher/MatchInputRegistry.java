@@ -24,14 +24,14 @@ import javax.annotation.Nullable;
 /**
  * Registry for {@link MatchInputProvider}s.
  */
-public final class MatchInputRegistry {
+final class MatchInputRegistry {
   private static MatchInputRegistry instance;
 
   private final Map<String, MatchInputProvider> providers = new HashMap<>();
 
   private MatchInputRegistry() {}
 
-  public static synchronized MatchInputRegistry getDefaultRegistry() {
+  static synchronized MatchInputRegistry getDefaultRegistry() {
     if (instance == null) {
       instance = newRegistry().register(
           new HeaderMatchInput.Provider(),
@@ -42,12 +42,12 @@ public final class MatchInputRegistry {
   }
 
   @VisibleForTesting
-  public static MatchInputRegistry newRegistry() {
+  static MatchInputRegistry newRegistry() {
     return new MatchInputRegistry();
   }
 
   @VisibleForTesting
-  public MatchInputRegistry register(MatchInputProvider... inputProviders) {
+  MatchInputRegistry register(MatchInputProvider... inputProviders) {
     for (MatchInputProvider provider : inputProviders) {
       providers.put(provider.typeUrl(), provider);
     }
@@ -55,7 +55,7 @@ public final class MatchInputRegistry {
   }
 
   @Nullable
-  public MatchInputProvider getProvider(String typeUrl) {
+  MatchInputProvider getProvider(String typeUrl) {
     return providers.get(typeUrl);
   }
 }

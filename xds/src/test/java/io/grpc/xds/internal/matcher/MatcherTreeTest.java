@@ -170,9 +170,6 @@ public class MatcherTreeTest {
     
     assertThat(result.matched).isFalse();
     assertThat(result.actions).isEmpty();
-    if (!result.actions.isEmpty()) {
-      assertThat(result.actions.get(0).getName()).isNotEqualTo("should-not-be-called");
-    }
   }
 
   @Test
@@ -481,7 +478,8 @@ public class MatcherTreeTest {
   @Test
   public void matcherTree_exactMatch_keepMatching_nestedMatcher_fails() {
     // Exact match "val" -> Nested Matcher (always fails), keepMatching=true
-    // Because keepMatching=true, we should fallback to onNoMatch
+    // Nested no-match aborts the match; 
+    // keepMatching does not trigger onNoMatch fallback here.
     
     Matcher.MatcherTree nestedProto = Matcher.MatcherTree.newBuilder()
         .setInput(TypedExtensionConfig.newBuilder().setTypedConfig(

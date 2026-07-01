@@ -21,7 +21,7 @@ import com.github.xds.core.v3.TypedExtensionConfig;
 /**
  * Provider interface for creating {@link Matcher} instances.
  */
-public interface MatcherProvider {
+interface MatcherProvider {
   /**
    * Returns the corresponding {@link Matcher} for the given config.
    */

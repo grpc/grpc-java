@@ -92,7 +92,7 @@ final class MatcherTree extends UnifiedMatcher {
   }
 
   @Override
-  public MatchResult match(MatchContext context) {
+  MatchResult match(MatchContext context) {
 
     Object valueObj = input.apply(context);
     if (!(valueObj instanceof String)) {
@@ -101,11 +101,8 @@ final class MatcherTree extends UnifiedMatcher {
     String value = (String) valueObj;
     if (exactMatchMap != null) {
       return matchExact(value, context);
-    } else if (prefixTrie != null) {
-      return matchPrefix(value, context);
     }
-
-    return onNoMatch != null ? onNoMatch.evaluate(context) : MatchResult.noMatch();
+    return matchPrefix(value, context);
   }
 
   private MatchResult matchExact(String value, MatchContext context) {

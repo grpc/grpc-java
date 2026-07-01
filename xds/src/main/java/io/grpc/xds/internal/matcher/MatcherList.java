@@ -45,7 +45,7 @@ final class MatcherList extends UnifiedMatcher {
   }
 
   @Override
-  public MatchResult match(MatchContext context) {
+  MatchResult match(MatchContext context) {
     List<TypedExtensionConfig> accumulated = new ArrayList<>();
     for (FieldMatcher matcher : matchers) {
       if (matcher.matches(context)) {

@@ -370,6 +370,28 @@ public class UnifiedMatcherValidationTest {
   }
 
   @Test
+  public void checkRecursionDepth_nestedInPrefixTree_throws() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 17; i++) {
+      current = Matcher.newBuilder()
+          .setMatcherTree(Matcher.MatcherTree.newBuilder()
+              .setInput(TypedExtensionConfig.newBuilder()
+                  .setTypedConfig(com.google.protobuf.Any.pack(
+                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      .setHeaderName("k").build())))
+              .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                  .putMap("prefix", Matcher.OnMatch.newBuilder().setMatcher(current).build())))
+          .build();
+    }
+    try {
+      UnifiedMatcher.fromProto(current);
+      org.junit.Assert.fail();
+    } catch (IllegalArgumentException e) {
+      assertThat(e).hasMessageThat().contains("exceeds limit");
+    }
+  }
+
+  @Test
   public void checkRecursionDepth_nestedInOnNoMatch_throws() {
     Matcher current = Matcher.newBuilder().build();
     for (int i = 0; i < 17; i++) {
@@ -383,6 +405,18 @@ public class UnifiedMatcherValidationTest {
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exceeds limit");
     }
+  }
+
+  @Test
+  public void checkRecursionDepth_nestedInOnNoMatch_success() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 5; i++) {
+      current = Matcher.newBuilder()
+          .setOnNoMatch(Matcher.OnMatch.newBuilder().setMatcher(current))
+          .build();
+    }
+    // This should not throw any exception as the depth (5) is within the limit (16).
+    UnifiedMatcher.fromProto(current);
   }
 
   @Test

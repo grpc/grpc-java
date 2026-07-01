@@ -21,7 +21,7 @@ import javax.annotation.Nullable;
 /**
  * Interface for extracting values from a match context (e.g. HTTP headers).
  */
-public interface MatchInput {
+interface MatchInput {
   /**
    * Extracts the value from the context.
    * @param context the context (e.g. Metadata, Attributes)

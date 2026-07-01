@@ -25,7 +25,7 @@ import dev.cel.runtime.CelVariableResolver;
 /**
  * Executes compiled CEL expressions.
  */
-public final class CelMatcher {
+final class CelMatcher {
   private final CelRuntime.Program program;
 
   private CelMatcher(CelRuntime.Program program) {
@@ -36,7 +36,7 @@ public final class CelMatcher {
    * Compiles the AST into a CelMatcher.
    * Throws an Exception if evaluation fails during compilation setup.
    */
-  public static CelMatcher compile(CelAbstractSyntaxTree ast)
+  static CelMatcher compile(CelAbstractSyntaxTree ast)
       throws CelEvaluationException {
     // CelEvaluationException -> inside cel-runtime -> Allowed in production signatures
     // CelValidationException -> inside cel-compiler -> Forbidden in production signatures
@@ -52,13 +52,14 @@ public final class CelMatcher {
   /**
    * Evaluates the CEL expression against the input activation.
    */
-  public boolean match(Object input) throws CelEvaluationException {
+  boolean match(Object input) throws CelEvaluationException {
     Object result;
     if (input instanceof CelVariableResolver) {
       result = program.eval((CelVariableResolver) input);
     } else {
       throw new CelEvaluationException(
-          "Unsupported input type for CEL evaluation: " + input.getClass().getName());
+          "Unsupported input type for CEL evaluation: "
+               + (input == null ? "null" : input.getClass().getName()));
     }
     
     if (result instanceof Boolean) {

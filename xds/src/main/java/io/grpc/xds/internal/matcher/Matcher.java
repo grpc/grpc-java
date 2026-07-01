@@ -19,7 +19,7 @@ package io.grpc.xds.internal.matcher;
 /**
  * Interface that defines a matcher that can match a given value.
  */
-public interface Matcher {
+interface Matcher {
   /**
    * Returns true if the value matches the matcher.
    */
