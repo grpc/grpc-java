@@ -8451,50 +8451,75 @@ public class ExternalProcessorClientInterceptorTest {
         .directExecutor()
         .build().start());
 
-    CachedChannelManager channelManager = new CachedChannelManager(config -> {
-      return grpcCleanup.register(
-          InProcessChannelBuilder.forName(extProcServerName).directExecutor().build());
-    });
+    ExecutorService extProcChannelExecutor = Executors.newSingleThreadExecutor();
+    try {
+      CachedChannelManager channelManager = new CachedChannelManager(config -> {
+        return grpcCleanup.register(
+            InProcessChannelBuilder.forName(extProcServerName)
+                .executor(extProcChannelExecutor)
+                .build());
+      });
 
-    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
-        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+      ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+          filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
-    final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
-        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-            (request, responseObserver) -> {
-              responseObserver.onNext("Hello " + request);
-              responseObserver.onCompleted();
-              dataPlaneLatch.countDown();
-            }))
-        .build());
+      final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
+      final CountDownLatch headersReceivedLatch = new CountDownLatch(1);
+      ServerInterceptor dataPlaneInterceptor = new ServerInterceptor() {
+        @Override
+        public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+            ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+          headersReceivedLatch.countDown();
+          return next.startCall(call, headers);
+        }
+      };
+      dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+          ServerServiceDefinition.builder("test.TestService")
+              .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+                  (request, responseObserver) -> {
+                    responseObserver.onNext("Hello " + request);
+                    responseObserver.onCompleted();
+                    dataPlaneLatch.countDown();
+                  }))
+              .build(),
+          dataPlaneInterceptor));
 
-    ManagedChannel dataPlaneChannel = grpcCleanup.register(
-        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+      ManagedChannel dataPlaneChannel = grpcCleanup.register(
+          InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
-    final CountDownLatch closedLatch = new CountDownLatch(1);
-    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        closedLatch.countDown();
-      }
-    };
-    
-    CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
-    ClientCall<String, String> proxyCall =
-        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(appListener, new Metadata());
+      final CountDownLatch closedLatch = new CountDownLatch(1);
+      ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+        @Override
+        public void onClose(Status status, Metadata trailers) {
+          closedLatch.countDown();
+        }
+      };
+      
+      CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
+      ClientCall<String, String> proxyCall =
+          interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
+      proxyCall.start(appListener, new Metadata());
 
-    // Send message and half-close to trigger unary call reaching server
-    proxyCall.request(1);
-    proxyCall.sendMessage("test");
-    proxyCall.halfClose();
+      // Send message and half-close to trigger unary call reaching server
+      proxyCall.request(1);
+      assertThat(headersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      
+      // Wait for the onError execution on extProcChannelExecutor to finish completely
+      final CountDownLatch executorSyncLatch = new CountDownLatch(1);
+      extProcChannelExecutor.execute(executorSyncLatch::countDown);
+      assertThat(executorSyncLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // Verify data plane call reached (failed open)
-    assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    
-    proxyCall.cancel("Cleanup", null);
-    channelManager.close();
+      proxyCall.sendMessage("test");
+      proxyCall.halfClose();
+
+      // Verify data plane call reached (failed open)
+      assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+      
+      proxyCall.cancel("Cleanup", null);
+      channelManager.close();
+    } finally {
+      extProcChannelExecutor.shutdown();
+    }
   }
 
   @Test
