@@ -421,6 +421,69 @@ public class UnifiedMatcherValidationTest {
   }
 
   @Test
+  public void checkRecursionDepth_nestedInList_success() {
+    Matcher current = Matcher.newBuilder()
+        .setOnNoMatch(Matcher.OnMatch.newBuilder()
+            .setAction(TypedExtensionConfig.newBuilder().setName("leaf")))
+        .build();
+
+    for (int i = 0; i < 5; i++) {
+      current = Matcher.newBuilder()
+          .setMatcherList(Matcher.MatcherList.newBuilder()
+              .addMatchers(Matcher.MatcherList.FieldMatcher.newBuilder()
+                  .setPredicate(Matcher.MatcherList.Predicate.newBuilder()
+                      .setSinglePredicate(Matcher.MatcherList.Predicate.SinglePredicate.newBuilder()
+                          .setInput(TypedExtensionConfig.newBuilder()
+                              .setTypedConfig(com.google.protobuf.Any.pack(
+                                  io.envoyproxy.envoy.type.matcher.v3
+                                      .HttpRequestHeaderMatchInput.newBuilder()
+                                      .setHeaderName("k").build())))
+                          .setValueMatch(com.github.xds.type.matcher.v3.StringMatcher
+                              .newBuilder().setExact("exact")))) 
+                  .setOnMatch(Matcher.OnMatch.newBuilder().setMatcher(current)))) 
+          .build();
+    }
+    // This should not throw any exception as the depth (5) is within the limit (16).
+    UnifiedMatcher.fromProto(current, (type) -> true);
+  }
+
+  @Test
+  public void checkRecursionDepth_nestedInTree_success() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 5; i++) {
+      current = Matcher.newBuilder()
+          .setMatcherTree(Matcher.MatcherTree.newBuilder()
+              .setInput(TypedExtensionConfig.newBuilder()
+                  .setTypedConfig(com.google.protobuf.Any.pack(
+                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      .setHeaderName("k").build())))
+              .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                  .putMap("key", Matcher.OnMatch.newBuilder().setMatcher(current).build())))
+          .build();
+    }
+    // This should not throw any exception as the depth (5) is within the limit (16).
+    UnifiedMatcher.fromProto(current);
+  }
+
+  @Test
+  public void checkRecursionDepth_nestedInPrefixTree_success() {
+    Matcher current = Matcher.newBuilder().build();
+    for (int i = 0; i < 5; i++) {
+      current = Matcher.newBuilder()
+          .setMatcherTree(Matcher.MatcherTree.newBuilder()
+              .setInput(TypedExtensionConfig.newBuilder()
+                  .setTypedConfig(com.google.protobuf.Any.pack(
+                      io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput.newBuilder()
+                      .setHeaderName("k").build())))
+              .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder()
+                  .putMap("prefix", Matcher.OnMatch.newBuilder().setMatcher(current).build())))
+          .build();
+    }
+    // This should not throw any exception as the depth (5) is within the limit (16).
+    UnifiedMatcher.fromProto(current);
+  }
+
+  @Test
   public void onMatch_empty_throws() {
     Matcher proto = Matcher.newBuilder()
         .setOnNoMatch(Matcher.OnMatch.newBuilder())

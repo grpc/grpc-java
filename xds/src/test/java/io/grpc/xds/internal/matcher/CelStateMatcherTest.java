@@ -137,6 +137,36 @@ public class CelStateMatcherTest {
   }
 
   @Test
+  public void celMatcher_runtimeReturnsString_throwsCelEvaluationException() throws Exception {
+    dev.cel.runtime.CelRuntime.Program mockProgram =
+        org.mockito.Mockito.mock(dev.cel.runtime.CelRuntime.Program.class);
+    org.mockito.Mockito.when(
+            mockProgram.eval(
+                org.mockito.ArgumentMatchers.any(dev.cel.runtime.CelVariableResolver.class)))
+        .thenReturn("not-a-bool");
+
+    java.lang.reflect.Constructor<io.grpc.xds.internal.matcher.CelMatcher> constructor = 
+        io.grpc.xds.internal.matcher.CelMatcher.class.getDeclaredConstructor(
+            dev.cel.runtime.CelRuntime.Program.class);
+    constructor.setAccessible(true);
+    io.grpc.xds.internal.matcher.CelMatcher celMatcher = constructor.newInstance(mockProgram);
+
+    try {
+      dev.cel.runtime.CelVariableResolver resolver = new dev.cel.runtime.CelVariableResolver() {
+        @Override
+        public java.util.Optional<Object> find(String name) {
+          return java.util.Optional.empty();
+        }
+      };
+      celMatcher.match(resolver);
+      fail("Should have thrown CelEvaluationException");
+    } catch (dev.cel.runtime.CelEvaluationException e) {
+      assertThat(e).hasMessageThat()
+          .contains("CEL expression must evaluate to boolean, got: java.lang.String");
+    }
+  }
+
+  @Test
   public void celMatcher_evaluationError_returnsFalse() {
     CelMatcher celMatcher = createCelMatcher("int(request.path) == 0");
     Matcher.MatcherList.Predicate.SinglePredicate predicate = 
