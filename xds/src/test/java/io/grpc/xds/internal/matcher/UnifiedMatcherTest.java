@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.matcher;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
@@ -27,7 +28,6 @@ import com.google.protobuf.Any;
 import io.envoyproxy.envoy.type.matcher.v3.HttpRequestHeaderMatchInput;
 import io.grpc.Metadata;
 import java.util.List;
-import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -142,7 +142,7 @@ public class UnifiedMatcherTest {
     
     try {
       adapter.match(123);
-      Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains(
           "StringMatcher expected a String input, but received: java.lang.Integer");

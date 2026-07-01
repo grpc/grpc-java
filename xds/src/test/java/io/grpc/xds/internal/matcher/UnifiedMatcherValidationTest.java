@@ -17,6 +17,7 @@
 package io.grpc.xds.internal.matcher;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import com.github.xds.core.v3.TypedExtensionConfig;
 import com.github.xds.type.matcher.v3.Matcher;
@@ -57,7 +58,7 @@ public class UnifiedMatcherValidationTest {
     
     try {
       UnifiedMatcher.fromProto(proto, (type) -> false);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Unsupported action type");
     }
@@ -84,7 +85,7 @@ public class UnifiedMatcherValidationTest {
     
     try {
       UnifiedMatcher.fromProto(current);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for depth > 16");
+      fail("Should have thrown IllegalArgumentException for depth > 16");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exceeds limit");
     }
@@ -95,7 +96,7 @@ public class UnifiedMatcherValidationTest {
     Matcher.MatcherList.Predicate proto = Matcher.MatcherList.Predicate.getDefaultInstance();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Predicate must have one of");
     }
@@ -112,7 +113,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Unsupported custom_match matcher");
     }
@@ -127,7 +128,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("SinglePredicate must have input");
     }
@@ -142,7 +143,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains(
           "SinglePredicate must have either value_match or custom_match");
@@ -164,7 +165,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       PredicateEvaluator.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("OrMatcher must have at least 2 predicates");
     }
@@ -183,7 +184,7 @@ public class UnifiedMatcherValidationTest {
     try {
       PredicateEvaluator.fromProto(
           Matcher.MatcherList.Predicate.newBuilder().setAndMatcher(proto).build());
-      org.junit.Assert.fail("Should have thrown");
+      fail("Should have thrown");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("AndMatcher must have at least 2 predicates");
     }
@@ -201,7 +202,7 @@ public class UnifiedMatcherValidationTest {
                           .setHeaderName("key").build())))
               .setExactMatchMap(Matcher.MatcherTree.MatchMap.newBuilder())) // Empty map
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exact_match_map must contain at least one entry");
     }
@@ -216,7 +217,7 @@ public class UnifiedMatcherValidationTest {
                           .setHeaderName("key").build())))
               .setPrefixMatchMap(Matcher.MatcherTree.MatchMap.newBuilder())) // Empty map
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("prefix_match_map must contain at least one entry");
     }
@@ -241,7 +242,7 @@ public class UnifiedMatcherValidationTest {
                    .setOnMatch(Matcher.OnMatch.newBuilder()
                        .setAction(TypedExtensionConfig.newBuilder().setName("action")))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for empty prefix");
+      fail("Should have thrown IllegalArgumentException for empty prefix");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("prefix (match_pattern) must be non-empty");
     }
@@ -263,7 +264,7 @@ public class UnifiedMatcherValidationTest {
                    .setOnMatch(Matcher.OnMatch.newBuilder()
                        .setAction(TypedExtensionConfig.newBuilder().setName("action")))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for empty suffix");
+      fail("Should have thrown IllegalArgumentException for empty suffix");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("suffix (match_pattern) must be non-empty");
     }
@@ -285,7 +286,7 @@ public class UnifiedMatcherValidationTest {
                    .setOnMatch(Matcher.OnMatch.newBuilder()
                        .setAction(TypedExtensionConfig.newBuilder().setName("action")))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for empty contains");
+      fail("Should have thrown IllegalArgumentException for empty contains");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("contains (match_pattern) must be non-empty");
     }
@@ -308,7 +309,7 @@ public class UnifiedMatcherValidationTest {
                    .setOnMatch(Matcher.OnMatch.newBuilder()
                        .setAction(TypedExtensionConfig.newBuilder().setName("action")))))
           .build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException for empty regex");
+      fail("Should have thrown IllegalArgumentException for empty regex");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("regex (match_pattern) must be non-empty");
     }
@@ -324,7 +325,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       UnifiedMatcher.resolveInput(config);
-      org.junit.Assert.fail();
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid input config");
     }
@@ -341,7 +342,7 @@ public class UnifiedMatcherValidationTest {
         .build();
     try {
       UnifiedMatcher.resolveInput(config);
-      org.junit.Assert.fail();
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Invalid header name");
     }
@@ -363,7 +364,7 @@ public class UnifiedMatcherValidationTest {
     }
     try {
       UnifiedMatcher.fromProto(current);
-      org.junit.Assert.fail();
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exceeds limit");
     }
@@ -385,7 +386,7 @@ public class UnifiedMatcherValidationTest {
     }
     try {
       UnifiedMatcher.fromProto(current);
-      org.junit.Assert.fail();
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exceeds limit");
     }
@@ -401,7 +402,7 @@ public class UnifiedMatcherValidationTest {
     }
     try {
       UnifiedMatcher.fromProto(current);
-      org.junit.Assert.fail();
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("exceeds limit");
     }
@@ -427,7 +428,7 @@ public class UnifiedMatcherValidationTest {
     
     try {
       UnifiedMatcher.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("OnMatch must have either matcher or action");
     }
@@ -441,7 +442,7 @@ public class UnifiedMatcherValidationTest {
     
     try {
       UnifiedMatcher.fromProto(proto);
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("MatcherList must contain at least one FieldMatcher");
     }
@@ -461,7 +462,7 @@ public class UnifiedMatcherValidationTest {
     try {
       PredicateEvaluator.fromProto(
           Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains(
           "StringMatcher suffix (match_pattern) must be non-empty");
@@ -482,7 +483,7 @@ public class UnifiedMatcherValidationTest {
     try {
       PredicateEvaluator.fromProto(
           Matcher.MatcherList.Predicate.newBuilder().setSinglePredicate(predicate).build());
-      org.junit.Assert.fail("Should have thrown IllegalArgumentException");
+      fail("Should have thrown IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       assertThat(e).hasMessageThat().contains("Unknown StringMatcher match pattern");
     }
