@@ -841,7 +841,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void halfClose() {
       clientHalfCloseStartNanos = System.nanoTime();
-      if (passThroughMode.get() || extProcStreamState.get().isCompleted()) {
+      if (passThroughMode.get()) {
         if (requestSideClosed.compareAndSet(false, true)) {
           proceedWithHalfClose();
         }
@@ -849,6 +849,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       pendingHalfClose.set(true);
+
+      if (extProcStreamState.get().isCompleted()) {
+        return;
+      }
 
       if (extProcStreamState.get().isDraining()) {
         return;
@@ -867,8 +871,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               .setEndOfStreamWithoutMessage(true)
               .build())
           .build());
-      
-      // Defer super.halfClose() until ext-proc response signals end_of_stream.
     }
 
     @Override
