@@ -449,7 +449,7 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
-  public void aggregateCluster_doesNotAddBackendServiceAttributeOrPickDetailsLabelFromRoot() {
+  public void aggregateCluster_doesNotAddBackendServiceAttributeAndPickDetailsLabelFromRoot() {
     String cluster1 = "cluster-01.googleapis.com";
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
         // CLUSTER (aggr.) -> [cluster1 (EDS)]
@@ -475,6 +475,44 @@ public class CdsLoadBalancer2Test {
 
     assertThat(result.getStatus().isOk()).isTrue();
     verify(detailsConsumer, never()).addOptionalLabel(eq("grpc.lb.backend_service"), any());
+  }
+
+  @Test
+  public void aggregateCluster_leafAddsBackendServicePickDetailsLabel() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
+
+    String cluster1 = "cluster-01.googleapis.com";
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        // CLUSTER (aggr.) -> [cluster1 (EDS)]
+        CLUSTER, Cluster.newBuilder()
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster1)
+                .build())))
+          .build(),
+        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build()));
+    startXdsDepManager();
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) childBalancer.config;
+    assertThat(clusterImplConfig.cluster).isEqualTo(cluster1);
+    assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE))
+        .isEqualTo(cluster1);
+    childBalancer.deliverSubchannelState(PickResult.withNoResult(), ConnectivityState.READY);
+
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(newPickSubchannelArgs(detailsConsumer));
+
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", cluster1);
+    verify(detailsConsumer, never()).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
   }
 
   @Test
