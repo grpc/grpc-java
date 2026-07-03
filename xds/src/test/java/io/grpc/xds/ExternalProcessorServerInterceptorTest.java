@@ -2202,6 +2202,8 @@ public class ExternalProcessorServerInterceptorTest {
     // plane call
     StreamObserver<ProcessingResponse> responseObserver = responseObserverRef.get();
     assertThat(responseObserver).isNotNull();
+    responseObserver.onNext(
+        ProcessingResponse.newBuilder().setRequestDrain(true).build());
     responseObserver.onCompleted();
 
     // Verify that the call is now activated
@@ -7606,6 +7608,97 @@ public class ExternalProcessorServerInterceptorTest {
     }
   }
 
+  @Test
+  public void givenNoRequestDrain_whenExtProcStreamCompletesNormally_thenTreatsAsNonOkAndCallFails()
+      throws Exception {
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    ExternalProcessor proto =
+        createBaseProto(uniqueExtProcServerName)
+            .setFailureModeAllow(false) // Fail closed
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    // External Processor Server completes normally without sending request_drain = true
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // Complete stream normally without drain
+                  responseObserver.onCompleted();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(uniqueExtProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    dataPlaneHandler =
+        new DataPlaneServiceHandler() {
+          @Override
+          public void sayHello(InputStream request, StreamObserver<InputStream> responseObserver) {
+            responseObserver.onNext(request);
+            responseObserver.onCompleted();
+          }
+        };
+
+    startDataPlane(interceptor);
+
+    io.grpc.ClientCall<InputStream, InputStream> clientCall =
+        dataPlaneChannel.newCall(METHOD_SAY_HELLO_RAW, io.grpc.CallOptions.DEFAULT);
+
+    final CountDownLatch callCompletedLatch = new CountDownLatch(1);
+    final AtomicReference<Status> closedStatus = new AtomicReference<>();
+    clientCall.start(
+        new io.grpc.ClientCall.Listener<InputStream>() {
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            closedStatus.set(status);
+            callCompletedLatch.countDown();
+          }
+        },
+        new Metadata());
+
+    clientCall.request(1);
+    clientCall.sendMessage(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+    clientCall.halfClose();
+
+    assertThat(callCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
+    channelManager.close();
+  }
+
   // ============================================================================
   // Category 15: Inbound Backpressure (request(n) / pendingRequests)
   // ============================================================================
@@ -11048,7 +11141,9 @@ public class ExternalProcessorServerInterceptorTest {
 
   @Test
   public void serverInterceptor_contextPropagatedToListenerCallbacks() throws Exception {
-    ExternalProcessor proto = createBaseProto(extProcServerName).build();
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setFailureModeAllow(true)
+        .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
     assertThat(configOrError.errorDetail).isNull();

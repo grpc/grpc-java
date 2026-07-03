@@ -562,8 +562,15 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
         @Override
         public void onCompleted() {
-          if (markExtProcStreamCompleted(extProcStreamState)) {
-            handleFailOpen();
+          ExtProcStreamState state = extProcStreamState.get();
+          if (state == ExtProcStreamState.DRAINING) {
+            if (markExtProcStreamCompleted(extProcStreamState)) {
+              handleFailOpen();
+            }
+          } else if (state == ExtProcStreamState.ACTIVE) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("External processor stream completed without drain")
+                .asRuntimeException());
           }
         }
       });
