@@ -25,6 +25,7 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -675,8 +676,8 @@ public class CdsLoadBalancer2Test {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult pick = pickerCaptor.getValue().pickSubchannel(
         mock(PickSubchannelArgs.class));
-    assertThat(pick.getDelayType()).isEqualTo("connecting");
-    assertThat(pick.getDelayReason()).contains("cds lookup failed");
+    assertThat(pick.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(pick.getStatus().getDescription()).contains("cds lookup failed");
   }
 
   private static void assertPickerStatus(SubchannelPicker picker, Status expectedStatus)  {
