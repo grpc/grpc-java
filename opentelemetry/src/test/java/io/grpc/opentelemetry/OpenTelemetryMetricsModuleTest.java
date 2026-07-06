@@ -1690,11 +1690,11 @@ public class OpenTelemetryMetricsModuleTest {
             helper.updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
               @Override
               public PickResult pickSubchannel(PickSubchannelArgs args) {
+                latch.countDown();
                 return PickResult.withNoResult("connecting",
                     "Simulated slow TLS handshake with backend");
               }
             });
-            latch.countDown();
             return Status.OK;
           }
 
@@ -1769,7 +1769,6 @@ public class OpenTelemetryMetricsModuleTest {
       call.request(1);
 
       latch.await(5, TimeUnit.SECONDS);
-      Thread.sleep(50);
       call.cancel("End test delay segment", null);
     } finally {
       channel.shutdownNow();
