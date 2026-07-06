@@ -45,7 +45,6 @@ import io.grpc.NoopClientCall;
 import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
