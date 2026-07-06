@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.primitives.UnsignedInts;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalEquivalentAddressGroup;
@@ -32,9 +33,11 @@ import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.StatusOr;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.util.OutlierDetectionLoadBalancer.OutlierDetectionLoadBalancerConfig;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
@@ -83,7 +86,9 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
   private final ClusterState clusterState = new ClusterState();
+  private final CdsLbHelper cdsLbHelper = new CdsLbHelper();
   private GracefulSwitchLoadBalancer delegate;
+  private boolean addBackendServicePickDetailsLabel;
   // Following fields are effectively final.
   private String clusterName;
   private Subscription clusterSubscription;
@@ -91,7 +96,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   CdsLoadBalancer2(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
-    this.delegate = new GracefulSwitchLoadBalancer(helper);
+    this.delegate = new GracefulSwitchLoadBalancer(cdsLbHelper);
     logger = XdsLogger.withLogId(InternalLogId.allocate("cds-lb", helper.getAuthority()));
     logger.log(XdsLogLevel.INFO, "Created");
   }
@@ -126,6 +131,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
     XdsClusterConfig clusterConfig = clusterConfigOr.getValue();
 
     if (clusterConfig.getChildren() instanceof EndpointConfig) {
+      addBackendServicePickDetailsLabel = true;
       StatusOr<EdsUpdate> edsUpdate = getEdsUpdate(xdsConfig, clusterName);
       StatusOr<ClusterResolutionResult> statusOrResult = clusterState.edsUpdateToResult(
           clusterName,
@@ -156,8 +162,12 @@ final class CdsLoadBalancer2 extends LoadBalancer {
           resolvedAddresses.toBuilder()
             .setLoadBalancingPolicyConfig(gracefulConfig)
             .setAddresses(Collections.unmodifiableList(addresses))
+            .setAttributes(resolvedAddresses.getAttributes().toBuilder()
+                .set(NameResolver.ATTR_BACKEND_SERVICE, clusterName)
+                .build())
             .build());
     } else if (clusterConfig.getChildren() instanceof AggregateConfig) {
+      addBackendServicePickDetailsLabel = false;
       Map<String, PriorityChildConfig> priorityChildConfigs = new HashMap<>();
       List<String> leafClusters = ((AggregateConfig) clusterConfig.getChildren()).getLeafNames();
       for (String childCluster: leafClusters) {
@@ -196,7 +206,8 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   public void shutdown() {
     logger.log(XdsLogLevel.INFO, "Shutdown");
     delegate.shutdown();
-    delegate = new GracefulSwitchLoadBalancer(helper);
+    delegate = new GracefulSwitchLoadBalancer(cdsLbHelper);
+    addBackendServicePickDetailsLabel = false;
     if (clusterSubscription != null) {
       clusterSubscription.close();
       clusterSubscription = null;
@@ -206,6 +217,7 @@ final class CdsLoadBalancer2 extends LoadBalancer {
   @CheckReturnValue // don't forget to return up the stack after the fail call
   private Status fail(Status error) {
     delegate.shutdown();
+    addBackendServicePickDetailsLabel = false;
     helper.updateBalancingState(
         TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(error)));
     return Status.OK; // XdsNameResolver isn't a polling NR, so this value doesn't matter
@@ -213,6 +225,38 @@ final class CdsLoadBalancer2 extends LoadBalancer {
 
   private String errorPrefix() {
     return "CdsLb for " + clusterName + ": ";
+  }
+
+  private final class CdsLbHelper extends ForwardingLoadBalancerHelper {
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      if (addBackendServicePickDetailsLabel) {
+        newPicker = new BackendServiceMetricLabelSubchannelPicker(newPicker, clusterName);
+      }
+      delegate().updateBalancingState(newState, newPicker);
+    }
+
+    @Override
+    protected Helper delegate() {
+      return helper;
+    }
+  }
+
+  private static final class BackendServiceMetricLabelSubchannelPicker extends SubchannelPicker {
+    private final SubchannelPicker delegate;
+    private final String backendService;
+
+    private BackendServiceMetricLabelSubchannelPicker(
+        SubchannelPicker delegate, String backendService) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.backendService = checkNotNull(backendService, "backendService");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.backend_service", backendService);
+      return delegate.pickSubchannel(args);
+    }
   }
 
   /**

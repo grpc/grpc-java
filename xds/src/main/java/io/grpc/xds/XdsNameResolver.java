@@ -51,6 +51,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.ClusterSpecifierPlugin.PluginConfig;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.RouteLookupServiceClusterSpecifierPlugin.RlsPluginConfig;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
@@ -67,6 +68,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsInitializationException;
 import io.grpc.xds.client.XdsLogger;
 import io.grpc.xds.client.XdsLogger.XdsLogLevel;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -110,7 +112,7 @@ final class XdsNameResolver extends NameResolver {
   @Nullable
   private final String targetAuthority;
   private final String serviceAuthority;
-  // Encoded version of the service authority as per 
+  // Encoded version of the service authority as per
   // https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.
   private final String encodedServiceAuthority;
   private final String overrideAuthority;
@@ -121,7 +123,6 @@ final class XdsNameResolver extends NameResolver {
   private final ThreadSafeRandom random;
   private final FilterRegistry filterRegistry;
   private final XxHash64 hashFunc = XxHash64.INSTANCE;
-  // Clusters (with reference counts) to which new/existing requests can be/are routed.
   // put()/remove() must be called in SyncContext, and get() can be called in any thread.
   private final ConcurrentMap<String, ClusterRefState> clusterRefs = new ConcurrentHashMap<>();
   private final ConfigSelector configSelector = new ConfigSelector();
@@ -137,6 +138,7 @@ final class XdsNameResolver extends NameResolver {
   private XdsClient xdsClient;
   private CallCounterProvider callCounterProvider;
   private ResolveState resolveState;
+
 
   /**
    * Constructs a new instance.
@@ -154,8 +156,8 @@ final class XdsNameResolver extends NameResolver {
     this(target, targetAuthority, name, overrideAuthority, serviceConfigParser,
         syncContext, scheduler,
         bootstrapOverride == null
-          ? SharedXdsClientPoolProvider.getDefaultProvider()
-          : new SharedXdsClientPoolProvider(),
+            ? SharedXdsClientPoolProvider.getDefaultProvider()
+            : new SharedXdsClientPoolProvider(),
         ThreadSafeRandomImpl.instance, FilterRegistry.getDefaultRegistry(), bootstrapOverride,
         metricRecorder, nameResolverArgs);
   }
@@ -172,8 +174,8 @@ final class XdsNameResolver extends NameResolver {
 
     // The name might have multiple slashes so encode it before verifying.
     serviceAuthority = checkNotNull(name, "name");
-    this.encodedServiceAuthority = 
-      GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
+    this.encodedServiceAuthority =
+        GrpcUtil.checkAuthority(GrpcUtil.AuthorityEscaper.encodeAuthority(serviceAuthority));
 
     this.overrideAuthority = overrideAuthority;
     this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser");
@@ -234,7 +236,7 @@ final class XdsNameResolver extends NameResolver {
     }
     String ldsResourceName = expandPercentS(listenerNameTemplate, replacement);
     if (!XdsClient.isResourceNameValid(ldsResourceName, XdsListenerResource.getInstance().typeUrl())
-        ) {
+    ) {
       listener.onError(Status.INVALID_ARGUMENT.withDescription(
           "invalid listener resource URI for service authority: " + serviceAuthority));
       return;
@@ -742,7 +744,9 @@ final class XdsNameResolver extends NameResolver {
         Filter.Provider provider = filterRegistry.get(typeUrl);
         checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = activeFilters.computeIfAbsent(
-            filterKey, k -> provider.newInstance(namedFilter.name));
+            filterKey, k -> provider.newInstance(
+                FilterContext.create(
+                    namedFilter.name, nameResolverArgs.getMetricRecorder())));
         checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }
@@ -900,9 +904,10 @@ final class XdsNameResolver extends NameResolver {
         }
       }
 
-      // Combine interceptors produced by different filters into a single one that executes
-      // them sequentially. The order is preserved.
-      return combineInterceptors(filterInterceptors.build());
+      ImmutableList.Builder<ClientInterceptor> withRawMessage = ImmutableList.builder();
+      withRawMessage.add(new RawMessageClientInterceptor());
+      withRawMessage.addAll(filterInterceptors.build());
+      return combineInterceptors(withRawMessage.build());
     }
 
     private void cleanUpRoutes(Status error) {
@@ -921,8 +926,8 @@ final class XdsNameResolver extends NameResolver {
       // the config selector handles the error message itself.
       listener.onResult2(ResolutionResult.newBuilder()
           .setAttributes(Attributes.newBuilder()
-            .set(InternalConfigSelector.KEY, configSelector)
-            .build())
+              .set(InternalConfigSelector.KEY, configSelector)
+              .build())
           .setServiceConfig(emptyServiceConfig)
           .build());
     }
@@ -1112,6 +1117,90 @@ final class XdsNameResolver extends NameResolver {
     @Override
     public XdsClient returnObject(XdsClient xdsClient) {
       return null;
+    }
+  }
+
+  static final class RawMessageClientInterceptor implements ClientInterceptor {
+    private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
+        new MethodDescriptor.Marshaller<InputStream>() {
+          @Override
+          public InputStream stream(InputStream value) {
+            return value;
+          }
+
+          @Override
+          public InputStream parse(InputStream stream) {
+            return stream;
+          }
+        };
+
+    @Override
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+        final MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      MethodDescriptor<InputStream, InputStream> rawMethod =
+          method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
+      final ClientCall<InputStream, InputStream> rawCall = next.newCall(rawMethod, callOptions);
+      return new ClientCall<ReqT, RespT>() {
+        @Override
+        public void start(final Listener<RespT> responseListener, Metadata headers) {
+          rawCall.start(new Listener<InputStream>() {
+            @Override
+            public void onHeaders(Metadata headers) {
+              responseListener.onHeaders(headers);
+            }
+
+            @Override
+            public void onMessage(InputStream message) {
+              responseListener.onMessage(method.getResponseMarshaller().parse(message));
+            }
+
+            @Override
+            public void onClose(Status status, Metadata trailers) {
+              responseListener.onClose(status, trailers);
+            }
+
+            @Override
+            public void onReady() {
+              responseListener.onReady();
+            }
+          }, headers);
+        }
+
+        @Override
+        public void request(int numMessages) {
+          rawCall.request(numMessages);
+        }
+
+        @Override
+        public void cancel(@Nullable String message, @Nullable Throwable cause) {
+          rawCall.cancel(message, cause);
+        }
+
+        @Override
+        public void halfClose() {
+          rawCall.halfClose();
+        }
+
+        @Override
+        public void sendMessage(ReqT message) {
+          rawCall.sendMessage(method.getRequestMarshaller().stream(message));
+        }
+
+        @Override
+        public boolean isReady() {
+          return rawCall.isReady();
+        }
+
+        @Override
+        public void setMessageCompression(boolean enabled) {
+          rawCall.setMessageCompression(enabled);
+        }
+
+        @Override
+        public Attributes getAttributes() {
+          return rawCall.getAttributes();
+        }
+      };
     }
   }
 }

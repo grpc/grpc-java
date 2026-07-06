@@ -45,6 +45,8 @@ import io.grpc.internal.DelayedClientCall;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.FaultConfig.FaultAbort;
 import io.grpc.xds.FaultConfig.FaultDelay;
+import io.grpc.xds.Filter.FilterConfigParseContext;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
 import java.util.Locale;
 import java.util.concurrent.Executor;
@@ -99,7 +101,7 @@ final class FaultFilter implements Filter {
     }
 
     @Override
-    public FaultFilter newInstance(String name) {
+    public FaultFilter newInstance(FilterContext context) {
       return INSTANCE;
     }
 
@@ -412,7 +414,7 @@ final class FaultFilter implements Filter {
         long delayNanos, Executor callExecutor, ScheduledExecutorService scheduler,
         @Nullable Deadline deadline,
         final Supplier<? extends ClientCall<ReqT, RespT>> callSupplier) {
-      super(callExecutor, scheduler, deadline);
+      super("httpfault_filter", callExecutor, scheduler, deadline);
       activeFaultCounter.incrementAndGet();
       ScheduledFuture<?> task = scheduler.schedule(
           new Runnable() {

@@ -38,9 +38,15 @@ final class FilterRegistry {
               new FaultFilter.Provider(),
               new RouterFilter.Provider(),
               new RbacFilter.Provider(),
-              new GcpAuthenticationFilter.Provider());
+              new GcpAuthenticationFilter.Provider(),
+              new ExternalProcessorFilter.Provider());
     }
     return instance;
+  }
+
+  @VisibleForTesting
+  static synchronized void reset() {
+    instance = null;
   }
 
   @VisibleForTesting

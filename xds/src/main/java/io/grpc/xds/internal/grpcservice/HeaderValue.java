@@ -28,13 +28,14 @@ import java.util.Optional;
 public abstract class HeaderValue {
 
   public static HeaderValue create(String key, String value) {
+    HeaderValueValidationUtils.validateHeaderValue(key, value);
     return new AutoValue_HeaderValue(key, Optional.of(value), Optional.empty());
   }
 
   public static HeaderValue create(String key, ByteString rawValue) {
+    HeaderValueValidationUtils.validateHeaderValue(key, rawValue);
     return new AutoValue_HeaderValue(key, Optional.empty(), Optional.of(rawValue));
   }
-
 
   public abstract String key();
 

@@ -27,15 +27,13 @@ import io.grpc.xds.internal.grpcservice.HeaderValue;
 public abstract class HeaderValueOption {
 
   public static HeaderValueOption create(
-      HeaderValue header, HeaderAppendAction appendAction, boolean keepEmptyValue) {
-    return new AutoValue_HeaderValueOption(header, appendAction, keepEmptyValue);
+      HeaderValue header, HeaderAppendAction appendAction) {
+    return new AutoValue_HeaderValueOption(header, appendAction);
   }
 
   public abstract HeaderValue header();
 
   public abstract HeaderAppendAction appendAction();
-
-  public abstract boolean keepEmptyValue();
 
   /**
    * Defines the action to take when appending headers.
