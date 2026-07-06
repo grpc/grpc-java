@@ -120,6 +120,7 @@ final class GrpcXdsTransportFactory implements XdsTransportFactory {
           .keepAliveTime(5, TimeUnit.MINUTES);
       if (channelConfigurator != null) {
         channelConfigurator.configureChannelBuilder(channelBuilder);
+        channelBuilder.childChannelConfigurator(channelConfigurator);
       }
       this.channel = channelBuilder.build();
       this.callCredentials = callCredentials;

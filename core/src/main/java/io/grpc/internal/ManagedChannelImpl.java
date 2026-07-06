@@ -1501,6 +1501,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // Note that we follow the global configurator pattern and try to fuse the configurations as
       // soon as the builder gets created
       channelConfigurator.configureChannelBuilder(builder);
+      builder.childChannelConfigurator(channelConfigurator);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

@@ -17,8 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.service.discovery.v3.AggregatedDiscoveryServiceGrpc;
@@ -35,6 +38,9 @@ import io.grpc.InsecureChannelCredentials;
 import io.grpc.InsecureServerCredentials;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.NoopClientCall;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -43,9 +49,11 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.XdsTransportFactory;
+import java.net.URI;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -278,6 +286,48 @@ public class GrpcXdsTransportFactoryTest {
     assertThat(called[0]).isTrue();
 
     transport.shutdown();
+  }
+
+  @Test
+  public void useChannelConfigurator_setsChildChannelConfigurator() {
+    final AtomicReference<NameResolver.Args> capturedArgs = new AtomicReference<>();
+    NameResolverProvider testProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        capturedArgs.set(args);
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn("localhost:8080");
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "test-xds-transport";
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(testProvider);
+    try {
+      ChannelConfigurator configurer = builder -> { };
+      GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(null, configurer);
+      XdsTransportFactory.XdsTransport transport = factory.create(
+          Bootstrapper.ServerInfo.create(
+              "test-xds-transport://localhost:8080", InsecureChannelCredentials.create()));
+      assertNotNull(capturedArgs.get());
+      assertSame(configurer, capturedArgs.get().getChildChannelConfigurator());
+      transport.shutdown();
+    } finally {
+      NameResolverRegistry.getDefaultRegistry().deregister(testProvider);
+    }
   }
 
   @Test

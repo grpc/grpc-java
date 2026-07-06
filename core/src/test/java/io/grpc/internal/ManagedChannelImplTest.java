@@ -532,6 +532,48 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void childChannelConfigurator_passedToResolvingOobChannelNameResolverArgs() {
+    ChannelConfigurator configurator = builder -> { };
+    channelBuilder.childChannelConfigurator(configurator);
+    AtomicReference<NameResolver.Args> oobArgs = new AtomicReference<>();
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        if ("oobauthority".equals(targetUri.getAuthority())
+            || "oobauthority".equals(targetUri.getPath())
+            || targetUri.toString().contains("oobauthority")) {
+          oobArgs.set(args);
+        }
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn(
+            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
+    oob.getState(true);
+    assertNotNull(oobArgs.get());
+    assertSame(configurator, oobArgs.get().getChildChannelConfigurator());
+    oob.shutdownNow();
+  }
+
+  @Test
   public void startCallBeforeNameResolution() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
