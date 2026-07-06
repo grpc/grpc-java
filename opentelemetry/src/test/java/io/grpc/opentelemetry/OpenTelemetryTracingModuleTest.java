@@ -308,6 +308,30 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void clientCallDelayTracingMocking() {
+    Span mockDelaySpan = mock(Span.class);
+    when(mockSpanBuilder.setAttribute(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(mockSpanBuilder);
+    when(mockSpanBuilder.startSpan()).thenReturn(mockDelaySpan);
+
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(mockOpenTelemetry);
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(mockClientSpan, method);
+
+    callTracer.recordCallDelayStart("resolving", "waiting for DNS query");
+    callTracer.recordCallDelayEnd();
+
+    verify(mockTracer).spanBuilder(eq("Call Delay"));
+    verify(mockSpanBuilder).setAttribute(eq("grpc.delay_type"), eq("resolving"));
+    verify(mockDelaySpan).addEvent(
+        eq("Delay state transition"),
+        org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
+    verify(mockDelaySpan).end();
+  }
+
+  @Test
   public void clientBasicTracingRule() {
     OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());

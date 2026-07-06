@@ -401,8 +401,10 @@ final class OpenTelemetryMetricsModule {
     private final List<OpenTelemetryPlugin.ClientCallPlugin> callPlugins;
     private final Context otelContext;
     private Status status;
-    @Nullable private volatile Stopwatch activeCallDelayStopwatch;
-    @Nullable private volatile String activeCallDelayType;
+    @GuardedBy("this")
+    @Nullable private Stopwatch activeCallDelayStopwatch;
+    @GuardedBy("this")
+    @Nullable private String activeCallDelayType;
     private final io.opentelemetry.api.common.Attributes callLevelBaseAttributes;
     private long retryDelayNanos;
     private long callLatencyNanos;
@@ -599,7 +601,7 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    public void recordCallDelayStart(String delayType, String delayReason) {
+    public synchronized void recordCallDelayStart(String delayType, String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
           || (activeCallDelayStopwatch != null && Objects.equals(activeCallDelayType, delayType))) {
         return;
@@ -610,11 +612,11 @@ final class OpenTelemetryMetricsModule {
     }
 
     @Override
-    public void recordCallDelayReasonChanged(String delayReason) {
+    public synchronized void recordCallDelayReasonChanged(String delayReason) {
     }
 
     @Override
-    public void recordCallDelayEnd() {
+    public synchronized void recordCallDelayEnd() {
       Stopwatch delayStopwatch = activeCallDelayStopwatch;
       String delayType = activeCallDelayType;
       if (delayStopwatch != null && delayType != null) {

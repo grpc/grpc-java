@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.IMPLEMENTATION_VERSION;
 import static io.grpc.opentelemetry.internal.OpenTelemetryConstants.BAGGAGE_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.errorprone.annotations.concurrent.GuardedBy;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -144,8 +145,10 @@ final class OpenTelemetryTracingModule {
     volatile int callEnded;
     private final Span clientSpan;
     private final String fullMethodName;
-    @Nullable private volatile Span activeCallDelaySpan;
-    @Nullable private volatile String activeCallDelayType;
+    @GuardedBy("this")
+    @Nullable private Span activeCallDelaySpan;
+    @GuardedBy("this")
+    @Nullable private String activeCallDelayType;
 
     CallAttemptsTracerFactory(Span clientSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
@@ -191,7 +194,7 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordCallDelayStart(String delayType, String delayReason) {
+    public synchronized void recordCallDelayStart(String delayType, String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
         return;
       }
@@ -214,7 +217,7 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordCallDelayReasonChanged(String delayReason) {
+    public synchronized void recordCallDelayReasonChanged(String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeCallDelaySpan == null) {
         return;
       }
@@ -227,7 +230,7 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordCallDelayEnd() {
+    public synchronized void recordCallDelayEnd() {
       Span delaySpan = activeCallDelaySpan;
       if (delaySpan != null) {
         delaySpan.end();
