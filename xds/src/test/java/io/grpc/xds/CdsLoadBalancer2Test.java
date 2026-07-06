@@ -61,6 +61,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -297,6 +298,24 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
+  public void nonAggregateCluster_addsBackendServiceAttributeAndPickDetailsLabel() {
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
+    startXdsDepManager();
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE)).isEqualTo(CLUSTER);
+    childBalancer.deliverSubchannelState(PickResult.withNoResult(), ConnectivityState.READY);
+
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(newPickSubchannelArgs(detailsConsumer));
+
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
+  }
+
+  @Test
   public void nonAggregateCluster_resourceRevoked() {
     lbRegistry.register(new PriorityLoadBalancerProvider());
     controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(CLUSTER, EDS_CLUSTER));
@@ -430,6 +449,73 @@ public class CdsLoadBalancer2Test {
   }
 
   @Test
+  public void aggregateCluster_doesNotAddBackendServiceAttributeAndPickDetailsLabelFromRoot() {
+    String cluster1 = "cluster-01.googleapis.com";
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        // CLUSTER (aggr.) -> [cluster1 (EDS)]
+        CLUSTER, Cluster.newBuilder()
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster1)
+                .build())))
+          .build(),
+        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build()));
+    startXdsDepManager();
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE)).isNull();
+    childBalancer.deliverSubchannelState(PickResult.withNoResult(), ConnectivityState.READY);
+
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(newPickSubchannelArgs(detailsConsumer));
+
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(detailsConsumer, never()).addOptionalLabel(eq("grpc.lb.backend_service"), any());
+  }
+
+  @Test
+  public void aggregateCluster_leafAddsBackendServicePickDetailsLabel() {
+    lbRegistry.register(new PriorityLoadBalancerProvider());
+    CdsLoadBalancerProvider cdsLoadBalancerProvider = new CdsLoadBalancerProvider(lbRegistry);
+    lbRegistry.register(cdsLoadBalancerProvider);
+    loadBalancer = (CdsLoadBalancer2) cdsLoadBalancerProvider.newLoadBalancer(helper);
+
+    String cluster1 = "cluster-01.googleapis.com";
+    controlPlaneService.setXdsConfig(ADS_TYPE_URL_CDS, ImmutableMap.of(
+        // CLUSTER (aggr.) -> [cluster1 (EDS)]
+        CLUSTER, Cluster.newBuilder()
+          .setName(CLUSTER)
+          .setClusterType(Cluster.CustomClusterType.newBuilder()
+            .setName("envoy.clusters.aggregate")
+            .setTypedConfig(Any.pack(ClusterConfig.newBuilder()
+                .addClusters(cluster1)
+                .build())))
+          .build(),
+        cluster1, EDS_CLUSTER.toBuilder().setName(cluster1).build()));
+    startXdsDepManager();
+
+    FakeLoadBalancer childBalancer = Iterables.getOnlyElement(childBalancers);
+    ClusterImplConfig clusterImplConfig = (ClusterImplConfig) childBalancer.config;
+    assertThat(clusterImplConfig.cluster).isEqualTo(cluster1);
+    assertThat(childBalancer.attributes.get(NameResolver.ATTR_BACKEND_SERVICE))
+        .isEqualTo(cluster1);
+    childBalancer.deliverSubchannelState(PickResult.withNoResult(), ConnectivityState.READY);
+
+    verify(helper).updateBalancingState(eq(ConnectivityState.READY), pickerCaptor.capture());
+    PickDetailsConsumer detailsConsumer = mock(PickDetailsConsumer.class);
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(newPickSubchannelArgs(detailsConsumer));
+
+    assertThat(result.getStatus().isOk()).isTrue();
+    verify(detailsConsumer).addOptionalLabel("grpc.lb.backend_service", cluster1);
+    verify(detailsConsumer, never()).addOptionalLabel("grpc.lb.backend_service", CLUSTER);
+  }
+
+  @Test
   // Both priorities will get tried using real priority LB policy.
   public void discoverAggregateCluster_testChildCdsLbPolicyParsing() {
     lbRegistry.register(new PriorityLoadBalancerProvider());
@@ -462,12 +548,16 @@ public class CdsLoadBalancer2Test {
         .isEqualTo("cluster-01.googleapis.com");
     assertThat(cluster1ImplConfig.edsServiceName)
         .isEqualTo("backend-service-1.googleapis.com");
+    assertThat(childBalancers.get(0).attributes.get(NameResolver.ATTR_BACKEND_SERVICE))
+        .isEqualTo(cluster1);
     ClusterImplConfig cluster2ImplConfig =
         (ClusterImplConfig) childBalancers.get(1).config;
     assertThat(cluster2ImplConfig.cluster)
         .isEqualTo("cluster-02.googleapis.com");
     assertThat(cluster2ImplConfig.edsServiceName)
         .isEqualTo("backend-service-1.googleapis.com");
+    assertThat(childBalancers.get(1).attributes.get(NameResolver.ATTR_BACKEND_SERVICE))
+        .isEqualTo(cluster2);
   }
 
   @Test
@@ -577,7 +667,9 @@ public class CdsLoadBalancer2Test {
     startXdsDepManager();
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(
+            newPickSubchannelArgs(mock(PickDetailsConsumer.class)));
     Status actualStatus = result.getStatus();
     assertThat(actualStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(actualStatus.getDescription()).contains("Invalid LoadBalancingPolicy");
@@ -605,7 +697,9 @@ public class CdsLoadBalancer2Test {
     startXdsDepManager();
     verify(helper).updateBalancingState(
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
-    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result =
+        pickerCaptor.getValue().pickSubchannel(
+            newPickSubchannelArgs(mock(PickDetailsConsumer.class)));
     Status actualStatus = result.getStatus();
     assertThat(actualStatus.getCode()).isEqualTo(Status.Code.UNAVAILABLE);
     assertThat(actualStatus.getDescription()).contains("Invalid 'minRingSize'");
@@ -639,10 +733,17 @@ public class CdsLoadBalancer2Test {
   }
 
   private static void assertPickerStatus(SubchannelPicker picker, Status expectedStatus)  {
-    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickResult result = picker.pickSubchannel(
+        newPickSubchannelArgs(mock(PickDetailsConsumer.class)));
     Status actualStatus = result.getStatus();
     assertThat(actualStatus.getCode()).isEqualTo(expectedStatus.getCode());
     assertThat(actualStatus.getDescription()).isEqualTo(expectedStatus.getDescription());
+  }
+
+  private static PickSubchannelArgs newPickSubchannelArgs(PickDetailsConsumer pickDetailsConsumer) {
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    when(args.getPickDetailsConsumer()).thenReturn(pickDetailsConsumer);
+    return args;
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {
@@ -660,7 +761,7 @@ public class CdsLoadBalancer2Test {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName);
+      FakeLoadBalancer balancer = new FakeLoadBalancer(policyName, helper);
       childBalancers.add(balancer);
       return balancer;
     }
@@ -692,17 +793,21 @@ public class CdsLoadBalancer2Test {
 
   private final class FakeLoadBalancer extends LoadBalancer {
     private final String name;
+    private final Helper helper;
     private Object config;
+    private Attributes attributes;
     private Status upstreamError;
     private boolean shutdown;
 
-    FakeLoadBalancer(String name) {
+    FakeLoadBalancer(String name, Helper helper) {
       this.name = name;
+      this.helper = helper;
     }
 
     @Override
     public Status acceptResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       config = resolvedAddresses.getLoadBalancingPolicyConfig();
+      attributes = resolvedAddresses.getAttributes();
       return Status.OK;
     }
 
@@ -715,6 +820,16 @@ public class CdsLoadBalancer2Test {
     public void shutdown() {
       shutdown = true;
       childBalancers.remove(this);
+    }
+
+    void deliverSubchannelState(final PickResult result, ConnectivityState state) {
+      SubchannelPicker picker = new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return result;
+        }
+      };
+      helper.updateBalancingState(state, picker);
     }
   }
 }

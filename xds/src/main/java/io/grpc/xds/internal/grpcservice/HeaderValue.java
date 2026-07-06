@@ -29,16 +29,12 @@ public abstract class HeaderValue {
 
   public static HeaderValue create(String key, String value) {
     HeaderValueValidationUtils.validateHeaderValue(key, value);
-    return new AutoValue_HeaderValue(key, Optional.of(value), Optional.empty(), true);
+    return new AutoValue_HeaderValue(key, Optional.of(value), Optional.empty());
   }
 
   public static HeaderValue create(String key, ByteString rawValue) {
     HeaderValueValidationUtils.validateHeaderValue(key, rawValue);
-    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.of(rawValue), true);
-  }
-
-  public static HeaderValue createInvalid(String key) {
-    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.empty(), false);
+    return new AutoValue_HeaderValue(key, Optional.empty(), Optional.of(rawValue));
   }
 
   public abstract String key();
@@ -46,6 +42,4 @@ public abstract class HeaderValue {
   public abstract Optional<String> value();
 
   public abstract Optional<ByteString> rawValue();
-
-  public abstract boolean isValid();
 }

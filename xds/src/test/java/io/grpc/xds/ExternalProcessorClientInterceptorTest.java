@@ -71,9 +71,11 @@ import io.grpc.stub.ServerCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.util.MutableHandlerRegistry;
-import io.grpc.xds.ExternalProcessorClientInterceptor;
+import io.grpc.xds.ConfigOrError;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterOverrideConfig;
+import io.grpc.xds.Filter;
+import io.grpc.xds.XdsNameResolver;
 import io.grpc.xds.client.Bootstrapper;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import io.grpc.xds.internal.grpcservice.CachedChannelManager;
@@ -7323,6 +7325,7 @@ public class ExternalProcessorClientInterceptorTest {
     final AtomicReference<Metadata> appReceivedTrailers = new AtomicReference<>();
     final CountDownLatch appCloseLatch = new CountDownLatch(1);
     final CountDownLatch mutatedMsg1ReceivedLatch = new CountDownLatch(1);
+    final CountDownLatch mutatedMsg2ReceivedLatch = new CountDownLatch(1);
     
     ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
       @Override
@@ -7335,6 +7338,8 @@ public class ExternalProcessorClientInterceptorTest {
         appReceivedMessages.add(message);
         if ("Mutated Message 1".equals(message)) {
           mutatedMsg1ReceivedLatch.countDown();
+        } else if ("Mutated Message 2".equals(message)) {
+          mutatedMsg2ReceivedLatch.countDown();
         }
       }
 
@@ -7387,8 +7392,9 @@ public class ExternalProcessorClientInterceptorTest {
     // 4. Signal sidecar to send Mutated Message 2
     m3SentLatch.countDown();
     
-    // Wait for sidecar to finish sending M2
+    // Wait for sidecar to finish sending M2 and app to receive it
     assertThat(respBody2Latch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(mutatedMsg2ReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Verify that Mutated Message 2 is delivered immediately to app upon arrival (even before
     // M3 is released)
@@ -8454,22 +8460,43 @@ public class ExternalProcessorClientInterceptorTest {
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
     final CountDownLatch dataPlaneLatch = new CountDownLatch(1);
-    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
-        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-            (request, responseObserver) -> {
-              responseObserver.onNext("Hello " + request);
-              responseObserver.onCompleted();
-              dataPlaneLatch.countDown();
-            }))
-        .build());
+    final CountDownLatch headersReceivedLatch = new CountDownLatch(1);
+    final CountDownLatch resumeAsyncThreadLatch = new CountDownLatch(1);
+
+    ServerInterceptor dataPlaneInterceptor = new ServerInterceptor() {
+      @Override
+      public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+          ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+        headersReceivedLatch.countDown();
+        try {
+          resumeAsyncThreadLatch.await();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+        return next.startCall(call, headers);
+      }
+    };
+
+    dataPlaneServiceRegistry.addService(ServerInterceptors.intercept(
+        ServerServiceDefinition.builder("test.TestService")
+            .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
+                (request, responseObserver) -> {
+                  responseObserver.onNext("Hello " + request);
+                  responseObserver.onCompleted();
+                  dataPlaneLatch.countDown();
+                }))
+            .build(),
+        dataPlaneInterceptor));
 
     ManagedChannel dataPlaneChannel = grpcCleanup.register(
         InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
 
+    final AtomicReference<Status> statusRef = new AtomicReference<>();
     final CountDownLatch closedLatch = new CountDownLatch(1);
     ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
       @Override
       public void onClose(Status status, Metadata trailers) {
+        statusRef.set(status);
         closedLatch.countDown();
       }
     };
@@ -8479,15 +8506,27 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
-    // Send message and half-close to trigger unary call reaching server
+    // Trigger unary call. request(1) starts it.
     proxyCall.request(1);
+
+    // Wait for the async sidecar thread to enter activateCall() and block inside interceptCall
+    assertThat(headersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Now, while the async thread is blocked (and passThroughMode is still false),
+    // send a message and half-close.
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
+    // Unblock the async thread
+    resumeAsyncThreadLatch.countDown();
+
     // Verify data plane call reached (failed open)
     assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify client call completes successfully
+    assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(statusRef.get().isOk()).isTrue();
     
-    proxyCall.cancel("Cleanup", null);
     channelManager.close();
   }
 
