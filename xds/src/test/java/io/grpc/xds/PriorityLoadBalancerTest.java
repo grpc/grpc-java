@@ -445,8 +445,8 @@ public class PriorityLoadBalancerTest {
         eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
     PickResult pick = pickerCaptor.getValue().pickSubchannel(
         mock(PickSubchannelArgs.class));
-    assertThat(pick.getDelayType()).isEqualTo("connecting");
-    assertThat(pick.getDelayReason()).contains("priority dns error");
+    assertThat(pick.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(pick.getStatus().getDescription()).contains("priority dns error");
   }
 
   @Test
