@@ -161,7 +161,7 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry, executor.getScheduledExecutorService());
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -195,7 +195,8 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
             selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-            XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+            XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+            executor.getScheduledExecutorService());
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
@@ -235,7 +236,8 @@ public class XdsServerWrapperTest {
     when(xdsClient.getBootstrapInfo()).thenReturn(b);
     xdsServerWrapper = new XdsServerWrapper("[::FFFF:129.144.52.38]:80", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+        executor.getScheduledExecutorService());
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
       public void run() {
@@ -1860,7 +1862,8 @@ public class XdsServerWrapperTest {
   private SettableFuture<Server> filterStateTestStartServer(FilterRegistry filterRegistry) {
     xdsServerWrapper = new XdsServerWrapper("0.0.0.0:1", mockBuilder, listener,
         selectorManager, new FakeXdsClientPoolFactory(xdsClient),
-        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry);
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+        executor.getScheduledExecutorService());
     SettableFuture<Server> serverStart = SettableFuture.create();
     scheduleServerStart(xdsServerWrapper, serverStart);
     return serverStart;
