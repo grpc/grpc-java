@@ -42,7 +42,14 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ConnectivityState;
 import io.grpc.KnownLength;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -55,14 +62,21 @@ import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.StatusOr;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.NameResolver;
+import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.inprocess.InProcessSocketAddress;
 import io.grpc.opentelemetry.OpenTelemetryTracingModule.CallAttemptsTracerFactory;
 import io.grpc.opentelemetry.internal.OpenTelemetryConstants;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.GrpcServerRule;
 import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanBuilder;
 import io.opentelemetry.api.trace.SpanContext;
@@ -83,8 +97,14 @@ import io.opentelemetry.sdk.trace.data.EventData;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
@@ -329,6 +349,244 @@ public class OpenTelemetryTracingModuleTest {
         eq("Delay state transition"),
         org.mockito.ArgumentMatchers.<io.opentelemetry.api.common.Attributes>any());
     verify(mockDelaySpan).end();
+  }
+
+  @Test
+  public void clientCallDelayTracing_endToEnd_nameResolutionDelay() throws Exception {
+    final CountDownLatch resolutionLatch = new CountDownLatch(1);
+    final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();
+
+    NameResolverProvider slowResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "slowres";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "slowres";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            capturedListener.set(listener);
+            resolutionLatch.countDown();
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(slowResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryRule.getOpenTelemetry())
+        .enableTracing(true)
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("slowres:///test-service")
+            .defaultLoadBalancingPolicy("pick_first");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      resolutionLatch.await(5, TimeUnit.SECONDS);
+
+      // Now complete name resolution
+      capturedListener.get().onResult(NameResolver.ResolutionResult.newBuilder()
+          .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
+              new EquivalentAddressGroup(new InProcessSocketAddress("test-slow-res")))))
+          .build());
+
+      call.cancel("End test", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, TimeUnit.SECONDS);
+      NameResolverRegistry.getDefaultRegistry().deregister(slowResolverProvider);
+    }
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData callDelaySpan = null;
+    for (SpanData s : spans) {
+      if ("Call Delay".equals(s.getName())) {
+        callDelaySpan = s;
+        break;
+      }
+    }
+    assertNotNull(callDelaySpan);
+    assertEquals("resolving",
+        callDelaySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+
+    boolean foundTransition = false;
+    for (EventData event : callDelaySpan.getEvents()) {
+      if ("Delay state transition".equals(event.getName())
+          && "waiting for name resolution or service config".equals(
+              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
+        foundTransition = true;
+        break;
+      }
+    }
+    assertTrue(foundTransition);
+  }
+
+  @Test
+  public void clientAttemptDelayTracing_endToEnd_inProcessTransport() throws Exception {
+    final CountDownLatch latch = new CountDownLatch(1);
+    LoadBalancerProvider slowLbProvider = new LoadBalancerProvider() {
+      @Override
+      public boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      public int getPriority() {
+        return 5;
+      }
+
+      @Override
+      public String getPolicyName() {
+        return "slow_connecting_policy";
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+        return new LoadBalancer() {
+          @Override
+          public Status acceptResolvedAddresses(LoadBalancer.ResolvedAddresses resolvedAddresses) {
+            helper.updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                latch.countDown();
+                return PickResult.withNoResult("connecting",
+                    "Simulated slow TLS handshake with backend");
+              }
+            });
+            return Status.OK;
+          }
+
+          @Override
+          public void handleNameResolutionError(Status error) {}
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    LoadBalancerRegistry.getDefaultRegistry().register(slowLbProvider);
+
+    NameResolverProvider customResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "inproce2e";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "inproce2e";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            listener.onResult(NameResolver.ResolutionResult.newBuilder()
+                .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
+                    new EquivalentAddressGroup(new InProcessSocketAddress("test-e2e")))))
+                .build());
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(customResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryRule.getOpenTelemetry())
+        .enableTracing(true)
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("inproce2e:///test-e2e")
+            .defaultLoadBalancingPolicy("slow_connecting_policy");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      latch.await(5, TimeUnit.SECONDS);
+      call.cancel("End test delay segment", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, TimeUnit.SECONDS);
+      LoadBalancerRegistry.getDefaultRegistry().deregister(slowLbProvider);
+      NameResolverRegistry.getDefaultRegistry().deregister(customResolverProvider);
+    }
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData delaySpanData = null;
+    for (SpanData s : spans) {
+      if ("Attempt Delay".equals(s.getName())) {
+        delaySpanData = s;
+        break;
+      }
+    }
+    assertNotNull(delaySpanData);
+    assertEquals("connecting",
+        delaySpanData.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+
+    boolean foundTransition = false;
+    for (EventData event : delaySpanData.getEvents()) {
+      if ("Delay state transition".equals(event.getName())
+          && "Simulated slow TLS handshake with backend".equals(
+              event.getAttributes().get(AttributeKey.stringKey("grpc.delay_reason")))) {
+        foundTransition = true;
+        break;
+      }
+    }
+    assertTrue(foundTransition);
   }
 
   @Test
