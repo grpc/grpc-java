@@ -539,9 +539,7 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
       @Override
       public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        if ("oobauthority".equals(targetUri.getAuthority())
-            || "oobauthority".equals(targetUri.getPath())
-            || targetUri.toString().contains("oobauthority")) {
+        if (targetUri.toString().contains("oobauthority")) {
           oobArgs.set(args);
         }
         NameResolver resolver = mock(NameResolver.class);
