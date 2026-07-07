@@ -29,6 +29,8 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -63,6 +65,7 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -681,8 +684,13 @@ final class XdsServerWrapper extends Server {
               .buildKeepingLast();
 
           // Interceptors for this vhost/route combo.
+          boolean hasExtProc = false;
           List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
           for (NamedFilterConfig namedFilter : filterConfigs) {
+            String typeUrl = namedFilter.filterConfig.typeUrl();
+            if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)) {
+              hasExtProc = true;
+            }
             String name = namedFilter.name;
             FilterConfig config = namedFilter.filterConfig;
             FilterConfig overrideConfig = perRouteOverrides.get(name);
@@ -699,7 +707,15 @@ final class XdsServerWrapper extends Server {
 
           // Combine interceptors produced by different filters into a single one that executes
           // them sequentially. The order is preserved.
-          perRouteInterceptors.put(route, combineInterceptors(interceptors));
+          if (hasExtProc) {
+            List<ServerInterceptor> withRawMessage = new ArrayList<>();
+            withRawMessage.add(new TransportRawMessageServerInterceptor());
+            withRawMessage.addAll(interceptors);
+            withRawMessage.add(new ApplicationRawMessageServerInterceptor());
+            perRouteInterceptors.put(route, combineInterceptors(withRawMessage));
+          } else {
+            perRouteInterceptors.put(route, combineInterceptors(interceptors));
+          }
         }
       }
 
@@ -870,6 +886,112 @@ final class XdsServerWrapper extends Server {
           updateSelector();
         }
       }
+    }
+  }
+
+  private static final Attributes.Key<MethodDescriptor<?, ?>> ATTR_ORIGINAL_METHOD =
+      Attributes.Key.create("io.grpc.xds.ATTR_ORIGINAL_METHOD");
+
+  static final class TransportRawMessageServerInterceptor implements ServerInterceptor {
+    private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
+        new MethodDescriptor.Marshaller<InputStream>() {
+          @Override
+          public InputStream stream(InputStream value) {
+            return value;
+          }
+
+          @Override
+          public InputStream parse(InputStream stream) {
+            return stream;
+          }
+        };
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      final MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
+      final MethodDescriptor<InputStream, InputStream> rawMethod =
+          method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
+
+      final Attributes attrs = call.getAttributes().toBuilder()
+          .set(ATTR_ORIGINAL_METHOD, method)
+          .build();
+
+      ServerCall<InputStream, InputStream> rawCall =
+          new SimpleForwardingServerCall<InputStream, InputStream>(
+              (ServerCall<InputStream, InputStream>) (ServerCall<?, ?>) call) {
+            @Override
+            public MethodDescriptor<InputStream, InputStream> getMethodDescriptor() {
+              return rawMethod;
+            }
+
+            @Override
+            public Attributes getAttributes() {
+              return attrs;
+            }
+
+            @Override
+            public void sendMessage(InputStream message) {
+              call.sendMessage(method.getResponseMarshaller().parse(message));
+            }
+          };
+
+      @SuppressWarnings("unchecked")
+      ServerCallHandler<InputStream, InputStream> rawNext =
+          (ServerCallHandler<InputStream, InputStream>) (ServerCallHandler<?, ?>) next;
+
+      final ServerCall.Listener<InputStream> rawListener = rawNext.startCall(rawCall, headers);
+
+      return new SimpleForwardingServerCallListener<ReqT>(
+          (ServerCall.Listener<ReqT>) (ServerCall.Listener<?>) rawListener) {
+        @Override
+        public void onMessage(ReqT message) {
+          rawListener.onMessage(method.getRequestMarshaller().stream(message));
+        }
+      };
+    }
+  }
+
+  static final class ApplicationRawMessageServerInterceptor implements ServerInterceptor {
+    @Override
+    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
+        final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+      @SuppressWarnings("unchecked")
+      final MethodDescriptor<ReqT, RespT> originalMethod =
+          (MethodDescriptor<ReqT, RespT>) call.getAttributes().get(ATTR_ORIGINAL_METHOD);
+      checkState(originalMethod != null, "Missing ATTR_ORIGINAL_METHOD attribute");
+
+      ServerCall<ReqT, RespT> appCall =
+          new SimpleForwardingServerCall<ReqT, RespT>(call) {
+            @Override
+            public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
+              return originalMethod;
+            }
+
+            @Override
+            public void sendMessage(RespT message) {
+              @SuppressWarnings("unchecked")
+              ServerCall<InputStream, InputStream> rawCall =
+                  (ServerCall<InputStream, InputStream>) (ServerCall<?, ?>) call;
+              rawCall.sendMessage(originalMethod.getResponseMarshaller().stream(message));
+            }
+          };
+
+      final ServerCall.Listener<ReqT> appListener = next.startCall(appCall, headers);
+
+      @SuppressWarnings("unchecked")
+      ServerCall.Listener<ReqT> rawListener =
+          (ServerCall.Listener<ReqT>) (ServerCall.Listener<?>)
+              new SimpleForwardingServerCallListener<InputStream>(
+                  (ServerCall.Listener<InputStream>) (ServerCall.Listener<?>) appListener) {
+            @Override
+            public void onMessage(InputStream message) {
+              appListener.onMessage(originalMethod.getRequestMarshaller().parse(message));
+            }
+          };
+
+      return rawListener;
     }
   }
 
