@@ -76,10 +76,6 @@ final class AsyncServletOutputStreamWriter {
    */
   // SPSC queue would do
   private final Queue<ActionItem> writeChain = new ConcurrentLinkedQueue<>();
-  // for a theoretical race condition that onWritePossible() is called immediately after isReady()
-  // returns false and before writeState.compareAndSet()
-  @Nullable
-  private volatile Thread parkingThread;
 
   AsyncServletOutputStreamWriter(
       AsyncContext asyncContext,
@@ -173,9 +169,6 @@ final class AsyncServletOutputStreamWriter {
   /** Called from the container thread {@link javax.servlet.WriteListener#onWritePossible()}. */
   void onWritePossible() throws IOException {
     log.finest("onWritePossible: ENTRY. The servlet output stream becomes ready");
-    if (writeState.get().readyAndDrained) {
-      assureReadyAndDrainedTurnsFalse();
-    }
     while (isReady.getAsBoolean()) {
       WriteState curState = writeState.get();
 
@@ -198,17 +191,6 @@ final class AsyncServletOutputStreamWriter {
     log.finest("onWritePossible: EXIT. The servlet output stream becomes not ready");
   }
 
-  private void assureReadyAndDrainedTurnsFalse() {
-    // readyAndDrained should have been set to false already.
-    // Just in case due to a race condition readyAndDrained is still true at this moment and is
-    // being set to false by runOrBuffer() concurrently.
-    parkingThread = Thread.currentThread();
-    while (writeState.get().readyAndDrained) {
-      LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1)); // should return immediately
-    }
-    parkingThread = null;
-  }
-
   /**
    * Either execute the write action directly, or buffer the action and let the container thread
    * drain it.
@@ -223,10 +205,7 @@ final class AsyncServletOutputStreamWriter {
         return;
       }
       if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        writeState.set(curState.withReadyAndDrained(false));
         log.finest("the servlet output stream becomes not ready");
       }
     } else { // buffer to the writeChain
