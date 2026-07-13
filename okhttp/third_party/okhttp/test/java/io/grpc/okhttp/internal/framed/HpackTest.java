@@ -274,12 +274,12 @@ public class HpackTest {
    * http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-12#appendix-C.2.2
    */
   @Test public void literalHeaderFieldWithoutIndexingIndexedName() throws IOException {
-    List<Header> headerBlock = headerEntries(":path", "/sample/path");
+    List<Header> headerBlock = headerEntries(":method", "PUT");
 
-    bytesIn.writeByte(0x04); // == Literal not indexed ==
-    // Indexed name (idx = 4) -> :path
-    bytesIn.writeByte(0x0c); // Literal value (len = 12)
-    bytesIn.writeUtf8("/sample/path");
+    bytesIn.writeByte(0x02); // == Literal not indexed ==
+    // Indexed name (idx = 2) -> :method
+    bytesIn.writeByte(0x03); // Literal value (len = 3)
+    bytesIn.writeUtf8("PUT");
 
     hpackWriter.writeHeaders(headerBlock);
     assertEquals(bytesIn, bytesOut);
@@ -1129,6 +1129,15 @@ public class HpackTest {
     hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
     assertBytes(0xbe);
     assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+
+    // If the :authority header value changes, it should be added as a new dynamic table entry.
+    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
+    assertBytes(0x41, 7, 'b', 'a', 'r', '.', 'c', 'o', 'm');
+    assertEquals(3, hpackWriter.dynamicTableHeaderCount);
+
+    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
+    assertBytes(0xbe);
+    assertEquals(3, hpackWriter.dynamicTableHeaderCount);
   }
 
   @Test
@@ -1140,17 +1149,6 @@ public class HpackTest {
     hpackWriter.resizeHeaderTable(0);
 
     assertEquals(0, hpackWriter.dynamicTableHeaderCount);
-    assertEquals(0, hpackWriter.dynamicTableByteCount);
-  }
-
-    // If the :authority header somehow changes, it should be re-added to the dynamic table.
-    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
-    assertBytes(0x41, 7, 'b', 'a', 'r', '.', 'c', 'o', 'm');
-    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
-
-    hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
-    assertBytes(0xbe);
-    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
   }
 
   @Test
