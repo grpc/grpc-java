@@ -92,6 +92,9 @@ final class SslContextFactory {
         S2ATrustManager.createForClient(stub, targetName, localIdentity));
     sslContextBuilder.option(
         OpenSslContextOption.PRIVATE_KEY_METHOD, S2APrivateKeyMethod.create(stub, localIdentity));
+    sslContextBuilder.option(
+        OpenSslContextOption.GROUPS,
+        new String[] {"X25519MLKEM768", "x25519", "secp256r1", "secp384r1", "secp521r1"});
 
     SslContext sslContext = sslContextBuilder.build();
     SSLSessionContext sslSessionContext = sslContext.sessionContext();

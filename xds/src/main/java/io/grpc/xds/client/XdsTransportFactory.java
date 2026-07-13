@@ -31,6 +31,12 @@ public interface XdsTransportFactory {
    * Represents transport for xDS communication (e.g., a gRPC channel).
    */
   interface XdsTransport {
+    /**
+     * Creates a bidirectional streaming call.
+     *
+     * @param fullMethodName should be a constant/literal string so that metric recorders
+     *     like OpenTelemetry can record the exact method name.
+     */
     <ReqT, RespT> StreamingCall<ReqT, RespT> createStreamingCall(
          String fullMethodName, MethodDescriptor.Marshaller<ReqT> reqMarshaller,
          MethodDescriptor.Marshaller<RespT> respMarshaller);

@@ -29,6 +29,7 @@ import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -148,6 +149,8 @@ public final class ManagedChannelImplBuilder
     GET_CLIENT_INTERCEPTOR_METHOD = getClientInterceptorMethod;
   }
 
+
+  ChannelConfigurator channelConfigurator = builder -> { };
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
@@ -753,6 +756,14 @@ public final class ManagedChannelImplBuilder
   @Override
   protected ManagedChannelImplBuilder addMetricSink(MetricSink metricSink) {
     metricSinks.add(checkNotNull(metricSink, "metric sink"));
+    return this;
+  }
+
+  @Override
+  public ManagedChannelImplBuilder childChannelConfigurator(
+      ChannelConfigurator channelConfigurator) {
+    this.channelConfigurator = checkNotNull(channelConfigurator,
+        "childChannelConfigurator");
     return this;
   }
 
