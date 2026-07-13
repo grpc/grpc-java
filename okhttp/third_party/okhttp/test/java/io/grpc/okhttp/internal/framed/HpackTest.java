@@ -1108,21 +1108,40 @@ public class HpackTest {
     hpackWriter.writeHeaders(headerEntries(":method", "PUT"));
     assertBytes(0x02, 3, 'P', 'U', 'T');
     assertEquals(0, hpackWriter.dynamicTableHeaderCount);
-
-    hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
-    assertBytes(0x04, 7, '/', 'o', 'k', 'h', 't', 't', 'p');
-    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
   }
 
   @Test
-  public void incrementalIndexingWithAuthorityPseudoHeader() throws IOException {
-    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
-    assertBytes(0x41, 7, 'f', 'o', 'o', '.', 'c', 'o', 'm');
+  public void pseudoHeaderIndexingForPathAndAuthority() throws IOException {
+    // :path should now be indexed
+    hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
+    assertBytes(0x44, 7, '/', 'o', 'k', 'h', 't', 't', 'p');
     assertEquals(1, hpackWriter.dynamicTableHeaderCount);
-
-    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
+    // Second call to same :path should be an index reference byte (0xbe)
+    hpackWriter.writeHeaders(headerEntries(":path", "/okhttp"));
     assertBytes(0xbe);
     assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    // :authority should be indexed
+    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
+    assertBytes(0x41, 7, 'f', 'o', 'o', '.', 'c', 'o', 'm');
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+    // Second call to same :authority should be an index reference byte (0xbe)
+    hpackWriter.writeHeaders(headerEntries(":authority", "foo.com"));
+    assertBytes(0xbe);
+    assertEquals(2, hpackWriter.dynamicTableHeaderCount);
+  }
+
+  @Test
+  public void evictToRecoverBytesDoesNotNpeWhenBytesToRecoverExceedsTable() throws IOException {
+    hpackWriter.writeHeaders(headerEntries("custom-key", "custom-value"));
+    assertEquals(1, hpackWriter.dynamicTableHeaderCount);
+
+    // Force resize to table size 0, requiring total eviction exceeding table capacity
+    hpackWriter.resizeHeaderTable(0);
+
+    assertEquals(0, hpackWriter.dynamicTableHeaderCount);
+    assertEquals(0, hpackWriter.dynamicTableByteCount);
+  }
 
     // If the :authority header somehow changes, it should be re-added to the dynamic table.
     hpackWriter.writeHeaders(headerEntries(":authority", "bar.com"));
