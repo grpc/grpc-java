@@ -939,6 +939,39 @@ public class DelayedClientTransportTest {
     };
   }
 
+  @Test
+  public void streamDelayMetrics_updateDelayAfterCancellation_isNoOp() {
+    final FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    // Create a pending stream
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    final ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(0, fakeTracer.delayEndedCount);
+
+    // Reprocess with a custom picker that cancels the stream during the pick.
+    // This exactly simulates the concurrent timing race.
+    SubchannelPicker racePicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        stream.cancel(Status.CANCELLED);
+        return PickResult.withNoResult("connecting", "retry-backoff");
+      }
+    };
+
+    delayedTransport.reprocess(racePicker);
+
+    // VERIFICATION:
+    // The updateDelay called after the cancellation must be ignored because of our check.
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

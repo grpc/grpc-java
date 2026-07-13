@@ -428,6 +428,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * structured transition event is appended to the active span without span re-creation.
      */
     synchronized void updateDelay(@Nullable String newType, @Nullable String newReason) {
+      if (getRealStream() != null) {
+        return;
+      }
       if (!Objects.equals(activeDelayType, newType)) {
         // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
         if (activeDelayType != null) {
@@ -466,7 +469,12 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     Runnable setStreamAndEndDelay(ClientStream stream) {
-      endDelay();
+      synchronized (this) {
+        if (getRealStream() != null) {
+          return null;
+        }
+        endDelay();
+      }
       return setStream(stream);
     }
 
@@ -493,7 +501,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     @Override
     public void cancel(Status reason) {
-      endDelay();
       super.cancel(reason);
       synchronized (lock) {
         if (reportTransportTerminated != null) {
@@ -512,6 +519,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     @Override
     protected void onEarlyCancellation(Status reason) {
+      endDelay();
       for (ClientStreamTracer tracer : tracers) {
         tracer.streamClosed(reason);
       }
