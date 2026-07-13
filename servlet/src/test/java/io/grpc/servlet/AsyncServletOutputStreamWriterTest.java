@@ -38,16 +38,16 @@ public class AsyncServletOutputStreamWriterTest {
     AsyncServletOutputStreamWriter writer =
         new AsyncServletOutputStreamWriter(
             (bytes, len) -> writeAction,
-            () -> {},
-            () -> {},
+            () -> { },
+            () -> { },
             () -> true,
-            new Log() {});
+            new Log() { });
 
     // Initial onWritePossible call turns readyAndDrained to true
     writer.onWritePossible();
 
     long startTime = System.nanoTime();
-    // Subsequent onWritePossible call when readyAndDrained is already true must return non-blockingly
+    // Subsequent call when readyAndDrained is true must return non-blockingly
     writer.onWritePossible();
     long durationMs = (System.nanoTime() - startTime) / 1_000_000;
 
