@@ -161,10 +161,29 @@ public final class RobolectricBinderSecurityTest {
 
   @Test
   public void testAsyncServerSecurityPolicy_failedFuture_failsWithCodeInternal() throws Exception {
-    ListenableFuture<Status> status = makeCall();
+    ListenableFuture<Status> status1 = makeCall();
     statusesToSet.take().setException(new IllegalStateException("oops"));
 
-    assertThat(status.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    Status result1 = status1.get();
+    assertThat(result1.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(result1.getDescription()).isEqualTo("Authorization future failed");
+
+    // Subsequent call on the same channel should also get uniform opaque failure description
+    ListenableFuture<Status> status2 = makeCall();
+    Status result2 = status2.get();
+    assertThat(result2.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(result2.getDescription()).isEqualTo("Authorization future failed");
+  }
+
+  @Test
+  public void testAsyncServerSecurityPolicy_cancelledFuture_failsWithUniformOpaqueDescription()
+      throws Exception {
+    ListenableFuture<Status> status1 = makeCall();
+    statusesToSet.take().cancel(true);
+
+    Status result1 = status1.get();
+    assertThat(result1.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(result1.getDescription()).isEqualTo("Authorization future failed");
   }
 
   @Test

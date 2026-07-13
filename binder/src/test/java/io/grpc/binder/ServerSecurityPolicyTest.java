@@ -333,6 +333,44 @@ public final class ServerSecurityPolicyTest {
         .isEqualTo(Status.PERMISSION_DENIED.getCode());
   }
 
+  @Test
+  public void testAsyncSecurityPolicy_throwsExceptionSynchronously_returnsFailedFuture() {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                SERVICE1,
+                asyncPolicy(
+                    uid -> {
+                      throw new IllegalStateException("Sync policy error");
+                    }))
+            .build();
+
+    ListenableFuture<Status> future = policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1);
+    assertThat(future.isDone()).isTrue();
+    ExecutionException thrown = assertThrows(ExecutionException.class, future::get);
+    assertThat(thrown.getCause()).isInstanceOf(IllegalStateException.class);
+    assertThat(thrown.getCause().getMessage()).isEqualTo("Sync policy error");
+  }
+
+  @Test
+  public void testSecurityPolicy_throwsExceptionSynchronously_returnsFailedFuture() {
+    policy =
+        ServerSecurityPolicy.newBuilder()
+            .servicePolicy(
+                SERVICE1,
+                policy(
+                    uid -> {
+                      throw new IllegalArgumentException("Sync standard policy error");
+                    }))
+            .build();
+
+    ListenableFuture<Status> future = policy.checkAuthorizationForServiceAsync(MY_UID, SERVICE1);
+    assertThat(future.isDone()).isTrue();
+    ExecutionException thrown = assertThrows(ExecutionException.class, future::get);
+    assertThat(thrown.getCause()).isInstanceOf(IllegalArgumentException.class);
+    assertThat(thrown.getCause().getMessage()).isEqualTo("Sync standard policy error");
+  }
+
   /**
    * Shortcut for invoking {@link ServerSecurityPolicy#checkAuthorizationForServiceAsync} without
    * dealing with concurrency details. Returns a {link @Status.Code} for convenience.

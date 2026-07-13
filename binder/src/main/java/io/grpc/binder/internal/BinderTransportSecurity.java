@@ -110,11 +110,7 @@ public final class BinderTransportSecurity {
         authStatus = Futures.getDone(authStatusFuture);
       } catch (ExecutionException | CancellationException e) {
         // Failed futures are treated as an internal error rather than a security rejection.
-        authStatus = Status.INTERNAL.withCause(e);
-        @Nullable String message = e.getMessage();
-        if (message != null) {
-          authStatus = authStatus.withDescription(message);
-        }
+        authStatus = Status.INTERNAL.withCause(e).withDescription("Authorization future failed");
       }
 
       if (authStatus.isOk()) {
