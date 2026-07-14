@@ -23,6 +23,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
@@ -318,6 +319,18 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
         if (!blocked) {
           delegate.enterIdle();
         }
+      }
+
+      @Override
+      public void onCapabilitiesChanged(Network network, NetworkCapabilities networkCapabilities) {
+        if (isConnected(networkCapabilities)) {
+          delegate.enterIdle();
+        }
+      }
+
+      private boolean isConnected(NetworkCapabilities networkCapabilities) {
+        return networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                && networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
       }
     }
 
