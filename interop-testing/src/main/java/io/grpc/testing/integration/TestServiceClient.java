@@ -54,6 +54,12 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
@@ -118,6 +124,8 @@ public class TestServiceClient {
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
+  private boolean enableOpentelemetry = false;
+  private OpenTelemetrySdk openTelemetrySdk;
   private String customCredentialsType;
   private boolean useTestCa;
   private boolean useOkHttp;
@@ -219,6 +227,8 @@ public class TestServiceClient {
         numThreads = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
+      } else if ("enable_opentelemetry".equals(key)) {
+        enableOpentelemetry = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -307,20 +317,34 @@ public class TestServiceClient {
 
   @VisibleForTesting
   void setUp() {
+    if (enableOpentelemetry) {
+      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
+          .addPropagatorCustomizer(
+              (previous, config) ->
+                  TextMapPropagator.composite(
+                      previous, GrpcTraceBinContextPropagator.defaultInstance()))
+          .build();
+      this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
+      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetrySdk);
+      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+      grpcOpenTelemetry.registerGlobal();
+    }
     tester.setUp();
   }
 
   private synchronized void tearDown() {
     try {
       tester.tearDown();
+    } finally {
       if (customBackendMetricsLoadBalancerProvider != null) {
         LoadBalancerRegistry.getDefaultRegistry()
             .deregister(customBackendMetricsLoadBalancerProvider);
       }
-    } catch (RuntimeException ex) {
-      throw ex;
-    } catch (Exception ex) {
-      throw new RuntimeException(ex);
+      if (openTelemetrySdk != null) {
+        openTelemetrySdk.close();
+      }
     }
   }
 
