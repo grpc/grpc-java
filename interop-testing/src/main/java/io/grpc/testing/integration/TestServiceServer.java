@@ -28,10 +28,16 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
@@ -76,6 +82,8 @@ public class TestServiceServer {
   private boolean useTls = true;
   private boolean useAlts = false;
   private int mcsLimit = -1;
+  private boolean enableOpentelemetry = false;
+  private OpenTelemetrySdk openTelemetrySdk;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -123,6 +131,8 @@ public class TestServiceServer {
         mcsLimit = Integer.parseInt(value);
         // TODO: Make Netty server builder usable for IPV6 as well (not limited to MCS handling)
         addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
+      } else if ("enable_opentelemetry".equals(key)) {
+        enableOpentelemetry = Boolean.parseBoolean(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -156,6 +166,20 @@ public class TestServiceServer {
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
   void start() throws Exception {
+    if (enableOpentelemetry) {
+      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
+          .addPropagatorCustomizer(
+              (previous, config) ->
+                  TextMapPropagator.composite(
+                      previous, GrpcTraceBinContextPropagator.defaultInstance()))
+          .build();
+      this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
+      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetrySdk);
+      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+      grpcOpenTelemetry.registerGlobal();
+    }
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;
     if (useAlts) {
@@ -224,11 +248,17 @@ public class TestServiceServer {
 
   @VisibleForTesting
   void stop() throws Exception {
-    server.shutdownNow();
-    if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
-      System.err.println("Timed out waiting for server shutdown");
+    try {
+      server.shutdownNow();
+      if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
+        System.err.println("Timed out waiting for server shutdown");
+      }
+      MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
+    } finally {
+      if (openTelemetrySdk != null) {
+        openTelemetrySdk.close();
+      }
     }
-    MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
   @VisibleForTesting
