@@ -166,94 +166,103 @@ public class TestServiceServer {
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
   void start() throws Exception {
-    if (enableOpentelemetry) {
-      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
-          .addPropagatorCustomizer(
-              (previous, config) ->
-                  TextMapPropagator.composite(
-                      previous, GrpcTraceBinContextPropagator.defaultInstance()))
-          .build();
-      this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
-      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
-          .sdk(openTelemetrySdk);
-      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
-      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
-      grpcOpenTelemetry.registerGlobal();
-    }
-    executor = Executors.newSingleThreadScheduledExecutor();
-    ServerCredentials serverCreds;
-    if (useAlts) {
-      if (localHandshakerPort > -1) {
-        serverCreds = AltsServerCredentials.newBuilder()
-            .enableUntrustedAltsForTesting()
-            .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
-      } else {
-        serverCreds = AltsServerCredentials.create();
+    try {
+      if (enableOpentelemetry) {
+        AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
+            .addPropagatorCustomizer(
+                (previous, config) ->
+                    TextMapPropagator.composite(
+                        previous, GrpcTraceBinContextPropagator.defaultInstance()))
+            .build();
+        this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
+        GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+            .sdk(openTelemetrySdk);
+        InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+        GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+        grpcOpenTelemetry.registerGlobal();
       }
-    } else if (useTls) {
-      serverCreds = TlsServerCredentials.create(
-          TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
-    } else {
-      serverCreds = InsecureServerCredentials.create();
-    }
-    MetricRecorder metricRecorder = MetricRecorder.newInstance();
-    BindableService orcaOobService =
-        OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
+      executor = Executors.newSingleThreadScheduledExecutor();
+      ServerCredentials serverCreds;
+      if (useAlts) {
+        if (localHandshakerPort > -1) {
+          serverCreds = AltsServerCredentials.newBuilder()
+              .enableUntrustedAltsForTesting()
+              .setHandshakerAddressForTesting("localhost:" + localHandshakerPort).build();
+        } else {
+          serverCreds = AltsServerCredentials.create();
+        }
+      } else if (useTls) {
+        serverCreds = TlsServerCredentials.create(
+            TlsTesting.loadCert("server1.pem"), TlsTesting.loadCert("server1.key"));
+      } else {
+        serverCreds = InsecureServerCredentials.create();
+      }
+      MetricRecorder metricRecorder = MetricRecorder.newInstance();
+      BindableService orcaOobService =
+          OrcaServiceImpl.createService(executor, metricRecorder, 1, TimeUnit.SECONDS);
 
-    // Create ServerBuilder with appropriate addresses
-    // - IPV4_IPV6: bind to wildcard which covers all addresses on all interfaces of both families
-    // - IPV4: bind to v4 address for local hostname + v4 localhost
-    // - IPV6: bind to all v6 addresses for local hostname + v6 localhost
-    ServerBuilder<?> serverBuilder;
-    switch (addressType) {
-      case IPV4_IPV6:
-        serverBuilder = Grpc.newServerBuilderForPort(port, serverCreds);
-        break;
-      case IPV4:
-        SocketAddress v4Address = Util.getV4Address(port);
-        InetSocketAddress localV4Address = new InetSocketAddress("127.0.0.1", port);
-        serverBuilder =
-            NettyServerBuilder.forAddress(localV4Address, serverCreds);
-        if (v4Address != null && !v4Address.equals(localV4Address)) {
-          ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
-        }
-        if (mcsLimit != -1) {
-          ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(mcsLimit);
-        }
-        break;
-      case IPV6:
-        List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
-        InetSocketAddress localV6Address = new InetSocketAddress("::1", port);
-        serverBuilder =
-            NettyServerBuilder.forAddress(localV6Address, serverCreds);
-        for (SocketAddress address : v6Addresses) {
-          if (!address.equals(localV6Address)) {
-            ((NettyServerBuilder) serverBuilder).addListenAddress(address);
+      // Create ServerBuilder with appropriate addresses
+      // - IPV4_IPV6: bind to wildcard which covers all addresses on all interfaces of both families
+      // - IPV4: bind to v4 address for local hostname + v4 localhost
+      // - IPV6: bind to all v6 addresses for local hostname + v6 localhost
+      ServerBuilder<?> serverBuilder;
+      switch (addressType) {
+        case IPV4_IPV6:
+          serverBuilder = Grpc.newServerBuilderForPort(port, serverCreds);
+          break;
+        case IPV4:
+          SocketAddress v4Address = Util.getV4Address(port);
+          InetSocketAddress localV4Address = new InetSocketAddress("127.0.0.1", port);
+          serverBuilder =
+              NettyServerBuilder.forAddress(localV4Address, serverCreds);
+          if (v4Address != null && !v4Address.equals(localV4Address)) {
+            ((NettyServerBuilder) serverBuilder).addListenAddress(v4Address);
           }
-        }
-        break;
-      default:
-        throw new AssertionError("Unknown address type: " + addressType);
+          if (mcsLimit != -1) {
+            ((NettyServerBuilder) serverBuilder).maxConcurrentCallsPerConnection(mcsLimit);
+          }
+          break;
+        case IPV6:
+          List<SocketAddress> v6Addresses = Util.getV6Addresses(port);
+          InetSocketAddress localV6Address = new InetSocketAddress("::1", port);
+          serverBuilder =
+              NettyServerBuilder.forAddress(localV6Address, serverCreds);
+          for (SocketAddress address : v6Addresses) {
+            if (!address.equals(localV6Address)) {
+              ((NettyServerBuilder) serverBuilder).addListenAddress(address);
+            }
+          }
+          break;
+        default:
+          throw new AssertionError("Unknown address type: " + addressType);
+      }
+      server = serverBuilder
+          .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
+          .addService(
+              ServerInterceptors.intercept(
+                  new TestServiceImpl(executor, metricRecorder), TestServiceImpl.interceptors()))
+          .addService(orcaOobService)
+          .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
+          .build()
+          .start();
+    } catch (Throwable t) {
+      stop();
+      throw t;
     }
-    server = serverBuilder
-        .maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE)
-        .addService(
-            ServerInterceptors.intercept(
-                new TestServiceImpl(executor, metricRecorder), TestServiceImpl.interceptors()))
-        .addService(orcaOobService)
-        .intercept(OrcaMetricReportingServerInterceptor.create(metricRecorder))
-        .build()
-        .start();
   }
 
   @VisibleForTesting
   void stop() throws Exception {
     try {
-      server.shutdownNow();
-      if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
-        System.err.println("Timed out waiting for server shutdown");
+      if (server != null) {
+        server.shutdownNow();
+        if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
+          System.err.println("Timed out waiting for server shutdown");
+        }
       }
-      MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
+      if (executor != null) {
+        MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
+      }
     } finally {
       if (openTelemetrySdk != null) {
         openTelemetrySdk.close();

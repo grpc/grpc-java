@@ -54,15 +54,12 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.netty.InsecureFromHttp1ChannelCredentials;
 import io.grpc.netty.InternalNettyChannelBuilder;
-import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
-import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
-import io.opentelemetry.context.propagation.TextMapPropagator;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -74,6 +71,9 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.opentelemetry.context.propagation.TextMapPropagator;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
@@ -448,28 +448,36 @@ public class TestServiceClient {
 
       case SERVICE_ACCOUNT_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
-        tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
+        try (FileInputStream credentialsStream =
+            new FileInputStream(new File(serviceAccountKeyFile))) {
+          tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
+        }
         break;
       }
 
       case JWT_TOKEN_CREDS: {
-        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
-        tester.jwtTokenCreds(credentialsStream);
+        try (FileInputStream credentialsStream =
+            new FileInputStream(new File(serviceAccountKeyFile))) {
+          tester.jwtTokenCreds(credentialsStream);
+        }
         break;
       }
 
       case OAUTH2_AUTH_TOKEN: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
-        tester.oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
+        try (FileInputStream credentialsStream =
+            new FileInputStream(new File(serviceAccountKeyFile))) {
+          tester.oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
+        }
         break;
       }
 
       case PER_RPC_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
-        tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
+        try (FileInputStream credentialsStream =
+            new FileInputStream(new File(serviceAccountKeyFile))) {
+          tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
+        }
         break;
       }
 
@@ -701,7 +709,8 @@ public class TestServiceClient {
         if (serverPort == 0) {
           nettyBuilder = NettyChannelBuilder.forTarget(serverHost, channelCredentials);
         } else {
-          nettyBuilder = NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+          nettyBuilder =
+              NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
         }
         nettyBuilder.flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
         if (serverHostOverride != null) {
@@ -819,8 +828,8 @@ public class TestServiceClient {
     }
 
     /** Sends a large unary rpc with service account credentials. */
-    public void serviceAccountCreds(String jsonKey, InputStream credentialsStream, String authScope)
-        throws Exception {
+    public void serviceAccountCreds(
+        String jsonKey, InputStream credentialsStream, String authScope) throws Exception {
       // cast to ServiceAccountCredentials to double-check the right type of object was created.
       GoogleCredentials credentials =
           ServiceAccountCredentials.class.cast(GoogleCredentials.fromStream(credentialsStream));
