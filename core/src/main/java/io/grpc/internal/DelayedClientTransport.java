@@ -469,12 +469,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     Runnable setStreamAndEndDelay(ClientStream stream) {
-      synchronized (this) {
-        if (getRealStream() != null) {
-          return null;
-        }
-        endDelay();
-      }
+      endDelay();
       return setStream(stream);
     }
 
