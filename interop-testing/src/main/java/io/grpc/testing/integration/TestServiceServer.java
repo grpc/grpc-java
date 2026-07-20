@@ -166,7 +166,7 @@ public class TestServiceServer {
 
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
-  @IgnoreJRERequirement
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void start() throws Exception {
     try {
       if (enableOpentelemetry) {

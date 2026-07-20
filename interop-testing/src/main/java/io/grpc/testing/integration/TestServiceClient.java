@@ -317,7 +317,7 @@ public class TestServiceClient {
   }
 
   @VisibleForTesting
-  @IgnoreJRERequirement
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void setUp() {
     if (enableOpentelemetry) {
       AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
