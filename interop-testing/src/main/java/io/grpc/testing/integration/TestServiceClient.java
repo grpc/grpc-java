@@ -107,9 +107,9 @@ public class TestServiceClient {
     client.parseArgs(args);
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
     LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
-    client.setUp();
 
     try {
+      client.setUp();
       client.run();
     } finally {
       client.tearDown();
