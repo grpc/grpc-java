@@ -43,6 +43,7 @@ import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assume;
@@ -145,10 +146,12 @@ public class OpenTelemetryContextPropagationTest extends AbstractInteropTest {
     return builder;
   }
 
+  private final AtomicBoolean applicationSpanClosed = new AtomicBoolean(false);
+
   private void maybeCloseSpan(AtomicReference<Span> applicationSpan) {
-    Span tmp = applicationSpan.getAndSet(null);
-    if (tmp != null) {
-      tmp.end();
+    Span span = applicationSpan.get();
+    if (span != null && applicationSpanClosed.compareAndSet(false, true)) {
+      span.end();
     }
   }
 
