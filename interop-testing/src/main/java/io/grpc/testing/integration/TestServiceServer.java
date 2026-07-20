@@ -45,6 +45,7 @@ import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Server that manages startup/shutdown of a single {@code TestService}. */
 public class TestServiceServer {
@@ -165,6 +166,7 @@ public class TestServiceServer {
 
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
+  @IgnoreJRERequirement
   void start() throws Exception {
     try {
       if (enableOpentelemetry) {

@@ -85,6 +85,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -316,6 +317,7 @@ public class TestServiceClient {
   }
 
   @VisibleForTesting
+  @IgnoreJRERequirement
   void setUp() {
     if (enableOpentelemetry) {
       AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
