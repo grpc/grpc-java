@@ -230,6 +230,7 @@ public class SpiffeUtilTest {
     private static final String SPIFFE_TRUST_BUNDLE_DUPLICATES = "spiffebundle_duplicates.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_ROOT = "spiffebundle_wrong_root.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_SEQ = "spiffebundle_wrong_seq_type.json";
+    private static final String SPIFFE_TRUST_BUNDLE_MISSING_X5C = "spiffebundle_missing_x5c.json";
     private static final String DOMAIN_ERROR_MESSAGE =
         " Certificate loading for trust domain 'google.com' failed.";
 
@@ -351,6 +352,10 @@ public class SpiffeUtilTest {
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_CORRUPTED_CERT)));
       assertEquals("Certificate can't be parsed." + DOMAIN_ERROR_MESSAGE, iae.getMessage());
+      // Check the exception if a key entry is missing the 'x5c' parameter
+      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
+          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_MISSING_X5C)));
+      assertEquals("'x5c' parameter is required." + DOMAIN_ERROR_MESSAGE, iae.getMessage());
       // Check the exception if 'kty' value differs from 'RSA'
       iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
           .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_KTY)));

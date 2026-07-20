@@ -1,0 +1,12 @@
+{
+  "trust_domains": {
+    "google.com": {
+      "keys": [
+        {
+          "kty": "RSA",
+          "use": "x509-svid"
+        }
+      ]
+    }
+  }
+}
