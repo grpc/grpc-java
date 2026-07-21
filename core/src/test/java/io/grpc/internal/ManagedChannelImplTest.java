@@ -68,7 +68,6 @@ import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
@@ -495,80 +494,6 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertSame(Status.DEADLINE_EXCEEDED.getCode(), status.getCode());
-  }
-
-  @Test
-  public void childChannelConfigurator_passedToNameResolverArgs() {
-    ChannelConfigurator configurator = builder -> { };
-    channelBuilder.childChannelConfigurator(configurator);
-    AtomicReference<NameResolver.Args> actualArgs = new AtomicReference<>();
-    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
-      @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        actualArgs.set(args);
-        NameResolver resolver = mock(NameResolver.class);
-        when(resolver.getServiceAuthority()).thenReturn("test.example.com");
-        return resolver;
-      }
-
-      @Override
-      public String getDefaultScheme() {
-        return expectedUri.getScheme();
-      }
-
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      protected int priority() {
-        return 10;
-      }
-    });
-    createChannel();
-    assertNotNull(actualArgs.get());
-    assertSame(configurator, actualArgs.get().getChildChannelConfigurator());
-  }
-
-  @Test
-  public void childChannelConfigurator_passedToResolvingOobChannelNameResolverArgs() {
-    ChannelConfigurator configurator = builder -> { };
-    channelBuilder.childChannelConfigurator(configurator);
-    AtomicReference<NameResolver.Args> oobArgs = new AtomicReference<>();
-    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
-      @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-        if (targetUri.toString().contains("oobauthority")) {
-          oobArgs.set(args);
-        }
-        NameResolver resolver = mock(NameResolver.class);
-        when(resolver.getServiceAuthority()).thenReturn(
-            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
-        return resolver;
-      }
-
-      @Override
-      public String getDefaultScheme() {
-        return expectedUri.getScheme();
-      }
-
-      @Override
-      protected boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      protected int priority() {
-        return 10;
-      }
-    });
-    createChannel();
-    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
-    oob.getState(true);
-    assertNotNull(oobArgs.get());
-    assertSame(configurator, oobArgs.get().getChildChannelConfigurator());
-    oob.shutdownNow();
   }
 
   @Test

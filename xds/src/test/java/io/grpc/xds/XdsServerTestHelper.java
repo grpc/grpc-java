@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
-import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.MetricRecorder;
 import io.grpc.Status;
@@ -181,13 +180,6 @@ public class XdsServerTestHelper {
           return null;
         }
       };
-    }
-
-    @Override
-    public ObjectPool<XdsClient> getOrCreate(
-        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-        ChannelConfigurator channelConfigurator) {
-      return getOrCreate(target, bootstrapInfo, metricRecorder);
     }
 
     @Override

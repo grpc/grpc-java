@@ -269,13 +269,6 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
     return thisT();
   }
 
-
-  @Override
-  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
-    delegate().childChannelConfigurator(channelConfigurator);
-    return thisT();
-  }
-
   /**
    * Returns the {@link ManagedChannel} built by the delegate by default. Overriding method can
    * return different value.

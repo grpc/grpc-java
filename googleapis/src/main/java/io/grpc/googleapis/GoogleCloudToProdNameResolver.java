@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.io.CharStreams;
 import com.google.errorprone.annotations.concurrent.GuardedBy;
-import io.grpc.ChannelConfigurator;
 import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverRegistry;
@@ -109,7 +108,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
   private final Resource<Executor> executorResource;
   private final String target;
   private final MetricRecorder metricRecorder;
-  private final ChannelConfigurator channelConfigurator;
   private final NameResolver delegate;
   private final boolean usingExecutorResource;
   private final boolean forceXds;
@@ -160,7 +158,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     }
     target = targetUri.toString();
     metricRecorder = args.getMetricRecorder();
-    channelConfigurator = args.getChildChannelConfigurator();
     delegate = checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(
         targetUri, args);
     executor = args.getOffloadExecutor();
@@ -206,7 +203,6 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
     targetUri = modifiedTargetBuilder.build();
     target = targetUri.toString();
     metricRecorder = args.getMetricRecorder();
-    channelConfigurator = args.getChildChannelConfigurator();
     delegate =
         checkNotNull(nameResolverFactory, "nameResolverFactory").newNameResolver(targetUri, args);
     executor = args.getOffloadExecutor();
@@ -274,7 +270,7 @@ final class GoogleCloudToProdNameResolver extends NameResolver {
             public void run() {
               if (!shutdown && finalBootstrapInfo != null) {
                 xdsClientPool = InternalSharedXdsClientPoolProvider.getOrCreate(
-                    target, finalBootstrapInfo, metricRecorder, null, channelConfigurator);
+                    target, finalBootstrapInfo, metricRecorder, null);
                 xdsClient = xdsClientPool.getObject();
                 delegate.start(listener);
                 succeeded = true;

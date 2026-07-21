@@ -66,10 +66,7 @@ dependencies {
 
     testImplementation project(':grpc-api')
     testImplementation project(':grpc-rls')
-    testImplementation project(':grpc-opentelemetry')
     testImplementation project(':grpc-inprocess')
-    testImplementation libraries.opentelemetry.api
-    testImplementation libraries.opentelemetry.sdk.testing
     testImplementation libraries.cel.compiler
     testImplementation testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
