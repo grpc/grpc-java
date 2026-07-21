@@ -47,34 +47,22 @@ import io.envoyproxy.envoy.config.route.v3.VirtualHost;
 import io.envoyproxy.envoy.extensions.load_balancing_policies.wrr_locality.v3.WrrLocality;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
 import io.grpc.FlagResetRule;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
-import io.grpc.Grpc;
-import io.grpc.InsecureChannelCredentials;
-import io.grpc.InsecureServerCredentials;
 import io.grpc.InternalFeatureFlags;
-import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import io.grpc.NoopMetricSink;
-import io.grpc.Server;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -370,79 +358,6 @@ public class FakeControlPlaneXdsIntegrationTest {
       assertEquals(goldenResponse, blockingStub.unaryRpc(request));
     } finally {
       System.clearProperty("GRPC_EXPERIMENTAL_XDS_AUTHORITY_REWRITE");
-    }
-  }
-
-  @Test
-  public void childChannelConfigurator_passesMetricSinkToChannel_E2E() throws Exception {
-    CountingMetricSink sink = new CountingMetricSink();
-    ChannelConfigurator configurator = new ChannelConfigurator() {
-      @Override
-      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        InternalManagedChannelBuilder.addMetricSink(builder, sink);
-      }
-    };
-
-    ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
-            InsecureChannelCredentials.create())
-        .childChannelConfigurator(configurator)
-        .build();
-
-    try {
-      SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub = SimpleServiceGrpc.newBlockingStub(
-          channel);
-      blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
-
-      // The xDS client inside the channel configurator will have created an ADS stream.
-      // The metric sink should have received attempt or connection metrics.
-      sink.awaitCall();
-    } finally {
-      channel.shutdownNow();
-    }
-  }
-
-  @Test
-  public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
-    CountingMetricSink sink = new CountingMetricSink();
-    ChannelConfigurator configurator = builder -> {
-      // Child channels (xDS client connections) created by this server get the sink.
-      InternalManagedChannelBuilder.addMetricSink(builder, sink);
-    };
-
-    // We start an XdsServer manually.
-    // XdsServer needs RDS, LDS, etc. from control plane.
-    XdsServerBuilder serverBuilder = XdsServerBuilder.forPort(
-            0, InsecureServerCredentials.create())
-        .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {})
-        .overrideBootstrapForTest(controlPlane.defaultBootstrapOverride())
-        .childChannelConfigurator(configurator);
-        
-    Server childServer = serverBuilder.build().start();
-
-    try {
-      // The server xDS client will connect to control plane to get LDS.
-      sink.awaitCall();
-    } finally {
-      childServer.shutdownNow();
-    }
-  }
-
-  private static final class CountingMetricSink extends NoopMetricSink {
-    private final CountDownLatch latch = new CountDownLatch(1);
-
-    @Override
-    public void addLongCounter(
-        LongCounterMetricInstrument metricInstrument,
-        long value,
-        List<String> requiredLabelValues,
-        List<String> optionalLabelValues) {
-      latch.countDown();
-    }
-
-    public void awaitCall() throws InterruptedException {
-      if (!latch.await(5, TimeUnit.SECONDS)) {
-        throw new AssertionError("Timed out waiting for metric sink call");
-      }
     }
   }
 }

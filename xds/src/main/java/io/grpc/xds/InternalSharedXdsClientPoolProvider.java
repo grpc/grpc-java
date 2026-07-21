@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import io.grpc.CallCredentials;
-import io.grpc.ChannelConfigurator;
 import io.grpc.Internal;
 import io.grpc.MetricRecorder;
 import io.grpc.internal.ObjectPool;
@@ -86,15 +85,8 @@ public final class InternalSharedXdsClientPoolProvider {
   public static XdsClientResult getOrCreate(
       String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
       CallCredentials transportCallCredentials) {
-    return getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials, null);
-  }
-
-  public static XdsClientResult getOrCreate(
-      String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
-      CallCredentials transportCallCredentials, ChannelConfigurator channelConfigurator) {
     return new XdsClientResult(SharedXdsClientPoolProvider.getDefaultProvider()
-        .getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials,
-            channelConfigurator));
+        .getOrCreate(target, bootstrapInfo, metricRecorder, transportCallCredentials));
   }
 
   /**

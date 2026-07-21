@@ -666,23 +666,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
     throw new UnsupportedOperationException();
   }
 
-
-  /**
-   * Sets a configurator that will be applied to all internal child channels created by this
-   * channel.
-   *
-   * <p>This allows injecting universal configuration (like interceptors)
-   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
-   *
-   * @param channelConfigurator the configurator to apply.
-   * @return this
-   * @since 1.83.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
-  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
-    throw new UnsupportedOperationException("Not implemented");
-  }
-
   /**
    * Builds a channel using the given parameters.
    *
