@@ -16,11 +16,14 @@
 
 package io.grpc.binder.internal;
 
+import static com.google.common.util.concurrent.Futures.nonCancellationPropagating;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.errorprone.annotations.CheckReturnValue;
 import io.grpc.Attributes;
 import io.grpc.Internal;
@@ -167,6 +170,7 @@ public final class BinderTransportSecurity {
   static final class TransportAuthorizationState {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
+    // Holds *all* pending policy check futures and *certain* complete ones that we want to cache.
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
     private final Executor executor;
 
@@ -185,44 +189,53 @@ public final class BinderTransportSecurity {
     @CheckReturnValue
     ListenableFuture<Status> checkAuthorization(MethodDescriptor<?, ?> method) {
       String serviceName = method.getServiceName();
-      // Only cache decisions if the method can be sampled for tracing,
-      // which is true for all generated methods. Otherwise, programmatically
-      // created methods could cause this cache to grow unbounded.
-      boolean useCache = method.isSampledToLocalTracing();
-      if (useCache) {
-        @Nullable ListenableFuture<Status> authorization = serviceAuthorization.get(serviceName);
-        if (authorization != null) {
-          // Authorization check exists and is a pending or successful future (even if for a
-          // failed authorization).
-          return authorization;
-        }
+      @Nullable
+      ListenableFuture<Status> pendingOrCachedAuthResult = serviceAuthorization.get(serviceName);
+      if (pendingOrCachedAuthResult != null) {
+        return nonCancellationPropagating(pendingOrCachedAuthResult);
       }
-      // Under high load, this may trigger a large number of concurrent authorization checks that
-      // perform essentially the same work and have the potential of exhausting the resources they
-      // depend on. This was a non-issue in the past with synchronous policy checks due to the
-      // fixed-size nature of the thread pool this method runs under.
-      //
-      // TODO(10669): evaluate if there should be at most a single pending authorization check per
-      //  (uid, serviceName) pair at any given time.
-      ListenableFuture<Status> authorization =
-          serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName);
-      if (useCache) {
-        serviceAuthorization.putIfAbsent(serviceName, authorization);
-        Futures.addCallback(
-            authorization,
-            new FutureCallback<Status>() {
-              @Override
-              public void onSuccess(Status result) {}
 
-              @Override
-              public void onFailure(Throwable t) {
-                serviceAuthorization.remove(serviceName, authorization);
-              }
-            },
-            MoreExecutors.directExecutor());
+      SettableFuture<Status> newPendingAuthResult = SettableFuture.create();
+      ListenableFuture<Status> checkThenActRaceWinner =
+          serviceAuthorization.putIfAbsent(serviceName, newPendingAuthResult);
+      if (checkThenActRaceWinner != null) {
+        // Another thread running this method must have also just saw no entry for serviceName, then
+        // beat us to calling putIfAbsent(). We can only track one check at a time so share theirs.
+        return nonCancellationPropagating(checkThenActRaceWinner);
       }
-      return authorization;
+
+      try {
+        newPendingAuthResult.setFuture(
+            serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName));
+      } catch (Exception e) {  // Not just RuntimeException! Handle the "sneaky" checked case too.
+        newPendingAuthResult.setException(e);
+      }
+
+      Futures.addCallback(
+          newPendingAuthResult,
+          new FutureCallback<Status>() {
+            @Override
+            public void onSuccess(Status result) {
+              // Auth checks can be expensive so we want to cache the results. But programmatically
+              // created service names could cause the cache to grow without bound. Conservatively,
+              // we only cache results for codegen service names as there can't be too many of them.
+              if (!method.isSampledToLocalTracing()) {
+                serviceAuthorization.remove(serviceName, newPendingAuthResult);
+              }
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+              // Not simply a non-OK auth result but a failure to return any decision at all. Never
+              // cache these so that if the caller retries, we'll retry the auth check as well.
+              serviceAuthorization.remove(serviceName, newPendingAuthResult);
+            }
+          },
+          MoreExecutors.directExecutor());
+
+      return nonCancellationPropagating(newPendingAuthResult);
     }
+
   }
 
   /**
