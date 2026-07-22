@@ -1,4 +1,4 @@
-choco install -y pkgconfiglite
+choco install -y pkgconfiglite --allow-empty-checksums
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
 set PROTOBUF_VER=35.1
