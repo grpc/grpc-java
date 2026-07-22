@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -260,13 +259,20 @@ public class GrpcXdsTransportFactoryTest {
     };
     NameResolverRegistry.getDefaultRegistry().register(testProvider);
     try {
-      ChannelConfigurator configurer = builder -> { };
+      final boolean[] configuratorInvoked = new boolean[1];
+      ChannelConfigurator configurer = builder -> {
+        configuratorInvoked[0] = true;
+      };
       GrpcXdsTransportFactory factory = new GrpcXdsTransportFactory(null, configurer);
       XdsTransportFactory.XdsTransport transport = factory.create(
           Bootstrapper.ServerInfo.create(
               "test-xds-transport://localhost:8080", InsecureChannelCredentials.create()));
       assertNotNull(capturedArgs.get());
-      assertSame(configurer, capturedArgs.get().getChildChannelConfigurator());
+      ChannelConfigurator childConfigurator = capturedArgs.get().getChildChannelConfigurator();
+      assertNotNull(childConfigurator);
+      ManagedChannelBuilder<?> testBuilder = mock(ManagedChannelBuilder.class);
+      childConfigurator.configureChannelBuilder(testBuilder);
+      assertThat(configuratorInvoked[0]).isTrue();
       transport.shutdown();
     } finally {
       NameResolverRegistry.getDefaultRegistry().deregister(testProvider);

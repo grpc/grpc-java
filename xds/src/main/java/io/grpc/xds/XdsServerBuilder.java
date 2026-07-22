@@ -113,7 +113,16 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * @return this
    */
   public XdsServerBuilder childChannelConfigurator(ChannelConfigurator channelConfigurator) {
-    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
+    checkNotNull(channelConfigurator, "channelConfigurator");
+    if (this.channelConfigurator == null) {
+      this.channelConfigurator = channelConfigurator;
+    } else {
+      ChannelConfigurator oldConfigurator = this.channelConfigurator;
+      this.channelConfigurator = builder -> {
+        oldConfigurator.configureChannelBuilder(builder);
+        channelConfigurator.configureChannelBuilder(builder);
+      };
+    }
     return this;
   }
 
