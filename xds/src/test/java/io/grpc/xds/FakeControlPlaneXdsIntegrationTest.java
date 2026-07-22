@@ -62,7 +62,6 @@ import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.LongCounterMetricInstrument;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NoopMetricSink;
@@ -376,10 +375,12 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurator_passesMetricSinkToChannel_E2E() throws Exception {
     CountingMetricSink sink1 = new CountingMetricSink();
-    ChannelConfigurator configurator1 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
+    ChannelConfigurator configurator1 =
+        builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
 
     CountingMetricSink sink2 = new CountingMetricSink();
-    ChannelConfigurator configurator2 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
+    ChannelConfigurator configurator2 =
+        builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
 
     ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
@@ -404,10 +405,12 @@ public class FakeControlPlaneXdsIntegrationTest {
   @Test
   public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
     CountingMetricSink sink1 = new CountingMetricSink();
-    ChannelConfigurator configurator1 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
+    ChannelConfigurator configurator1 =
+        builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
 
     CountingMetricSink sink2 = new CountingMetricSink();
-    ChannelConfigurator configurator2 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
+    ChannelConfigurator configurator2 =
+        builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
 
     // We start an XdsServer manually.
     // XdsServer needs RDS, LDS, etc. from control plane.
