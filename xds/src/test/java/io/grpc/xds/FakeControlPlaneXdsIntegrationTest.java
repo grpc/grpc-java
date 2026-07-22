@@ -375,17 +375,16 @@ public class FakeControlPlaneXdsIntegrationTest {
 
   @Test
   public void childChannelConfigurator_passesMetricSinkToChannel_E2E() throws Exception {
-    CountingMetricSink sink = new CountingMetricSink();
-    ChannelConfigurator configurator = new ChannelConfigurator() {
-      @Override
-      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
-        InternalManagedChannelBuilder.addMetricSink(builder, sink);
-      }
-    };
+    CountingMetricSink sink1 = new CountingMetricSink();
+    ChannelConfigurator configurator1 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
+
+    CountingMetricSink sink2 = new CountingMetricSink();
+    ChannelConfigurator configurator2 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
 
     ManagedChannel channel = Grpc.newChannelBuilder("test-xds:///test-server",
             InsecureChannelCredentials.create())
-        .childChannelConfigurator(configurator)
+        .childChannelConfigurator(configurator1)
+        .childChannelConfigurator(configurator2)
         .build();
 
     try {
@@ -394,8 +393,9 @@ public class FakeControlPlaneXdsIntegrationTest {
       blockingStub.unaryRpc(SimpleRequest.getDefaultInstance());
 
       // The xDS client inside the channel configurator will have created an ADS stream.
-      // The metric sink should have received attempt or connection metrics.
-      sink.awaitCall();
+      // Both metric sinks should have received attempt or connection metrics.
+      sink1.awaitCall();
+      sink2.awaitCall();
     } finally {
       channel.shutdownNow();
     }
@@ -403,11 +403,11 @@ public class FakeControlPlaneXdsIntegrationTest {
 
   @Test
   public void childChannelConfigurator_passesMetricSinkToServer_E2E() throws Exception {
-    CountingMetricSink sink = new CountingMetricSink();
-    ChannelConfigurator configurator = builder -> {
-      // Child channels (xDS client connections) created by this server get the sink.
-      InternalManagedChannelBuilder.addMetricSink(builder, sink);
-    };
+    CountingMetricSink sink1 = new CountingMetricSink();
+    ChannelConfigurator configurator1 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink1);
+
+    CountingMetricSink sink2 = new CountingMetricSink();
+    ChannelConfigurator configurator2 = builder -> InternalManagedChannelBuilder.addMetricSink(builder, sink2);
 
     // We start an XdsServer manually.
     // XdsServer needs RDS, LDS, etc. from control plane.
@@ -415,13 +415,15 @@ public class FakeControlPlaneXdsIntegrationTest {
             0, InsecureServerCredentials.create())
         .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {})
         .overrideBootstrapForTest(controlPlane.defaultBootstrapOverride())
-        .childChannelConfigurator(configurator);
+        .childChannelConfigurator(configurator1)
+        .childChannelConfigurator(configurator2);
         
     Server childServer = serverBuilder.build().start();
 
     try {
       // The server xDS client will connect to control plane to get LDS.
-      sink.awaitCall();
+      sink1.awaitCall();
+      sink2.awaitCall();
     } finally {
       childServer.shutdownNow();
     }
