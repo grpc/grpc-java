@@ -554,8 +554,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
-    this.channelConfigurator = builder.channelConfigurator != null
-        ? builder.channelConfigurator : b -> { };
+    this.channelConfigurator = checkNotNull(builder.channelConfigurator,
+            "channelConfigurator");
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");

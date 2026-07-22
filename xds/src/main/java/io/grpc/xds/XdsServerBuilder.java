@@ -60,8 +60,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
-  @Nullable
-  private ChannelConfigurator channelConfigurator = null;
+  private ChannelConfigurator channelConfigurator = builder -> { };
 
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
@@ -116,15 +115,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    */
   public XdsServerBuilder childChannelConfigurator(ChannelConfigurator channelConfigurator) {
     checkNotNull(channelConfigurator, "channelConfigurator");
-    if (this.channelConfigurator == null) {
-      this.channelConfigurator = channelConfigurator;
-    } else {
-      ChannelConfigurator oldConfigurator = this.channelConfigurator;
-      this.channelConfigurator = builder -> {
-        oldConfigurator.configureChannelBuilder(builder);
-        channelConfigurator.configureChannelBuilder(builder);
-      };
-    }
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
     return this;
   }
 
@@ -157,7 +152,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
         filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry,
-        this.channelConfigurator != null ? this.channelConfigurator : b -> { });
+        this.channelConfigurator);
   }
 
   @VisibleForTesting

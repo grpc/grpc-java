@@ -150,8 +150,7 @@ public final class ManagedChannelImplBuilder
   }
 
 
-  @Nullable
-  ChannelConfigurator channelConfigurator = null;
+  ChannelConfigurator channelConfigurator = builder -> { };
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
@@ -764,15 +763,11 @@ public final class ManagedChannelImplBuilder
   public ManagedChannelImplBuilder childChannelConfigurator(
       ChannelConfigurator channelConfigurator) {
     checkNotNull(channelConfigurator, "childChannelConfigurator");
-    if (this.channelConfigurator == null) {
-      this.channelConfigurator = channelConfigurator;
-    } else {
-      ChannelConfigurator oldConfigurator = this.channelConfigurator;
-      this.channelConfigurator = builder -> {
-        oldConfigurator.configureChannelBuilder(builder);
-        channelConfigurator.configureChannelBuilder(builder);
-      };
-    }
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
     return this;
   }
 
