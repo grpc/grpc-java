@@ -198,6 +198,7 @@ public abstract class AbstractClientStream extends AbstractStream
   public final void cancel(Status reason) {
     Preconditions.checkArgument(!reason.isOk(), "Should not cancel with OK status");
     cancelled = true;
+    transportState().getStatsTraceContext().clientCancelled(reason);
     abstractClientStreamSink().cancel(reason);
   }
 

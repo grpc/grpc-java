@@ -451,6 +451,29 @@ public class OutlierDetectionLoadBalancerTest {
     verify(mockStreamTracer).inboundHeaders();
   }
 
+  @Test
+  public void delegatePick_cancelledForwarded() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setSuccessRateEjection(new SuccessRateEjection.Builder().build())
+        .setChildConfig(newChildConfig(fakeLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers.get(0)));
+
+    final Subchannel readySubchannel = subchannels.values().iterator().next();
+    deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(2)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+
+    SubchannelPicker picker = pickerCaptor.getAllValues().get(1);
+    PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+        .newClientStreamTracer(ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+    clientStreamTracer.cancelled(Status.CANCELLED);
+    verify(mockStreamTracer).cancelled(Status.CANCELLED);
+  }
+
   /**
    * Assure the tracer works even when the underlying LB does not have a tracer to delegate to.
    */
@@ -529,6 +552,51 @@ public class OutlierDetectionLoadBalancerTest {
 
     // The one subchannel that was returning errors should be ejected.
     assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * Client-cancelled streams (e.g. non-winning hedged attempts) do not count as failures.
+   */
+  @Test
+  public void successRate_clientCancelled_notEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(7)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
+
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
+      if (subchannel == subchannel1) {
+        clientStreamTracer.cancelled(Status.CANCELLED);
+        clientStreamTracer.streamClosed(Status.CANCELLED);
+      } else {
+        clientStreamTracer.streamClosed(Status.OK);
+      }
+    }
+
+    forwardTime(config);
+
+    // subchannel1 was cancelled client-side and should not be ejected as an outlier.
+    assertEjectedSubchannels(ImmutableSet.of());
   }
 
   /**
@@ -778,6 +846,52 @@ public class OutlierDetectionLoadBalancerTest {
     forwardTime(config);
 
     // No outliers, no ejections.
+    assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * Client-cancelled streams (e.g. non-winning hedged attempts) do not count as failures for
+   * failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentage_clientCancelled_notEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(7)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
+
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
+      if (subchannel == subchannel1) {
+        clientStreamTracer.cancelled(Status.CANCELLED);
+        clientStreamTracer.streamClosed(Status.CANCELLED);
+      } else {
+        clientStreamTracer.streamClosed(Status.OK);
+      }
+    }
+
+    forwardTime(config);
+
+    // subchannel1 was cancelled client-side and should not be ejected as an outlier.
     assertEjectedSubchannels(ImmutableSet.of());
   }
 
