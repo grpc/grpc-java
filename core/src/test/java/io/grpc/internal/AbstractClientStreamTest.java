@@ -39,6 +39,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Deadline;
 import io.grpc.Grpc;
@@ -153,6 +154,24 @@ public class AbstractClientStreamTest {
     stream.cancel(Status.DEADLINE_EXCEEDED);
 
     verify(mockListener).closed(any(Status.class), same(PROCESSED), any(Metadata.class));
+  }
+
+  @Test
+  public void cancel_notifiesStatsTraceContext() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
+      @Override
+      public void cancel(Status errorStatus) {
+      }
+    }, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    Status cancelStatus = Status.CANCELLED.withDescription("Cancelled by test");
+    stream.cancel(cancelStatus);
+
+    verify(mockTracer).cancelled(cancelStatus);
   }
 
   @Test

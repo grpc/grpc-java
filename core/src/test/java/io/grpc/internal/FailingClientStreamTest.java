@@ -57,4 +57,14 @@ public class FailingClientStreamTest {
     stream.start(listener);
     verify(listener).closed(eq(status), eq(RpcProgress.DROPPED), any(Metadata.class));
   }
+
+  @Test
+  public void cancel_notifiesTracers() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    ClientStream stream = new FailingClientStream(
+        Status.UNAVAILABLE, RpcProgress.PROCESSED, new ClientStreamTracer[] {mockTracer});
+    Status cancelStatus = Status.CANCELLED.withDescription("Cancelled by test");
+    stream.cancel(cancelStatus);
+    verify(mockTracer).cancelled(cancelStatus);
+  }
 }

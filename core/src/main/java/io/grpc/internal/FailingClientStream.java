@@ -61,6 +61,13 @@ public final class FailingClientStream extends NoopClientStream {
     listener.closed(error, rpcProgress, new Metadata());
   }
 
+  @Override
+  public void cancel(Status reason) {
+    for (ClientStreamTracer tracer : tracers) {
+      tracer.cancelled(reason);
+    }
+  }
+
   @VisibleForTesting
   Status getError() {
     return error;
