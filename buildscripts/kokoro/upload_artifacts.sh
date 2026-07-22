@@ -90,9 +90,9 @@ LATEST_VERSION="$((echo "v$VERSION"; git ls-remote -t --refs https://github.com/
 STAGING_REPO=a93898609ef848
 "$GRPC_JAVA_DIR"/buildscripts/sonatype-upload.sh "$STAGING_REPO" "$LOCAL_MVN_ARTIFACTS"
 
-docker tag "$EXAMPLE_HOSTNAME_ID" "grpc/java-example-hostname:${VERSION}"
+docker tag "hostname:latest" "grpc/java-example-hostname:${VERSION}"
 docker push "grpc/java-example-hostname:${VERSION}"
 if [[ "v$VERSION" = "$LATEST_VERSION" ]]; then
-  docker tag "$EXAMPLE_HOSTNAME_ID" grpc/java-example-hostname:latest
+  docker tag "hostname:latest" grpc/java-example-hostname:latest
   docker push grpc/java-example-hostname:latest
 fi
