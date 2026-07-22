@@ -150,7 +150,8 @@ public final class ManagedChannelImplBuilder
   }
 
 
-  ChannelConfigurator channelConfigurator = builder -> { };
+  @Nullable
+  ChannelConfigurator channelConfigurator = null;
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 

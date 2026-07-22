@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers.
@@ -59,7 +60,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private Map<String, ?> bootstrapOverride;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
-  private ChannelConfigurator channelConfigurator = builder -> { };
+  @Nullable
+  private ChannelConfigurator channelConfigurator = null;
 
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
@@ -155,7 +157,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
     return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
         filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry,
-        this.channelConfigurator);
+        this.channelConfigurator != null ? this.channelConfigurator : b -> { });
   }
 
   @VisibleForTesting
