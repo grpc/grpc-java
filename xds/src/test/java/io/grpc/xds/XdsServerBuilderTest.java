@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
 import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -354,7 +355,7 @@ public class XdsServerBuilderTest {
     verify(mockPoolFactory).getOrCreate(
         any(), any(), any(), configuratorCaptor.capture());
     
-    io.grpc.ManagedChannelBuilder<?> testBuilder = mock(io.grpc.ManagedChannelBuilder.class);
+    ManagedChannelBuilder<?> testBuilder = mock(ManagedChannelBuilder.class);
     configuratorCaptor.getValue().configureChannelBuilder(testBuilder);
     assertThat(configuratorInvoked[0]).isTrue();
   }
