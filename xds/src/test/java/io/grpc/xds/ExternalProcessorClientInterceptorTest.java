@@ -171,7 +171,6 @@ public class ExternalProcessorClientInterceptorTest {
       return new ByteArrayInputStream(value.getBytes(StandardCharsets.UTF_8));
     }
 
-
     @Override
     public String parse(InputStream stream) {
       try {
@@ -199,11 +198,9 @@ public class ExternalProcessorClientInterceptorTest {
             return "localhost";
           }
 
-
           @Override
           public void start(Listener2 listener) {
           }
-
 
           @Override
           public void shutdown() {
@@ -213,24 +210,20 @@ public class ExternalProcessorClientInterceptorTest {
       return null;
     }
 
-
     @Override
     protected boolean isAvailable() {
       return true;
     }
-
 
     @Override
     protected int priority() {
       return 5;
     }
 
-
     @Override
     public String getDefaultScheme() {
       return "in-process";
     }
-
 
     @Override
     public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
@@ -272,8 +265,6 @@ public class ExternalProcessorClientInterceptorTest {
         .build().start());
   }
 
-
-
   private ExternalProcessor.Builder createBaseProto(String targetName) {
     return ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -286,7 +277,6 @@ public class ExternalProcessorClientInterceptorTest {
                 .build())
             .build());
   }
-
 
   // --- Category 1: Configuration Override ---
 
@@ -381,8 +371,6 @@ public class ExternalProcessorClientInterceptorTest {
 
     assertThat(interceptor.getFilterConfig().getFailureModeAllow()).isTrue();
   }
-
-
 
   @Test
   public void givenOverrideConfig_whenOtherFieldsOverridden_thenReplaced() throws Exception {
@@ -550,7 +538,6 @@ public class ExternalProcessorClientInterceptorTest {
         .containsExactly("attr-parent");
   }
 
-
   @Test
   public void givenOverrideConfig_whenDisableImmediateResponseOverridden_thenInheritedFromParent()
       throws Exception {
@@ -677,11 +664,9 @@ public class ExternalProcessorClientInterceptorTest {
           public void onNext(ProcessingRequest request) {
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -775,11 +760,9 @@ public class ExternalProcessorClientInterceptorTest {
           public void onNext(ProcessingRequest request) {
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -836,8 +819,6 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-
-
   // --- Category 3: Protocol config propagation ---
 
   @Test
@@ -846,7 +827,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = dataPlaneServerName;
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(3);
+    final CountDownLatch extProcLatch = new CountDownLatch(3);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -873,13 +854,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -930,7 +909,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(capturedRequests.size()).isAtLeast(2);
     
@@ -958,7 +937,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = dataPlaneServerName;
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(2);
+    final CountDownLatch extProcLatch = new CountDownLatch(2);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -981,13 +960,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1038,7 +1015,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(capturedRequests.size()).isAtLeast(1);
     
@@ -1066,7 +1043,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = dataPlaneServerName;
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(2);
+    final CountDownLatch extProcLatch = new CountDownLatch(2);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1089,13 +1066,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseBody(BodyResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1146,7 +1121,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(capturedRequests.size()).isAtLeast(1);
     
@@ -1174,7 +1149,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = dataPlaneServerName;
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1193,13 +1168,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseBody(BodyResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1250,7 +1223,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(capturedRequests.size()).isAtLeast(1);
     
@@ -1278,7 +1251,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = dataPlaneServerName;
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1297,13 +1270,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseTrailers(TrailersResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1354,7 +1325,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(capturedRequests.size()).isAtLeast(1);
     
@@ -1422,10 +1393,8 @@ public class ExternalProcessorClientInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {}
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1504,7 +1473,7 @@ public class ExternalProcessorClientInterceptorTest {
         .addRequestAttributes("request.host")
         .build();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(2);
+    final CountDownLatch extProcLatch = new CountDownLatch(2);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1526,13 +1495,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setRequestBody(BodyResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1577,7 +1544,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(capturedRequests.size()).isAtLeast(2);
 
     // First request should be RequestHeaders and should have attributes
@@ -1618,7 +1585,7 @@ public class ExternalProcessorClientInterceptorTest {
         .addRequestAttributes("request.host")
         .build();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1636,13 +1603,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setRequestBody(BodyResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1687,7 +1652,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(capturedRequests.size()).isAtLeast(1);
 
     // First request should be RequestBody and should have attributes
@@ -1728,7 +1693,7 @@ public class ExternalProcessorClientInterceptorTest {
         .addRequestAttributes("request.host")
         .build();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final List<ProcessingRequest> capturedRequests =
         Collections.synchronizedList(new ArrayList<>());
 
@@ -1746,13 +1711,11 @@ public class ExternalProcessorClientInterceptorTest {
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
                 }
-                sidecarLatch.countDown();
+                extProcLatch.countDown();
               }
-
 
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -1797,7 +1760,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(capturedRequests.size()).isAtLeast(1);
 
     // First request should be ResponseHeaders, and should NOT have attributes
@@ -1852,11 +1815,9 @@ public class ExternalProcessorClientInterceptorTest {
             requestSentLatch.countDown();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -1981,11 +1942,9 @@ public class ExternalProcessorClientInterceptorTest {
             }).start();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2114,11 +2073,9 @@ public class ExternalProcessorClientInterceptorTest {
                 }).start();
               }
 
-
               @Override
               public void onError(Throwable t) {
               }
-
 
               @Override
               public void onCompleted() {
@@ -2216,7 +2173,7 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
-    final AtomicInteger sidecarMessages = new AtomicInteger(0);
+    final AtomicInteger extProcMessages = new AtomicInteger(0);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
@@ -2227,14 +2184,12 @@ public class ExternalProcessorClientInterceptorTest {
         return new StreamObserver<ProcessingRequest>() {
           @Override
           public void onNext(ProcessingRequest request) {
-            sidecarMessages.incrementAndGet();
+            extProcMessages.incrementAndGet();
           }
-
 
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2289,8 +2244,8 @@ public class ExternalProcessorClientInterceptorTest {
     // Verify main call started immediately
     assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
-    // Verify sidecar RECEIVED message about headers because default is SEND
-    assertThat(sidecarMessages.get()).isEqualTo(1);
+    // Verify ext_proc server RECEIVED message about headers because default is SEND
+    assertThat(extProcMessages.get()).isEqualTo(1);
     
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
@@ -2346,10 +2301,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -2491,11 +2444,9 @@ public class ExternalProcessorClientInterceptorTest {
             }).start();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2624,11 +2575,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2756,11 +2705,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2861,7 +2808,7 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
-    final AtomicInteger sidecarMessages = new AtomicInteger(0);
+    final AtomicInteger extProcMessages = new AtomicInteger(0);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
@@ -2877,7 +2824,7 @@ public class ExternalProcessorClientInterceptorTest {
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
             } else if (request.hasRequestBody()) {
-              sidecarMessages.incrementAndGet();
+              extProcMessages.incrementAndGet();
               boolean triggerEos =
                   request.getRequestBody().getBody().toStringUtf8().equals("Trigger EOS");
               BodyResponse.Builder bodyResponse = BodyResponse.newBuilder();
@@ -2906,11 +2853,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -2968,7 +2913,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("Too late");
     assertThat(dataPlaneMessages.get()).isEqualTo(1);
 
-    // Verify sidecar received Trigger EOS and half-close
+    // Verify ext_proc server received Trigger EOS and half-close
 
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
@@ -3017,11 +2962,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -3080,7 +3023,6 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.cancel("Cleanup", null);
     channelManager.close();
   }
-
 
   // --- Category 8: Response Header Mutation ---
 
@@ -3149,11 +3091,9 @@ public class ExternalProcessorClientInterceptorTest {
             responseObserver.onNext(response.build());
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -3285,11 +3225,9 @@ public class ExternalProcessorClientInterceptorTest {
             responseObserver.onNext(response.build());
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -3348,7 +3286,6 @@ public class ExternalProcessorClientInterceptorTest {
         headersLatch.countDown();
       }
 
-
       @Override public void onClose(Status status, Metadata trailers) {
         appCloseLatch.countDown();
       }
@@ -3376,7 +3313,6 @@ public class ExternalProcessorClientInterceptorTest {
     
     channelManager.close();
   }
-
 
   // --- Category 9: Body Mutation: Inbound/Response (GRPC Mode) ---
 
@@ -3411,7 +3347,7 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     // External Processor Server
-    final CountDownLatch sidecarBodyLatch = new CountDownLatch(1);
+    final CountDownLatch extProcBodyLatch = new CountDownLatch(1);
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -3434,7 +3370,7 @@ public class ExternalProcessorClientInterceptorTest {
             } else if (request.hasResponseBody()) {
               if (capturedRequest.get() == null && !request.getResponseBody().getBody().isEmpty()) {
                 capturedRequest.set(request);
-                sidecarBodyLatch.countDown();
+                extProcBodyLatch.countDown();
               }
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseBody(BodyResponse.newBuilder()
@@ -3454,11 +3390,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -3511,7 +3445,6 @@ public class ExternalProcessorClientInterceptorTest {
         appMessageLatch.countDown();
       }
 
-
       @Override
       public void onClose(Status status, Metadata trailers) {
         appCloseLatch.countDown();
@@ -3524,7 +3457,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     long startTime = System.currentTimeMillis();
-    while (sidecarBodyLatch.getCount() > 0 && System.currentTimeMillis() - startTime < 5000) {
+    while (extProcBodyLatch.getCount() > 0 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
       Thread.sleep(10);
     }
@@ -3570,7 +3503,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     // External Processor Server
     MutableHandlerRegistry extProcRegistry = new MutableHandlerRegistry();
-    final CountDownLatch sidecarBodyLatch = new CountDownLatch(1);
+    final CountDownLatch extProcBodyLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
       @Override
@@ -3601,7 +3534,7 @@ public class ExternalProcessorClientInterceptorTest {
                           .build())
                       .build())
                   .build());
-              sidecarBodyLatch.countDown();
+              extProcBodyLatch.countDown();
             } else if (request.hasResponseTrailers()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseTrailers(TrailersResponse.newBuilder().build())
@@ -3609,11 +3542,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -3672,7 +3603,6 @@ public class ExternalProcessorClientInterceptorTest {
         appMessageLatch.countDown();
       }
 
-
       @Override
       public void onClose(Status status, Metadata trailers) {
         appCloseLatch.countDown();
@@ -3685,7 +3615,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     long startTime = System.currentTimeMillis();
-    while (sidecarBodyLatch.getCount() > 0 && System.currentTimeMillis() - startTime < 5000) {
+    while (extProcBodyLatch.getCount() > 0 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
       Thread.sleep(10);
     }
@@ -3703,7 +3633,6 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-
   // --- Category 10: Response Trailers ---
 
   @Test
@@ -3713,7 +3642,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -3732,7 +3661,6 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onNext(ProcessingRequest request) {
                 if (request.hasResponseTrailers()) {
@@ -3749,7 +3677,7 @@ public class ExternalProcessorClientInterceptorTest {
                               .build())
                           .build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                   completeResponse();
                 } else if (request.hasRequestHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
@@ -3762,10 +3690,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -3856,7 +3782,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Verify status was propagated correctly
@@ -3881,7 +3807,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -3900,7 +3826,6 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
@@ -3908,7 +3833,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseTrailers(TrailersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               completeResponse();
             } else if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
@@ -3921,11 +3846,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4008,7 +3931,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(callLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(capturedRequest.get().hasResponseTrailers()).isTrue();
     assertThat(capturedRequest.get().getResponseTrailers().getTrailers().getHeadersList())
@@ -4023,9 +3946,9 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final AtomicInteger sidecarTrailerCount = new AtomicInteger(0);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarHeadersLatch = new CountDownLatch(1);
+    final AtomicInteger extProcTrailerCount = new AtomicInteger(0);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
+    final CountDownLatch extProcHeadersLatch = new CountDownLatch(1);
     final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -4044,29 +3967,26 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
-              sidecarTrailerCount.incrementAndGet();
+              extProcTrailerCount.incrementAndGet();
             } else if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarHeadersLatch.countDown();
+              extProcHeadersLatch.countDown();
             }
           }
-
 
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4158,12 +4078,12 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
     // Wait for the ext_proc stream to complete
     assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarTrailerCount.get()).isEqualTo(0);
+    assertThat(extProcTrailerCount.get()).isEqualTo(0);
 
     // Verify status was propagated correctly
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
@@ -4184,9 +4104,9 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final AtomicInteger sidecarTrailerCount = new AtomicInteger(0);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarHeadersLatch = new CountDownLatch(1);
+    final AtomicInteger extProcTrailerCount = new AtomicInteger(0);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
+    final CountDownLatch extProcHeadersLatch = new CountDownLatch(1);
     final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -4205,29 +4125,26 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
-              sidecarTrailerCount.incrementAndGet();
+              extProcTrailerCount.incrementAndGet();
             } else if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarHeadersLatch.countDown();
+              extProcHeadersLatch.countDown();
             }
           }
-
 
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4319,12 +4236,12 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
     // Wait for the ext_proc stream to complete
     assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarTrailerCount.get()).isEqualTo(0);
+    assertThat(extProcTrailerCount.get()).isEqualTo(0);
 
     // Verify status was propagated correctly
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
@@ -4348,7 +4265,7 @@ public class ExternalProcessorClientInterceptorTest {
     String myExtProcServerName = InProcessServerBuilder.generateName();
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest>
         capturedResponseHeadersRequest = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     class MyExtProcImpl extends io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc
         .ExternalProcessorImplBase {
@@ -4377,7 +4294,7 @@ public class ExternalProcessorClientInterceptorTest {
                       .build());
             } else if (request.hasResponseHeaders()) {
               capturedResponseHeadersRequest.set(request);
-              // Sidecar mutates the trailers-only headers (which are the trailers)
+              // Ext_proc server mutates the trailers-only headers (which are the trailers)
               responseObserver.onNext(
                   io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse.newBuilder()
                       .setResponseHeaders(
@@ -4402,16 +4319,14 @@ public class ExternalProcessorClientInterceptorTest {
                                       .build())
                               .build())
                       .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               responseObserver.onCompleted();
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4482,7 +4397,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(callLatch.await(10, TimeUnit.SECONDS)).isTrue();
     
     ProcessingRequest req = capturedResponseHeadersRequest.get();
@@ -4505,7 +4420,7 @@ public class ExternalProcessorClientInterceptorTest {
     String myExtProcServerName = InProcessServerBuilder.generateName();
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.ProcessingRequest>
         capturedResponseHeadersRequest = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     class MyExtProcImpl extends io.envoyproxy.envoy.service.ext_proc.v3.ExternalProcessorGrpc
         .ExternalProcessorImplBase {
@@ -4534,7 +4449,7 @@ public class ExternalProcessorClientInterceptorTest {
                       .build());
             } else if (request.hasResponseHeaders()) {
               capturedResponseHeadersRequest.set(request);
-              // Sidecar mutates the trailers-only headers (which are the trailers)
+              // Ext_proc server mutates the trailers-only headers (which are the trailers)
               responseObserver.onNext(
                   io.envoyproxy.envoy.service.ext_proc.v3.ProcessingResponse.newBuilder()
                       .setResponseHeaders(
@@ -4559,16 +4474,14 @@ public class ExternalProcessorClientInterceptorTest {
                                       .build())
                               .build())
                       .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               responseObserver.onCompleted();
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4639,7 +4552,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(callLatch.await(10, TimeUnit.SECONDS)).isTrue();
     
     ProcessingRequest req = capturedResponseHeadersRequest.get();
@@ -4662,8 +4575,8 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final AtomicInteger sidecarTrailerCount = new AtomicInteger(0);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final AtomicInteger extProcTrailerCount = new AtomicInteger(0);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final CountDownLatch extProcCompletedLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -4676,21 +4589,19 @@ public class ExternalProcessorClientInterceptorTest {
           @Override
           public void onNext(ProcessingRequest request) {
             if (request.hasResponseTrailers()) {
-              sidecarTrailerCount.incrementAndGet();
+              extProcTrailerCount.incrementAndGet();
             } else if (request.hasResponseHeaders()) {
-              sidecarTrailerCount.incrementAndGet();
+              extProcTrailerCount.incrementAndGet();
             } else if (request.hasRequestHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             }
           }
 
-
           @Override
           public void onError(Throwable t) {}
-
 
           @Override
           public void onCompleted() {
@@ -4769,11 +4680,11 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
     // Wait for the ext_proc stream to complete
     assertThat(extProcCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarTrailerCount.get()).isEqualTo(0);
+    assertThat(extProcTrailerCount.get()).isEqualTo(0);
 
     // Verify status was propagated correctly
     assertThat(capturedStatus.get().getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
@@ -4787,8 +4698,6 @@ public class ExternalProcessorClientInterceptorTest {
     
     channelManager.close();
   }
-
-
 
   // --- Category 12: Half-Close handling ---
 
@@ -4834,11 +4743,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -4863,7 +4770,7 @@ public class ExternalProcessorClientInterceptorTest {
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
         .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
             (request, responseObserver) -> {
-              // Should only be called AFTER sidecar response
+              // Should only be called AFTER ext_proc server response
               dataPlaneHalfCloseLatch.countDown();
               responseObserver.onNext("Hello");
               responseObserver.onCompleted();
@@ -4880,7 +4787,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     proxyCall.halfClose();
 
-    // Verify sidecar received end_of_stream_without_message
+    // Verify ext_proc server received end_of_stream_without_message
     assertThat(halfCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     // Verify main call NOT yet started (data plane server NOT yet reached)
@@ -4966,11 +4873,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5009,11 +4914,9 @@ public class ExternalProcessorClientInterceptorTest {
                     serverReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -5127,11 +5030,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5170,11 +5071,9 @@ public class ExternalProcessorClientInterceptorTest {
                     serverReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -5300,11 +5199,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5343,11 +5240,9 @@ public class ExternalProcessorClientInterceptorTest {
                     serverReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -5479,11 +5374,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5522,11 +5415,9 @@ public class ExternalProcessorClientInterceptorTest {
                     serverReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -5590,8 +5481,6 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-
-
   // --- Category 13: Outbound Backpressure (isReady / onReady) ---
 
   @Test
@@ -5638,11 +5527,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5702,11 +5589,11 @@ public class ExternalProcessorClientInterceptorTest {
       }
     }, new Metadata());
 
-    // Wait for activation (sidecar needs to respond to headers)
+    // Wait for activation (ext_proc server needs to respond to headers)
     assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(proxyCall.isReady()).isTrue();
 
-    // Sidecar busy
+    // Ext_proc server busy
     sidecarReady.set(false);
     assertThat(proxyCall.isReady()).isFalse();
 
@@ -5763,11 +5650,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5829,7 +5714,7 @@ public class ExternalProcessorClientInterceptorTest {
       }
     }, new Metadata());
 
-    // Wait for activation (sidecar needs to respond to headers)
+    // Wait for activation (ext_proc server needs to respond to headers)
     assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(proxyCall.isReady()).isTrue();
 
@@ -5887,11 +5772,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -5953,9 +5836,9 @@ public class ExternalProcessorClientInterceptorTest {
       }
     }, new Metadata());
 
-    // Wait for activation (sidecar needs to respond to headers)
+    // Wait for activation (ext_proc server needs to respond to headers)
     assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
-    // Since sidecar is ready, proxyCall.isReady() should return true,
+    // Since ext_proc server is ready, proxyCall.isReady() should return true,
     // ignoring that upstream is busy
     assertThat(proxyCall.isReady()).isTrue();
 
@@ -5998,11 +5881,9 @@ public class ExternalProcessorClientInterceptorTest {
           public void onNext(ProcessingRequest request) {
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -6015,7 +5896,7 @@ public class ExternalProcessorClientInterceptorTest {
         .directExecutor()
         .build().start());
 
-    final AtomicReference<ClientCall.Listener<ProcessingResponse>> sidecarListenerRef =
+    final AtomicReference<ClientCall.Listener<ProcessingResponse>> extProcListenerRef =
         new AtomicReference<>();
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
@@ -6029,7 +5910,7 @@ public class ExternalProcessorClientInterceptorTest {
                       next.newCall(method, callOptions)) {
                     @Override
                     public void start(Listener<RespT> responseListener, Metadata headers) {
-                      sidecarListenerRef.set((Listener<ProcessingResponse>) responseListener);
+                      extProcListenerRef.set((Listener<ProcessingResponse>) responseListener);
                       super.start(responseListener, headers);
                     }
                   };
@@ -6064,15 +5945,15 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
-    // Wait for sidecar call to start and listener to be captured
+    // Wait for ext_proc server call to start and listener to be captured
     long startTime = System.currentTimeMillis();
-    while (sidecarListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
+    while (extProcListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(10);
     }
-    assertThat(sidecarListenerRef.get()).isNotNull();
+    assertThat(extProcListenerRef.get()).isNotNull();
 
-    // Trigger sidecar onReady
-    sidecarListenerRef.get().onReady();
+    // Trigger ext_proc server onReady
+    extProcListenerRef.get().onReady();
 
     // Verify app listener notified
     assertThat(onReadyLatch.await(5, TimeUnit.SECONDS)).isTrue();
@@ -6117,10 +5998,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -6187,7 +6066,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
     proxyCall.request(1);
 
-    // 3. Wait for the sidecar response to complete the external processor stream
+    // 3. Wait for the ext_proc server response to complete the external processor stream
     assertThat(sidecarResponseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // 4. Assert that proxyCall.isReady() delegates directly to the downstream call
@@ -6772,11 +6651,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -6889,11 +6766,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -6959,14 +6834,14 @@ public class ExternalProcessorClientInterceptorTest {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
     }
 
-    // Wait for sidecar to send drain and test to observe it
+    // Wait for ext_proc server to send drain and test to observe it
     assertThat(sidecarOnNextLatch.await(5, TimeUnit.SECONDS)).isTrue();
     for (int i = 0; i < 10; i++) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
     }
     assertThat(proxyCall.isReady()).isFalse();
 
-    // Now let sidecar complete
+    // Now let ext_proc server complete
     sidecarFinishLatch.countDown();
     for (int i = 0; i < 10; i++) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -6982,7 +6857,7 @@ public class ExternalProcessorClientInterceptorTest {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
     }
 
-    // After sidecar stream completes, it should trigger onReady and become ready
+    // After ext_proc server stream completes, it should trigger onReady and become ready
     assertThat(onReadyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     for (int i = 0; i < 50 && !proxyCall.isReady(); i++) {
       fakeClock.forwardTime(100, TimeUnit.MILLISECONDS);
@@ -7039,10 +6914,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -7157,11 +7030,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -7229,10 +7100,10 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(proxyCall.isReady()).isFalse();
 
-    // Request messages from server while stream is draining (and sidecar not ready)
+    // Request messages from server while stream is draining (and ext_proc server not ready)
     proxyCall.request(1);
 
-    // Now let sidecar complete
+    // Now let ext_proc server complete
     sidecarFinishLatch.countDown();
 
     // Wait for it to become ready again
@@ -7242,7 +7113,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(proxyCall.isReady()).isTrue();
 
-    // 1. Verify application message is forwarded to data plane WITHOUT sidecar contact
+    // 1. Verify application message is forwarded to data plane WITHOUT ext_proc server contact
     proxyCall.sendMessage("Direct Message");
     proxyCall.halfClose();
 
@@ -7252,7 +7123,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(dataPlaneLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(dataPlaneReceivedMessage.get()).isEqualTo("Direct Message");
     
-    // 2. Verify server response is delivered to application WITHOUT sidecar call
+    // 2. Verify server response is delivered to application WITHOUT ext_proc server call
     assertThat(appLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appReceivedMessage.get()).isEqualTo("Direct Response");
     
@@ -7321,11 +7192,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -7361,11 +7230,9 @@ public class ExternalProcessorClientInterceptorTest {
                     dataPlaneReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -7413,7 +7280,7 @@ public class ExternalProcessorClientInterceptorTest {
     // Assert that it was NOT received by extProc
     assertThat(extProcReceivedBodyCount.get()).isEqualTo(0);
 
-    // Now let sidecar complete
+    // Now let ext_proc server complete
     sidecarFinishLatch.countDown();
 
     // Request response from data plane
@@ -7506,11 +7373,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -7549,11 +7414,9 @@ public class ExternalProcessorClientInterceptorTest {
                     }
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -7608,7 +7471,7 @@ public class ExternalProcessorClientInterceptorTest {
     // Verify the message during drain has NOT been delivered to the data plane server yet
     assertThat(dataPlaneReceivedMessages).containsExactly("Mutated Message 1");
 
-    // Now let sidecar complete
+    // Now let ext_proc server complete
     sidecarFinishLatch.countDown();
 
     // Wait for the control stream drain to be fully completed
@@ -7688,11 +7551,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -7729,11 +7590,9 @@ public class ExternalProcessorClientInterceptorTest {
                   public void onNext(String value) {
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -7757,12 +7616,10 @@ public class ExternalProcessorClientInterceptorTest {
         appReceivedHeaders.set(headers);
       }
 
-
       @Override
       public void onMessage(String message) {
         appReceivedMessages.add(message);
       }
-
 
       @Override
       public void onClose(Status status, Metadata trailers) {
@@ -7780,7 +7637,7 @@ public class ExternalProcessorClientInterceptorTest {
     // Request messages from server
     proxyCall.request(10);
 
-    // Wait for drain to be processed and sidecar's client stream to finish
+    // Wait for drain to be processed and ext_proc server's client stream to finish
     assertThat(drainCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(proxyCall.isReady()).isFalse();
 
@@ -7799,7 +7656,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(appReceivedMessages).isEmpty();
     assertThat(appReceivedStatus.get()).isNull();
 
-    // Now let sidecar complete the drain
+    // Now let ext_proc server complete the drain
     sidecarFinishLatch.countDown();
 
     // Wait for the call to close on application side
@@ -7875,7 +7732,7 @@ public class ExternalProcessorClientInterceptorTest {
                   if ("Original Message 1".equals(msgStr)) {
                     new Thread(() -> {
                       try {
-                        // Wait until M2 is received by sidecar so both M1 and M2 are in flight
+                        // Wait until M2 is received by ext_proc server so both M1 and M2 are in flight
                         if (m2ReceivedLatch.await(5, TimeUnit.SECONDS)) {
                           responseObserver.onNext(ProcessingResponse.newBuilder()
                               .setResponseBody(BodyResponse.newBuilder()
@@ -7925,11 +7782,9 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-    
               @Override
               public void onError(Throwable t) {}
 
-    
               @Override
               public void onCompleted() {
                 drainCompletedLatch.countDown();
@@ -7965,10 +7820,8 @@ public class ExternalProcessorClientInterceptorTest {
                   @Override
                   public void onNext(String value) {}
 
-
                   @Override
                   public void onError(Throwable t) {}
-
 
                   @Override
                   public void onCompleted() {}
@@ -7994,7 +7847,6 @@ public class ExternalProcessorClientInterceptorTest {
         appReceivedHeaders.set(headers);
       }
 
-
       @Override
       public void onMessage(String message) {
         appReceivedMessages.add(message);
@@ -8004,7 +7856,6 @@ public class ExternalProcessorClientInterceptorTest {
           mutatedMsg2ReceivedLatch.countDown();
         }
       }
-
 
       @Override
       public void onClose(Status status, Metadata trailers) {
@@ -8027,13 +7878,13 @@ public class ExternalProcessorClientInterceptorTest {
     StreamObserver<String> dataPlaneResponseObserver = dataPlaneResponseObserverRef.get();
     assertThat(dataPlaneResponseObserver).isNotNull();
 
-    // 1. Upstream sends M1 (which triggers response headers and M1 body to sidecar)
+    // 1. Upstream sends M1 (which triggers response headers and M1 body to ext_proc server)
     dataPlaneResponseObserver.onNext("Original Message 1");
 
-    // Wait for sidecar to receive and respond to response headers
+    // Wait for ext_proc server to receive and respond to response headers
     assertThat(respHeadersLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // 2. Upstream sends M2 (which triggers M2 body to sidecar)
+    // 2. Upstream sends M2 (which triggers M2 body to ext_proc server)
     dataPlaneResponseObserver.onNext("Original Message 2");
 
     // Wait for app to receive Mutated Message 1 (meaning M1's response with request_drain=true
@@ -8052,10 +7903,10 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(appReceivedMessages).containsExactly("Mutated Message 1");
     assertThat(appReceivedStatus.get()).isNull();
 
-    // 4. Signal sidecar to send Mutated Message 2
+    // 4. Signal ext_proc server to send Mutated Message 2
     m3SentLatch.countDown();
     
-    // Wait for sidecar to finish sending M2 and app to receive it
+    // Wait for ext_proc server to finish sending M2 and app to receive it
     assertThat(respBody2Latch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(mutatedMsg2ReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
@@ -8063,7 +7914,7 @@ public class ExternalProcessorClientInterceptorTest {
     // M3 is released)
     assertThat(appReceivedMessages).containsExactly("Mutated Message 1", "Mutated Message 2");
 
-    // 5. Complete sidecar stream to finish the drain
+    // 5. Complete ext_proc server stream to finish the drain
     sidecarFinishLatch.countDown();
 
     // Wait for the call to close on application side
@@ -8119,11 +7970,9 @@ public class ExternalProcessorClientInterceptorTest {
           public void onNext(ProcessingRequest request) {
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -8137,7 +7986,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build().start());
 
     final AtomicBoolean sidecarReady = new AtomicBoolean(true);
-    final AtomicReference<ClientCall.Listener<ProcessingResponse>> sidecarListenerRef =
+    final AtomicReference<ClientCall.Listener<ProcessingResponse>> extProcListenerRef =
         new AtomicReference<>();
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
@@ -8151,10 +8000,9 @@ public class ExternalProcessorClientInterceptorTest {
                       ReqT, RespT>(next.newCall(method, callOptions)) {
                     @Override
                     public void start(Listener<RespT> responseListener, Metadata headers) {
-                      sidecarListenerRef.set((Listener<ProcessingResponse>) responseListener);
+                      extProcListenerRef.set((Listener<ProcessingResponse>) responseListener);
                       super.start(responseListener, headers);
                     }
-
 
                     @Override
                     public boolean isReady() {
@@ -8180,11 +8028,9 @@ public class ExternalProcessorClientInterceptorTest {
                   public void onNext(String value) {
                   }
 
-
                   @Override
                   public void onError(Throwable t) {
                   }
-
 
                   @Override
                   public void onCompleted() {
@@ -8219,27 +8065,27 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    // Wait for sidecar call to start
+    // Wait for ext_proc server call to start
     long startTime = System.currentTimeMillis();
-    while (sidecarListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
+    while (extProcListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(10);
     }
-    assertThat(sidecarListenerRef.get()).isNotNull();
+    assertThat(extProcListenerRef.get()).isNotNull();
 
-    // Sidecar is busy
+    // Ext_proc server is busy
     sidecarReady.set(false);
     assertThat(proxyCall.isReady()).isFalse();
 
     proxyCall.request(5);
 
-    // Verify data plane call NOT requested yet (due to observability mode and sidecar busy)
+    // Verify data plane call NOT requested yet (due to observability mode and ext_proc server busy)
     assertThat(dataPlaneRequestCount.get()).isEqualTo(0);
 
-    // Sidecar becomes ready
+    // Ext_proc server becomes ready
     sidecarReady.set(true);
-    sidecarListenerRef.get().onReady();
+    extProcListenerRef.get().onReady();
 
-    // After sidecar becomes ready, pending requests should be drained to data plane.
+    // After ext_proc server becomes ready, pending requests should be drained to data plane.
     assertThat(dataPlaneRequestCount.get()).isEqualTo(5);
     assertThat(proxyCall.isReady()).isTrue();
     
@@ -8290,11 +8136,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -8407,11 +8251,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -8425,7 +8267,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build().start());
 
     final AtomicBoolean sidecarReady = new AtomicBoolean(true);
-    final AtomicReference<ClientCall.Listener<ProcessingResponse>> sidecarListenerRef =
+    final AtomicReference<ClientCall.Listener<ProcessingResponse>> extProcListenerRef =
         new AtomicReference<>();
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
@@ -8439,10 +8281,9 @@ public class ExternalProcessorClientInterceptorTest {
                       ReqT, RespT>(next.newCall(method, callOptions)) {
                     @Override
                     public void start(Listener<RespT> responseListener, Metadata headers) {
-                      sidecarListenerRef.set((Listener<ProcessingResponse>) responseListener);
+                      extProcListenerRef.set((Listener<ProcessingResponse>) responseListener);
                       super.start(responseListener, headers);
                     }
-
 
                     @Override
                     public boolean isReady() {
@@ -8490,23 +8331,23 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
 
-    // Wait for sidecar call to start
+    // Wait for ext_proc server call to start
     long startTime = System.currentTimeMillis();
-    while (sidecarListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
+    while (extProcListenerRef.get() == null && System.currentTimeMillis() - startTime < 5000) {
       Thread.sleep(10);
     }
-    assertThat(sidecarListenerRef.get()).isNotNull();
+    assertThat(extProcListenerRef.get()).isNotNull();
 
-    // Sidecar is busy initially
+    // Ext_proc server is busy initially
     sidecarReady.set(false);
     
     // Request from application
     proxyCall.request(10);
     assertThat(dataPlaneRequestCount.get()).isEqualTo(0);
 
-    // Sidecar becomes ready
+    // Ext_proc server becomes ready
     sidecarReady.set(true);
-    sidecarListenerRef.get().onReady();
+    extProcListenerRef.get().onReady();
 
     // Verify buffered request drained
     assertThat(dataPlaneRequestCount.get()).isEqualTo(10);
@@ -8554,11 +8395,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -8618,7 +8457,7 @@ public class ExternalProcessorClientInterceptorTest {
       }
     }, new Metadata());
 
-    // Wait for sidecar stream completion
+    // Wait for ext_proc server stream completion
     assertThat(readyLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(proxyCall.isReady()).isTrue();
 
@@ -8626,7 +8465,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     // Verify request forwarded immediately
     assertThat(dataPlaneRequestCount.get()).isEqualTo(7);
-    // proxyCall.isReady() should remain true as sidecar is gone
+    // proxyCall.isReady() should remain true as ext_proc server is gone
     assertThat(proxyCall.isReady()).isTrue();
     
     proxyCall.cancel("Cleanup", null);
@@ -8700,11 +8539,9 @@ public class ExternalProcessorClientInterceptorTest {
             });
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -8773,12 +8610,10 @@ public class ExternalProcessorClientInterceptorTest {
         appEvents.add("HEADERS");
       }
 
-
       @Override
       public void onMessage(String message) {
         appEvents.add("MESSAGE");
       }
-
 
       @Override
       public void onClose(Status status, Metadata trailers) {
@@ -8800,7 +8635,6 @@ public class ExternalProcessorClientInterceptorTest {
     sidecarResponseExecutor.shutdown();
     channelManager.close();
   }
-
 
   @Test
   @SuppressWarnings("FutureReturnValueIgnored")
@@ -8879,10 +8713,8 @@ public class ExternalProcessorClientInterceptorTest {
                 });
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -8926,7 +8758,6 @@ public class ExternalProcessorClientInterceptorTest {
               call.sendMessage("server-response-" + message);
             }
 
-
             @Override
             public void onHalfClose() {
               call.close(Status.OK, new Metadata());
@@ -8958,12 +8789,10 @@ public class ExternalProcessorClientInterceptorTest {
         appEvents.add("HEADERS");
       }
 
-
       @Override
       public void onMessage(String message) {
         appEvents.add("MESSAGE:" + message);
       }
-
 
       @Override
       public void onClose(Status status, Metadata trailers) {
@@ -9037,16 +8866,14 @@ public class ExternalProcessorClientInterceptorTest {
               // Fail the stream immediately on headers
               responseObserver.onError(
                   Status.INTERNAL
-                      .withDescription("Simulated sidecar failure")
+                      .withDescription("Simulated ext_proc server failure")
                       .asRuntimeException());
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9085,7 +8912,7 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
-    // Verify application receives INTERNAL due to sidecar failure
+    // Verify application receives INTERNAL due to ext_proc server failure
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(closedStatus.get().getDescription()).contains("External processor stream failed");
@@ -9134,11 +8961,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9209,7 +9034,7 @@ public class ExternalProcessorClientInterceptorTest {
     // Trigger unary call. request(1) starts it.
     proxyCall.request(1);
 
-    // Wait for the async sidecar thread to enter activateCall() and block inside interceptCall
+    // Wait for the async ext_proc server thread to enter activateCall() and block inside interceptCall
     assertThat(headersReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Now, while the async thread is blocked (and passThroughMode is still false),
@@ -9268,11 +9093,9 @@ public class ExternalProcessorClientInterceptorTest {
           public void onNext(ProcessingRequest request) {
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9335,7 +9158,7 @@ public class ExternalProcessorClientInterceptorTest {
       }
       assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
-      // At this point, app received onClose, but sidecar should NOT be completed yet
+      // At this point, app received onClose, but ext_proc server should NOT be completed yet
       assertThat(sidecarCompletedLatch.getCount()).isEqualTo(1);
 
       // Fast forward time to trigger deferred close
@@ -9404,7 +9227,7 @@ public class ExternalProcessorClientInterceptorTest {
                       .build())
                   .build());
             } else if (request.hasRequestBody()) {
-              // Simulate sidecar sending compressed body mutation (unsupported)
+              // Simulate ext_proc server sending compressed body mutation (unsupported)
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestBody(BodyResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
@@ -9419,11 +9242,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9491,7 +9312,7 @@ public class ExternalProcessorClientInterceptorTest {
         interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
     proxyCall.start(appListener, new Metadata());
 
-    // Wait for sidecar to receive headers and filter to activate call
+    // Wait for ext_proc server to receive headers and filter to activate call
     for (int i = 0; i < 5000 && closedLatch.getCount() > 0; i++) {
       fakeClock.forwardTime(10, TimeUnit.MILLISECONDS);
       Thread.sleep(1);
@@ -9574,7 +9395,7 @@ public class ExternalProcessorClientInterceptorTest {
                       .build())
                   .build());
             } else if (request.hasResponseBody()) {
-              // Simulate sidecar sending compressed body mutation (unsupported) for response body
+              // Simulate ext_proc server sending compressed body mutation (unsupported) for response body
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseBody(BodyResponse.newBuilder()
                       .setResponse(CommonResponse.newBuilder()
@@ -9589,11 +9410,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9719,11 +9538,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9862,11 +9679,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -9922,7 +9737,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
     assertThat(closedStatus.get().getDescription()).isEqualTo("Custom security rejection");
     
-    // Data plane call should NOT have been started as sidecar rejected immediately on headers
+    // Data plane call should NOT have been started as ext_proc server rejected immediately on headers
     assertThat(dataPlaneStarted.get()).isFalse();
     
     proxyCall.cancel("Cleanup", null);
@@ -9976,10 +9791,8 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {}
-
 
           @Override
           public void onCompleted() {}
@@ -10090,11 +9903,9 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {
               }
-
 
               @Override
               public void onCompleted() {
@@ -10140,7 +9951,7 @@ public class ExternalProcessorClientInterceptorTest {
         fakeClock.forwardTime(1, TimeUnit.SECONDS);
         Thread.sleep(1);
       }
-      // Verify app listener notified with an error (not the sidecar's UNAUTHENTICATED)
+      // Verify app listener notified with an error (not the ext_proc server's UNAUTHENTICATED)
       assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
       assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.INTERNAL);
       
@@ -10217,11 +10028,9 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {
               }
-
 
               @Override
               public void onCompleted() {
@@ -10342,7 +10151,7 @@ public class ExternalProcessorClientInterceptorTest {
                                     io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus.newBuilder()
                                         .setStatus(Status.DATA_LOSS.getCode().value())
                                         .build())
-                                .setDetails("Sidecar detected data loss")
+                                .setDetails("Ext_proc server detected data loss")
                                 .setHeaders(
                                     io.envoyproxy.envoy.service.ext_proc.v3.HeaderMutation
                                         .newBuilder()
@@ -10352,7 +10161,7 @@ public class ExternalProcessorClientInterceptorTest {
                                                 .setHeader(
                                                     io.envoyproxy.envoy.config.core.v3.HeaderValue
                                                         .newBuilder()
-                                                        .setKey("x-sidecar-extra")
+                                                        .setKey("x-ext-proc-server-extra")
                                                         .setValue("true")
                                                         .build())
                                                 .build())
@@ -10364,11 +10173,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -10425,11 +10232,11 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(closedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.DATA_LOSS);
-    assertThat(closedStatus.get().getDescription()).isEqualTo("Sidecar detected data loss");
+    assertThat(closedStatus.get().getDescription()).isEqualTo("Ext_proc server detected data loss");
     assertThat(
             closedTrailers
                 .get()
-                .get(Metadata.Key.of("x-sidecar-extra", Metadata.ASCII_STRING_MARSHALLER)))
+                .get(Metadata.Key.of("x-ext-proc-server-extra", Metadata.ASCII_STRING_MARSHALLER)))
         .isEqualTo("true");
     
     proxyCall.cancel("Cleanup", null);
@@ -10491,12 +10298,10 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
             cancelLatch.countDown();
           }
-
 
           @Override
           public void onCompleted() {
@@ -10543,7 +10348,7 @@ public class ExternalProcessorClientInterceptorTest {
     // Application cancels the RPC
     proxyCall.cancel("User cancelled", null);
 
-    // Verify sidecar stream also cancelled
+    // Verify ext_proc server stream also cancelled
     assertThat(cancelLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     channelManager.close();
@@ -10575,7 +10380,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     final List<ProcessingRequest> extProcRequests =
         new CopyOnWriteArrayList<>();
-    // Sidecar server
+    // Ext_proc server server
     final CountDownLatch sidecarActionLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -10598,11 +10403,9 @@ public class ExternalProcessorClientInterceptorTest {
             }).start();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -10681,11 +10484,11 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(proxyCall.isReady()).isTrue();
 
-    // Sidecar becomes busy -> proxyCall becomes busy
+    // Ext_proc server becomes busy -> proxyCall becomes busy
     sidecarReady.set(false);
     assertThat(proxyCall.isReady()).isFalse();
 
-    // Sidecar becomes ready, but Data Plane is busy -> proxyCall is STILL ready because Normal Mode
+    // Ext_proc server becomes ready, but Data Plane is busy -> proxyCall is STILL ready because Normal Mode
     sidecarReady.set(true);
     dataPlaneReady.set(false);
     assertThat(proxyCall.isReady()).isTrue();
@@ -10727,7 +10530,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    // Sidecar server
+    // Ext_proc server server
     final CountDownLatch sidecarActionLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -10765,11 +10568,9 @@ public class ExternalProcessorClientInterceptorTest {
             }).start();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -10784,7 +10585,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build().start());
 
     final AtomicBoolean sidecarReady = new AtomicBoolean(true);
-    final AtomicReference<ClientCall.Listener<ProcessingResponse>> sidecarListenerRef =
+    final AtomicReference<ClientCall.Listener<ProcessingResponse>> extProcListenerRef =
         new AtomicReference<>();
     CachedChannelManager channelManager = new CachedChannelManager(config -> {
       return grpcCleanup.register(
@@ -10798,10 +10599,9 @@ public class ExternalProcessorClientInterceptorTest {
                       next.newCall(method, callOptions)) {
                     @Override
                     public void start(Listener<RespT> responseListener, Metadata headers) {
-                      sidecarListenerRef.set((Listener<ProcessingResponse>) responseListener);
+                      extProcListenerRef.set((Listener<ProcessingResponse>) responseListener);
                       super.start(responseListener, headers);
                     }
-
 
                     @Override
                     public boolean isReady() {
@@ -10872,15 +10672,15 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(proxyCall.isReady()).isTrue();
 
-    // Sidecar busy -> request(5) should be buffered
+    // Ext_proc server busy -> request(5) should be buffered
     sidecarReady.set(false);
     proxyCall.request(5);
     assertThat(dataPlaneRequestCount.get()).isEqualTo(1);
     // (Only the initial bootstrap request went through)
 
-    // Sidecar becomes ready -> buffered requests should start draining (pulling next message)
+    // Ext_proc server becomes ready -> buffered requests should start draining (pulling next message)
     sidecarReady.set(true);
-    sidecarListenerRef.get().onReady();
+    extProcListenerRef.get().onReady();
 
     long startTime2 = System.currentTimeMillis();
     while (dataPlaneRequestCount.get() < 2 && System.currentTimeMillis() - startTime2 < 5000) {
@@ -10963,7 +10763,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(configOrError.errorDetail).isNull();
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
-    // Sidecar server
+    // Ext_proc server server
     final CountDownLatch sidecarActionLatch = new CountDownLatch(1);
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -10985,11 +10785,9 @@ public class ExternalProcessorClientInterceptorTest {
             }).start();
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -11018,7 +10816,6 @@ public class ExternalProcessorClientInterceptorTest {
                     public void start(Listener<RespT> responseListener, Metadata headers) {
                       super.start(responseListener, headers);
                     }
-
 
                     @Override
                     public boolean isReady() {
@@ -11086,7 +10883,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
     assertThat(proxyCall.isReady()).isTrue();
 
-    // Sidecar busy
+    // Ext_proc server busy
     sidecarReady.set(false);
     
     // Since responseBodyMode is NONE and not in observabilityMode, request(5) should
@@ -11162,10 +10959,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -11307,10 +11102,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -11346,10 +11139,8 @@ public class ExternalProcessorClientInterceptorTest {
                     dataPlaneReceivedMessages.add(value);
                   }
 
-
                   @Override
                   public void onError(Throwable t) {}
-
 
                   @Override
                   public void onCompleted() {
@@ -11501,10 +11292,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -11582,7 +11371,7 @@ public class ExternalProcessorClientInterceptorTest {
     String largeMessage70k = new String(new char[70000]).replace('\0', 'a');
     String largeMessage30k = new String(new char[30000]).replace('\0', 'b');
 
-    // Wait for the initialization (headers, request body, response headers) to reach the sidecar
+    // Wait for the initialization (headers, request body, response headers) to reach the ext_proc server
     assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Upstream sends 70k response chunk. Since window is 65,536, this drives the window
@@ -11597,12 +11386,12 @@ public class ExternalProcessorClientInterceptorTest {
     // must block/buffer this chunk.
     upstreamResponseObserver.onNext(largeMessage30k);
 
-    // Wait a brief period and verify that the 30k chunk has NOT been sent to the sidecar
+    // Wait a brief period and verify that the 30k chunk has NOT been sent to the ext_proc server
     Thread.sleep(200);
     assertThat(secondResponseBodyLatch.getCount()).isEqualTo(1);
     assertThat(appReceivedMessages).hasSize(2);
 
-    // Sidecar sends a ServerWindowUpdate of 40k to the filter, unblocking the window.
+    // Ext_proc server sends a ServerWindowUpdate of 40k to the filter, unblocking the window.
     responseObserverRef.get().onNext(ProcessingResponse.newBuilder()
         .setServerWindowUpdate(ProcessingResponse.ServerWindowUpdate.newBuilder()
             .setWindowIncrementUpstreamToSidestream(40000)
@@ -11610,7 +11399,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build());
 
     // Once the window is unblocked, the filter immediately forwards the 30k chunk
-    // to the sidecar, which processes it.
+    // to the ext_proc server, which processes it.
     assertThat(secondResponseBodyLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Verify that Chunk 2 is now successfully delivered to the client application
@@ -11724,10 +11513,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -11883,10 +11670,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -11990,6 +11775,179 @@ public class ExternalProcessorClientInterceptorTest {
 
   @Test
   @SuppressWarnings("unchecked")
+  public void testSidestreamToUpstreamFlowControl_QueuingAndDraining() throws Exception {
+    ExternalProcessor proto = ExternalProcessor.newBuilder()
+        .setGrpcService(GrpcService.newBuilder()
+            .setGoogleGrpc(GrpcService.GoogleGrpc.newBuilder()
+                .setTargetUri("in-process:///" + extProcServerName)
+                .addChannelCredentialsPlugin(Any.newBuilder()
+                    .setTypeUrl(INSECURE_CREDENTIALS_TYPE_URL)
+                    .build())
+                .build())
+            .build())
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final CountDownLatch finishLatch = new CountDownLatch(1);
+    final AtomicReference<String> serverReceivedBody = new AtomicReference<>();
+    final CountDownLatch serverReceivedLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                } else if (request.hasRequestBody()) {
+                  boolean eos = request.getRequestBody().getEndOfStream()
+                      || request.getRequestBody().getEndOfStreamWithoutMessage();
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestBody(BodyResponse.newBuilder()
+                          .setResponse(CommonResponse.newBuilder()
+                              .setBodyMutation(BodyMutation.newBuilder()
+                                  .setStreamedResponse(StreamedBodyResponse.newBuilder()
+                                      .setBody(ByteString.copyFromUtf8(eos ? "" : "MutatedRequest"))
+                                      .setEndOfStream(eos)
+                                      .build())
+                                  .build())
+                              .build())
+                          .build())
+                      .build());
+                }
+              }
+              @Override
+              public void onError(Throwable t) {}
+              @Override
+              public void onCompleted() {
+                responseObserver.onCompleted();
+              }
+            };
+          }
+        };
+
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_CLIENT_STREAMING, ServerCalls.asyncClientStreamingCall(
+            new ServerCalls.ClientStreamingMethod<String, String>() {
+              @Override
+              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                return new StreamObserver<String>() {
+                  @Override
+                  public void onNext(String value) {
+                    serverReceivedBody.set(value);
+                    serverReceivedLatch.countDown();
+                  }
+
+                  @Override
+                  public void onError(Throwable t) {}
+
+                  @Override
+                  public void onCompleted() {
+                    responseObserver.onNext("Response");
+                    responseObserver.onCompleted();
+                  }
+                };
+              }
+            }))
+        .build());
+
+    final AtomicBoolean transportReady = new AtomicBoolean(false);
+    final AtomicReference<ClientCall.Listener<?>> capturedListenerRef = new AtomicReference<>();
+
+    class TriggerableForwardingCall<ReqT, RespT>
+        extends io.grpc.ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT> {
+      TriggerableForwardingCall(ClientCall<ReqT, RespT> delegate) {
+        super(delegate);
+      }
+      @Override
+      public void start(Listener<RespT> responseListener, Metadata headers) {
+        capturedListenerRef.set(responseListener);
+        super.start(responseListener, headers);
+      }
+      @Override
+      public boolean isReady() {
+        return transportReady.get();
+      }
+    }
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName)
+            .intercept(new ClientInterceptor() {
+              @Override
+              public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+                  MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+                return new TriggerableForwardingCall<>(next.newCall(method, callOptions));
+              }
+            })
+            .directExecutor()
+            .build());
+
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_CLIENT_STREAMING,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()), dataPlaneChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        finishLatch.countDown();
+      }
+    }, new Metadata());
+    proxyCall.request(1);
+
+    // Send a message. This gets mutated to "MutatedRequest" by ext_proc.
+    proxyCall.sendMessage("OriginalRequest");
+
+    // Give some time to process and ensure the message is NOT received on the server side because transport is not ready
+    assertThat(serverReceivedLatch.await(500, TimeUnit.MILLISECONDS)).isFalse();
+    assertThat(serverReceivedBody.get()).isNull();
+
+    // Now make the transport ready and trigger onReady callback
+    transportReady.set(true);
+    ClientCall.Listener<?> listener = capturedListenerRef.get();
+    assertThat(listener).isNotNull();
+    listener.onReady();
+
+    // The message should be drained and forwarded to the backend server
+    assertThat(serverReceivedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(serverReceivedBody.get()).isEqualTo("MutatedRequest");
+
+    proxyCall.halfClose();
+    assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
   public void testThresholdBasedWindowUpdates() throws Exception {
     ExternalProcessor proto = ExternalProcessor.newBuilder()
         .setGrpcService(GrpcService.newBuilder()
@@ -12048,10 +12006,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -12224,10 +12180,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -12282,8 +12236,6 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(filterClientRequests(receivedRequests)).hasSize(1);
 
     proxyCall.sendMessage("Last Message");
-
-
 
     // Verify 12 bytes are accumulated but no standalone update is sent.
     assertThat(filterClientRequests(receivedRequests)).hasSize(2);
@@ -12397,10 +12349,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -12458,7 +12408,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(filterClientRequests(receivedRequests)).hasSize(1); // Headers request
 
-    // Send Msg 1 (5 bytes). It is processed by sidecar and mutated to 15 bytes.
+    // Send Msg 1 (5 bytes). It is processed by ext_proc server and mutated to 15 bytes.
     proxyCall.sendMessage("Msg 1");
 
     // Wait until Msg 1 request and response are processed
@@ -12475,7 +12425,7 @@ public class ExternalProcessorClientInterceptorTest {
     StreamObserver<String> upstreamResponseObserver = dataPlaneResponseObserverRef.get();
     upstreamResponseObserver.onNext("Dummy for headers");
     
-    // Wait until response headers are processed by sidecar
+    // Wait until response headers are processed by ext_proc server
     startTime = System.currentTimeMillis();
     while (receivedRequests.size() < 3 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -12485,7 +12435,7 @@ public class ExternalProcessorClientInterceptorTest {
     String msg20Bytes = new String(new char[20]).replace('\0', 's');
     upstreamResponseObserver.onNext(msg20Bytes);
 
-    // Wait until response body is processed by sidecar
+    // Wait until response body is processed by ext_proc server
     startTime = System.currentTimeMillis();
     while (receivedRequests.size() < 4 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -12607,10 +12557,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -12668,7 +12616,7 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(filterClientRequests(receivedRequests)).hasSize(1); // Headers request
 
-    // Send Msg 1 (5 bytes) from app. It is processed by sidecar and mutated to 15 bytes.
+    // Send Msg 1 (5 bytes) from app. It is processed by ext_proc server and mutated to 15 bytes.
     proxyCall.sendMessage("Msg 1");
 
     // Wait until Msg 1 request and response are processed
@@ -12684,7 +12632,7 @@ public class ExternalProcessorClientInterceptorTest {
     StreamObserver<String> upstreamResponseObserver = dataPlaneResponseObserverRef.get();
     upstreamResponseObserver.onNext("Dummy for headers");
     
-    // Wait until response headers are processed by sidecar
+    // Wait until response headers are processed by ext_proc server
     startTime = System.currentTimeMillis();
     while (receivedRequests.size() < 3 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -12694,7 +12642,7 @@ public class ExternalProcessorClientInterceptorTest {
     String msg20Bytes = new String(new char[20]).replace('\0', 's');
     upstreamResponseObserver.onNext(msg20Bytes);
 
-    // Wait until response body is processed by sidecar
+    // Wait until response body is processed by ext_proc server
     startTime = System.currentTimeMillis();
     while (receivedRequests.size() < 4 && System.currentTimeMillis() - startTime < 5000) {
       fakeClock.forwardTime(1, TimeUnit.SECONDS);
@@ -12818,10 +12766,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -13000,10 +12946,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -13179,10 +13123,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -13435,11 +13377,9 @@ public class ExternalProcessorClientInterceptorTest {
             });
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -13469,11 +13409,9 @@ public class ExternalProcessorClientInterceptorTest {
                         serverReceivedBody.set(value);
                       }
 
-
                       @Override
                       public void onError(Throwable t) {
                       }
-
 
                       @Override
                       public void onCompleted() {
@@ -13552,13 +13490,11 @@ public class ExternalProcessorClientInterceptorTest {
             clientReceivedBody.set(value);
           }
 
-
           @Override
           public void onError(Throwable t) {
             errorRef.set(t);
             finishLatch.countDown();
           }
-
 
           @Override
           public void onCompleted() {
@@ -13570,7 +13506,7 @@ public class ExternalProcessorClientInterceptorTest {
     requestObserver.onCompleted();
 
     if (!sidecarActionLatch.await(10, TimeUnit.SECONDS)) {
-      throw new AssertionError("Sidecar actions failed. Received: " + receivedPhases);
+      throw new AssertionError("Ext_proc server actions failed. Received: " + receivedPhases);
     }
     assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
     if (errorRef.get() != null) {
@@ -13744,11 +13680,9 @@ public class ExternalProcessorClientInterceptorTest {
             });
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -13781,11 +13715,9 @@ public class ExternalProcessorClientInterceptorTest {
                         responseObserver.onNext(value + "Echo");
                       }
 
-
                       @Override
                       public void onError(Throwable t) {
                       }
-
 
                       @Override
                       public void onCompleted() {
@@ -13866,13 +13798,11 @@ public class ExternalProcessorClientInterceptorTest {
             clientReceivedBody.set(value);
           }
 
-
           @Override
           public void onError(Throwable t) {
             errorRef.set(t);
             finishLatch.countDown();
           }
-
 
           @Override
           public void onCompleted() {
@@ -13884,7 +13814,7 @@ public class ExternalProcessorClientInterceptorTest {
     bidiRequestObserver.onCompleted();
 
     if (!sidecarBidiLatch.await(10, TimeUnit.SECONDS)) {
-      throw new AssertionError("Sidecar bidi actions failed. Received: " + receivedPhases);
+      throw new AssertionError("Ext_proc server bidi actions failed. Received: " + receivedPhases);
     }
     assertThat(finishLatch.await(5, TimeUnit.SECONDS)).isTrue();
     if (errorRef.get() != null) {
@@ -13921,7 +13851,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders>
         capturedHeaders = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -13937,7 +13867,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -13945,11 +13875,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14031,7 +13959,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     List<String> headerNames = new ArrayList<>();
@@ -14054,7 +13982,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders>
         capturedHeaders = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -14074,15 +14002,13 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             }
           }
-
 
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14177,7 +14103,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     List<String> headerNames = new ArrayList<>();
@@ -14199,7 +14125,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders> capturedHeaders =
         new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -14215,7 +14141,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -14223,11 +14149,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14301,7 +14225,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     List<String> headerNames = new ArrayList<>();
@@ -14323,7 +14247,7 @@ public class ExternalProcessorClientInterceptorTest {
 
     final AtomicReference<io.envoyproxy.envoy.service.ext_proc.v3.HttpHeaders> capturedHeaders =
         new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -14339,7 +14263,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -14347,11 +14271,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14428,7 +14350,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     List<String> headerNames = new ArrayList<>();
@@ -14484,7 +14406,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build();
 
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final CountDownLatch callLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -14501,7 +14423,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -14509,11 +14431,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14565,7 +14485,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(callLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     ProcessingRequest request = capturedRequest.get();
@@ -14593,7 +14513,7 @@ public class ExternalProcessorClientInterceptorTest {
         .build();
 
     final AtomicReference<ProcessingRequest> capturedRequest = new AtomicReference<>();
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final CountDownLatch callLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -14610,7 +14530,7 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             } else if (request.hasResponseHeaders()) {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setResponseHeaders(HeadersResponse.newBuilder().build())
@@ -14618,11 +14538,9 @@ public class ExternalProcessorClientInterceptorTest {
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -14683,7 +14601,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(callLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     ProcessingRequest request = capturedRequest.get();
@@ -14702,8 +14620,6 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-
-
   // --- Category 24: Response Ordering Checks ---
 
   @Test
@@ -14712,7 +14628,7 @@ public class ExternalProcessorClientInterceptorTest {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
     String uniqueDataPlaneServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> extProcError = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
@@ -14737,17 +14653,15 @@ public class ExternalProcessorClientInterceptorTest {
                           .build())
                       .build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               responseObserver.onCompleted(); // Complete stream to allow cleanup
             }
           }
-
 
           @Override
           public void onError(Throwable t) {
             extProcError.set(t);
           }
-
 
           @Override
           public void onCompleted() {
@@ -14806,7 +14720,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
     
     // The call should fail with INTERNAL status
@@ -14822,7 +14736,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> extProcError = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -14839,17 +14753,15 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                   responseObserver.onCompleted();
                 }
               }
-
 
               @Override
               public void onError(Throwable t) {
                 extProcError.set(t);
               }
-
 
               @Override
               public void onCompleted() {
@@ -14916,7 +14828,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // The call should fail with INTERNAL status due to protocol error
@@ -14936,7 +14848,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> extProcError = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -14953,17 +14865,15 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseTrailers(TrailersResponse.newBuilder().build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                   responseObserver.onCompleted();
                 }
               }
-
 
               @Override
               public void onError(Throwable t) {
                 extProcError.set(t);
               }
-
 
               @Override
               public void onCompleted() {
@@ -15030,7 +14940,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // The call should fail with INTERNAL status due to protocol error
@@ -15050,7 +14960,7 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
     final AtomicReference<Throwable> extProcError = new AtomicReference<>();
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -15072,17 +14982,15 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseBody(BodyResponse.newBuilder().build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                   responseObserver.onCompleted();
                 }
               }
-
 
               @Override
               public void onError(Throwable t) {
                 extProcError.set(t);
               }
-
 
               @Override
               public void onCompleted() {
@@ -15152,7 +15060,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.sendMessage("test");
     proxyCall.halfClose();
 
-    assertThat(sidecarLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
 
     // The call should fail with INTERNAL status due to protocol error
@@ -15171,7 +15079,7 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenValidOrder_whenResponsesArriveInOrder_thenSucceeds() throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -15186,15 +15094,13 @@ public class ExternalProcessorClientInterceptorTest {
               responseObserver.onNext(ProcessingResponse.newBuilder()
                   .setRequestHeaders(HeadersResponse.newBuilder().build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
             }
           }
-
 
           @Override
           public void onError(Throwable t) {
           }
-
 
           @Override
           public void onCompleted() {
@@ -15263,7 +15169,7 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     // Verify that headers are processed correctly and the ordering check passes
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     
     // Verify that the call completes successfully
     assertThat(callLatch.await(10, TimeUnit.SECONDS)).isTrue();
@@ -15339,10 +15245,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -15369,10 +15273,8 @@ public class ExternalProcessorClientInterceptorTest {
                   @Override
                   public void onNext(String value) {}
 
-
                   @Override
                   public void onError(Throwable t) {}
-
 
                   @Override
                   public void onCompleted() {
@@ -15426,10 +15328,8 @@ public class ExternalProcessorClientInterceptorTest {
           @Override
           public void onNext(String value) {}
 
-
           @Override
           public void onError(Throwable t) {}
-
 
           @Override
           public void onCompleted() {
@@ -15473,8 +15373,8 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarFinishedLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
+    final CountDownLatch extProcFinishedLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -15493,21 +15393,19 @@ public class ExternalProcessorClientInterceptorTest {
                           .build())
                       .build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               responseObserver.onCompleted();
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
-            sidecarFinishedLatch.countDown();
+            extProcFinishedLatch.countDown();
           }
-
 
           @Override
           public void onCompleted() {
-            sidecarFinishedLatch.countDown();
+            extProcFinishedLatch.countDown();
             responseObserver.onCompleted();
           }
         };
@@ -15566,8 +15464,8 @@ public class ExternalProcessorClientInterceptorTest {
       // ignore
     }
 
-    assertThat(sidecarLatch.await(30, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(30, TimeUnit.SECONDS)).isTrue();
 
     // Call should succeed due to fail-open
@@ -15581,8 +15479,8 @@ public class ExternalProcessorClientInterceptorTest {
       throws Exception {
     String uniqueExtProcServerName = InProcessServerBuilder.generateName();
 
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarFinishedLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
+    final CountDownLatch extProcFinishedLatch = new CountDownLatch(1);
 
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl;
     extProcImpl = new ExternalProcessorGrpc.ExternalProcessorImplBase() {
@@ -15605,21 +15503,19 @@ public class ExternalProcessorClientInterceptorTest {
                           .build())
                       .build())
                   .build());
-              sidecarLatch.countDown();
+              extProcLatch.countDown();
               responseObserver.onCompleted();
             }
           }
 
-
           @Override
           public void onError(Throwable t) {
-            sidecarFinishedLatch.countDown();
+            extProcFinishedLatch.countDown();
           }
-
 
           @Override
           public void onCompleted() {
-            sidecarFinishedLatch.countDown();
+            extProcFinishedLatch.countDown();
             responseObserver.onCompleted();
           }
         };
@@ -15681,8 +15577,8 @@ public class ExternalProcessorClientInterceptorTest {
       // ignore
     }
 
-    assertThat(sidecarLatch.await(30, TimeUnit.SECONDS)).isTrue();
-    assertThat(sidecarFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(30, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcFinishedLatch.await(30, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(30, TimeUnit.SECONDS)).isTrue();
 
     // The call should succeed due to fail-open
@@ -15694,8 +15590,8 @@ public class ExternalProcessorClientInterceptorTest {
   @Test
   public void givenExtProcCall_whenExecutionSucceeds_thenAll4MetricsAreRecorded() throws Exception {
     final String uniqueExtProcServerName = "ext-proc-server-metrics-" + java.util.UUID.randomUUID();
-    final CountDownLatch sidecarRequestHeadersLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcRequestHeadersLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     // In-process mock server for External Processor
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -15712,20 +15608,18 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setRequestHeaders(HeadersResponse.newBuilder().build())
                       .build());
-                  sidecarRequestHeadersLatch.countDown();
+                  extProcRequestHeadersLatch.countDown();
                 } else if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                 }
               }
-
 
               @Override
               public void onError(Throwable t) {
               }
-
 
               @Override
               public void onCompleted() {
@@ -15806,13 +15700,13 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     // 1. Wait for mock Ext Proc to receive and process client request headers
-    assertThat(sidecarRequestHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcRequestHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
     // 2. Release the data plane server to respond back to the client call
     dataPlaneLatch.countDown();
 
     // 3. Assert that all stages complete in sequence deterministically
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
     // Clean up and close the Ext Proc stream to release in-process server/channel resources cleanly
@@ -15851,8 +15745,8 @@ public class ExternalProcessorClientInterceptorTest {
   public void givenExtProcCall_whenExecutionFails_thenAll4MetricsAreRecorded() throws Exception {
     final String uniqueExtProcServerName =
         "ext-proc-server-metrics-fail-" + java.util.UUID.randomUUID();
-    final CountDownLatch sidecarRequestHeadersLatch = new CountDownLatch(1);
-    final CountDownLatch sidecarLatch = new CountDownLatch(1);
+    final CountDownLatch extProcRequestHeadersLatch = new CountDownLatch(1);
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
 
     // In-process mock server for External Processor
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
@@ -15869,20 +15763,18 @@ public class ExternalProcessorClientInterceptorTest {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setRequestHeaders(HeadersResponse.newBuilder().build())
                       .build());
-                  sidecarRequestHeadersLatch.countDown();
+                  extProcRequestHeadersLatch.countDown();
                 } else if (request.hasResponseHeaders()) {
                   responseObserver.onNext(ProcessingResponse.newBuilder()
                       .setResponseHeaders(HeadersResponse.newBuilder().build())
                       .build());
-                  sidecarLatch.countDown();
+                  extProcLatch.countDown();
                 }
               }
-
 
               @Override
               public void onError(Throwable t) {
               }
-
 
               @Override
               public void onCompleted() {
@@ -15976,13 +15868,13 @@ public class ExternalProcessorClientInterceptorTest {
     proxyCall.halfClose();
 
     // 1. Wait for mock Ext Proc to receive and process client request headers
-    assertThat(sidecarRequestHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcRequestHeadersLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
     // 2. Release the data plane server to respond back with error
     dataPlaneLatch.countDown();
 
     // 3. Assert that all stages complete
-    assertThat(sidecarLatch.await(10, TimeUnit.SECONDS)).isTrue();
+    assertThat(extProcLatch.await(10, TimeUnit.SECONDS)).isTrue();
     assertThat(appCloseLatch.await(10, TimeUnit.SECONDS)).isTrue();
 
     assertThat(appStatus.get().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
@@ -16051,10 +15943,8 @@ public class ExternalProcessorClientInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {}
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16157,10 +16047,8 @@ public class ExternalProcessorClientInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {}
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16270,10 +16158,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16402,10 +16288,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16506,15 +16390,13 @@ public class ExternalProcessorClientInterceptorTest {
                 if (request.hasRequestHeaders()) {
                   // Fail the stream immediately on receiving headers
                   responseObserver.onError(
-                      Status.INTERNAL.withDescription("Simulated sidecar failure")
+                      Status.INTERNAL.withDescription("Simulated ext_proc server failure")
                           .asRuntimeException());
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16599,10 +16481,8 @@ public class ExternalProcessorClientInterceptorTest {
                     .build());
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -16723,10 +16603,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -16788,19 +16666,16 @@ public class ExternalProcessorClientInterceptorTest {
         onHeadersContext.set(testKey.get());
       }
 
-
       @Override
       public void onMessage(String message) {
         onMessageContext.set(testKey.get());
       }
-
 
       @Override
       public void onClose(Status status, Metadata trailers) {
         onCloseContext.set(testKey.get());
         latch.countDown();
       }
-
 
       @Override
       public void onReady() {
@@ -16856,10 +16731,8 @@ public class ExternalProcessorClientInterceptorTest {
               @Override
               public void onNext(ProcessingRequest request) {}
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {}
@@ -16975,10 +16848,8 @@ public class ExternalProcessorClientInterceptorTest {
                 requestSentLatch.countDown();
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17101,10 +16972,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17226,10 +17095,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17350,10 +17217,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17459,10 +17324,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17564,10 +17427,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17674,10 +17535,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17779,10 +17638,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17891,10 +17748,8 @@ public class ExternalProcessorClientInterceptorTest {
                 }
               }
 
-
               @Override
               public void onError(Throwable t) {}
-
 
               @Override
               public void onCompleted() {
@@ -17959,6 +17814,9 @@ public class ExternalProcessorClientInterceptorTest {
       MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions,
       Channel next) {
+    if (callOptions.getExecutor() == null) {
+      callOptions = callOptions.withExecutor(MoreExecutors.directExecutor());
+    }
     Channel intercepted = ClientInterceptors.interceptForward(
         next,
         Arrays.asList(new XdsNameResolver.RawMessageClientInterceptor(), interceptor));

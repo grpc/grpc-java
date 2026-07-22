@@ -197,15 +197,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions,
       Channel next) {
-    java.util.concurrent.Executor callExecutor = callOptions.getExecutor();
-    if (callExecutor == null) {
-      callExecutor = new java.util.concurrent.Executor() {
-        @Override
-        public void execute(Runnable command) {
-          command.run();
-        }
-      };
-    }
+    Executor callExecutor = callOptions.getExecutor();
     SerializingExecutor serializingExecutor = new SerializingExecutor(callExecutor);
     
     ExternalProcessorGrpc.ExternalProcessorStub extProcStub = ExternalProcessorGrpc.newStub(
@@ -300,6 +292,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final AtomicInteger pendingRequests = new AtomicInteger(0);
     private final ProcessingMode currentProcessingMode;
 
+    // Default initial window size
     private static final long DEFAULT_INITIAL_WINDOW_SIZE = 65536;
 
     // Outbound (sending) windows
@@ -310,23 +303,30 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private long sidestreamToUpstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
     private long sidestreamToDownstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
 
-    // Buffered request body messages from downstream
-    private final Queue<ByteString> pendingRequestBodyMessages =
-        new java.util.concurrent.ConcurrentLinkedQueue<>();
-
-    // Buffered mutated response bodies from sidecar
-    private int downstreamRequestsPending = 0;
-    private final Queue<ByteString> pendingMutatedResponseBodies =
-        new java.util.concurrent.ConcurrentLinkedQueue<>();
-
+    // Threshold to trigger standalone client window updates
     private static final long WINDOW_UPDATE_THRESHOLD = DEFAULT_INITIAL_WINDOW_SIZE / 2;
 
-    // Accumulated client window updates for external processor
+    // Path 1: Pending/buffered request body messages from downstream
+    private final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
+
+    // Path 2: Buffered request body messages from ext_proc server to forward upstream
+    private final Queue<ByteString> pendingUpstreamBodyMessages =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
+    // Path 4: Outstanding requests from downstream for pulling responses
+    private int downstreamRequestsPending = 0;
+    // Buffered mutated response bodies from ext_proc server
+    private final Queue<ByteString> pendingMutatedResponseBodies =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
+    // Deferred half-close flag for upstream direction
+    private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
+
+    // Accumulated client window updates to send to ext_proc
     private long accumulatedWindowUpdateSidestreamToUpstream = 0;
     private long accumulatedWindowUpdateSidestreamToDownstream = 0;
 
-    // Track whether flow_control_init has been sent on the stream
+    // Flag to track if FlowControlInit was sent in the initial message
     private boolean flowControlInitSent = false;
+
     private final MethodDescriptor<?, ?> method;
     private final Channel channel;
     private final MetricRecorder metricsRecorder;
@@ -488,10 +488,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
                 drainPendingRequestBodyMessages();
                 drainPendingRequests();
+                if (wrappedListener != null) {
+                  wrappedListener.drainSavedMessages();
+                }
               }
-              if (wrappedListener != null) {
-                wrappedListener.drainSavedMessages();
-              }
+              // If isReady() becomes true (depends on updated downstreamToSidestreamWindow),
+              // notify the client application via onReadyNotify() (runs unlocked).
               if (!wasReady && isReady()) {
                 onReadyNotify();
               }
@@ -671,7 +673,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               == ProcessingMode.HeaderSendMode.DEFAULT;
 
       if (sendRequestHeaders) {
-        sendToExtProcDirect(ProcessingRequest.newBuilder()
+        sendToExtProc(ProcessingRequest.newBuilder()
             .setRequestHeaders(HttpHeaders.newBuilder()
                 .setHeaders(toHeaderMap(headers, config.getForwardRulesConfig()))
                 .setEndOfStream(false)
@@ -684,7 +686,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
-    private void sendToExtProcDirect(ProcessingRequest request) {
+    private void sendToExtProc(ProcessingRequest request) {
       synchronized (streamLock) {
         if (extProcStreamState.get().isCompleted()) {
           return;
@@ -743,8 +745,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void mergeAccumulatedWindowUpdates(ProcessingRequest.Builder requestBuilder) {
       synchronized (streamLock) {
-        long incrementUpstream = super.isReady()
-            ? accumulatedWindowUpdateSidestreamToUpstream : 0;
+        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
         long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
 
         if (incrementUpstream > 0 || incrementDownstream > 0) {
@@ -766,8 +767,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (extProcStreamState.get().isCompleted()) {
           return;
         }
-        long incrementUpstream = super.isReady()
-            ? accumulatedWindowUpdateSidestreamToUpstream : 0;
+        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
         long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
 
         boolean shouldSend = (incrementUpstream > 0 || incrementDownstream > 0) && (
@@ -784,7 +784,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           sidestreamToUpstreamWindow += incrementUpstream;
           sidestreamToDownstreamWindow += incrementDownstream;
 
-          sendToExtProcDirect(ProcessingRequest.newBuilder()
+          sendToExtProc(ProcessingRequest.newBuilder()
               .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
                   .setWindowIncrementSidestreamToUpstream(incrementUpstream)
                   .setWindowIncrementSidestreamToDownstream(incrementDownstream)
@@ -811,7 +811,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         // Normal mode flow control: pull 1 message at a time
-        if (isSidecarReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
+        if (isExtProcReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
           super.request(1);
           pendingRequests.decrementAndGet();
         }
@@ -863,7 +863,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       wrappedListener.onReadyNotify();
     }
 
-    boolean isSidecarReady() {
+    boolean isExtProcReady() {
       ExtProcStreamState state = extProcStreamState.get();
       if (state.isCompleted()) {
         return true;
@@ -889,11 +889,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return false;
       }
       synchronized (streamLock) {
-        boolean sidecarReady = isSidecarReady();
+        boolean extProcReady = isExtProcReady();
         if (config.getObservabilityMode()) {
-          return super.isReady() && sidecarReady;
+          return super.isReady() && extProcReady;
         }
-        return downstreamToSidestreamWindow > 0 && sidecarReady
+        return downstreamToSidestreamWindow > 0 && extProcReady
             && pendingRequestBodyMessages.isEmpty();
       }
     }
@@ -904,22 +904,34 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         super.request(numMessages);
         return;
       }
-      if (!config.getObservabilityMode() 
-          && currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
-        super.request(numMessages);
-        return;
-      }
-      if (config.getObservabilityMode() 
-          || currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
-        super.request(numMessages);
-        return;
-      }
       synchronized (streamLock) {
-        pendingRequests.addAndGet(numMessages);
-        downstreamRequestsPending += numMessages;
-        if (isSidecarReady()) {
-          drainPendingMutatedResponseBodies();
-          drainPendingRequests();
+        boolean sendResponseBodiesToExtProc = config.getObservabilityMode()
+            || currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC;
+
+        if (!sendResponseBodiesToExtProc) {
+          // We do not send response bodies to ext_proc server at all. Bypassed.
+          super.request(numMessages);
+          return;
+        }
+
+        // We send response bodies to ext_proc server (either in normal GRPC mode or observability mode).
+        // Gated by ext_proc server readiness.
+        boolean normalFlowControl = !config.getObservabilityMode(); // i.e. normal GRPC response body mode
+
+        if (normalFlowControl) {
+          pendingRequests.addAndGet(numMessages);
+          downstreamRequestsPending += numMessages;
+          if (isExtProcReady()) {
+            drainPendingMutatedResponseBodies();
+            drainPendingRequests();
+          }
+        } else {
+          // Observability mode: gate on readiness but pull all at once
+          if (isExtProcReady()) {
+            super.request(numMessages);
+          } else {
+            pendingRequests.addAndGet(numMessages);
+          }
         }
       }
     }
@@ -966,7 +978,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         try {
           ByteString bodyByteString = outboundStreamToByteString(message);
           if (config.getObservabilityMode()) {
-            sendToExtProcDirect(ProcessingRequest.newBuilder()
+            sendToExtProc(ProcessingRequest.newBuilder()
                 .setRequestBody(HttpBody.newBuilder()
                     .setBody(bodyByteString)
                     .setEndOfStream(false)
@@ -996,7 +1008,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .setEndOfStream(false)
                 .build());
         mergeAccumulatedWindowUpdates(builder);
-        sendToExtProcDirect(builder.build());
+        sendToExtProc(builder.build());
         bodyMessageSentToExtProc.set(true);
       }
     }
@@ -1060,7 +1072,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 .setEndOfStreamWithoutMessage(true)
                 .build());
         mergeAccumulatedWindowUpdates(builder);
-        sendToExtProcDirect(builder.build());
+        sendToExtProc(builder.build());
       }
     }
 
@@ -1087,6 +1099,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             com.google.protobuf.ByteString body = streamed.getBody();
             if (!config.getObservabilityMode()
                 && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
+              boolean sendImmediately = false;
               synchronized (streamLock) {
                 if (sidestreamToUpstreamWindow <= 0) {
                   internalOnError(Status.INTERNAL
@@ -1097,18 +1110,30 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                   return;
                 }
                 sidestreamToUpstreamWindow -= body.size();
-                accumulatedWindowUpdateSidestreamToUpstream += body.size();
+                if (super.isReady() && pendingUpstreamBodyMessages.isEmpty()) {
+                  sendImmediately = true;
+                  accumulatedWindowUpdateSidestreamToUpstream += body.size();
+                } else {
+                  pendingUpstreamBodyMessages.add(body);
+                }
               }
-            }
-            super.sendMessage(new KnownLengthInputStream(body));
-            if (!config.getObservabilityMode()
-                && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
-              trySendAccumulatedWindowUpdates();
+              if (sendImmediately) {
+                super.sendMessage(new KnownLengthInputStream(body));
+                trySendAccumulatedWindowUpdates();
+              }
+            } else {
+              super.sendMessage(new KnownLengthInputStream(body));
             }
           }
           if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-            if (requestSideClosed.compareAndSet(false, true)) {
-              proceedWithHalfClose();
+            synchronized (streamLock) {
+              if (pendingUpstreamBodyMessages.isEmpty()) {
+                if (requestSideClosed.compareAndSet(false, true)) {
+                  proceedWithHalfClose();
+                }
+              } else {
+                pendingUpstreamHalfClose.set(true);
+              }
             }
           }
         }
@@ -1190,6 +1215,34 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 trySendAccumulatedWindowUpdates();
               }
             });
+          }
+        }
+      }
+    }
+
+    void drainPendingUpstreamBodyMessages() {
+      while (true) {
+        ByteString body = null;
+        boolean triggerHalfClose = false;
+        synchronized (streamLock) {
+          if (super.isReady() && !pendingUpstreamBodyMessages.isEmpty()) {
+            body = pendingUpstreamBodyMessages.poll();
+            if (body != null) {
+              accumulatedWindowUpdateSidestreamToUpstream += body.size();
+            }
+            if (pendingUpstreamBodyMessages.isEmpty() && pendingUpstreamHalfClose.compareAndSet(true, false)) {
+              triggerHalfClose = true;
+            }
+          }
+        }
+        if (body == null) {
+          break;
+        }
+        super.sendMessage(new KnownLengthInputStream(body));
+        trySendAccumulatedWindowUpdates();
+        if (triggerHalfClose) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
           }
         }
       }
@@ -1307,6 +1360,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   private static class DataPlaneListener extends SimpleForwardingClientCallListener<InputStream> {
     private final ClientCall<?, ?> rawCall;
     private final DataPlaneClientCall dataPlaneClientCall;
+    // Path 3: Upstream response bodies queued because upstream to sidestream window not available,
+    // response headers not cleared by ext_proc or ext_proc stream draining
     private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
     private boolean inboundPassThrough = false;
     @Nullable private volatile Metadata savedHeaders;
@@ -1344,6 +1399,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onReady() {
+      dataPlaneClientCall.drainPendingUpstreamBodyMessages();
       dataPlaneClientCall.trySendAccumulatedWindowUpdates();
       dataPlaneClientCall.drainPendingRequests();
       onReadyNotify();
@@ -1372,7 +1428,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       this.savedHeaders = headers;
-      dataPlaneClientCall.sendToExtProcDirect(ProcessingRequest.newBuilder()
+      dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
           .setResponseHeaders(HttpHeaders.newBuilder()
               .setHeaders(
                   toHeaderMap(headers, dataPlaneClientCall.getConfig().getForwardRulesConfig()))
@@ -1443,7 +1499,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void drainSavedMessages() {
       synchronized (dataPlaneClientCall.getStreamLock()) {
-        while (dataPlaneClientCall.isSidecarReady()
+        while (dataPlaneClientCall.isExtProcReady()
             && dataPlaneClientCall.upstreamToSidestreamWindow > 0
             && !savedMessages.isEmpty()) {
           InputStream msg = savedMessages.poll();
@@ -1605,7 +1661,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
       if (trailersOnly.get()) {
         if (sendResponseHeaders) {
-          dataPlaneClientCall.sendToExtProcDirect(ProcessingRequest.newBuilder()
+          dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
               .setResponseHeaders(HttpHeaders.newBuilder()
                   .setHeaders(
                       toHeaderMap(
@@ -1622,7 +1678,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
       } else if (sendResponseTrailers) {
         dataPlaneClientCall.getIsProcessingTrailers().set(true);
-        dataPlaneClientCall.sendToExtProcDirect(ProcessingRequest.newBuilder()
+        dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
             .setResponseTrailers(HttpTrailers.newBuilder()
                 .setTrailers(
                     toHeaderMap(
@@ -1665,7 +1721,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
           .setResponseBody(bodyBuilder.build());
       dataPlaneClientCall.mergeAccumulatedWindowUpdates(builder);
-      dataPlaneClientCall.sendToExtProcDirect(builder.build());
+      dataPlaneClientCall.sendToExtProc(builder.build());
     }
   }
 }
