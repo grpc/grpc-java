@@ -25,6 +25,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingChannelBuilder2;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
@@ -156,6 +157,35 @@ public class GrpcOpenTelemetryTest {
     assertThat(module.getEnableMetrics()).isEmpty();
   }
 
-  // TODO(dnvindhya): Add tests for configurator
+  @Test
+  public void configureChannelBuilder_registersMetricSink() {
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder().build();
+    TestChannelBuilder testBuilder = new TestChannelBuilder();
+    grpcOpenTelemetry.configureChannelBuilder(testBuilder);
+    assertThat(testBuilder.metricSink).isSameInstanceAs(grpcOpenTelemetry.getSink());
+  }
+
+  private static class TestChannelBuilder extends ForwardingChannelBuilder2<TestChannelBuilder> {
+
+    private MetricSink metricSink;
+
+    protected TestChannelBuilder() {
+    }
+
+    @Override
+    protected ManagedChannelBuilder<?> delegate() {
+      return null;
+    }
+
+    @Override
+    protected void addMetricSink(MetricSink metricSink) {
+      this.metricSink = metricSink;
+    }
+
+    @Override
+    public TestChannelBuilder childChannelConfigurator(io.grpc.ChannelConfigurator configurator) {
+      return this;
+    }
+  }
 
 }

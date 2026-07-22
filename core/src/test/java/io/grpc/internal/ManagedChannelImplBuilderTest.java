@@ -34,6 +34,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -779,6 +780,25 @@ public class ManagedChannelImplBuilderTest {
     assertFalse(uriPattern.matcher("0a:/").matches()); // '0' not matched
     assertFalse(uriPattern.matcher("a,:/").matches()); // ',' not matched
     assertFalse(uriPattern.matcher(" a:/").matches()); // space not matched
+  }
+
+  @Test
+  public void childChannelConfigurator_setsFieldAndAppends() {
+    final boolean[] config1Called = {false};
+    final boolean[] config2Called = {false};
+    
+    ChannelConfigurator config1 = builder -> config1Called[0] = true;
+    ChannelConfigurator config2 = builder -> config2Called[0] = true;
+    
+    builder.childChannelConfigurator(config1);
+    builder.childChannelConfigurator(config2);
+    
+    // Create a dummy builder to pass to the configurator
+    ManagedChannelBuilder<?> dummyBuilder = mock(ManagedChannelBuilder.class);
+    builder.channelConfigurator.configureChannelBuilder(dummyBuilder);
+    
+    assertTrue(config1Called[0]);
+    assertTrue(config2Called[0]);
   }
 
   private static class CustomSocketAddress extends SocketAddress {}

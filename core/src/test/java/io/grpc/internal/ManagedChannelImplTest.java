@@ -67,6 +67,7 @@ import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
@@ -89,6 +90,7 @@ import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalConfigSelector;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -497,6 +499,86 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertSame(Status.DEADLINE_EXCEEDED.getCode(), status.getCode());
+  }
+
+  @Test
+  public void childChannelConfigurator_passedToNameResolverArgs() {
+    java.util.concurrent.atomic.AtomicBoolean configured = new java.util.concurrent.atomic.AtomicBoolean();
+    ChannelConfigurator configurator = builder -> { configured.set(true); };
+    channelBuilder.childChannelConfigurator(configurator);
+    java.util.concurrent.atomic.AtomicReference<NameResolver.Args> actualArgs = new java.util.concurrent.atomic.AtomicReference<>();
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(java.net.URI targetUri, NameResolver.Args args) {
+        actualArgs.set(args);
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn("test.example.com");
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    assertNotNull(actualArgs.get());
+    assertNotNull(actualArgs.get().getChildChannelConfigurator());
+    actualArgs.get().getChildChannelConfigurator().configureChannelBuilder(mock(ManagedChannelBuilder.class));
+    assertTrue(configured.get());
+  }
+
+  @Test
+  public void childChannelConfigurator_passedToResolvingOobChannelNameResolverArgs() {
+    java.util.concurrent.atomic.AtomicBoolean configured = new java.util.concurrent.atomic.AtomicBoolean();
+    ChannelConfigurator configurator = builder -> { configured.set(true); };
+    channelBuilder.childChannelConfigurator(configurator);
+    java.util.concurrent.atomic.AtomicReference<NameResolver.Args> oobArgs = new java.util.concurrent.atomic.AtomicReference<>();
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(java.net.URI targetUri, NameResolver.Args args) {
+        if (targetUri.toString().contains("oobauthority")) {
+          oobArgs.set(args);
+        }
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn(
+            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
+    oob.getState(true);
+    assertNotNull(oobArgs.get());
+    assertNotNull(oobArgs.get().getChildChannelConfigurator());
+    oobArgs.get().getChildChannelConfigurator().configureChannelBuilder(mock(ManagedChannelBuilder.class));
+    assertTrue(configured.get());
+    oob.shutdownNow();
   }
 
   @Test

@@ -323,6 +323,7 @@ public abstract class NameResolver {
     @Nullable private final MetricRecorder metricRecorder;
     @Nullable private final NameResolverRegistry nameResolverRegistry;
     @Nullable private final IdentityHashMap<Key<?>, Object> customArgs;
+    private final ChannelConfigurator channelConfigurator;
 
     private Args(Builder builder) {
       this.defaultPort = checkNotNull(builder.defaultPort, "defaultPort not set");
@@ -336,6 +337,7 @@ public abstract class NameResolver {
       this.overrideAuthority = builder.overrideAuthority;
       this.metricRecorder = builder.metricRecorder;
       this.nameResolverRegistry = builder.nameResolverRegistry;
+      this.channelConfigurator = builder.channelConfigurator;
       this.customArgs = cloneCustomArgs(builder.customArgs);
     }
 
@@ -480,6 +482,16 @@ public abstract class NameResolver {
       return nameResolverRegistry;
     }
 
+    /**
+     * Returns the configurator for child channels.
+     *
+     * @since 1.83.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+    public ChannelConfigurator getChildChannelConfigurator() {
+      return channelConfigurator;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -514,6 +526,7 @@ public abstract class NameResolver {
       builder.setOverrideAuthority(overrideAuthority);
       builder.setMetricRecorder(metricRecorder);
       builder.setNameResolverRegistry(nameResolverRegistry);
+      builder.setChildChannelConfigurator(channelConfigurator);
       builder.customArgs = cloneCustomArgs(customArgs);
       return builder;
     }
@@ -544,6 +557,7 @@ public abstract class NameResolver {
       private MetricRecorder metricRecorder;
       private NameResolverRegistry nameResolverRegistry;
       private IdentityHashMap<Key<?>, Object> customArgs;
+      private ChannelConfigurator channelConfigurator = builder -> { };
 
       Builder() {
       }
@@ -656,6 +670,17 @@ public abstract class NameResolver {
        */
       public Builder setNameResolverRegistry(NameResolverRegistry registry) {
         this.nameResolverRegistry = registry;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getChildChannelConfigurator()}. This is an optional field.
+       *
+       * @since 1.83.0
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+      public Builder setChildChannelConfigurator(ChannelConfigurator channelConfigurator) {
+        this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
         return this;
       }
 
