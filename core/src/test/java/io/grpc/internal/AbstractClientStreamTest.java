@@ -164,6 +164,7 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
       @Override
       public void cancel(Status errorStatus) {
+        state.transportReportStatus(errorStatus, true, new Metadata());
       }
     }, customStatsTraceCtx, transportTracer);
     stream.start(mockListener);

@@ -198,7 +198,6 @@ public abstract class AbstractClientStream extends AbstractStream
   public final void cancel(Status reason) {
     Preconditions.checkArgument(!reason.isOk(), "Should not cancel with OK status");
     cancelled = true;
-    transportState().getStatsTraceContext().clientCancelled(reason);
     abstractClientStreamSink().cancel(reason);
   }
 
@@ -458,6 +457,9 @@ public abstract class AbstractClientStream extends AbstractStream
         Status status, RpcProgress rpcProgress, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
+        if (status.getCode() == Status.Code.CANCELLED) {
+          statsTraceCtx.clientCancelled(status);
+        }
         statsTraceCtx.streamClosed(status);
         if (getTransportTracer() != null) {
           getTransportTracer().reportStreamClosed(status.isOk());
