@@ -258,7 +258,7 @@ public class XdsServerWrapperTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  public void testBootstrap_ldsResourceNameResolver() throws Exception {
+  public void testLdsResourceNameResolver_overridesBootstrapTemplate() throws Exception {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
             .servers(
@@ -288,7 +288,7 @@ public class XdsServerWrapperTest {
                 try {
                   xdsServerWrapper.start();
                 } catch (IOException ex) {
-                  // ignore
+                  // Ignored: test only asserts on the watchXdsResource call, not start() result.
                 }
               }
             });
