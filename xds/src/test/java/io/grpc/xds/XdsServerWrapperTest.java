@@ -257,7 +257,50 @@ public class XdsServerWrapperTest {
   }
 
   @Test
-  public void shutdown() throws Exception {
+  @SuppressWarnings("unchecked")
+  public void testBootstrap_ldsResourceNameResolver() throws Exception {
+    Bootstrapper.BootstrapInfo b =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(
+                Arrays.asList(
+                    Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
+            .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+            .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
+            .build();
+    XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper =
+        new XdsServerWrapper(
+            "[::FFFF:129.144.52.38]:80",
+            mockBuilder,
+            listener,
+            selectorManager,
+            new FakeXdsClientPoolFactory(xdsClient),
+            XdsServerTestHelper.RAW_BOOTSTRAP,
+            addr -> "xdstp://resolved_name/" + addr,
+            filterRegistry);
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  xdsServerWrapper.start();
+                } catch (IOException ex) {
+                  // ignore
+                }
+              }
+            });
+    verify(xdsClient, timeout(5000))
+        .watchXdsResource(
+            eq(listenerResource),
+            eq("xdstp://resolved_name/[::FFFF:129.144.52.38]:80"),
+            any(ResourceWatcher.class),
+            any(SynchronizationContext.class));
+  }
+
+  @Test
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {
       @Override
