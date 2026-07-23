@@ -35,6 +35,7 @@ import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
 
@@ -77,6 +78,9 @@ final class AsyncServletOutputStreamWriter {
   private final Queue<ActionItem> writeChain = new ConcurrentLinkedQueue<>();
   // for a theoretical race condition that onWritePossible() is called immediately after isReady()
   // returns false and before writeState.compareAndSet()
+
+  @Nullable
+  private volatile Thread parkingThread;
 
   AsyncServletOutputStreamWriter(
       AsyncContext asyncContext,
@@ -199,9 +203,18 @@ final class AsyncServletOutputStreamWriter {
     // readyAndDrained should have been set to false already.
     // Just in case due to a race condition readyAndDrained is still true at this moment and is
     // being set to false by runOrBuffer() concurrently.
+    parkingThread = Thread.currentThread();
     while (writeState.get().readyAndDrained) {
       LockSupport.parkNanos(TimeUnit.MINUTES.toNanos(1)); // should return immediately
     }
+    parkingThread = null;
+  }
+
+  private void markNotReadyAndUnpark(WriteState curState) {
+    boolean successful = writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+    checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+    LockSupport.unpark(parkingThread);
+    log.finest("the servlet output stream becomes not ready");
   }
 
   /**
@@ -217,8 +230,7 @@ final class AsyncServletOutputStreamWriter {
     // If our cache says true, but the container is secretly not ready,
     // intercept the stale state and sync it before proceeding.
     if (curState.readyAndDrained && !isReady.getAsBoolean()) {
-      boolean successful = writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-      checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+      markNotReadyAndUnpark(curState);
       // Update local state so it gracefully bypasses the 
       // direct write and falls into the buffer block
       curState = writeState.get(); 
@@ -232,9 +244,7 @@ final class AsyncServletOutputStreamWriter {
         return;
       }
       if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+        markNotReadyAndUnpark(curState);
       }
       return;
     }
