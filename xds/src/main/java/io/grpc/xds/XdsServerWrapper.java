@@ -199,7 +199,7 @@ final class XdsServerWrapper extends Server {
         null,
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        builder -> {});
+        builder -> { });
     sharedTimeService = true;
   }
 
@@ -222,7 +222,7 @@ final class XdsServerWrapper extends Server {
         ldsResourceNameResolver,
         filterRegistry,
         SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
-        builder -> {});
+        builder -> { });
     sharedTimeService = true;
   }
 
@@ -246,7 +246,7 @@ final class XdsServerWrapper extends Server {
         null,
         filterRegistry,
         timeService,
-        builder -> {});
+        builder -> { });
   }
 
   @VisibleForTesting
@@ -270,7 +270,7 @@ final class XdsServerWrapper extends Server {
         ldsResourceNameResolver,
         filterRegistry,
         timeService,
-        builder -> {});
+        builder -> { });
   }
 
   @VisibleForTesting

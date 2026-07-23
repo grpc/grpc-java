@@ -150,7 +150,8 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
             new FilterChainMatchingNegotiatorServerFactory(originalNegotiatorFactory));
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(address, wrappedCredentials);
     int port = 0;
-    if (address instanceof InetSocketAddress inetSocketAddress) {
+    if (address instanceof InetSocketAddress) {
+      InetSocketAddress inetSocketAddress = (InetSocketAddress) address;
       port = inetSocketAddress.getPort();
     }
     return new XdsServerBuilder(nettyDelegate, port);
