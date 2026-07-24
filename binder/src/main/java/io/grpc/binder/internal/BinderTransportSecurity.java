@@ -16,6 +16,7 @@
 
 package io.grpc.binder.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -162,7 +163,8 @@ public final class BinderTransportSecurity {
    * Maintains the authorization state for a single transport instance. This class lives for the
    * lifetime of a single transport.
    */
-  private static final class TransportAuthorizationState {
+  @VisibleForTesting
+  static final class TransportAuthorizationState {
     private final int uid;
     private final ServerPolicyChecker serverPolicyChecker;
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
