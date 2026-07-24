@@ -176,6 +176,28 @@ public class AbstractClientStreamTest {
   }
 
   @Test
+  public void transportReportStatus_okFirst_lateCancellationDoesNotNotifyTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {
+      @Override
+      public void cancel(Status errorStatus) {
+        state.transportReportStatus(errorStatus, true, new Metadata());
+      }
+    }, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Report Status.OK first
+    state.transportReportStatus(Status.OK, false, new Metadata());
+
+    // Subsequent late cancellation
+    stream.cancel(Status.CANCELLED.withDescription("Late cancel"));
+
+    verify(mockTracer, never()).cancelled(any(Status.class));
+  }
+
+  @Test
   public void startFailsOnNullListener() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
