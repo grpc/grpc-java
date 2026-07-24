@@ -238,7 +238,6 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Test
   public void clientStream_cancel_notifiesTracerCancelled() throws Exception {
-    server = newServer(Arrays.asList(serverStreamTracerFactory));
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener =
@@ -251,6 +250,8 @@ public class InProcessTransportTest extends AbstractTransportTest {
         new io.grpc.ClientStreamTracer[] {mockTracer});
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
+    StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     Status cancelStatus = Status.CANCELLED.withDescription("Client cancelled");
     clientStream.cancel(cancelStatus);
@@ -260,7 +261,6 @@ public class InProcessTransportTest extends AbstractTransportTest {
 
   @Test
   public void clientStream_cancelAfterServerClose_doesNotNotifyTracerCancelled() throws Exception {
-    server = newServer(Arrays.asList(serverStreamTracerFactory));
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener =
