@@ -226,7 +226,7 @@ final class AsyncServletOutputStreamWriter {
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
 
-    // --- NEW: Tomcat Spontaneous State Change Mitigation ---
+    // Tomcat Spontaneous State Change Mitigation ---
     // If our cache says true, but the container is secretly not ready,
     // intercept the stale state and sync it before proceeding.
     if (curState.readyAndDrained && !isReady.getAsBoolean()) {
@@ -235,9 +235,7 @@ final class AsyncServletOutputStreamWriter {
       // direct write and falls into the buffer block
       curState = writeState.get(); 
     }
-    // -------------------------------------------------------
-
-    // The rest is the standard, original gRPC code!
+    // -------------------------------------------------------    
     if (curState.readyAndDrained) {
       actionItem.run();
       if (actionItem == completeAction) {
