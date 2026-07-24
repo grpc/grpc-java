@@ -19,9 +19,14 @@ package io.grpc.inprocess;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -245,21 +250,22 @@ public class InProcessTransportTest extends AbstractTransportTest {
         serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
 
-    io.grpc.ClientStreamTracer mockTracer = org.mockito.Mockito.mock(io.grpc.ClientStreamTracer.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     ClientStream clientStream = client.newStream(
         methodDescriptor, new Metadata(), CallOptions.DEFAULT,
-        new io.grpc.ClientStreamTracer[] {mockTracer});
+        new ClientStreamTracer[] {mockTracer});
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
 
     Status cancelStatus = Status.CANCELLED.withDescription("Client cancelled");
     clientStream.cancel(cancelStatus);
 
-    org.mockito.Mockito.verify(mockTracer).cancelled(cancelStatus);
+    verify(mockTracer).cancelled(cancelStatus);
   }
 
   @Test
-  public void clientStream_cancelAfterServerClose_doesNotNotifyTracerCancelled() throws Exception {
+  public void clientStream_cancelAfterServerClose_doesNotNotifyTracerCancelled()
+      throws Exception {
     server = newServer(Arrays.asList(serverStreamTracerFactory));
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
@@ -267,10 +273,10 @@ public class InProcessTransportTest extends AbstractTransportTest {
         serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
 
-    io.grpc.ClientStreamTracer mockTracer = org.mockito.Mockito.mock(io.grpc.ClientStreamTracer.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     ClientStream clientStream = client.newStream(
         methodDescriptor, new Metadata(), CallOptions.DEFAULT,
-        new io.grpc.ClientStreamTracer[] {mockTracer});
+        new ClientStreamTracer[] {mockTracer});
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
     StreamCreation serverStreamCreation =
@@ -280,8 +286,7 @@ public class InProcessTransportTest extends AbstractTransportTest {
     serverStream.close(Status.OK, new Metadata());
     clientStream.cancel(Status.CANCELLED.withDescription("Late cancellation"));
 
-    org.mockito.Mockito.verify(mockTracer, org.mockito.Mockito.never())
-        .cancelled(org.mockito.Mockito.any(Status.class));
+    verify(mockTracer, never()).cancelled(any(Status.class));
   }
 
   private void assertAssumedMessageSize(
