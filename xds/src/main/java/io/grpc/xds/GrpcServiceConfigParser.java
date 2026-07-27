@@ -98,10 +98,14 @@ final class GrpcServiceConfigParser {
         .getInitialMetadataList()) {
       String key = header.getKey();
       HeaderValue headerValue;
-      if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-        headerValue = HeaderValue.create(key, header.getRawValue());
-      } else {
-        headerValue = HeaderValue.create(key, header.getValue());
+      try {
+        if (key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          headerValue = HeaderValue.create(key, header.getRawValue());
+        } else {
+          headerValue = HeaderValue.create(key, header.getValue());
+        }
+      } catch (IllegalArgumentException e) {
+        throw new GrpcServiceParseException("Invalid initial metadata header: " + key, e);
       }
       if (HeaderValueValidationUtils.isDisallowed(headerValue)) {
         throw new GrpcServiceParseException("Invalid initial metadata header: " + key);

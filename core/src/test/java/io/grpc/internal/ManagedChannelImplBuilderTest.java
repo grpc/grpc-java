@@ -34,6 +34,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
@@ -42,6 +43,7 @@ import io.grpc.FlagResetRule;
 import io.grpc.InternalConfigurator;
 import io.grpc.InternalConfiguratorRegistry;
 import io.grpc.InternalFeatureFlags;
+import io.grpc.InternalManagedChannelBuilder;
 import io.grpc.InternalManagedChannelBuilder.InternalInterceptorFactory;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -50,7 +52,9 @@ import io.grpc.MetricSink;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.NameResolverRegistry;
+import io.grpc.NoopMetricSink;
 import io.grpc.StaticTestingClassLoader;
+import io.grpc.Uri;
 import io.grpc.internal.ManagedChannelImplBuilder.ChannelBuilderDefaultPortProvider;
 import io.grpc.internal.ManagedChannelImplBuilder.ClientTransportFactoryBuilder;
 import io.grpc.internal.ManagedChannelImplBuilder.FixedPortProvider;
@@ -802,6 +806,113 @@ public class ManagedChannelImplBuilderTest {
     NameResolver.Args.Key<Integer> testKey = NameResolver.Args.Key.create("test-key");
     builder.setNameResolverArg(testKey, 42);
     assertThat(builder.nameResolverCustomArgs.get(testKey)).isEqualTo(42);
+  }
+
+  @Test
+  public void childChannelConfigurator_setsField() {
+    ChannelConfigurator configurator = builder -> { };
+    assertSame(builder, builder.childChannelConfigurator(configurator));
+    assertSame(configurator, builder.channelConfigurator);
+  }
+
+  @Test
+  public void childChannelConfigurator_propagatesMetricsAndInterceptors_xdsTarget() {
+    // Setup Mocks
+    when(mockClientTransportFactory.getScheduledExecutorService())
+        .thenReturn(clock.getScheduledExecutorService());
+    when(mockClientTransportFactoryBuilder.buildClientTransportFactory())
+        .thenReturn(mockClientTransportFactory);
+    when(mockClientTransportFactory.getSupportedSocketAddressTypes())
+        .thenReturn(Collections.singleton(InetSocketAddress.class));
+
+    MetricSink mockMetricSink = new NoopMetricSink();
+    ClientInterceptor mockInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    };
+
+    // Define the Configurator
+    ChannelConfigurator configurator = builder -> {
+      InternalManagedChannelBuilder.addMetricSink(builder, mockMetricSink);
+
+      InternalManagedChannelBuilder.interceptWithTarget(builder, target -> mockInterceptor);
+    };
+
+    // Use NameResolver.Factory to capture Args
+    final NameResolver.Args[] capturedArgs = new NameResolver.Args[1];
+    final boolean[] newNameResolverCalled = new boolean[1];
+
+    NameResolver realNameResolver = new NameResolver() {
+      @Override
+      public String getServiceAuthority() {
+        return "foo.authority";
+      }
+
+      @Override
+      public void start(Listener2 listener) {}
+
+      @Override
+      public void shutdown() {}
+    };
+
+    NameResolver.Factory realNameResolverFactory = new NameResolver.Factory() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public NameResolver newNameResolver(Uri targetUri, NameResolver.Args args) {
+        newNameResolverCalled[0] = true;
+        capturedArgs[0] = args;
+        return realNameResolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "xds";
+      }
+    };
+
+    // Use the configurator and the custom factory
+    NameResolverRegistry registry = new NameResolverRegistry();
+    registry.register(new NameResolverFactoryToProviderFacade(realNameResolverFactory));
+
+    ManagedChannelBuilder<?> parentBuilder = new ManagedChannelImplBuilder(
+        "xds:///my-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT))
+        .childChannelConfigurator(configurator)
+        .nameResolverRegistry(registry);
+
+    ManagedChannel channel = parentBuilder.build();
+    grpcCleanupRule.register(channel);
+
+    // Verify that newNameResolver was called
+    assertThat(newNameResolverCalled[0]).isTrue();
+
+    // Extract the childChannelConfigurator from Args
+    NameResolver.Args args = capturedArgs[0];
+    ChannelConfigurator channelConfiguratorInArgs = args.getChildChannelConfigurator();
+    assertNotNull("Child channel configurator should be present in NameResolver.Args",
+        channelConfiguratorInArgs);
+
+    // Verify the configurator is the one we passed
+    assertThat(channelConfiguratorInArgs).isSameInstanceAs(configurator);
+
+    // Verify the configurator logically applies (by running it on a real builder)
+    ManagedChannelImplBuilder childBuilder = new ManagedChannelImplBuilder(
+        "xds:///child-service-target",
+        mockClientTransportFactoryBuilder,
+        new FixedPortProvider(DUMMY_PORT));
+
+    configurator.configureChannelBuilder(childBuilder);
+    assertThat(childBuilder.metricSinks).contains(mockMetricSink);
   }
 
   @Test

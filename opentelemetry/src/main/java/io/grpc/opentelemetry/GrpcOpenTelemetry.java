@@ -253,7 +253,6 @@ public final class GrpcOpenTelemetry {
               .setExplicitBucketBoundariesAdvice(LATENCY_BUCKETS)
               .build());
     }
-
     if (isMetricEnabled("grpc.client.attempt.sent_total_compressed_message_size", enableMetrics,
         disableDefault)) {
       builder.clientTotalSentCompressedMessageSizeCounter(

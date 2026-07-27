@@ -1041,11 +1041,13 @@ public class PriorityLoadBalancerTest {
             
     Helper helper0 = Iterables.getOnlyElement(fooHelpers);  // priority p0
     
-    SubchannelPicker mockChildPicker = mock(SubchannelPicker.class);
-    when(mockChildPicker.pickSubchannel(any(PickSubchannelArgs.class)))
-        .thenReturn(PickResult.withNoResult("connecting", "child_reason"));
-        
-    helper0.updateBalancingState(CONNECTING, mockChildPicker);
+    SubchannelPicker fakeChildPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "child_reason");
+      }
+    };
+    helper0.updateBalancingState(CONNECTING, fakeChildPicker);
     
     verify(helper, atLeastOnce())
         .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
@@ -1053,8 +1055,66 @@ public class PriorityLoadBalancerTest {
     SubchannelPicker priorityPicker = pickerCaptor.getValue();
     PickResult result = priorityPicker.pickSubchannel(mock(PickSubchannelArgs.class));
     
+    assertThat(result.getDelayType()).isEqualTo("p0:connecting");
+    assertThat(result.getDelayReason())
+        .isEqualTo("waiting on priority group p0 (child_reason)");
+  }
+
+  @Test
+  public void priorityPicker_nestedPriorities_composesTokens() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    Helper helper0 = Iterables.getOnlyElement(fooHelpers); // priority p0
+
+    SubchannelPicker nestedChildPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult("p1:connecting",
+            "waiting on priority group p1 (child_reason)");
+      }
+    };
+    helper0.updateBalancingState(CONNECTING, nestedChildPicker);
+
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+
+    SubchannelPicker priorityPicker = pickerCaptor.getValue();
+    PickResult result = priorityPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+
+    assertThat(result.getDelayType()).isEqualTo("p0:p1:connecting");
+    assertThat(result.getDelayReason()).isEqualTo(
+        "waiting on priority group p0 (waiting on priority group p1 (child_reason))");
+  }
+
+  @Test
+  public void initialChildPicker_returnsAnnotatedDelayAttributes() throws Exception {
+    PriorityChildConfig priorityChildConfig0 =
+        new PriorityChildConfig(newChildConfig(fooLbProvider, new Object()), true);
+    PriorityLbConfig priorityLbConfig =
+        new PriorityLbConfig(ImmutableMap.of("p0", priorityChildConfig0), ImmutableList.of("p0"));
+    priorityLb.acceptResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+            .setLoadBalancingPolicyConfig(priorityLbConfig)
+            .build());
+
+    verify(helper, atLeastOnce())
+        .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    SubchannelPicker initialPicker = pickerCaptor.getAllValues().get(0);
+    PickResult result = initialPicker.pickSubchannel(mock(PickSubchannelArgs.class));
+
     assertThat(result.getDelayType()).isEqualTo("connecting");
-    assertThat(result.getDelayReason()).isEqualTo("priority_p0:child_reason");
+    assertThat(result.getDelayReason()).isEqualTo(
+        "priority child state uninitialized");
   }
 
   private void assertLatestConnectivityState(ConnectivityState expectedState) {

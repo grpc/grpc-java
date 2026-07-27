@@ -50,6 +50,7 @@ import io.grpc.StreamTracer;
 import io.grpc.internal.StatsTraceContext.ServerCallMethodListener;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
 import java.util.ArrayList;
@@ -228,7 +229,7 @@ final class OpenTelemetryMetricsModule {
     public void recordAttemptDelayStart(String delayType, String delayReason) {
       if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
           || (activeDelayStopwatch != null && Objects.equals(activeDelayType, delayType))) {
-        // If delay metrics are disabled or canonical delay type is unchanged, skip timer reset.
+        // Do not reset the stopwatch if the delay type is unchanged.
         return;
       }
       recordAttemptDelayEnd();
@@ -238,7 +239,7 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void recordAttemptDelayReasonChanged(String delayReason) {
-      // Reason strings are high-cardinality diagnostics intended strictly for tracing spans.
+      // Reason strings are high-cardinality diagnostics intended for tracing spans.
     }
 
     @Override
@@ -251,8 +252,7 @@ final class OpenTelemetryMetricsModule {
         activeDelayStopwatch = null;
         activeDelayType = null;
         if (module.resource.clientAttemptDelayCounter() != null) {
-          // Export elapsed duration to grpc.client.attempt.delay.duration histogram (seconds).
-          AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+          AttributesBuilder builder = Attributes.builder()
               .put(METHOD_KEY, fullMethodName)
               .put(TARGET_KEY, target)
               .put("grpc.delay_type", delayType);

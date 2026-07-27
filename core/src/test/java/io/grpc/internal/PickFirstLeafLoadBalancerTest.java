@@ -1439,6 +1439,9 @@ public class PickFirstLeafLoadBalancerTest {
     inOrder.verify(mockSubchannel3).requestConnection();
     stateListener3.onSubchannelState(ConnectivityStateInfo.forNonError(CONNECTING));
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    PickResult connectingPick = pickerCaptor.getValue().pickSubchannel(mockArgs);
+    assertEquals("connecting", connectingPick.getDelayType());
+    assertEquals("pick_first: attempting to connect", connectingPick.getDelayReason());
 
     if (enableHappyEyeballs) {
       forwardTimeByConnectionDelay();

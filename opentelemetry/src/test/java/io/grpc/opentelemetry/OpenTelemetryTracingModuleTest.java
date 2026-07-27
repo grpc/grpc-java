@@ -720,29 +720,29 @@ public class OpenTelemetryTracingModuleTest {
 
     assertEquals("Attempt Delay", delaySpanData.getName());
     assertEquals("connecting", delaySpanData.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals(3, delaySpanData.getEvents().size());
 
     EventData event1 = delaySpanData.getEvents().get(0);
     assertEquals("Delay state transition", event1.getName());
     assertEquals("connecting", event1.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason1", event1.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+        AttributeKey.stringKey("grpc.delay_reason")));
 
     EventData event2 = delaySpanData.getEvents().get(1);
     assertEquals("Delay state transition", event2.getName());
     assertEquals("connecting", event2.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason2", event2.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+        AttributeKey.stringKey("grpc.delay_reason")));
 
     EventData event3 = delaySpanData.getEvents().get(2);
     assertEquals("Delay state transition", event3.getName());
     assertEquals("connecting", event3.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_type")));
+        AttributeKey.stringKey("grpc.delay_type")));
     assertEquals("reason3", event3.getAttributes().get(
-        io.opentelemetry.api.common.AttributeKey.stringKey("grpc.delay_reason")));
+        AttributeKey.stringKey("grpc.delay_reason")));
   }
 
   @Test

@@ -63,6 +63,7 @@ import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalEquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickDetailsConsumer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -1064,7 +1065,9 @@ public class ClusterResolverLoadBalancerTest {
 
   private static void assertPicker(SubchannelPicker picker, Status expectedStatus,
       @Nullable Subchannel expectedSubchannel)  {
-    PickResult result = picker.pickSubchannel(mock(PickSubchannelArgs.class));
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    when(args.getPickDetailsConsumer()).thenReturn(mock(PickDetailsConsumer.class));
+    PickResult result = picker.pickSubchannel(args);
     Status actualStatus = result.getStatus();
     assertThat(actualStatus.getCode()).isEqualTo(expectedStatus.getCode());
     assertThat(actualStatus.getDescription()).isEqualTo(expectedStatus.getDescription());

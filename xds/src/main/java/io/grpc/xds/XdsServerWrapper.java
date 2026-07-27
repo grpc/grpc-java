@@ -29,6 +29,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -50,6 +51,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.ThreadSafeRandom.ThreadSafeRandomImpl;
@@ -128,6 +130,30 @@ final class XdsServerWrapper extends Server {
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
 
+  private final ChannelConfigurator channelConfigurator;
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      FilterRegistry filterRegistry,
+      ChannelConfigurator channelConfigurator) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        channelConfigurator);
+    sharedTimeService = true;
+  }
+
   XdsServerWrapper(
       String listenerAddress,
       ServerBuilder<?> delegateBuilder,
@@ -144,8 +170,7 @@ final class XdsServerWrapper extends Server {
         xdsClientPoolFactory,
         bootstrapOverride,
         filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
-    sharedTimeService = true;
+        builder -> { });
   }
 
   @VisibleForTesting
@@ -158,6 +183,29 @@ final class XdsServerWrapper extends Server {
           @Nullable Map<String, ?> bootstrapOverride,
           FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        filterRegistry,
+        timeService,
+        builder -> { });
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+          String listenerAddress,
+          ServerBuilder<?> delegateBuilder,
+          XdsServingStatusListener listener,
+          FilterChainSelectorManager filterChainSelectorManager,
+          XdsClientPoolFactory xdsClientPoolFactory,
+          @Nullable Map<String, ?> bootstrapOverride,
+          FilterRegistry filterRegistry,
+          ScheduledExecutorService timeService,
+          ChannelConfigurator channelConfigurator) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
@@ -169,6 +217,7 @@ final class XdsServerWrapper extends Server {
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
+    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
   }
 
   @Override
@@ -202,7 +251,8 @@ final class XdsServerWrapper extends Server {
         bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
-          "#server", bootstrapInfo, new MetricRecorder() {});
+          "#server", bootstrapInfo, new MetricRecorder() {},
+          channelConfigurator);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -612,7 +662,8 @@ final class XdsServerWrapper extends Server {
         Filter.Provider provider = filterRegistry.get(typeUrl);
         checkNotNull(provider, "provider %s", typeUrl);
         Filter filter = chainFilters.computeIfAbsent(
-            filterKey, k -> provider.newInstance(namedFilter.name));
+            filterKey, k -> provider.newInstance(
+                FilterContext.create(namedFilter.name, new MetricRecorder() {})));
         checkNotNull(filter, "filter %s", filterKey);
         filtersToShutdown.remove(filterKey);
       }

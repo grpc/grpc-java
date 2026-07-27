@@ -1028,8 +1028,7 @@ final class CachingRlsLbClient {
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
         if (picker == null) {
-          // Category F (Pass-Through container): Preserve leaf "connecting" delay type while
-          // recording RLS child policy context.
+          // Child policy is connecting. Preserve leaf delay type.
           return PickResult.withNoResult(
               "connecting", "RLS child policy connecting");
         }
@@ -1040,6 +1039,11 @@ final class CachingRlsLbClient {
               Arrays.asList(helper.getChannelTarget(), lookupService,
                   childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
               Arrays.asList(determineCustomLabel(args)));
+        } else if (pickResult.getDelayType() != null) {
+          return PickResult.withNoResult(
+              pickResult.getDelayType(),
+              "RLS child (" + childPolicyWrapper.getTarget() + ") delayed: "
+                  + pickResult.getDelayReason());
         }
         return pickResult;
       } else if (response.hasError()) {
@@ -1053,8 +1057,7 @@ final class CachingRlsLbClient {
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
-        // Category B (Control-Plane scenario): RPC is blocked executing an RLS control-plane
-        // query. Report canonical "rls_lookup_pending" type and target server address.
+        // RLS control-plane query is pending.
         return PickResult.withNoResult(
             "rls_lookup_pending",
             "Route Lookup Service query pending on " + lookupService);
@@ -1074,6 +1077,11 @@ final class CachingRlsLbClient {
             Arrays.asList(helper.getChannelTarget(), lookupService,
                 fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
             Arrays.asList(determineCustomLabel(args)));
+      } else if (pickResult.getDelayType() != null) {
+        return PickResult.withNoResult(
+            pickResult.getDelayType(),
+            "RLS fallback (" + fallbackChildPolicyWrapper.getTarget() + ") delayed: "
+                + pickResult.getDelayReason());
       }
       return pickResult;
     }

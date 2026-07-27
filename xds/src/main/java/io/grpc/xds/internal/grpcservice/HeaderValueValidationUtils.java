@@ -16,6 +16,7 @@
 
 package io.grpc.xds.internal.grpcservice;
 
+import com.google.protobuf.ByteString;
 import java.util.Locale;
 
 /**
@@ -27,7 +28,47 @@ public final class HeaderValueValidationUtils {
   private HeaderValueValidationUtils() {}
 
   /**
-   * Returns true if the header key is disallowed for mutations or validation.
+   * Validates that the header key is non-empty and within allowed length.
+   * Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderKey(String key) {
+    if (key == null || key.isEmpty() || key.length() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Invalid header key: " + key);
+    }
+  }
+
+  /**
+   * Validates that the header value is within allowed length and contains valid ASCII characters.
+   * Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderValue(String key, String value) {
+    validateHeaderKey(key);
+    if (value == null || value.length() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Header value length exceeds maximum allowed length");
+    }
+    if (!key.endsWith("-bin") && !isValidAsciiHeaderValue(value)) {
+      throw new IllegalArgumentException(
+          "Invalid ASCII characters in header value for key: " + key);
+    }
+  }
+
+  /**
+   * Validates that the raw header value is within allowed length and contains valid ASCII
+   * characters. Throws {@link IllegalArgumentException} if invalid.
+   */
+  public static void validateHeaderValue(String key, ByteString rawValue) {
+    validateHeaderKey(key);
+    if (rawValue == null || rawValue.size() > MAX_HEADER_LENGTH) {
+      throw new IllegalArgumentException("Header value length exceeds maximum allowed length");
+    }
+    if (!key.endsWith("-bin") && !isValidAsciiHeaderValue(rawValue.toStringUtf8())) {
+      throw new IllegalArgumentException(
+          "Invalid ASCII characters in header value for key: " + key);
+    }
+  }
+
+  /**
+   * Returns true if the header key is disallowed for mutations.
    *
    * @param key The header key (e.g., "content-type")
    */
@@ -48,20 +89,26 @@ public final class HeaderValueValidationUtils {
   }
 
   /**
-   * Returns true if the header value is disallowed.
+   * Returns true if the header is disallowed for mutations.
    *
-   * @param header The HeaderValue containing key and values
+   * @param header The HeaderValue
    */
   public static boolean isDisallowed(HeaderValue header) {
-    if (isDisallowed(header.key())) {
-      return true;
+    return isDisallowed(header.key());
+  }
+
+  /**
+   * Validates that the header value contains only allowed ASCII characters as specified by
+   * {@link io.grpc.Metadata.AsciiMarshaller}: horizontal tab (0x09), space (0x20), and visible
+   * ASCII characters (0x21 - 0x7E).
+   */
+  private static boolean isValidAsciiHeaderValue(String value) {
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if (c != 0x09 && (c < 0x20 || c > 0x7E)) {
+        return false;
+      }
     }
-    if (header.value().isPresent() && header.value().get().length() > MAX_HEADER_LENGTH) {
-      return true;
-    }
-    if (header.rawValue().isPresent() && header.rawValue().get().size() > MAX_HEADER_LENGTH) {
-      return true;
-    }
-    return false;
+    return true;
   }
 }

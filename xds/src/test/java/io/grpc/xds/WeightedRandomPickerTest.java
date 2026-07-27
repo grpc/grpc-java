@@ -28,6 +28,7 @@ import io.grpc.Status;
 import io.grpc.xds.WeightedRandomPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
@@ -247,5 +248,25 @@ public class WeightedRandomPickerTest {
     fakeRandom.nextInt = 3;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(4);
+  }
+
+  @Test
+  public void pickSubchannelEnrichesDelayReason() {
+    final PickResult pending =
+        PickResult.withNoResult("connecting", "TCP handshake in progress");
+    SubchannelPicker delayedPicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pending;
+      }
+    };
+    WeightedRandomPicker picker = new WeightedRandomPicker(
+        Collections.singletonList(new WeightedChildPicker(10, delayedPicker)));
+
+    PickResult res = picker.pickSubchannel(pickSubchannelArgs);
+    assertThat(res.hasResult()).isFalse();
+    assertThat(res.getDelayType()).isEqualTo("connecting");
+    assertThat(res.getDelayReason())
+        .isEqualTo("weighted_target: TCP handshake in progress");
   }
 }

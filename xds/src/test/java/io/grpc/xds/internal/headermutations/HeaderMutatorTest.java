@@ -296,7 +296,7 @@ public class HeaderMutatorTest {
   public void applyMutations_binaryValueWithAsciiKey_ignored() {
     Metadata headers = new Metadata();
     HeaderValueOption option = HeaderValueOption.create(
-        HeaderValue.create("some-key", ByteString.copyFrom(new byte[] {1})),
+        HeaderValue.create("some-key", ByteString.copyFrom(new byte[] {0x61})),
         HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
 
     headerMutator.applyMutations(

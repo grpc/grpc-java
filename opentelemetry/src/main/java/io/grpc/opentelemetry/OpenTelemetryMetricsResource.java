@@ -89,6 +89,7 @@ abstract class OpenTelemetryMetricsResource {
 
     abstract Builder clientCallDelayCounter(DoubleHistogram counter);
 
+
     abstract Builder clientTotalSentCompressedMessageSizeCounter(LongHistogram counter);
 
     abstract Builder clientTotalReceivedCompressedMessageSizeCounter(

@@ -66,8 +66,8 @@ public class DelayedClientCallTest {
 
   @Test
   public void allMethodsForwarded() throws Exception {
-    DelayedClientCall<String, Integer> delayedClientCall =
-        new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null);
+    DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
     ForwardingTestUtil.testMethodsForwarded(
         ClientCall.class,
@@ -94,18 +94,22 @@ public class DelayedClientCallTest {
   @Test
   public void deadlineExceededWhileCallIsStartedButStillPending() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), Deadline.after(10, SECONDS));
+        "tESt", callExecutor, fakeClock.getScheduledExecutorService(),
+        Deadline.after(10, SECONDS, fakeClock.getDeadlineTicker()));
 
     delayedClientCall.start(listener, new Metadata());
     fakeClock.forwardTime(10, SECONDS);
     verify(listener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("Deadline CallOptions was exceeded after 10.000000000s waiting for tESt");
   }
 
   @Test
   public void listenerEventsPropagated() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), Deadline.after(10, SECONDS));
+        "test", callExecutor, fakeClock.getScheduledExecutorService(),
+        Deadline.after(10, SECONDS, fakeClock.getDeadlineTicker()));
     delayedClientCall.start(listener, new Metadata());
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
     @SuppressWarnings("unchecked")
@@ -130,7 +134,7 @@ public class DelayedClientCallTest {
   @Test
   public void setCallThenStart() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     callMeMaybe(delayedClientCall.setCall(mockRealCall));
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
@@ -146,7 +150,7 @@ public class DelayedClientCallTest {
   @Test
   public void startThenSetCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     Runnable r = delayedClientCall.setCall(mockRealCall);
@@ -167,7 +171,7 @@ public class DelayedClientCallTest {
   @SuppressWarnings("unchecked")
   public void cancelThenSetCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     delayedClientCall.cancel("cancel", new StatusException(Status.CANCELLED));
@@ -183,7 +187,7 @@ public class DelayedClientCallTest {
   @SuppressWarnings("unchecked")
   public void setCallThenCancel() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     delayedClientCall.start(listener, new Metadata());
     delayedClientCall.request(1);
     Runnable r = delayedClientCall.setCall(mockRealCall);
@@ -206,7 +210,8 @@ public class DelayedClientCallTest {
     Object goldenValue = new Object();
     DelayedClientCall<String, Integer> delayedClientCall =
         Context.current().withValue(contextKey, goldenValue).call(() ->
-            new DelayedClientCall<>(callExecutor, fakeClock.getScheduledExecutorService(), null));
+            new DelayedClientCall<>(
+                "test", callExecutor, fakeClock.getScheduledExecutorService(), null));
     AtomicReference<Context> readyContext = new AtomicReference<>();
     delayedClientCall.start(new ClientCall.Listener<Integer>() {
       @Override public void onReady() {
@@ -232,7 +237,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPendingCallback_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -261,7 +266,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPendingOnHeaders_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -286,7 +291,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPendingOnReady_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -311,7 +316,7 @@ public class DelayedClientCallTest {
   @Test
   public void onCloseExceptionCaughtAndLogged() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     final AtomicReference<Status> observed = new AtomicReference<>();
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
@@ -339,7 +344,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPassThroughOnMessage_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -362,7 +367,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPassThroughOnHeaders_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -385,7 +390,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPassThroughOnReady_cancelsRealCall() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     ClientCall.Listener<Integer> throwingListener = new ClientCall.Listener<Integer>() {
       @Override
@@ -408,7 +413,7 @@ public class DelayedClientCallTest {
   @Test
   public void listenerThrowsInPassThrough_subsequentCallbacksSwallowedAndOnCloseOverridden() {
     DelayedClientCall<String, Integer> delayedClientCall = new DelayedClientCall<>(
-        callExecutor, fakeClock.getScheduledExecutorService(), null);
+        "test", callExecutor, fakeClock.getScheduledExecutorService(), null);
     final RuntimeException boom = new RuntimeException("boom");
     final AtomicReference<Integer> lastMessage = new AtomicReference<>();
     final AtomicReference<Status> closeStatus = new AtomicReference<>();

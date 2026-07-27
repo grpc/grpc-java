@@ -1659,6 +1659,8 @@ public class OpenTelemetryMetricsModuleTest {
                     histogram -> histogram.hasPointsSatisfying(
                         point -> {
                           point.hasSum(0.25);
+                          point.hasAttribute(METHOD_KEY, method.getFullMethodName());
+                          point.hasAttribute(TARGET_KEY, "target:///");
                           point.hasAttribute(
                               AttributeKey.stringKey("grpc.delay_type"), "connecting");
                         })));
@@ -1861,7 +1863,7 @@ public class OpenTelemetryMetricsModuleTest {
 
           @Override
           public void start(Listener2 listener) {
-            listener.onResult(NameResolver.ResolutionResult.newBuilder()
+            listener.onResult(ResolutionResult.newBuilder()
                 .setAddressesOrError(StatusOr.fromValue(Collections.singletonList(
                     new EquivalentAddressGroup(
                         new InProcessSocketAddress("test-metrics-e2e")))))

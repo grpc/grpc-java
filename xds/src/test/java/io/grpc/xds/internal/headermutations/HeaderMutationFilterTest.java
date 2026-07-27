@@ -19,10 +19,9 @@ package io.grpc.xds.internal.headermutations;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.protobuf.ByteString;
 import com.google.re2j.Pattern;
+import io.grpc.xds.internal.grpcservice.HeaderValue;
 import io.grpc.xds.internal.headermutations.HeaderValueOption.HeaderAppendAction;
 import java.util.Optional;
 import org.junit.Test;
@@ -31,26 +30,14 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class HeaderMutationFilterTest {
-
-  private static final int MAX_HEADER_LENGTH = 16384;
-
-  private static HeaderValueOption header(String key, ByteString value) {
-    return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
-        HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
-  }
-
   private static HeaderValueOption header(String key, String value) {
-    return HeaderValueOption.create(io.grpc.xds.internal.grpcservice.HeaderValue.create(key, value),
+    return HeaderValueOption.create(HeaderValue.create(key, value),
         HeaderAppendAction.APPEND_IF_EXISTS_OR_ADD);
   }
 
   @Test
   public void filter_validationRules_dropsInvalidHeaders() throws Exception {
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.empty());
-    @SuppressWarnings("InlineMeInliner")
-    String longString = Strings.repeat("a", MAX_HEADER_LENGTH + 1);
-    ByteString longBytes = ByteString.copyFrom(new byte[MAX_HEADER_LENGTH + 1]);
-
     HeaderMutations mutations = HeaderMutations.create(
         ImmutableList.of(
             header("add-key", "add-value"), header(":authority", "new-authority"),
@@ -58,11 +45,10 @@ public class HeaderMutationFilterTest {
             header("resp-add-key", "resp-add-value"), header(":scheme", "https"),
             header(":path", "/new-path"), header(":grpc-trace-bin", "binary-value"),
             header(":alt-svc", "h3=:443"), header("user-agent", "new-agent"),
-            header("Valid-Key", "value"), header("", "value"), header(longString, "value"),
-            header("long-value-key", longString), header("long-bin-key-bin", longBytes),
+            header("Valid-Key", "value"),
             header("grpc-timeout", "10S"), header("valid-key-lower", "value")),
         ImmutableList.of("remove-key", "host", ":authority", ":scheme", ":method", ":foo", ":bar",
-            "Valid-Key", "", longString, "grpc-timeout", "UPPER-REMOVE", "lower-remove"));
+            "Valid-Key", "grpc-timeout", "UPPER-REMOVE", "lower-remove"));
 
     HeaderMutations filtered = filter.filter(mutations);
 
@@ -77,8 +63,6 @@ public class HeaderMutationFilterTest {
     HeaderMutationRulesConfig rules =
         HeaderMutationRulesConfig.builder().disallowIsError(true).build();
     HeaderMutationFilter filter = new HeaderMutationFilter(Optional.of(rules));
-    @SuppressWarnings("InlineMeInliner")
-    String longString = Strings.repeat("a", MAX_HEADER_LENGTH + 1);
 
     // Test system headers modification
     assertThrows(HeaderMutationDisallowedException.class, () -> filter.filter(HeaderMutations
@@ -99,16 +83,6 @@ public class HeaderMutationFilterTest {
     assertThrows(HeaderMutationDisallowedException.class, () -> filter
         .filter(HeaderMutations.create(
             ImmutableList.of(), ImmutableList.of("UPPER-REMOVE"))));
-
-    // Test empty header
-    assertThrows(HeaderMutationDisallowedException.class, () -> filter
-        .filter(HeaderMutations.create(
-            ImmutableList.of(header("", "value")), ImmutableList.of())));
-
-    // Test long header key
-    assertThrows(HeaderMutationDisallowedException.class, () -> filter
-        .filter(HeaderMutations.create(
-            ImmutableList.of(), ImmutableList.of(longString))));
   }
 
 

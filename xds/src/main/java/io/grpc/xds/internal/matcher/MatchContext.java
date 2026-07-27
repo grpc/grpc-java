@@ -19,68 +19,81 @@ package io.grpc.xds.internal.matcher;
 import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
 
-public final class MatchContext {
+final class MatchContext {
   private final Metadata metadata;
   private final String path;
   private final String host;
   private final String method;
+  private final String id;
 
-  public MatchContext(Metadata metadata, String path,
-      String host, String method) {
+  MatchContext(Metadata metadata, String path,
+      String host, String method,
+      String id) {
     this.metadata = Preconditions.checkNotNull(metadata, "metadata");
-    this.path = Preconditions.checkNotNull(path, "path");
-    this.host = Preconditions.checkNotNull(host, "host");
-    this.method = Preconditions.checkNotNull(method, "method");
+    this.path = path;
+    this.host = host;
+    this.method = method;
+    this.id = id;
   }
 
-  public Metadata getMetadata() {
+  Metadata getMetadata() {
     return metadata;
   }
   
-  public String getPath() {
+  String getPath() {
     return path;
   }
   
-  public String getHost() {
+  String getHost() {
     return host;
   }
   
-  public String getMethod() {
+  String getMethod() {
     return method;
   }
+  
+  String getId() {
+    return id;
+  }
 
-  public static Builder newBuilder() {
+  static Builder newBuilder() {
     return new Builder();
   }
 
-  public static final class Builder {
+  static final class Builder {
     private Metadata metadata = new Metadata();
     private String path;
     private String host;
     private String method;
+    private String id;
 
-    public Builder setMetadata(Metadata metadata) {
+    Builder setMetadata(Metadata metadata) {
       this.metadata = metadata;
       return this;
     }
 
-    public Builder setPath(String path) {
+    Builder setPath(String path) {
       this.path = path;
       return this;
     }
 
-    public Builder setHost(String host) {
+    Builder setHost(String host) {
       this.host = host;
       return this;
     }
 
-    public Builder setMethod(String method) {
+    Builder setMethod(String method) {
       this.method = method;
       return this;
     }
 
-    public MatchContext build() {
-      return new MatchContext(metadata, path, host, method);
+    Builder setId(String id) {
+      this.id = id;
+      return this;
+    }
+
+    MatchContext build() {
+      return new MatchContext(metadata, path, host, method, id);
     }
   }
 }

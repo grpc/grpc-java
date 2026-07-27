@@ -78,6 +78,7 @@ final class AsyncServletOutputStreamWriter {
   private final Queue<ActionItem> writeChain = new ConcurrentLinkedQueue<>();
   // for a theoretical race condition that onWritePossible() is called immediately after isReady()
   // returns false and before writeState.compareAndSet()
+
   @Nullable
   private volatile Thread parkingThread;
 
@@ -209,6 +210,13 @@ final class AsyncServletOutputStreamWriter {
     parkingThread = null;
   }
 
+  private void markNotReadyAndUnpark(WriteState curState) {
+    boolean successful = writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
+    checkState(successful, "Bug: curState is unexpectedly changed by another thread");
+    LockSupport.unpark(parkingThread);
+    log.finest("the servlet output stream becomes not ready");
+  }
+
   /**
    * Either execute the write action directly, or buffer the action and let the container thread
    * drain it.
@@ -217,30 +225,38 @@ final class AsyncServletOutputStreamWriter {
    */
   private void runOrBuffer(ActionItem actionItem) throws IOException {
     WriteState curState = writeState.get();
-    if (curState.readyAndDrained) { // write to the outputStream directly
+
+    // Tomcat Spontaneous State Change Mitigation ---
+    // If our cache says true, but the container is secretly not ready,
+    // intercept the stale state and sync it before proceeding.
+    if (curState.readyAndDrained && !isReady.getAsBoolean()) {
+      markNotReadyAndUnpark(curState);
+      // Update local state so it gracefully bypasses the 
+      // direct write and falls into the buffer block
+      curState = writeState.get(); 
+    }
+    // -------------------------------------------------------    
+    if (curState.readyAndDrained) {
       actionItem.run();
       if (actionItem == completeAction) {
         return;
       }
       if (!isReady.getAsBoolean()) {
-        boolean successful =
-            writeState.compareAndSet(curState, curState.withReadyAndDrained(false));
-        LockSupport.unpark(parkingThread);
-        checkState(successful, "Bug: curState is unexpectedly changed by another thread");
-        log.finest("the servlet output stream becomes not ready");
+        markNotReadyAndUnpark(curState);
       }
-    } else { // buffer to the writeChain
-      writeChain.offer(actionItem);
-      if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
-        checkState(
-            writeState.get().readyAndDrained,
-            "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
-        ActionItem lastItem = writeChain.poll();
-        if (lastItem != null) {
-          checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
-          runOrBuffer(lastItem);
-        }
-      } // state has not changed since
+      return;
+    }
+
+    writeChain.offer(actionItem);
+    if (!writeState.compareAndSet(curState, curState.withReadyAndDrained(false))) {
+      checkState(
+          writeState.get().readyAndDrained,
+          "Bug: onWritePossible() should have changed readyAndDrained to true, but not");
+      ActionItem lastItem = writeChain.poll();
+      if (lastItem != null) {
+        checkState(lastItem == actionItem, "Bug: lastItem != actionItem");
+        runOrBuffer(lastItem);
+      }
     }
   }
 

@@ -87,7 +87,8 @@ public class RoundRobinLoadBalancerTest {
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
   private static final SubchannelPicker EMPTY_PICKER =
       new FixedResultPicker(
-          PickResult.withNoResult("connecting", "round_robin: attempting to connect"));
+          PickResult.withNoResult("connecting",
+              "round_robin connecting: TCP/TLS handshake in progress to child balancers"));
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
 
@@ -584,7 +585,7 @@ public class RoundRobinLoadBalancerTest {
         .updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     PickResult res = pickerCaptor.getValue().pickSubchannel(mockArgs);
     assertThat(res.getDelayType()).isEqualTo("connecting");
-    assertThat(res.getDelayReason()).contains("attempting to connect");
+    assertThat(res.getDelayReason()).contains("TCP/TLS handshake in progress");
   }
 
   private static class FakeSocketAddress extends SocketAddress {

@@ -366,23 +366,23 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
   private static String determineQueuingDelayType(@Nullable PickResult pickResult) {
     if (pickResult == null) {
-      return "client_channel_init";
+      return "connecting";
     }
     if (pickResult.getSubchannel() != null) {
       return "subchannel_state_mismatch";
     }
     if (!pickResult.getStatus().isOk()) {
-      return "wait_for_ready_failed";
+      return "picker_failing_with_wait_for_ready";
     }
     if (pickResult.getDelayType() != null) {
       return pickResult.getDelayType();
     }
-    return "client_channel_init";
+    return "connecting";
   }
 
   private static String determineQueuingDelayReason(@Nullable PickResult pickResult) {
     if (pickResult == null) {
-      return "client channel: created LB policy.";
+      return "client channel: waiting for picker";
     }
     if (pickResult.getSubchannel() != null) {
       return "subchannel returned by LB picker has no connected subchannel";
@@ -401,7 +401,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
     private volatile Status lastPickStatus;
+    @GuardedBy("this")
     @Nullable private String activeDelayType;
+    @GuardedBy("this")
     @Nullable private String activeDelayReason;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
@@ -425,7 +427,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * spans are ended and a new segment is initiated. If only {@code newReason} changes, a
      * structured transition event is appended to the active span without span re-creation.
      */
-    void updateDelay(@Nullable String newType, @Nullable String newReason) {
+    synchronized void updateDelay(@Nullable String newType, @Nullable String newReason) {
+      if (getRealStream() != null) {
+        return;
+      }
       if (!Objects.equals(activeDelayType, newType)) {
         // Delay categorization changed (e.g., from RLS lookup to TCP connecting).
         // Close prior active segment across all tracers before starting new canonical segment.
@@ -455,7 +460,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     /**
      * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
      */
-    void endDelay() {
+    synchronized void endDelay() {
       if (activeDelayType != null) {
         for (ClientStreamTracer tracer : tracers) {
           tracer.recordAttemptDelayEnd();
@@ -512,6 +517,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
     @Override
     protected void onEarlyCancellation(Status reason) {
+      endDelay();
       for (ClientStreamTracer tracer : tracers) {
         tracer.streamClosed(reason);
       }

@@ -44,6 +44,7 @@ import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import io.netty.handler.ssl.ClientAuth;
+import io.netty.handler.ssl.OpenSslContextOption;
 import io.netty.handler.ssl.OpenSslSessionContext;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -251,6 +252,43 @@ public final class IntegrationTest {
                       .setResponseMessage("Hello, " + request.getRequestMessage() + "!")
                       .build());
       observer.onCompleted();
+    }
+  }
+
+  @Test
+  public void clientCommunicateWithPqcRequiredServer_succeeds() throws Exception {
+    ClassLoader classLoader = IntegrationTest.class.getClassLoader();
+    SslContextBuilder serverSslContextBuilder =
+        SslContextBuilder.forServer(
+            classLoader.getResourceAsStream("cert_chain_ec.pem"),
+            classLoader.getResourceAsStream("leaf_key_ec.pem"));
+    SslContext serverSslContext =
+        GrpcSslContexts.configure(serverSslContextBuilder, SslProvider.OPENSSL)
+            .protocols("TLSv1.3")
+            .trustManager(classLoader.getResourceAsStream("root_cert_ec.pem"))
+            .clientAuth(ClientAuth.REQUIRE)
+            .option(OpenSslContextOption.GROUPS, new String[] {"X25519MLKEM768"})
+            .build();
+
+    Server pqcServer =
+        NettyServerBuilder.forPort(0)
+            .addService(new SimpleServiceImpl())
+            .sslContext(serverSslContext)
+            .build()
+            .start();
+    int pqcServerPort = pqcServer.getPort();
+    String pqcServerAddress = "localhost:" + pqcServerPort;
+
+    try {
+      ChannelCredentials credentials =
+          S2AChannelCredentials.newBuilder(s2aAddress, InsecureChannelCredentials.create())
+              .setLocalSpiffeId("test-spiffe-id").build();
+      ManagedChannel channel = Grpc.newChannelBuilder(pqcServerAddress, credentials).build();
+
+      assertThat(doUnaryRpc(channel)).isTrue();
+    } finally {
+      pqcServer.shutdown();
+      pqcServer.awaitTermination(10, SECONDS);
     }
   }
 }

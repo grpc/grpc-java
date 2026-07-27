@@ -85,7 +85,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
-      updateBalancingState(CONNECTING, new FixedResultPicker(CONNECTING_RESULT));
+      updateBalancingState(CONNECTING, new FixedResultPicker(connectingResult()));
       subchannel.requestConnection();
     } else {
       subchannel.updateAddresses(servers);
@@ -137,7 +137,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       case CONNECTING:
         // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
         // the current picker in-place. But ignoring the potential optimization is simpler.
-        picker = new FixedResultPicker(CONNECTING_RESULT);
+        picker = new FixedResultPicker(connectingResult());
         break;
       case READY:
         picker = new FixedResultPicker(PickResult.withSubchannel(subchannel));
@@ -169,6 +169,10 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     if (subchannel != null) {
       subchannel.requestConnection();
     }
+  }
+
+  private PickResult connectingResult() {
+    return CONNECTING_RESULT;
   }
 
   /** Picker that requests connection during the first pick, and returns noResult. */

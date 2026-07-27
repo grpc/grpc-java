@@ -447,8 +447,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
           subchannelData.healthStateInfo.getStatus())));
     } else if (concludedState != TRANSIENT_FAILURE) {
-      updateBalancingState(subchannelData.getHealthState(),
-          new FixedResultPicker(PickResult.withNoResult()));
+      updateBalancingState(subchannelData.getHealthState(), new FixedResultPicker(
+          PickResult.withNoResult("connecting",
+              "health check state: " + subchannelData.getHealthState())));
     }
   }
 

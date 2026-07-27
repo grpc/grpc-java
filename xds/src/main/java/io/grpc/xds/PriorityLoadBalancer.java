@@ -225,7 +225,8 @@ final class PriorityLoadBalancer extends LoadBalancer {
     // deactivated.
     @Nullable ScheduledHandle deletionTimer;
     ConnectivityState connectivityState = CONNECTING;
-    SubchannelPicker picker = new FixedResultPicker(PickResult.withNoResult());
+    SubchannelPicker picker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "priority child state uninitialized"));
 
     ChildLbState(final String priority, boolean ignoreReresolution) {
       this.priority = priority;
@@ -384,8 +385,10 @@ final class PriorityLoadBalancer extends LoadBalancer {
       PickResult childResult = delegate.pickSubchannel(args);
       if (!childResult.hasResult() && childResult.getDelayType() != null) {
         String childReason = childResult.getDelayReason();
-        String reason = "priority_" + priority + ":" + (childReason != null ? childReason : "");
-        return PickResult.withNoResult(childResult.getDelayType(), reason);
+        String composedType = priority + ":" + childResult.getDelayType();
+        String reason = "waiting on priority group " + priority + " ("
+            + (childReason != null ? childReason : "connecting") + ")";
+        return PickResult.withNoResult(composedType, reason);
       }
       return childResult;
     }

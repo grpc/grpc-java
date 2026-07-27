@@ -39,6 +39,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -52,12 +53,14 @@ import io.grpc.StatusException;
 import io.grpc.StatusOr;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.ObjectPool;
 import io.grpc.testing.TestMethodDescriptors;
 import io.grpc.xds.EnvoyServerProtoData.CidrRange;
 import io.grpc.xds.EnvoyServerProtoData.FilterChain;
 import io.grpc.xds.EnvoyServerProtoData.FilterChainMatch;
 import io.grpc.xds.EnvoyServerProtoData.Listener;
 import io.grpc.xds.Filter.FilterConfig;
+import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.Filter.NamedFilterConfig;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingHandler.FilterChainSelector;
 import io.grpc.xds.StatefulFilter.Config;
@@ -1293,7 +1296,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
+    when(filterProvider.newInstance(any(FilterContext.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -1366,7 +1369,7 @@ public class XdsServerWrapperTest {
     Filter.Provider filterProvider = mock(Filter.Provider.class);
     when(filterProvider.typeUrls()).thenReturn(new String[]{"filter-type-url"});
     when(filterProvider.isServerFilter()).thenReturn(true);
-    when(filterProvider.newInstance(any(String.class))).thenReturn(filter);
+    when(filterProvider.newInstance(any(FilterContext.class))).thenReturn(filter);
     filterRegistry.register(filterProvider);
 
     FilterConfig f0 = mock(FilterConfig.class);
@@ -2029,5 +2032,32 @@ public class XdsServerWrapperTest {
 
   static EnvoyServerProtoData.DownstreamTlsContext createTls() {
     return CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1");
+  }
+
+  @Test
+  public void childChannelConfigurator_passedToXdsClientPool() {
+    ChannelConfigurator configurator = builder -> { };
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
+    when(mockPool.getObject()).thenReturn(xdsClient);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
+
+    XdsServerWrapper serverWrapper = new XdsServerWrapper(
+        "0.0.0.0:1", mockBuilder, listener, selectorManager, mockPoolFactory,
+        XdsServerTestHelper.RAW_BOOTSTRAP, filterRegistry,
+        executor.getScheduledExecutorService(), configurator);
+
+    Executors.newSingleThreadExecutor().execute(() -> {
+      try {
+        serverWrapper.start();
+      } catch (IOException ex) {
+        // ignore
+      }
+    });
+
+    verify(mockPoolFactory, timeout(5000)).getOrCreate(
+        any(), any(), any(), eq(configurator));
+    serverWrapper.shutdownNow();
   }
 }

@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelLogger;
 import io.grpc.MetricRecorder;
 import io.grpc.NameResolver;
@@ -102,6 +103,7 @@ public class GoogleCloudToProdNameResolverTest {
   private final Map<String, NameResolver> delegatedResolver = new HashMap<>();
   private final Map<String, URI> delegatedUri = new HashMap<>();
   private final Map<String, Uri> delegatedRfcUri = new HashMap<>();
+  private final Map<String, Args> delegatedArgs = new HashMap<>();
 
   @Mock
   private NameResolver.Listener2 mockListener;
@@ -284,6 +286,22 @@ public class GoogleCloudToProdNameResolverTest {
   }
 
   @Test
+  public void childChannelConfigurator_passedToDelegatedResolver() {
+    GoogleCloudToProdNameResolver.isOnGcp = false;
+    ChannelConfigurator configurator = builder -> { };
+    Args customArgs = args.toBuilder().setChildChannelConfigurator(configurator).build();
+    resolver = enableRfc3986UrisParam
+        ? new GoogleCloudToProdNameResolver(
+            Uri.create(TARGET_URI), customArgs, fakeExecutorResource, nsRegistry.asFactory())
+        : new GoogleCloudToProdNameResolver(
+            URI.create(TARGET_URI), customArgs, fakeExecutorResource, nsRegistry.asFactory());
+    resolver.start(mockListener);
+    assertThat(delegatedArgs.keySet()).containsExactly("dns");
+    assertThat(delegatedArgs.get("dns").getChildChannelConfigurator())
+        .isSameInstanceAs(configurator);
+  }
+
+  @Test
   public void notOnGcpButForceXds_WithMultipleParams_DelegateToXds() {
     GoogleCloudToProdNameResolver.isOnGcp = false;
     String target = TARGET_URI + "?foo=bar&force-xds&baz=qux";
@@ -385,6 +403,7 @@ public class GoogleCloudToProdNameResolverTest {
     public NameResolver newNameResolver(URI targetUri, Args args) {
       if (scheme.equals(targetUri.getScheme())) {
         delegatedUri.put(scheme, targetUri);
+        delegatedArgs.put(scheme, args);
         NameResolver resolver = mock(NameResolver.class);
         delegatedResolver.put(scheme, resolver);
         return resolver;
@@ -396,6 +415,7 @@ public class GoogleCloudToProdNameResolverTest {
     public NameResolver newNameResolver(Uri targetUri, Args args) {
       if (scheme.equals(targetUri.getScheme())) {
         delegatedRfcUri.put(scheme, targetUri);
+        delegatedArgs.put(scheme, args);
         NameResolver resolver = mock(NameResolver.class);
         delegatedResolver.put(scheme, resolver);
         return resolver;

@@ -146,12 +146,7 @@ tomcat-embed-core = "org.apache.tomcat.embed:tomcat-embed-core:10.1.55"
 # checkForUpdates: tomcat-embed-core9:9.+
 tomcat-embed-core9 = "org.apache.tomcat.embed:tomcat-embed-core:9.0.118"
 truth = "com.google.truth:truth:1.4.5"
-# 2.2.39 fails UndertowInteropTest.veryLargeRequest()
-# https://github.com/grpc/grpc-java/issues/12859
-# (disabled) checkForUpdates: undertow-servlet22:2.2.+
-# checkForUpdates: undertow-servlet22:2.2.38.Final
-undertow-servlet22 = "io.undertow:undertow-servlet:2.2.38.Final"
-# 2.3.21 fails UndertowInteropTest.veryLargeRequest()
-# https://github.com/grpc/grpc-java/issues/12859
-# checkForUpdates: undertow-servlet:2.3.20.Final
-undertow-servlet = "io.undertow:undertow-servlet:2.3.20.Final"
+# checkForUpdates: undertow-servlet22:2.2.+
+undertow-servlet22 = "io.undertow:undertow-servlet:2.2.39.Final"
+# checkForUpdates: undertow-servlet:2.3.+
+undertow-servlet = "io.undertow:undertow-servlet:2.3.21.Final"

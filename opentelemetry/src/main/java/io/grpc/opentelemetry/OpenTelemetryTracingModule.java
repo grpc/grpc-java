@@ -190,6 +190,7 @@ final class OpenTelemetryTracingModule {
         }
         callEnded = 1;
       }
+      recordCallDelayEnd();
       endSpanWithStatus(clientSpan, status);
     }
 
@@ -274,8 +275,7 @@ final class OpenTelemetryTracingModule {
         return;
       }
       if (activeDelaySpan != null && Objects.equals(activeDelayType, delayType)) {
-        // Active Span Retention invariant: If canonical delay type remains identical
-        // (e.g., priority failover between tiers), delegate to reason changed hook.
+        // Do not recreate the span if the delay type is unchanged (e.g., priority failover).
         recordAttemptDelayReasonChanged(delayReason);
         return;
       }
@@ -288,7 +288,6 @@ final class OpenTelemetryTracingModule {
           .setAttribute("grpc.delay_type", delayType)
           .startSpan();
       activeDelaySpan = delaySpan;
-      // Emit structured transition event containing explicit categorization attributes.
       delaySpan.addEvent(
           "Delay state transition",
           io.opentelemetry.api.common.Attributes.of(
@@ -302,7 +301,6 @@ final class OpenTelemetryTracingModule {
         return;
       }
       String type = activeDelayType;
-      // Append granular runtime diagnostics to active child span without span re-creation.
       activeDelaySpan.addEvent(
           "Delay state transition",
           io.opentelemetry.api.common.Attributes.of(

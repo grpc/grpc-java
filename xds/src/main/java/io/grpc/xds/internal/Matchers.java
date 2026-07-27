@@ -257,10 +257,15 @@ public final class Matchers {
     }
 
     /** The input string should contain this substring. */
-    public static StringMatcher forContains(String contains) {
+    public static StringMatcher forContains(String contains, boolean ignoreCase) {
       checkNotNull(contains, "contains");
       return StringMatcher.create(null, null, null, null, contains,
-          false/* doesn't matter */);
+          ignoreCase);
+    }
+
+    /** The input string should contain this substring. */
+    public static StringMatcher forContains(String contains) {
+      return forContains(contains, false);
     }
 
     /** Returns the matching result for this string. */
@@ -281,7 +286,9 @@ public final class Matchers {
             ? args.toLowerCase(Locale.ROOT).endsWith(suffix().toLowerCase(Locale.ROOT))
             : args.endsWith(suffix());
       } else if (contains() != null) {
-        return args.contains(contains());
+        return ignoreCase()
+            ? args.toLowerCase(Locale.ROOT).contains(contains().toLowerCase(Locale.ROOT))
+            : args.contains(contains());
       }
       return regEx().matches(args);
     }

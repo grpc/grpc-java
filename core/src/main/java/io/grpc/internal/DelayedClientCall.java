@@ -49,6 +49,9 @@ import javax.annotation.Nullable;
  */
 public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger logger = Logger.getLogger(DelayedClientCall.class.getName());
+
+  /** A string describing what this call is waiting on. */
+  private final String bufferContext;
   /**
    * A timer to monitor the initial deadline. The timer must be cancelled on transition to the real
    * call.
@@ -76,7 +79,11 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private DelayedListener<RespT> delayedListener;
 
   protected DelayedClientCall(
-      Executor callExecutor, ScheduledExecutorService scheduler, @Nullable Deadline deadline) {
+      String bufferContext,
+      Executor callExecutor,
+      ScheduledExecutorService scheduler,
+      @Nullable Deadline deadline) {
+    this.bufferContext = checkNotNull(bufferContext, "bufferContext");
     this.callExecutor = checkNotNull(callExecutor, "callExecutor");
     checkNotNull(scheduler, "scheduler");
     context = Context.current();
@@ -143,7 +150,8 @@ public class DelayedClientCall<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
         buf.append(seconds);
         buf.append(String.format(Locale.US, ".%09d", nanos));
-        buf.append("s");
+        buf.append("s waiting for ");
+        buf.append(bufferContext);
         cancel(
             Status.DEADLINE_EXCEEDED.withDescription(buf.toString()),
             // We should not cancel the call if the realCall is set because there could be a
