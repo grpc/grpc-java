@@ -16,14 +16,12 @@
 
 package io.grpc.android;
 
-import android.annotation.TargetApi;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.Network;
-import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -212,7 +210,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     private void configureNetworkMonitoring() {
       // Android N added the registerDefaultNetworkCallback API to listen to changes in the device's
       // default network. For earlier Android API levels, use the BroadcastReceiver API.
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connectivityManager != null) {
+      if (connectivityManager != null) {
         final DefaultNetworkCallback defaultNetworkCallback = new DefaultNetworkCallback();
         connectivityManager.registerDefaultNetworkCallback(defaultNetworkCallback);
         unregisterRunnable =
@@ -306,7 +304,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     }
 
     /** Respond to changes in the default network. Only used on API levels 24+. */
-    @TargetApi(Build.VERSION_CODES.N)
     private class DefaultNetworkCallback extends ConnectivityManager.NetworkCallback {
       @Override
       public void onAvailable(Network network) {
