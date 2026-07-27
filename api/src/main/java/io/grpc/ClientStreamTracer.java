@@ -67,7 +67,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    *
    * @param delayType canonical low-cardinality label categorizing the delay (e.g., "connecting")
    * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
-   * @since 1.82.0
+   * @since 1.84.0
    */
   public void recordAttemptDelayStart(String delayType, String delayReason) {
   }
@@ -80,7 +80,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * on the active delay span without recreating the span or resetting cumulative timers.
    *
    * @param delayReason updated high-cardinality diagnostic string describing new conditions
-   * @since 1.82.0
+   * @since 1.84.0
    */
   public void recordAttemptDelayReasonChanged(String delayReason) {
   }
@@ -91,7 +91,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
    * <p>Implementations should simultaneously close active child tracing spans and record elapsed
    * duration to the {@code grpc.client.attempt.delay.duration} histogram.
    *
-   * @since 1.82.0
+   * @since 1.84.0
    */
   public void recordAttemptDelayEnd() {
   }
@@ -166,7 +166,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      *
      * @param delayType canonical low-cardinality label categorizing the delay (e.g., "resolving")
      * @param delayReason high-cardinality diagnostic string describing granular runtime conditions
-     * @since 1.82.0
+     * @since 1.84.0
      */
     public void recordCallDelayStart(String delayType, String delayReason) {
     }
@@ -178,7 +178,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * on the active call delay span without recreating the span or resetting timers.
      *
      * @param delayReason updated high-cardinality diagnostic string describing new conditions
-     * @since 1.82.0
+     * @since 1.84.0
      */
     public void recordCallDelayReasonChanged(String delayReason) {
     }
@@ -190,7 +190,7 @@ public abstract class ClientStreamTracer extends StreamTracer {
      * <p>Implementations should close active call delay spans and record elapsed duration to the
      * {@code grpc.client.call.delay.duration} histogram.
      *
-     * @since 1.82.0
+     * @since 1.84.0
      */
     public void recordCallDelayEnd() {
     }
