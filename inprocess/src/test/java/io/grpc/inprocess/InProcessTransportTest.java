@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -239,16 +240,17 @@ public class InProcessTransportTest extends AbstractTransportTest {
   @Test
   public void clientStream_cancel_notifiesTracerCancelled() throws Exception {
     server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server.start(serverListener);
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener =
         serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
 
-    io.grpc.ClientStreamTracer mockTracer = org.mockito.Mockito.mock(io.grpc.ClientStreamTracer.class);
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
     ClientStream clientStream = client.newStream(
         methodDescriptor, new Metadata(), CallOptions.DEFAULT,
-        new io.grpc.ClientStreamTracer[] {mockTracer});
+        new ClientStreamTracer[] {mockTracer});
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
 
@@ -261,16 +263,17 @@ public class InProcessTransportTest extends AbstractTransportTest {
   @Test
   public void clientStream_cancelAfterServerClose_doesNotNotifyTracerCancelled() throws Exception {
     server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server.start(serverListener);
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener =
         serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
 
-    io.grpc.ClientStreamTracer mockTracer = org.mockito.Mockito.mock(io.grpc.ClientStreamTracer.class);
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
     ClientStream clientStream = client.newStream(
         methodDescriptor, new Metadata(), CallOptions.DEFAULT,
-        new io.grpc.ClientStreamTracer[] {mockTracer});
+        new ClientStreamTracer[] {mockTracer});
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
     StreamCreation serverStreamCreation =
