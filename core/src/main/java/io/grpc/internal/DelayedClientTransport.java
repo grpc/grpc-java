@@ -402,9 +402,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     private final ClientStreamTracer[] tracers;
     private volatile Status lastPickStatus;
     @GuardedBy("this")
-    @Nullable private volatile String activeDelayType;
+    @Nullable private String activeDelayType;
     @GuardedBy("this")
-    @Nullable private volatile String activeDelayReason;
+    @Nullable private String activeDelayReason;
     @GuardedBy("this")
     private boolean delayEnded;
 
@@ -416,10 +416,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
       synchronized (this) {
         this.activeDelayType = initialType;
         this.activeDelayReason = initialReason;
-        if (initialType != null) {
-          for (ClientStreamTracer tracer : tracers) {
-            tracer.recordAttemptDelayStart(initialType, initialReason != null ? initialReason : "");
-          }
+      }
+      if (initialType != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordAttemptDelayStart(initialType, initialReason != null ? initialReason : "");
         }
       }
     }
@@ -431,32 +431,47 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * spans are ended and a new segment is initiated. If only {@code newReason} changes, a
      * structured transition event is appended to the active span without span re-creation.
      */
-    synchronized void updateDelay(@Nullable String newType, @Nullable String newReason) {
-      if (getRealStream() != null || delayEnded) {
-        return;
-      }
-      if (!Objects.equals(activeDelayType, newType)) {
-        // Delay categorization changed (e.g., from RLS lookup to TCP connecting).
-        // Close prior active segment across all tracers before starting new canonical segment.
-        if (activeDelayType != null) {
-          for (ClientStreamTracer tracer : tracers) {
-            tracer.recordAttemptDelayEnd();
+    void updateDelay(@Nullable String newType, @Nullable String newReason) {
+      String prevTypeToClose = null;
+      String newTypeToStart = null;
+      String newReasonToStart = null;
+      String newReasonToNotify = null;
+
+      synchronized (this) {
+        if (getRealStream() != null || delayEnded) {
+          return;
+        }
+        if (!Objects.equals(activeDelayType, newType)) {
+          if (activeDelayType != null) {
+            prevTypeToClose = activeDelayType;
+          }
+          activeDelayType = newType;
+          activeDelayReason = null;
+          if (newType != null) {
+            newTypeToStart = newType;
+            newReasonToStart = newReason != null ? newReason : "";
           }
         }
-        activeDelayType = newType;
-        activeDelayReason = null;
-        if (newType != null) {
-          for (ClientStreamTracer tracer : tracers) {
-            tracer.recordAttemptDelayStart(newType, newReason != null ? newReason : "");
-          }
+        if (newType != null && newReason != null
+            && !Objects.equals(activeDelayReason, newReason)) {
+          activeDelayReason = newReason;
+          newReasonToNotify = newReason;
         }
       }
-      if (newType != null && newReason != null && !Objects.equals(activeDelayReason, newReason)) {
-        // Categorization remained constant, but granular runtime diagnostics updated
-        // (e.g., priority policy failover between tiers). Emit transition event.
-        activeDelayReason = newReason;
+
+      if (prevTypeToClose != null) {
         for (ClientStreamTracer tracer : tracers) {
-          tracer.recordAttemptDelayReasonChanged(newReason);
+          tracer.recordAttemptDelayEnd();
+        }
+      }
+      if (newTypeToStart != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordAttemptDelayStart(newTypeToStart, newReasonToStart);
+        }
+      }
+      if (newReasonToNotify != null) {
+        for (ClientStreamTracer tracer : tracers) {
+          tracer.recordAttemptDelayReasonChanged(newReasonToNotify);
         }
       }
     }
@@ -464,17 +479,23 @@ final class DelayedClientTransport implements ManagedClientTransport {
     /**
      * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
      */
-    synchronized void endDelay() {
-      if (delayEnded) {
-        return;
+    void endDelay() {
+      boolean shouldEnd = false;
+      synchronized (this) {
+        if (delayEnded) {
+          return;
+        }
+        delayEnded = true;
+        if (activeDelayType != null) {
+          shouldEnd = true;
+          activeDelayType = null;
+          activeDelayReason = null;
+        }
       }
-      delayEnded = true;
-      if (activeDelayType != null) {
+      if (shouldEnd) {
         for (ClientStreamTracer tracer : tracers) {
           tracer.recordAttemptDelayEnd();
         }
-        activeDelayType = null;
-        activeDelayReason = null;
       }
     }
 
