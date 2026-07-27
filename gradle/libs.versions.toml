@@ -51,7 +51,7 @@ cronet-embedded = "org.chromium.net:cronet-embedded:119.6045.31"
 errorprone-annotations = "com.google.errorprone:error_prone_annotations:2.50.0"
 # 2.32.0+ requires Java 17+
 # checkForUpdates: errorprone-core:2.31.+
-errorprone-core = "com.google.errorprone:error_prone_core:2.50.0"
+errorprone-core = "com.google.errorprone:error_prone_core:2.31.0"
 # 2.11.0+ requires JDK 11+ (See https://github.com/google/error-prone/releases/tag/v2.11.0)
 # checkForUpdates: errorprone-corejava8:2.10.+
 errorprone-corejava8 = "com.google.errorprone:error_prone_core:2.10.0"
