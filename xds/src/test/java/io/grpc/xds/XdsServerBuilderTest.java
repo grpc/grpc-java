@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
 import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -274,6 +275,50 @@ public class XdsServerBuilderTest {
     verifyServer(future, mockXdsServingStatusListener, null);
     xdsClient.ldsWatcher.onAmbientError(Status.ABORTED);
     verifyServer(null, mockXdsServingStatusListener, null);
+  }
+
+  @Test
+  public void forAddress() throws Exception {
+    ServerCredentials creds = InsecureServerCredentials.create();
+
+    // Custom SocketAddress
+    SocketAddress customAddress = new SocketAddress() {};
+    XdsServerBuilder builder = XdsServerBuilder.forAddress(customAddress, creds);
+    XdsServerWrapper server = (XdsServerWrapper) builder.build();
+    assertThat(server).isNotNull();
+
+    java.lang.reflect.Field listenerAddressField =
+        XdsServerWrapper.class.getDeclaredField("listenerAddress");
+    listenerAddressField.setAccessible(true);
+    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:0");
+
+    // InetSocketAddress with port
+    InetSocketAddress inetAddressWithPort = new InetSocketAddress("10.0.0.1", 8080);
+    builder = XdsServerBuilder.forAddress(inetAddressWithPort, creds);
+    server = (XdsServerWrapper) builder.build();
+    assertThat(server).isNotNull();
+    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:8080");
+
+    // InetSocketAddress without port
+    InetSocketAddress inetAddressWithoutPort = new InetSocketAddress("10.0.0.1", 0);
+    builder = XdsServerBuilder.forAddress(inetAddressWithoutPort, creds);
+    server = (XdsServerWrapper) builder.build();
+    assertThat(server).isNotNull();
+    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:0");
+
+    try {
+      XdsServerBuilder.forAddress(null, creds);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("address");
+    }
+
+    try {
+      XdsServerBuilder.forAddress(customAddress, null);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("serverCredentials");
+    }
   }
 
   @Test

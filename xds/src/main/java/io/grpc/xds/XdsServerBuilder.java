@@ -142,6 +142,7 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   /** Creates a gRPC server builder for the given address. */
   public static XdsServerBuilder forAddress(
       SocketAddress address, ServerCredentials serverCredentials) {
+    checkNotNull(address, "address");
     checkNotNull(serverCredentials, "serverCredentials");
     InternalProtocolNegotiator.ServerFactory originalNegotiatorFactory =
         InternalNettyServerCredentials.toNegotiator(serverCredentials);
