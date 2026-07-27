@@ -167,7 +167,10 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
     if (noOldAddrs) {
       // Make tests happy; they don't properly assume starting in CONNECTING
       rawConnectivityState = CONNECTING;
-      updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+      updateBalancingState(
+          CONNECTING,
+          new FixedResultPicker(
+              PickResult.withNoResult("connecting", "pick_first: address list updated")));
     }
 
     if (rawConnectivityState == READY) {
@@ -340,10 +343,13 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
         // the current address of a valid index exists.
         if ((!enableHappyEyeballs && !addressIndex.isValid())
             || (addressIndex.isValid() && !subchannels.containsKey(
-            addressIndex.getCurrentAddress()))) {
+                addressIndex.getCurrentAddress()))) {
           addressIndex.seekTo(getAddress(subchannelData.subchannel));
         }
-        updateBalancingState(CONNECTING, new FixedResultPicker(PickResult.withNoResult()));
+        updateBalancingState(
+            CONNECTING,
+            new FixedResultPicker(
+                PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
         break;
 
       case READY:
@@ -441,8 +447,9 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       updateBalancingState(TRANSIENT_FAILURE, new FixedResultPicker(PickResult.withError(
           subchannelData.healthStateInfo.getStatus())));
     } else if (concludedState != TRANSIENT_FAILURE) {
-      updateBalancingState(subchannelData.getHealthState(),
-          new FixedResultPicker(PickResult.withNoResult()));
+      updateBalancingState(subchannelData.getHealthState(), new FixedResultPicker(
+          PickResult.withNoResult("connecting",
+              "health check state: " + subchannelData.getHealthState())));
     }
   }
 
@@ -668,7 +675,8 @@ final class PickFirstLeafLoadBalancer extends LoadBalancer {
       if (connectionRequested.compareAndSet(false, true)) {
         helper.getSynchronizationContext().execute(pickFirstLeafLoadBalancer::requestConnection);
       }
-      return PickResult.withNoResult();
+      return PickResult.withNoResult(
+          "connecting", "pick_first: requesting connection");
     }
   }
 

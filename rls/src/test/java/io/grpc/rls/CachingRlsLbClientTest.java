@@ -27,6 +27,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -605,6 +606,70 @@ public class CachingRlsLbClientTest {
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
     assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
     assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
+  }
+
+  @Test
+  public void rls_pendingLookup_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("service1/create").build(),
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
+    assertThat(pickResult.getDelayType()).isEqualTo("rls_lookup_pending");
+    assertThat(pickResult.getDelayReason()).contains("Route Lookup Service query pending");
+  }
+
+  @Test
+  public void rls_childPolicyDelayed_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "service1",
+                "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(
+                ImmutableList.of("target1"), "header")));
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isFalse();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isTrue();
+
+    LbPolicyConfiguration.ChildPolicyWrapper wrapper = resp.getChildPolicyWrapper();
+    wrapper.getHelper().updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(LoadBalancer.PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "TCP handshake in progress");
+      }
+    });
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(any(), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("service1/create").build(),
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
+    assertThat(pickResult.hasResult()).isFalse();
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason()).isEqualTo(
+        "RLS child (target1) delayed: TCP handshake in progress");
   }
 
   @Test
