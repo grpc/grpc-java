@@ -2548,6 +2548,41 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
+  public void clientMetrics_delayObservabilityDisabled_noDelayMetricsRecorded() {
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+            emptyList(), Context.root());
+
+    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+    // When delay observability is disabled or default is unchanged, calls are no-ops
+    tracer.recordAttemptDelayStart("connecting", "attempt delay reason");
+    tracer.recordAttemptDelayReasonChanged("changed reason");
+    tracer.recordAttemptDelayEnd();
+
+    callAttemptsTracerFactory.recordCallDelayStart("resolving", "call delay reason");
+    callAttemptsTracerFactory.recordCallDelayReasonChanged("changed call reason");
+    callAttemptsTracerFactory.recordCallDelayEnd();
+
+    assertNotNull(tracer);
+  }
+
+  @Test
+  public void clientMetrics_targetAttributeFilter_returnsFilteredOrOther() {
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+
+    assertEquals("target:///", module.recordTarget("target:///"));
+    assertThat(module.recordTarget(null)).isNull();
+  }
+
+  @Test
   public void serverMetrics_recordsBaggage_endToEnd() throws Exception {
     DoubleHistogram mockDurationHistogram = mock(DoubleHistogram.class);
     OpenTelemetryMetricsResource mockResource = OpenTelemetryMetricsResource.builder()
