@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -549,6 +550,22 @@ public class Context {
     Context previous = attach();
     try {
       return c.call();
+    } finally {
+      detach(previous);
+    }
+  }
+
+  /**
+    * Immediately supply a value from a {@link Supplier} with this context as the
+    * {@link #current} context.
+    * @param supplier {@link Supplier} to use to produce the value.
+    * @return result of supplier.
+    */
+  @CanIgnoreReturnValue
+  public <V> V supply(Supplier<V> supplier) {
+    Context previous = attach();
+    try {
+      return supplier.get();
     } finally {
       detach(previous);
     }

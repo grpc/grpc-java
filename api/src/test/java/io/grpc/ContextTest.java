@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -544,6 +545,46 @@ public class ContextTest {
           throw err;
         }
       }).call();
+      fail("Excepted exception");
+    } catch (TestError ex) {
+      assertSame(err, ex);
+    }
+    assertSame(current, Context.current());
+
+    current.detach(Context.ROOT);
+  }
+
+  @Test
+  public void testSupply() throws Exception {
+    Context base = Context.current().withValue(PET, "cat");
+    Context current = Context.current().withValue(PET, "fish");
+    current.attach();
+
+    final Object ret = new Object();
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        runner.run();
+        return ret;
+      }
+    };
+
+    assertSame(ret, base.supply(supplier));
+    assertSame(base, observed);
+    assertSame(current, Context.current());
+
+    assertSame(ret, current.supply(supplier));
+    assertSame(current, observed);
+    assertSame(current, Context.current());
+
+    final TestError err = new TestError();
+    try {
+      base.supply(new Supplier<Object>() {
+        @Override
+        public Object get() {
+          throw err;
+        }
+      });
       fail("Excepted exception");
     } catch (TestError ex) {
       assertSame(err, ex);
