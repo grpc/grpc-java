@@ -30,6 +30,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableMap;
@@ -2411,6 +2412,139 @@ public class OpenTelemetryMetricsModuleTest {
     assertNotNull("Captured context should have baggage", capturedBaggage);
     assertEquals(
         "baggage-val-1", capturedBaggage.getEntryValue("baggage-key-1"));
+  }
+
+  @Test
+  public void clientMetrics_nameResolutionFailure_zeroAttempts() {
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+            emptyList(), Context.root());
+
+    fakeClock.forwardTime(50, TimeUnit.MILLISECONDS);
+    callAttemptsTracerFactory.callEnded(Status.UNAVAILABLE, CALL_OPTIONS);
+
+    io.opentelemetry.api.common.Attributes clientAttributes =
+        io.opentelemetry.api.common.Attributes.of(
+            TARGET_KEY, target,
+            METHOD_KEY, method.getFullMethodName(),
+            STATUS_KEY, Code.UNAVAILABLE.toString());
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric ->
+                assertThat(metric)
+                    .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                        OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                    .hasName(CLIENT_CALL_DURATION)
+                    .hasUnit("s")
+                    .hasHistogramSatisfying(
+                        histogram ->
+                            histogram.hasPointsSatisfying(
+                                point ->
+                                    point
+                                        .hasCount(1)
+                                        .hasSum(0.05)
+                                        .hasAttributes(clientAttributes)
+                                        .hasBucketBoundaries(latencyBuckets))));
+  }
+
+  @Test
+  public void clientMetrics_endToEnd_nameResolutionFailure_unavailable() throws Exception {
+    NameResolverProvider failingProvider = new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "failing.authority";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            listener.onError(Status.UNAVAILABLE.withDescription("Name resolution failed"));
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "failingnr";
+      }
+
+      @Override
+      public String getScheme() {
+        return getDefaultScheme();
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+    };
+
+    NameResolverRegistry.getDefaultRegistry().register(failingProvider);
+
+    try {
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = newOpenTelemetryMetricsModule(resource);
+
+      String target = "failingnr:///test.service";
+      ManagedChannel channel = grpcCleanup.register(
+          InProcessChannelBuilder.forTarget(target)
+              .directExecutor()
+              .intercept(module.getClientInterceptor(target))
+              .build());
+
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(mockClientCallListener, new Metadata());
+
+      verify(mockClientCallListener, timeout(5000))
+          .onClose(statusCaptor.capture(), any(Metadata.class));
+      Status status = statusCaptor.getValue();
+      assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+
+      io.opentelemetry.api.common.Attributes clientAttributes =
+          io.opentelemetry.api.common.Attributes.of(
+              TARGET_KEY, target,
+              METHOD_KEY, method.getFullMethodName(),
+              STATUS_KEY, Code.UNAVAILABLE.toString());
+
+      assertThat(openTelemetryTesting.getMetrics())
+          .anySatisfy(
+              metric ->
+                  assertThat(metric)
+                      .hasInstrumentationScope(InstrumentationScopeInfo.create(
+                          OpenTelemetryConstants.INSTRUMENTATION_SCOPE))
+                      .hasName(CLIENT_CALL_DURATION)
+                      .hasUnit("s")
+                      .hasHistogramSatisfying(
+                          histogram ->
+                              histogram.hasPointsSatisfying(
+                                  point ->
+                                      point
+                                          .hasCount(1)
+                                          .hasAttributes(clientAttributes))));
+    } finally {
+      NameResolverRegistry.getDefaultRegistry().deregister(failingProvider);
+    }
   }
 
   @Test

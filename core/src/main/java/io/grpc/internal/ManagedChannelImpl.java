@@ -998,7 +998,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final MethodDescriptor<ReqT, RespT> method;
       final CallOptions callOptions;
       private final long callCreationTime;
-      private volatile boolean queuedForResolution;
+      @GuardedBy("this") private boolean queuedForResolution;
+      @GuardedBy("this") private boolean callCancelled;
+      @GuardedBy("this") private boolean delayEnded;
+      @GuardedBy("this") private boolean callDelayStarted;
 
       PendingCall(Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
         super(
@@ -1013,25 +1016,64 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       void notifyQueuedForNameResolution() {
-        queuedForResolution = true;
-        for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-          factory.recordCallDelayStart(
-              "resolving", "waiting for name resolution or service config");
+        boolean shouldStart = false;
+        synchronized (this) {
+          if (!callCancelled && !delayEnded && !queuedForResolution) {
+            queuedForResolution = true;
+            shouldStart = true;
+          }
+        }
+        if (shouldStart) {
+          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+            factory.recordCallDelayStart(
+                "resolving", "waiting for name resolution or service config");
+          }
+          boolean shouldEndNow = false;
+          synchronized (this) {
+            callDelayStarted = true;
+            if (!delayEnded && callCancelled) {
+              delayEnded = true;
+              shouldEndNow = true;
+            }
+          }
+          if (shouldEndNow) {
+            for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+              factory.recordCallDelayEnd();
+            }
+          }
+        }
+      }
+
+      private void endDelayIfNeeded() {
+        boolean shouldEnd = false;
+        synchronized (this) {
+          if (!queuedForResolution || delayEnded) {
+            return;
+          }
+          if (callDelayStarted) {
+            delayEnded = true;
+            shouldEnd = true;
+          }
+        }
+        if (shouldEnd) {
+          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+            factory.recordCallDelayEnd();
+          }
         }
       }
 
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
-        if (queuedForResolution) {
-          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-            factory.recordCallDelayEnd();
-          }
-        }
+        endDelayIfNeeded();
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
           CallOptions effectiveOptions = callOptions;
-          if (queuedForResolution) {
+          boolean wasQueued;
+          synchronized (this) {
+            wasQueued = queuedForResolution;
+          }
+          if (wasQueued) {
             effectiveOptions = callOptions.withOption(NAME_RESOLUTION_DELAYED,
                 ticker.nanoTime() - callCreationTime);
           }
@@ -1055,11 +1097,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       @Override
       protected void callCancelled() {
-        if (queuedForResolution) {
-          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
-            factory.recordCallDelayEnd();
-          }
+        synchronized (this) {
+          callCancelled = true;
         }
+        endDelayIfNeeded();
         super.callCancelled();
         syncContext.execute(new PendingCallRemoval());
       }

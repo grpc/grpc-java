@@ -173,6 +173,13 @@ final class OpenTelemetryTracingModule {
       return new ClientTracer(attemptSpan, clientSpan);
     }
 
+    private boolean isCallEnded() {
+      if (callEndedUpdater != null) {
+        return callEndedUpdater.get(this) != 0;
+      }
+      return callEnded != 0;
+    }
+
     /**
      * Record a finished call and mark the current time as the end time.
      *
@@ -196,7 +203,7 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public synchronized void recordCallDelayStart(String delayType, String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || isCallEnded()) {
         return;
       }
       if (activeCallDelaySpan != null && Objects.equals(activeCallDelayType, delayType)) {
@@ -219,7 +226,9 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public synchronized void recordCallDelayReasonChanged(String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeCallDelaySpan == null) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
+          || isCallEnded()
+          || activeCallDelaySpan == null) {
         return;
       }
       String type = activeCallDelayType;
@@ -246,8 +255,12 @@ final class OpenTelemetryTracingModule {
     private final Span parentSpan;
     volatile int seqNo;
     boolean isPendingStream;
-    @Nullable private volatile Span activeDelaySpan;
-    @Nullable private volatile String activeDelayType;
+    @GuardedBy("this")
+    @Nullable private Span activeDelaySpan;
+    @GuardedBy("this")
+    @Nullable private String activeDelayType;
+    @GuardedBy("this")
+    private boolean streamClosed;
 
     ClientTracer(Span span, Span parentSpan) {
       this.span = checkNotNull(span, "span");
@@ -270,8 +283,8 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordAttemptDelayStart(String delayType, String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()) {
+    public synchronized void recordAttemptDelayStart(String delayType, String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || streamClosed) {
         return;
       }
       if (activeDelaySpan != null && Objects.equals(activeDelayType, delayType)) {
@@ -296,8 +309,10 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordAttemptDelayReasonChanged(String delayReason) {
-      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled() || activeDelaySpan == null) {
+    public synchronized void recordAttemptDelayReasonChanged(String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
+          || streamClosed
+          || activeDelaySpan == null) {
         return;
       }
       String type = activeDelayType;
@@ -309,7 +324,7 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void recordAttemptDelayEnd() {
+    public synchronized void recordAttemptDelayEnd() {
       Span delaySpan = activeDelaySpan;
       if (delaySpan != null) {
         // End active child span upon pick completion or transport cancellation.
@@ -344,7 +359,11 @@ final class OpenTelemetryTracingModule {
     }
 
     @Override
-    public void streamClosed(io.grpc.Status status) {
+    public synchronized void streamClosed(io.grpc.Status status) {
+      if (streamClosed) {
+        return;
+      }
+      streamClosed = true;
       recordAttemptDelayEnd();
       endSpanWithStatus(span, status);
     }
