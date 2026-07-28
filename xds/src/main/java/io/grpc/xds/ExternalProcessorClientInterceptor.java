@@ -185,12 +185,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   ExternalProcessorFilterConfig getFilterConfig() {
     return filterConfig;
   }
-
-  @VisibleForTesting
-  ManagedChannel getExtProcChannel() {
-    return extProcChannel;
-  }
-
+  
   @Override
   @SuppressWarnings("unchecked")
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -921,8 +916,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (normalFlowControl) {
           pendingRequests.addAndGet(numMessages);
           downstreamRequestsPending += numMessages;
+          drainPendingMutatedResponseBodies();
           if (isExtProcReady()) {
-            drainPendingMutatedResponseBodies();
             drainPendingRequests();
           }
         } else {
@@ -1097,32 +1092,27 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
           if (!streamed.getEndOfStreamWithoutMessage()) {
             com.google.protobuf.ByteString body = streamed.getBody();
-            if (!config.getObservabilityMode()
-                && currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.GRPC) {
-              boolean sendImmediately = false;
-              synchronized (streamLock) {
-                if (sidestreamToUpstreamWindow <= 0) {
-                  internalOnError(Status.INTERNAL
-                      .withDescription(
-                          "Flow control violation: received client body from ext_proc "
-                          + "when window is closed")
-                      .asRuntimeException());
-                  return;
-                }
-                sidestreamToUpstreamWindow -= body.size();
-                if (super.isReady() && pendingUpstreamBodyMessages.isEmpty()) {
-                  sendImmediately = true;
-                  accumulatedWindowUpdateSidestreamToUpstream += body.size();
-                } else {
-                  pendingUpstreamBodyMessages.add(body);
-                }
+            boolean sendImmediately = false;
+            synchronized (streamLock) {
+              if (sidestreamToUpstreamWindow <= 0) {
+                internalOnError(Status.INTERNAL
+                    .withDescription(
+                        "Flow control violation: received client body from ext_proc "
+                        + "when window is closed")
+                    .asRuntimeException());
+                return;
               }
-              if (sendImmediately) {
-                super.sendMessage(new KnownLengthInputStream(body));
-                trySendAccumulatedWindowUpdates();
+              sidestreamToUpstreamWindow -= body.size();
+              if (super.isReady() && pendingUpstreamBodyMessages.isEmpty()) {
+                sendImmediately = true;
+                accumulatedWindowUpdateSidestreamToUpstream += body.size();
+              } else {
+                pendingUpstreamBodyMessages.add(body);
               }
-            } else {
+            }
+            if (sendImmediately) {
               super.sendMessage(new KnownLengthInputStream(body));
+              trySendAccumulatedWindowUpdates();
             }
           }
           if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
@@ -1148,19 +1138,16 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
           com.google.protobuf.ByteString body = streamed.getBody();
           final int bodySize = body.size();
-          if (!config.getObservabilityMode()
-              && currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC) {
-            synchronized (streamLock) {
-              if (sidestreamToDownstreamWindow <= 0) {
-                internalOnError(Status.INTERNAL
-                    .withDescription(
-                        "Flow control violation: received server body from ext_proc "
-                        + "when window is closed")
-                    .asRuntimeException());
-                return;
-              }
-              sidestreamToDownstreamWindow -= bodySize;
+          synchronized (streamLock) {
+            if (sidestreamToDownstreamWindow <= 0) {
+              internalOnError(Status.INTERNAL
+                  .withDescription(
+                      "Flow control violation: received server body from ext_proc "
+                      + "when window is closed")
+                  .asRuntimeException());
+              return;
             }
+            sidestreamToDownstreamWindow -= bodySize;
           }
           deliverResponseBody(body, listener);
         }
@@ -1169,12 +1156,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     private void deliverResponseBody(ByteString body, DataPlaneListener listener) {
       synchronized (streamLock) {
-        if (config.getObservabilityMode() 
-            || currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
-          callContext.run(() -> listener.onExternalBody(body));
-          return;
-        }
-
         if (downstreamRequestsPending > 0) {
           downstreamRequestsPending--;
           final int bodySize = body.size();
@@ -1199,23 +1180,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         while (downstreamRequestsPending > 0 && !pendingMutatedResponseBodies.isEmpty()) {
           ByteString body = pendingMutatedResponseBodies.poll();
           downstreamRequestsPending--;
-          if (pendingRequests.get() > 0) {
-            pendingRequests.decrementAndGet();
-          }
+          pendingRequests.decrementAndGet();
           final int bodySize = body.size();
-          final DataPlaneListener listener = wrappedListener;
-          if (listener != null) {
-            callContext.run(() -> {
-              try {
-                listener.onExternalBody(body);
-              } finally {
-                synchronized (streamLock) {
-                  accumulatedWindowUpdateSidestreamToDownstream += bodySize;
-                }
-                trySendAccumulatedWindowUpdates();
+          callContext.run(() -> {
+            try {
+              wrappedListener.onExternalBody(body);
+            } finally {
+              synchronized (streamLock) {
+                accumulatedWindowUpdateSidestreamToDownstream += bodySize;
               }
-            });
-          }
+              trySendAccumulatedWindowUpdates();
+            }
+          });
         }
       }
     }
@@ -1227,9 +1203,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         synchronized (streamLock) {
           if (super.isReady() && !pendingUpstreamBodyMessages.isEmpty()) {
             body = pendingUpstreamBodyMessages.poll();
-            if (body != null) {
-              accumulatedWindowUpdateSidestreamToUpstream += body.size();
-            }
+            accumulatedWindowUpdateSidestreamToUpstream += body.size();
             if (pendingUpstreamBodyMessages.isEmpty() && pendingUpstreamHalfClose.compareAndSet(true, false)) {
               triggerHalfClose = true;
             }
