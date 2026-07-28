@@ -33,7 +33,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
 import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
-import io.grpc.ServerCredentials;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -94,6 +93,16 @@ public class XdsServerBuilderTest {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
     tlsContextManager = mock(TlsContextManager.class);
+  }
+
+  private void buildServerForAddress(SocketAddress address) throws IOException {
+    builder =
+        XdsServerBuilder.forAddress(
+            address, XdsServerCredentials.create(InsecureServerCredentials.create()));
+    builder.xdsClientPoolFactory(xdsClientPoolFactory);
+    builder.overrideBootstrapForTest(XdsServerTestHelper.RAW_BOOTSTRAP);
+    tlsContextManager = mock(TlsContextManager.class);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
   }
 
   private void verifyServer(
@@ -278,47 +287,67 @@ public class XdsServerBuilderTest {
   }
 
   @Test
-  public void forAddress() throws Exception {
-    ServerCredentials creds = InsecureServerCredentials.create();
-
-    // Custom SocketAddress
-    SocketAddress customAddress = new SocketAddress() {};
-    XdsServerBuilder builder = XdsServerBuilder.forAddress(customAddress, creds);
-    XdsServerWrapper server = (XdsServerWrapper) builder.build();
-    assertThat(server).isNotNull();
-
-    java.lang.reflect.Field listenerAddressField =
-        XdsServerWrapper.class.getDeclaredField("listenerAddress");
-    listenerAddressField.setAccessible(true);
-    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:0");
-
-    // InetSocketAddress with port
-    InetSocketAddress inetAddressWithPort = new InetSocketAddress("10.0.0.1", 8080);
-    builder = XdsServerBuilder.forAddress(inetAddressWithPort, creds);
-    server = (XdsServerWrapper) builder.build();
-    assertThat(server).isNotNull();
-    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:8080");
-
-    // InetSocketAddress without port
-    InetSocketAddress inetAddressWithoutPort = new InetSocketAddress("10.0.0.1", 0);
-    builder = XdsServerBuilder.forAddress(inetAddressWithoutPort, creds);
-    server = (XdsServerWrapper) builder.build();
-    assertThat(server).isNotNull();
-    assertThat(listenerAddressField.get(server)).isEqualTo("0.0.0.0:0");
-
+  public void forAddress_nullAddress_throws() {
     try {
-      XdsServerBuilder.forAddress(null, creds);
+      XdsServerBuilder.forAddress(
+          null, XdsServerCredentials.create(InsecureServerCredentials.create()));
       fail("exception expected");
     } catch (NullPointerException expected) {
       assertThat(expected).hasMessageThat().contains("address");
     }
+  }
 
+  @Test
+  public void forAddress_nullCredentials_throws() {
     try {
-      XdsServerBuilder.forAddress(customAddress, null);
+      XdsServerBuilder.forAddress(new InetSocketAddress(0), null);
       fail("exception expected");
     } catch (NullPointerException expected) {
       assertThat(expected).hasMessageThat().contains("serverCredentials");
     }
+  }
+
+  @Test
+  public void forAddress_inetSocketAddress_startsAndShutsDown()
+      throws IOException, InterruptedException, TimeoutException, ExecutionException {
+    buildServerForAddress(new InetSocketAddress(0));
+    Future<Throwable> future = startServerAsync();
+    XdsServerTestHelper.generateListenerUpdate(
+        xdsClient,
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        tlsContextManager);
+    verifyServer(future, null, null);
+    verifyShutdown();
+  }
+
+  @Test
+  public void forAddress_inetSocketAddress_withSpecificPort()
+      throws IOException, InterruptedException, TimeoutException, ExecutionException {
+    ServerSocket serverSocket = new ServerSocket(0);
+    int localPort = serverSocket.getLocalPort();
+    serverSocket.close();
+    buildServerForAddress(new InetSocketAddress("0.0.0.0", localPort));
+    Future<Throwable> future = startServerAsync();
+    // The server only transitions to serving once it receives an LDS update whose
+    // listening address matches the address the server was configured with.
+    EnvoyServerProtoData.Listener listener =
+        buildTestListener(
+            "listener1",
+            "0.0.0.0:" + localPort,
+            ImmutableList.of(),
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+            null,
+            tlsContextManager);
+    xdsClient.deliverLdsUpdate(LdsUpdate.forTcpListener(listener));
+    verifyServer(future, null, null);
+    assertThat(xdsServer.getPort()).isEqualTo(localPort);
+    verifyShutdown();
+  }
+
+  @Test
+  public void forAddress_customSocketAddress_builds() throws IOException {
+    buildServerForAddress(new SocketAddress() {});
+    assertThat(xdsServer).isNotNull();
   }
 
   @Test
