@@ -455,6 +455,14 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  public void connectionRemoteMaxActiveStreamsShouldBeEnforcedLocallyOnStartup() throws Exception {
+    maxConcurrentStreams = 314;
+    manualSetUp();
+
+    assertEquals(maxConcurrentStreams, connection().remote().maxActiveStreams());
+  }
+
+  @Test
   public void shouldAdvertiseMaxHeaderListSize() throws Exception {
     maxHeaderListSize = 123;
     manualSetUp();
