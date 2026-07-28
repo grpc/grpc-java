@@ -252,6 +252,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxMessageSize);
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
+    connection.remote().maxActiveStreams(maxStreams);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
     dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
