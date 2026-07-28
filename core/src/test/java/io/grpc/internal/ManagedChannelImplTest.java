@@ -147,8 +147,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -818,6 +822,90 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.CANCELLED);
+  }
+
+  @Test
+  public void stressTest_pendingCall_notifyQueuedVsCancel_multithreaded()
+      throws Exception {
+    int iterations = 1000;
+    ExecutorService threadPool = Executors.newFixedThreadPool(4);
+    try {
+      for (int i = 0; i < iterations; i++) {
+        final CyclicBarrier barrier = new CyclicBarrier(2);
+        final AtomicReference<Throwable> unhandledError = new AtomicReference<>();
+        final AtomicInteger callDelayStartCount = new AtomicInteger();
+        final AtomicInteger callDelayEndCount = new AtomicInteger();
+
+        ClientStreamTracer.Factory tracerFactory = new ClientStreamTracer.Factory() {
+          @Override
+          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+            return new ClientStreamTracer() {};
+          }
+
+          @Override
+          public void recordCallDelayStart(String delayType, String delayReason) {
+            callDelayStartCount.incrementAndGet();
+          }
+
+          @Override
+          public void recordCallDelayEnd() {
+            callDelayEndCount.incrementAndGet();
+          }
+        };
+
+        channelBuilder.nameResolverFactory(
+            new FakeNameResolverFactory.Builder(expectedUri)
+                .setResolvedAtStart(false)
+                .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+                .build());
+        createChannel();
+
+        final CallOptions options = CallOptions.DEFAULT.withStreamTracerFactory(tracerFactory);
+
+        Future<?> f1 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              ClientCall<String, Integer> call = channel.newCall(method, options);
+              call.cancel("cancelled by stress test", null);
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        Future<?> f2 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              channel.syncContext.execute(new Runnable() {
+                @Override
+                public void run() {}
+              });
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        f1.get(5, TimeUnit.SECONDS);
+        f2.get(5, TimeUnit.SECONDS);
+        executor.runDueTasks();
+
+        assertNull("Unhandled exception in iteration " + i, unhandledError.get());
+        assertEquals("Iteration " + i + " tracer call delay starts vs ends mismatch",
+            callDelayStartCount.get(), callDelayEndCount.get());
+
+        channel.shutdownNow();
+        executor.runDueTasks();
+        channel = null;
+        org.mockito.Mockito.reset(mockLoadBalancerProvider);
+      }
+    } finally {
+      threadPool.shutdownNow();
+    }
   }
 
   @Test

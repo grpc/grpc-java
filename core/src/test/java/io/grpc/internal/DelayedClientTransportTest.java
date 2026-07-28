@@ -56,8 +56,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -970,6 +974,146 @@ public class DelayedClientTransportTest {
     // The updateDelay called after the cancellation must be ignored because of our check.
     assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
     assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
+  @Test
+  public void stressTest_pendingStream_cancelVsReprocess_multithreaded() throws Exception {
+    int iterations = 1000;
+    ExecutorService threadPool = Executors.newFixedThreadPool(4);
+    try {
+      for (int i = 0; i < iterations; i++) {
+        final CyclicBarrier barrier = new CyclicBarrier(2);
+        final AtomicReference<Throwable> unhandledError = new AtomicReference<>();
+        final FakeStreamTracer fakeTracer = new FakeStreamTracer();
+        ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+        final DelayedClientTransport transport = new DelayedClientTransport(
+            fakeExecutor.getScheduledExecutorService(),
+            new SynchronizationContext(
+                new Thread.UncaughtExceptionHandler() {
+                  @Override
+                  public void uncaughtException(Thread t, Throwable e) {
+                    unhandledError.set(e);
+                  }
+                }));
+        transport.start(transportListener);
+
+        final ClientStream stream =
+            transport.newStream(method, headers, callOptions, customTracers);
+        stream.start(streamListener);
+
+        final SubchannelPicker readyPicker = fakePicker(PickResult.withSubchannel(mockSubchannel));
+
+        Future<?> f1 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              transport.reprocess(readyPicker);
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        Future<?> f2 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              stream.cancel(Status.CANCELLED);
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        f1.get(5, TimeUnit.SECONDS);
+        f2.get(5, TimeUnit.SECONDS);
+
+        assertNull("Unhandled exception in iteration " + i, unhandledError.get());
+        assertEquals("Iteration " + i + " pending stream count", 0,
+            transport.getPendingStreamsCount());
+        assertEquals("Iteration " + i + " tracer starts vs ends mismatch",
+            fakeTracer.startedDelayTypes.size(), fakeTracer.delayEndedCount);
+        fakeExecutor.runDueTasks();
+      }
+    } finally {
+      threadPool.shutdownNow();
+    }
+  }
+
+  @Test
+  public void stressTest_setStreamAndEndDelayVsUpdateDelay_multithreaded()
+      throws Exception {
+    int iterations = 1000;
+    ExecutorService threadPool = Executors.newFixedThreadPool(4);
+    try {
+      for (int i = 0; i < iterations; i++) {
+        final CyclicBarrier barrier = new CyclicBarrier(2);
+        final AtomicReference<Throwable> unhandledError = new AtomicReference<>();
+        final FakeStreamTracer fakeTracer = new FakeStreamTracer();
+        ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+        final DelayedClientTransport transport = new DelayedClientTransport(
+            fakeExecutor.getScheduledExecutorService(),
+            new SynchronizationContext(
+                new Thread.UncaughtExceptionHandler() {
+                  @Override
+                  public void uncaughtException(Thread t, Throwable e) {
+                    unhandledError.set(e);
+                  }
+                }));
+        transport.start(transportListener);
+
+        final ClientStream stream =
+            transport.newStream(method, headers, callOptions, customTracers);
+        stream.start(streamListener);
+
+        final SubchannelPicker updatePicker = fakePicker(
+            PickResult.withNoResult("connecting", "re-trying connection " + i));
+        final SubchannelPicker readyPicker = fakePicker(
+            PickResult.withSubchannel(mockSubchannel));
+
+        Future<?> f1 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              for (int k = 0; k < 5; k++) {
+                transport.reprocess(updatePicker);
+              }
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        Future<?> f2 = threadPool.submit(new Runnable() {
+          @Override
+          public void run() {
+            try {
+              barrier.await();
+              transport.reprocess(readyPicker);
+            } catch (Throwable t) {
+              unhandledError.compareAndSet(null, t);
+            }
+          }
+        });
+
+        f1.get(5, TimeUnit.SECONDS);
+        f2.get(5, TimeUnit.SECONDS);
+
+        assertNull("Unhandled exception in iteration " + i, unhandledError.get());
+        assertEquals("Iteration " + i + " pending streams remaining", 0,
+            transport.getPendingStreamsCount());
+        assertEquals("Iteration " + i + " tracer delay starts vs ends mismatch",
+            fakeTracer.startedDelayTypes.size(), fakeTracer.delayEndedCount);
+        fakeExecutor.runDueTasks();
+      }
+    } finally {
+      threadPool.shutdownNow();
+    }
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
