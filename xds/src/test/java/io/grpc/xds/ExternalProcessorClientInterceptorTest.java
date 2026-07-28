@@ -6128,11 +6128,14 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorFilterConfig filterConfig = configOrError.config;
 
     final CountDownLatch sidecarActionLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
     ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
         new ExternalProcessorGrpc.ExternalProcessorImplBase() {
           @Override
           public StreamObserver<ProcessingRequest> process(
               final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
             ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
             return new StreamObserver<ProcessingRequest>() {
               @Override
@@ -6150,9 +6153,7 @@ public class ExternalProcessorClientInterceptorTest {
               public void onError(Throwable t) {}
 
               @Override
-              public void onCompleted() {
-                responseObserver.onCompleted();
-              }
+              public void onCompleted() {}
             };
           }
         };
@@ -6169,11 +6170,27 @@ public class ExternalProcessorClientInterceptorTest {
     ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
         filterConfig, channelManager, scheduler, FAKE_CONTEXT);
 
+    final AtomicReference<StreamObserver<String>> dataPlaneResponseObserverRef =
+        new AtomicReference<>();
     dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
-        .addMethod(METHOD_SAY_HELLO, ServerCalls.asyncUnaryCall(
-            (request, responseObserver) -> {
-              responseObserver.onNext("Hello " + request);
-              responseObserver.onCompleted();
+        .addMethod(METHOD_BIDI_STREAMING, ServerCalls.asyncBidiStreamingCall(
+            new ServerCalls.BidiStreamingMethod<String, String>() {
+              @Override
+              public StreamObserver<String> invoke(StreamObserver<String> responseObserver) {
+                dataPlaneResponseObserverRef.set(responseObserver);
+                return new StreamObserver<String>() {
+                  @Override
+                  public void onNext(String value) {}
+
+                  @Override
+                  public void onError(Throwable t) {}
+
+                  @Override
+                  public void onCompleted() {
+                    responseObserver.onCompleted();
+                  }
+                };
+              }
             }))
         .build());
 
@@ -6204,10 +6221,36 @@ public class ExternalProcessorClientInterceptorTest {
             })
             .build());
 
+    final List<String> appReceivedMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+    final CountDownLatch appMessageLatch = new CountDownLatch(2);
+    final CountDownLatch appCloseLatch = new CountDownLatch(1);
+    final AtomicReference<Metadata> appReceivedHeaders = new AtomicReference<>();
+    final AtomicReference<Status> appReceivedStatus = new AtomicReference<>();
+
+    ClientCall.Listener<String> appListener = new ClientCall.Listener<String>() {
+      @Override
+      public void onHeaders(Metadata headers) {
+        appReceivedHeaders.set(headers);
+      }
+
+      @Override
+      public void onMessage(String message) {
+        appReceivedMessages.add(message);
+        appMessageLatch.countDown();
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        appReceivedStatus.set(status);
+        appCloseLatch.countDown();
+      }
+    };
+
     CallOptions callOptions = DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor());
     ClientCall<String, String> proxyCall =
-        interceptCall(interceptor, METHOD_SAY_HELLO, callOptions, dataPlaneChannel);
-    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+        interceptCall(interceptor, METHOD_BIDI_STREAMING, callOptions, dataPlaneChannel);
+    proxyCall.start(appListener, new Metadata());
+    proxyCall.request(10);
 
     assertThat(sidecarActionLatch.await(5, TimeUnit.SECONDS)).isTrue();
     // Wait for the drain signal to be received and processed by client call
@@ -6219,7 +6262,30 @@ public class ExternalProcessorClientInterceptorTest {
 
     assertThat(dataPlaneSentMessages).containsExactly("Hello ExtProc");
 
-    proxyCall.cancel("Cleanup", null);
+    // Server sends response headers and messages back.
+    // Since sendResponseHeaders is true and call is DRAINING, the response headers and messages
+    // should be saved.
+    StreamObserver<String> upstreamResponseObserver = dataPlaneResponseObserverRef.get();
+    upstreamResponseObserver.onNext("Dummy for headers");
+    upstreamResponseObserver.onNext("Hello Downstream");
+
+    // Verify that app has not received headers or messages yet (because they are saved
+    // since stream is still DRAINING)
+    assertThat(appReceivedHeaders.get()).isNull();
+    assertThat(appReceivedMessages).isEmpty();
+
+    // Now complete the ext_proc stream
+    responseObserverRef.get().onCompleted();
+    upstreamResponseObserver.onCompleted();
+
+    // Verify that app receives headers, message, and close
+    assertThat(appMessageLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appReceivedHeaders.get()).isNotNull();
+    assertThat(appReceivedMessages).containsExactly("Dummy for headers", "Hello Downstream");
+
+    assertThat(appCloseLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(appReceivedStatus.get().isOk()).isTrue();
+
     channelManager.close();
   }
 
