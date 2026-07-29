@@ -130,6 +130,14 @@ public abstract class ForwardingChannelBuilder2<T extends ManagedChannelBuilder<
     return thisT();
   }
 
+  @Override
+  public T preferJdkSslWithSecurityProvider(java.security.Provider provider) {
+    delegate().preferJdkSslWithSecurityProvider(provider);
+    return thisT();
+  }
+
+
+
   @Deprecated
   @Override
   public T nameResolverFactory(NameResolver.Factory resolverFactory) {
