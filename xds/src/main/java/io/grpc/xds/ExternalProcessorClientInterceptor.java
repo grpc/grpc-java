@@ -228,7 +228,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
     }
 
-
     // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
     // InputStream.
     MethodDescriptor<InputStream, InputStream> rawMethod =
@@ -379,8 +378,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.backendService = checkNotNull(backendService, "backendService");
     }
 
-
-
     private void activateCall() {
       if ((extProcStreamState.get() == ExtProcStreamState.FAILED
               && !config.getFailureModeAllow()
@@ -446,8 +443,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
       return true;
     }
-
-
 
     @Override
     public void start(Listener<InputStream> responseListener, Metadata headers) {
@@ -686,7 +681,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (extProcStreamState.get().isCompleted()) {
           return;
         }
-
+        
         if (request.hasRequestHeaders()) {
           expectedRequestResponse = EventType.REQUEST_HEADERS;
         } else if (request.hasResponseHeaders()) {
@@ -806,7 +801,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
 
         // Normal mode flow control: pull 1 message at a time
-        if (isExtProcReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
+        if (isSidecarReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
           super.request(1);
           pendingRequests.decrementAndGet();
         }
@@ -858,7 +853,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       wrappedListener.onReadyNotify();
     }
 
-    boolean isExtProcReady() {
+    boolean isSidecarReady() {
       ExtProcStreamState state = extProcStreamState.get();
       if (state.isCompleted()) {
         return true;
@@ -884,11 +879,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return false;
       }
       synchronized (streamLock) {
-        boolean extProcReady = isExtProcReady();
+        boolean sidecarReady = isSidecarReady();
         if (config.getObservabilityMode()) {
-          return super.isReady() && extProcReady;
+          return super.isReady() && sidecarReady;
         }
-        return downstreamToSidestreamWindow > 0 && extProcReady
+        return downstreamToSidestreamWindow > 0 && sidecarReady
             && pendingRequestBodyMessages.isEmpty();
       }
     }
@@ -909,20 +904,22 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           return;
         }
 
-        // We send response bodies to ext_proc server (either in normal GRPC mode or observability mode).
+        // We send response bodies to ext_proc server (either in normal GRPC mode or
+        // observability mode).
         // Gated by ext_proc server readiness.
-        boolean normalFlowControl = !config.getObservabilityMode(); // i.e. normal GRPC response body mode
+        // i.e. normal GRPC response body mode
+        boolean normalFlowControl = !config.getObservabilityMode();
 
         if (normalFlowControl) {
           pendingRequests.addAndGet(numMessages);
           downstreamRequestsPending += numMessages;
           drainPendingMutatedResponseBodies();
-          if (isExtProcReady()) {
+          if (isSidecarReady()) {
             drainPendingRequests();
           }
         } else {
           // Observability mode: gate on readiness but pull all at once
-          if (isExtProcReady()) {
+          if (isSidecarReady()) {
             super.request(numMessages);
           } else {
             pendingRequests.addAndGet(numMessages);
@@ -1204,7 +1201,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           if (super.isReady() && !pendingUpstreamBodyMessages.isEmpty()) {
             body = pendingUpstreamBodyMessages.poll();
             accumulatedWindowUpdateSidestreamToUpstream += body.size();
-            if (pendingUpstreamBodyMessages.isEmpty() && pendingUpstreamHalfClose.compareAndSet(true, false)) {
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingUpstreamHalfClose.compareAndSet(true, false)) {
               triggerHalfClose = true;
             }
           }
@@ -1473,7 +1471,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void drainSavedMessages() {
       synchronized (dataPlaneClientCall.getStreamLock()) {
-        while (dataPlaneClientCall.isExtProcReady()
+        while (dataPlaneClientCall.isSidecarReady()
             && dataPlaneClientCall.upstreamToSidestreamWindow > 0
             && !savedMessages.isEmpty()) {
           InputStream msg = savedMessages.poll();
