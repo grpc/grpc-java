@@ -58,7 +58,7 @@ class JavaGrpcGenerator : public protobuf::compiler::CodeGenerator {
     return protobuf::Edition::EDITION_PROTO2;
   }
   protobuf::Edition GetMaximumEdition() const override {
-#if GOOGLE_PROTOBUF_VERSION >= 6036000
+#if GOOGLE_PROTOBUF_VERSION >= 7035000
     return protobuf::Edition::EDITION_2026;
 #elif GOOGLE_PROTOBUF_VERSION >= 6032000
     return protobuf::Edition::EDITION_2024;
