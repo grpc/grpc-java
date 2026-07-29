@@ -22,6 +22,7 @@ import com.google.auto.value.AutoValue;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.CallCredentials;
 import io.grpc.Internal;
 import io.grpc.xds.client.EnvoyProtoData.Node;
 import java.util.List;
@@ -68,10 +69,12 @@ public abstract class Bootstrapper {
 
     public abstract boolean failOnDataErrors();
 
+    @Nullable public abstract CallCredentials callCredentials();
+
     @VisibleForTesting
     public static ServerInfo create(String target, @Nullable Object implSpecificConfig) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
-          false, false, false, false);
+          false, false, false, false, null);
     }
 
     @VisibleForTesting
@@ -81,7 +84,17 @@ public abstract class Bootstrapper {
         boolean resourceTimerIsTransientError, boolean failOnDataErrors) {
       return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
           ignoreResourceDeletion, isTrustedXdsServer,
-          resourceTimerIsTransientError, failOnDataErrors);
+          resourceTimerIsTransientError, failOnDataErrors, null);
+    }
+
+    public static ServerInfo create(
+        String target, Object implSpecificConfig,
+        boolean ignoreResourceDeletion, boolean isTrustedXdsServer,
+        boolean resourceTimerIsTransientError, boolean failOnDataErrors,
+        @Nullable CallCredentials callCredentials) {
+      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
+          ignoreResourceDeletion, isTrustedXdsServer,
+          resourceTimerIsTransientError, failOnDataErrors, callCredentials);
     }
   }
 
