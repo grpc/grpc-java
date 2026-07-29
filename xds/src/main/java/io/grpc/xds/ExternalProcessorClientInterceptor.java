@@ -864,6 +864,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       if (extProcStreamState.get().isDraining()) {
+        boolean canProceed = false;
+        synchronized (streamLock) {
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
+              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
+            canProceed = true;
+          }
+        }
+        if (canProceed) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        }
         return;
       }
 
