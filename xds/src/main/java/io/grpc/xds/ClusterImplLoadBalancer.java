@@ -33,7 +33,6 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
-import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.ForwardingClientStreamTracer;
 import io.grpc.internal.GrpcUtil;
@@ -154,9 +153,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
 
     return childSwitchLb.acceptResolvedAddresses(
         resolvedAddresses.toBuilder()
-            .setAttributes(attributes.toBuilder()
-              .set(NameResolver.ATTR_BACKEND_SERVICE, cluster)
-              .build())
             .setLoadBalancingPolicyConfig(config.childConfig)
             .build());
   }
@@ -200,7 +196,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+    private SubchannelPicker currentPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "cluster_impl: initializing"));
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable
@@ -409,7 +406,6 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         args.getCallOptions().getOption(ClusterImplLoadBalancerProvider.FILTER_METADATA_CONSUMER)
             .accept(filterMetadata);
-        args.getPickDetailsConsumer().addOptionalLabel("grpc.lb.backend_service", cluster);
         for (DropOverload dropOverload : dropPolicies) {
           int rand = random.nextInt(1_000_000);
           if (rand < dropOverload.dropsPerMillion()) {

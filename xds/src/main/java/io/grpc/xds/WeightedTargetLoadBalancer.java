@@ -165,7 +165,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
       if (overallState == TRANSIENT_FAILURE) {
         picker = new WeightedRandomPicker(errorPickers);
       } else {
-        picker = new FixedResultPicker(PickResult.withNoResult());
+        picker = new FixedResultPicker(
+            PickResult.withNoResult("connecting", "weighted_target: connecting"));
       }
     } else {
       picker = new WeightedRandomPicker(childPickers);
@@ -197,7 +198,8 @@ final class WeightedTargetLoadBalancer extends LoadBalancer {
   private final class ChildHelper extends ForwardingLoadBalancerHelper {
     String name;
     ConnectivityState currentState = CONNECTING;
-    SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+    SubchannelPicker currentPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "weighted_target: initializing"));
 
     private ChildHelper(String name) {
       this.name = name;

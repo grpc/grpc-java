@@ -92,6 +92,15 @@ public class TransportFrameUtilTest {
   }
 
   @Test
+  public void binaryHeaderEncodedWithoutPadding() {
+    Metadata headers = new Metadata();
+    headers.put(BINARY_BYTES, new byte[] {1, 2, 3, 4, 5});
+    byte[][] http2Headers = TransportFrameUtil.toHttp2Headers(headers);
+    assertContains(
+        http2Headers, BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU".getBytes(US_ASCII));
+  }
+
+  @Test
   public void testToAndFromHttp2Headers() {
     Metadata headers = new Metadata();
     headers.put(PLAIN_STRING, COMPLIANT_ASCII_STRING);
@@ -128,6 +137,24 @@ public class TransportFrameUtilTest {
             BaseEncoding.base64().decode("more"),
             BaseEncoding.base64().decode("")},
         values));
+  }
+
+  @Test
+  public void binaryHeaderDecodesPaddedBase64() {
+    byte[][] http2Headers = new byte[][] {
+        BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU=".getBytes(US_ASCII)};
+    byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
+    Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
+    assertArrayEquals(new byte[] {1, 2, 3, 4, 5}, recoveredHeaders.get(BINARY_BYTES));
+  }
+
+  @Test
+  public void binaryHeaderDecodesUnpaddedBase64() {
+    byte[][] http2Headers = new byte[][] {
+        BINARY_BYTES.name().getBytes(US_ASCII), "AQIDBAU".getBytes(US_ASCII)};
+    byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
+    Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
+    assertArrayEquals(new byte[] {1, 2, 3, 4, 5}, recoveredHeaders.get(BINARY_BYTES));
   }
 
   private static void assertContains(byte[][] headers, byte[] key, byte[] value) {

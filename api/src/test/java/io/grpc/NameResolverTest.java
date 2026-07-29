@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Objects;
+import io.grpc.ChannelConfigurator;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.Listener2;
 import io.grpc.NameResolver.ResolutionResult;
@@ -72,6 +73,8 @@ public class NameResolverTest {
   private final int customArgValue = 42;
   @Mock NameResolver.Listener mockListener;
 
+  private final ChannelConfigurator channelConfigurator = builder -> { };
+
   @Test
   public void args() {
     NameResolver.Args args = createArgs();
@@ -84,6 +87,7 @@ public class NameResolverTest {
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
     assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
@@ -97,6 +101,7 @@ public class NameResolverTest {
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
     assertThat(args2.getOverrideAuthority()).isSameInstanceAs(overrideAuthority);
     assertThat(args.getMetricRecorder()).isSameInstanceAs(metricRecorder);
+    assertThat(args2.getChildChannelConfigurator()).isSameInstanceAs(channelConfigurator);
     assertThat(args.getArg(FOO_ARG_KEY)).isEqualTo(customArgValue);
     assertThat(args.getArg(BAR_ARG_KEY)).isNull();
 
@@ -115,8 +120,45 @@ public class NameResolverTest {
         .setOffloadExecutor(executor)
         .setOverrideAuthority(overrideAuthority)
         .setMetricRecorder(metricRecorder)
+        .setChildChannelConfigurator(channelConfigurator)
         .setArg(FOO_ARG_KEY, customArgValue)
         .build();
+  }
+
+  @Test
+  public void args_childChannelConfigurator() {
+    final ManagedChannelBuilder<?>[] capturedBuilder = new ManagedChannelBuilder<?>[1];
+    ChannelConfigurator channelConfigurator = new ChannelConfigurator() {
+      @Override
+      public void configureChannelBuilder(ManagedChannelBuilder<?> builder) {
+        capturedBuilder[0] = builder;
+      }
+    };
+
+    SynchronizationContext realSyncContext = new SynchronizationContext(
+        new Thread.UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            throw new AssertionError(e);
+          }
+        });
+
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(realSyncContext)
+        .setServiceConfigParser(mock(NameResolver.ServiceConfigParser.class))
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurator(channelConfigurator)
+        .build();
+
+    ChannelConfigurator configurator = args.getChildChannelConfigurator();
+    assertThat(configurator).isSameInstanceAs(channelConfigurator);
+    
+    // Validate configurator accepts builders
+    ManagedChannelBuilder<?> mockBuilder = mock(ManagedChannelBuilder.class);
+    configurator.configureChannelBuilder(mockBuilder);
+    assertThat(capturedBuilder[0]).isSameInstanceAs(mockBuilder);
   }
 
   @Test

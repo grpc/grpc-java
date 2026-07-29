@@ -50,12 +50,14 @@ import io.grpc.StreamTracer;
 import io.grpc.internal.StatsTraceContext.ServerCallMethodListener;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
 import io.opentelemetry.api.baggage.Baggage;
+import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.context.Context;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLong;
@@ -203,6 +205,8 @@ final class OpenTelemetryMetricsModule {
     volatile String backendService;
     long attemptNanos;
     Code statusCode;
+    @Nullable private volatile Stopwatch activeDelayStopwatch;
+    @Nullable private volatile String activeDelayType;
 
     ClientTracer(CallAttemptsTracerFactory attemptsState, OpenTelemetryMetricsModule module,
         StreamInfo info, String target, String fullMethodName,
@@ -214,6 +218,55 @@ final class OpenTelemetryMetricsModule {
       this.fullMethodName = fullMethodName;
       this.streamPlugins = streamPlugins;
       this.stopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public void streamCreated(io.grpc.Attributes transportAtts, Metadata headers) {
+      recordAttemptDelayEnd();
+    }
+
+    @Override
+    public void recordAttemptDelayStart(String delayType, String delayReason) {
+      if (!GrpcOpenTelemetry.isDelayObservabilityEnabled()
+          || (activeDelayStopwatch != null && Objects.equals(activeDelayType, delayType))) {
+        // Do not reset the stopwatch if the delay type is unchanged.
+        return;
+      }
+      recordAttemptDelayEnd();
+      activeDelayType = delayType;
+      activeDelayStopwatch = module.stopwatchSupplier.get().start();
+    }
+
+    @Override
+    public void recordAttemptDelayReasonChanged(String delayReason) {
+      // Reason strings are high-cardinality diagnostics intended for tracing spans.
+    }
+
+    @Override
+    public void recordAttemptDelayEnd() {
+      Stopwatch delayStopwatch = activeDelayStopwatch;
+      String delayType = activeDelayType;
+      if (delayStopwatch != null && delayType != null) {
+        delayStopwatch.stop();
+        long delayNanos = delayStopwatch.elapsed(TimeUnit.NANOSECONDS);
+        activeDelayStopwatch = null;
+        activeDelayType = null;
+        if (module.resource.clientAttemptDelayCounter() != null) {
+          AttributesBuilder builder = Attributes.builder()
+              .put(METHOD_KEY, fullMethodName)
+              .put(TARGET_KEY, target)
+              .put("grpc.delay_type", delayType);
+          if (module.customLabelEnabled) {
+            builder.put(
+                CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+          }
+          for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+            plugin.addLabels(builder);
+          }
+          module.resource.clientAttemptDelayCounter()
+              .record(delayNanos * SECONDS_PER_NANO, builder.build(), attemptsState.otelContext);
+        }
+      }
     }
 
     @Override
@@ -262,6 +315,7 @@ final class OpenTelemetryMetricsModule {
 
     @Override
     public void streamClosed(Status status) {
+      recordAttemptDelayEnd();
       stopwatch.stop();
       attemptNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       Deadline deadline = info.getCallOptions().getDeadline();

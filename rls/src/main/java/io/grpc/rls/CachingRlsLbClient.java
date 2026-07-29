@@ -1028,7 +1028,9 @@ final class CachingRlsLbClient {
         SubchannelPicker picker =
             (childPolicyWrapper != null) ? childPolicyWrapper.getPicker() : null;
         if (picker == null) {
-          return PickResult.withNoResult();
+          // Child policy is connecting. Preserve leaf delay type.
+          return PickResult.withNoResult(
+              "connecting", "RLS child policy connecting");
         }
         // Happy path
         PickResult pickResult = picker.pickSubchannel(args);
@@ -1037,6 +1039,11 @@ final class CachingRlsLbClient {
               Arrays.asList(helper.getChannelTarget(), lookupService,
                   childPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
               Arrays.asList(determineCustomLabel(args)));
+        } else if (pickResult.getDelayType() != null) {
+          return PickResult.withNoResult(
+              pickResult.getDelayType(),
+              "RLS child (" + childPolicyWrapper.getTarget() + ") delayed: "
+                  + pickResult.getDelayReason());
         }
         return pickResult;
       } else if (response.hasError()) {
@@ -1050,7 +1057,10 @@ final class CachingRlsLbClient {
             convertRlsServerStatus(response.getStatus(),
                 lbPolicyConfig.getRouteLookupConfig().lookupService()));
       } else {
-        return PickResult.withNoResult();
+        // RLS control-plane query is pending.
+        return PickResult.withNoResult(
+            "rls_lookup_pending",
+            "Route Lookup Service query pending on " + lookupService);
       }
     }
 
@@ -1058,7 +1068,8 @@ final class CachingRlsLbClient {
     private PickResult useFallback(PickSubchannelArgs args) {
       SubchannelPicker picker = fallbackChildPolicyWrapper.getPicker();
       if (picker == null) {
-        return PickResult.withNoResult();
+        return PickResult.withNoResult(
+            "connecting", "RLS fallback child policy connecting");
       }
       PickResult pickResult = picker.pickSubchannel(args);
       if (pickResult.hasResult()) {
@@ -1066,6 +1077,11 @@ final class CachingRlsLbClient {
             Arrays.asList(helper.getChannelTarget(), lookupService,
                 fallbackChildPolicyWrapper.getTarget(), determineMetricsPickResult(pickResult)),
             Arrays.asList(determineCustomLabel(args)));
+      } else if (pickResult.getDelayType() != null) {
+        return PickResult.withNoResult(
+            pickResult.getDelayType(),
+            "RLS fallback (" + fallbackChildPolicyWrapper.getTarget() + ") delayed: "
+                + pickResult.getDelayReason());
       }
       return pickResult;
     }
