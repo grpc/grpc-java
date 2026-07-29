@@ -143,6 +143,47 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void pickResult_withNoResult_delayTypeAndReason() {
+    PickResult result = PickResult.withNoResult("connecting", "diagnostic reason");
+    assertThat(result.getSubchannel()).isNull();
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isNull();
+    assertThat(result.isDrop()).isFalse();
+    assertThat(result.getDelayType()).isEqualTo("connecting");
+    assertThat(result.getDelayReason()).isEqualTo("diagnostic reason");
+  }
+
+  @Test
+  public void pickResult_withError_delayTypeAndReasonNull() {
+    PickResult result = PickResult.withError(status);
+    assertThat(result.getDelayType()).isNull();
+    assertThat(result.getDelayReason()).isNull();
+  }
+
+  @Test
+  public void pickResult_copyWithSubchannel_preservesDelayAttributes() {
+    PickResult original = PickResult.withNoResult("connecting", "diagnostic reason");
+    PickResult copy = original.copyWithSubchannel(subchannel);
+    assertThat(copy.getDelayType()).isEqualTo("connecting");
+    assertThat(copy.getDelayReason()).isEqualTo("diagnostic reason");
+    assertThat(copy.getSubchannel()).isSameInstanceAs(subchannel);
+
+    PickResult copyWithTracer = original.copyWithStreamTracerFactory(tracerFactory);
+    assertThat(copyWithTracer.getDelayType()).isEqualTo("connecting");
+    assertThat(copyWithTracer.getDelayReason()).isEqualTo("diagnostic reason");
+    assertThat(copyWithTracer.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
+  }
+
+  @Test
+  public void pickResult_delayTypeNotPartOfEquality() {
+    PickResult r1 = PickResult.withNoResult("connecting", "reason 1");
+    PickResult r2 = PickResult.withNoResult("rls_lookup", "reason 2");
+
+    assertThat(r1).isEqualTo(r2);
+    assertThat(r1.hashCode()).isEqualTo(r2.hashCode());
+  }
+
+  @Test
   public void helper_createSubchannelList_throws() {
     try {
       new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()

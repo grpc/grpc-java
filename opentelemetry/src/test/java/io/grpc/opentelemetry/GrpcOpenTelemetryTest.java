@@ -54,13 +54,10 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
-import io.opentelemetry.sdk.metrics.data.HistogramPointData;
 import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
-import io.opentelemetry.sdk.trace.data.EventData;
-import io.opentelemetry.sdk.trace.data.SpanData;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -315,32 +312,6 @@ public class GrpcOpenTelemetryTest {
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    // Print actual logged telemetry
-    System.out.println("\n====================================================================");
-    System.out.println("  ACTUAL LOGGED TELEMETRY: NAME RESOLUTION DELAY CLIENT/SERVER RPC  ");
-    System.out.println("====================================================================");
-    System.out.println("--- ACTUAL LOGGED METRICS ---");
-    for (MetricData md : openTelemetryRule.getMetrics()) {
-      if (md.getName().contains("delay") || md.getName().contains("attempt")) {
-        System.out.println("Metric Name: " + md.getName() + " | Type: " + md.getType());
-        System.out.println("Description: " + md.getDescription());
-        for (HistogramPointData pt : md.getHistogramData().getPoints()) {
-          System.out.println("  -> Histogram Point | Count: " + pt.getCount()
-              + " | Sum: " + pt.getSum() + "s | Attributes: " + pt.getAttributes());
-        }
-      }
-    }
-    System.out.println("--- ACTUAL LOGGED TRACES ---");
-    for (SpanData sd : openTelemetryRule.getSpans()) {
-      System.out.println("Span Name: " + sd.getName() + " | TraceId: " + sd.getTraceId()
-          + " | SpanId: " + sd.getSpanId());
-      for (EventData ed : sd.getEvents()) {
-        System.out.println("  -> Trace Event: '" + ed.getName() + "' | Epoch Nanos: "
-            + ed.getEpochNanos() + " | Attributes: " + ed.getAttributes());
-      }
-    }
-    System.out.println("====================================================================\n");
-
     io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
         .assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
@@ -426,26 +397,6 @@ public class GrpcOpenTelemetryTest {
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
 
-    System.out.println("\n====================================================================");
-    System.out.println("    ACTUAL LOGGED TELEMETRY: LB POLICY DELAY CLIENT/SERVER RPC     ");
-    System.out.println("====================================================================");
-    System.out.println("--- ACTUAL LOGGED METRICS ---");
-    for (MetricData md : openTelemetryRule.getMetrics()) {
-      if (md.getName().contains("delay") || md.getName().contains("attempt")) {
-        System.out.println("Metric Name: " + md.getName() + " | Type: " + md.getType());
-        System.out.println("Description: " + md.getDescription());
-        for (HistogramPointData pt : md.getHistogramData().getPoints()) {
-          System.out.println("  -> Histogram Point | Count: " + pt.getCount()
-              + " | Sum: " + pt.getSum() + "s | Attributes: " + pt.getAttributes());
-        }
-      }
-    }
-    System.out.println("--- ACTUAL LOGGED TRACES ---");
-    for (SpanData sd : openTelemetryRule.getSpans()) {
-      System.out.println("Span Name: " + sd.getName() + " | TraceId: " + sd.getTraceId());
-    }
-    System.out.println("====================================================================\n");
-
     io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
         .assertThat(openTelemetryRule.getMetrics())
         .anySatisfy(
@@ -507,18 +458,6 @@ public class GrpcOpenTelemetryTest {
     call.halfClose();
     call.request(1);
     assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
-
-    System.out.println("\n====================================================================");
-    System.out.println("  ACTUAL LOGGED TELEMETRY: ZERO DELAY BASELINE CLIENT/SERVER RPC    ");
-    System.out.println("====================================================================");
-    System.out.println("--- ACTUAL LOGGED METRICS ---");
-    for (MetricData md : openTelemetryRule.getMetrics()) {
-      if (md.getName().contains("delay")) {
-        System.out.println("Metric Name: " + md.getName() + " | Histogram points: "
-            + md.getHistogramData().getPoints().size());
-      }
-    }
-    System.out.println("====================================================================\n");
 
     boolean hasAttemptDelay = false;
     boolean hasCallDelay = false;
