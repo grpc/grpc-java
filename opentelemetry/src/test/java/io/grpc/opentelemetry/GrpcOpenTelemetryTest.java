@@ -17,6 +17,9 @@
 package io.grpc.opentelemetry;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ClientStreamTracer.NAME_RESOLUTION_DELAYED;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.emptyList;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -24,27 +27,85 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.io.ByteStreams;
+import io.grpc.CallOptions;
+import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ForwardingChannelBuilder2;
+import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.MethodDescriptor;
 import io.grpc.MetricSink;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerServiceDefinition;
+import io.grpc.Status;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.opentelemetry.GrpcOpenTelemetry.TargetFilter;
+import io.grpc.testing.GrpcCleanupRule;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
+import io.opentelemetry.sdk.metrics.data.HistogramPointData;
+import io.opentelemetry.sdk.metrics.data.MetricData;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
+import io.opentelemetry.sdk.testing.junit4.OpenTelemetryRule;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
+import io.opentelemetry.sdk.trace.data.EventData;
+import io.opentelemetry.sdk.trace.data.SpanData;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class GrpcOpenTelemetryTest {
+  @Rule
+  public final OpenTelemetryRule openTelemetryRule = OpenTelemetryRule.create();
+  @Rule
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
+
+  private static final MethodDescriptor.Marshaller<String> MARSHALLER =
+      new MethodDescriptor.Marshaller<String>() {
+        @Override
+        public InputStream stream(String value) {
+          return new ByteArrayInputStream(value.getBytes(UTF_8));
+        }
+
+        @Override
+        public String parse(InputStream stream) {
+          try {
+            return new String(ByteStreams.toByteArray(stream), UTF_8);
+          } catch (IOException ex) {
+            throw new RuntimeException(ex);
+          }
+        }
+      };
+
+  private final MethodDescriptor<String, String> method =
+      MethodDescriptor.<String, String>newBuilder()
+          .setType(MethodDescriptor.MethodType.UNARY)
+          .setRequestMarshaller(MARSHALLER)
+          .setResponseMarshaller(MARSHALLER)
+          .setFullMethodName("test.service/method")
+          .build();
+
   private final InMemoryMetricReader inMemoryMetricReader = InMemoryMetricReader.create();
   private final SdkMeterProvider meterProvider =
       SdkMeterProvider.builder().registerMetricReader(inMemoryMetricReader).build();
@@ -55,11 +116,13 @@ public class GrpcOpenTelemetryTest {
   @Before
   public void setup() {
     originalEnableOtelTracing = GrpcOpenTelemetry.ENABLE_OTEL_TRACING;
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
   }
 
   @After
   public void tearDown() {
     GrpcOpenTelemetry.ENABLE_OTEL_TRACING = originalEnableOtelTracing;
+    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
   }
 
   @Test
@@ -177,6 +240,300 @@ public class GrpcOpenTelemetryTest {
     grpcOpenTelemetry.configureChannelBuilder(testBuilder);
     assertThat(testBuilder.metricSink).isSameInstanceAs(grpcOpenTelemetry.getSink());
     assertThat(testBuilder.interceptorFactory).isNotNull();
+  }
+
+  @Test
+  public void nameResolutionDelay_endToEndClientServerSimulation() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.service")
+        .addMethod(method, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.sendHeaders(new Metadata());
+            call.sendMessage("response_payload");
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<String>() {};
+          }
+        })
+        .build();
+
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName(serverName).directExecutor().addService(serviceDef).build()
+            .start());
+
+    OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(sdk)
+        .enableMetrics(Arrays.asList(
+            "grpc.client.attempt.delay.duration",
+            "grpc.client.call.delay.duration",
+            "grpc.client.attempt.started"))
+        .enableTracing(true)
+        .addOptionalLabel("grpc.delay_type")
+        .build();
+
+    ManagedChannelBuilder<?> channelBuilder = InProcessChannelBuilder.forName(serverName)
+        .directExecutor();
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = grpcCleanupRule.register(channelBuilder.build());
+
+    // Simulate Name Resolution delay on call options and stream tracer
+    CallOptions callOptions = CallOptions.DEFAULT.withOption(
+        NAME_RESOLUTION_DELAYED, TimeUnit.MILLISECONDS.toNanos(120));
+
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        sdk.getMeterProvider().get("grpc-java"),
+        ImmutableMap.of(
+            "grpc.client.attempt.delay.duration", true,
+            "grpc.client.call.delay.duration", true),
+        false);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", callOptions, method.getFullMethodName(),
+            emptyList(), io.opentelemetry.context.Context.root());
+    ClientStreamTracer delayTracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(callOptions).build(),
+        new Metadata());
+    delayTracer.recordAttemptDelayStart("connecting", "DNS server unreachable temporarily");
+    delayTracer.recordAttemptDelayEnd();
+    factory.recordCallDelayStart("resolving", "DNS resolution pending");
+    factory.recordCallDelayEnd();
+
+    final CountDownLatch latch = new CountDownLatch(1);
+    ClientCall<String, String> call = channel.newCall(method, callOptions);
+    call.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        latch.countDown();
+      }
+    }, new Metadata());
+    call.sendMessage("request_payload");
+    call.halfClose();
+    call.request(1);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Print actual logged telemetry
+    System.out.println("\n====================================================================");
+    System.out.println("  ACTUAL LOGGED TELEMETRY: NAME RESOLUTION DELAY CLIENT/SERVER RPC  ");
+    System.out.println("====================================================================");
+    System.out.println("--- ACTUAL LOGGED METRICS ---");
+    for (MetricData md : openTelemetryRule.getMetrics()) {
+      if (md.getName().contains("delay") || md.getName().contains("attempt")) {
+        System.out.println("Metric Name: " + md.getName() + " | Type: " + md.getType());
+        System.out.println("Description: " + md.getDescription());
+        for (HistogramPointData pt : md.getHistogramData().getPoints()) {
+          System.out.println("  -> Histogram Point | Count: " + pt.getCount()
+              + " | Sum: " + pt.getSum() + "s | Attributes: " + pt.getAttributes());
+        }
+      }
+    }
+    System.out.println("--- ACTUAL LOGGED TRACES ---");
+    for (SpanData sd : openTelemetryRule.getSpans()) {
+      System.out.println("Span Name: " + sd.getName() + " | TraceId: " + sd.getTraceId()
+          + " | SpanId: " + sd.getSpanId());
+      for (EventData ed : sd.getEvents()) {
+        System.out.println("  -> Trace Event: '" + ed.getName() + "' | Epoch Nanos: "
+            + ed.getEpochNanos() + " | Attributes: " + ed.getAttributes());
+      }
+    }
+    System.out.println("====================================================================\n");
+
+    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+        .assertThat(openTelemetryRule.getMetrics())
+        .anySatisfy(
+            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+                .assertThat(metric)
+                .hasName("grpc.client.attempt.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.delay_type"), "connecting");
+                        })));
+    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+        .assertThat(openTelemetryRule.getMetrics())
+        .anySatisfy(
+            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+                .assertThat(metric)
+                .hasName("grpc.client.call.delay.duration"));
+  }
+
+  @Test
+  public void lbPolicyDelay_endToEndClientServerSimulation() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.service")
+        .addMethod(method, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.sendHeaders(new Metadata());
+            call.sendMessage("response_payload");
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<String>() {};
+          }
+        })
+        .build();
+
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName(serverName).directExecutor().addService(serviceDef).build()
+            .start());
+
+    OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(sdk)
+        .enableMetrics(Arrays.asList(
+            "grpc.client.attempt.delay.duration",
+            "grpc.client.call.delay.duration",
+            "grpc.client.attempt.started"))
+        .enableTracing(true)
+        .addOptionalLabel("grpc.delay_type")
+        .build();
+
+    ManagedChannelBuilder<?> channelBuilder = InProcessChannelBuilder.forName(serverName)
+        .directExecutor();
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = grpcCleanupRule.register(channelBuilder.build());
+
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        sdk.getMeterProvider().get("grpc-java"),
+        ImmutableMap.of("grpc.client.attempt.delay.duration", true),
+        false);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+            emptyList(), io.opentelemetry.context.Context.root());
+    ClientStreamTracer tracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+        new Metadata());
+    tracer.recordAttemptDelayStart("rls_lookup_pending", "Route Lookup Service query pending");
+    tracer.recordAttemptDelayEnd();
+
+    final CountDownLatch latch = new CountDownLatch(1);
+    ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        latch.countDown();
+      }
+    }, new Metadata());
+    call.sendMessage("request_payload");
+    call.halfClose();
+    call.request(1);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    System.out.println("\n====================================================================");
+    System.out.println("    ACTUAL LOGGED TELEMETRY: LB POLICY DELAY CLIENT/SERVER RPC     ");
+    System.out.println("====================================================================");
+    System.out.println("--- ACTUAL LOGGED METRICS ---");
+    for (MetricData md : openTelemetryRule.getMetrics()) {
+      if (md.getName().contains("delay") || md.getName().contains("attempt")) {
+        System.out.println("Metric Name: " + md.getName() + " | Type: " + md.getType());
+        System.out.println("Description: " + md.getDescription());
+        for (HistogramPointData pt : md.getHistogramData().getPoints()) {
+          System.out.println("  -> Histogram Point | Count: " + pt.getCount()
+              + " | Sum: " + pt.getSum() + "s | Attributes: " + pt.getAttributes());
+        }
+      }
+    }
+    System.out.println("--- ACTUAL LOGGED TRACES ---");
+    for (SpanData sd : openTelemetryRule.getSpans()) {
+      System.out.println("Span Name: " + sd.getName() + " | TraceId: " + sd.getTraceId());
+    }
+    System.out.println("====================================================================\n");
+
+    io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+        .assertThat(openTelemetryRule.getMetrics())
+        .anySatisfy(
+            metric -> io.opentelemetry.sdk.testing.assertj.OpenTelemetryAssertions
+                .assertThat(metric)
+                .hasName("grpc.client.attempt.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.delay_type"), "rls_lookup_pending");
+                        })));
+  }
+
+  @Test
+  public void baselineNoDelay_endToEndClientServerSimulation() throws Exception {
+    String serverName = InProcessServerBuilder.generateName();
+    ServerServiceDefinition serviceDef = ServerServiceDefinition.builder("test.service")
+        .addMethod(method, new ServerCallHandler<String, String>() {
+          @Override
+          public ServerCall.Listener<String> startCall(
+              ServerCall<String, String> call, Metadata headers) {
+            call.sendHeaders(new Metadata());
+            call.sendMessage("response_payload");
+            call.close(Status.OK, new Metadata());
+            return new ServerCall.Listener<String>() {};
+          }
+        })
+        .build();
+
+    grpcCleanupRule.register(
+        InProcessServerBuilder.forName(serverName).directExecutor().addService(serviceDef).build()
+            .start());
+
+    OpenTelemetrySdk sdk = (OpenTelemetrySdk) openTelemetryRule.getOpenTelemetry();
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(sdk)
+        .enableMetrics(Arrays.asList(
+            "grpc.client.attempt.delay.duration",
+            "grpc.client.call.delay.duration",
+            "grpc.client.attempt.started"))
+        .enableTracing(true)
+        .build();
+
+    ManagedChannelBuilder<?> channelBuilder = InProcessChannelBuilder.forName(serverName)
+        .directExecutor();
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = grpcCleanupRule.register(channelBuilder.build());
+
+    final CountDownLatch latch = new CountDownLatch(1);
+    ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        latch.countDown();
+      }
+    }, new Metadata());
+    call.sendMessage("request_payload");
+    call.halfClose();
+    call.request(1);
+    assertThat(latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    System.out.println("\n====================================================================");
+    System.out.println("  ACTUAL LOGGED TELEMETRY: ZERO DELAY BASELINE CLIENT/SERVER RPC    ");
+    System.out.println("====================================================================");
+    System.out.println("--- ACTUAL LOGGED METRICS ---");
+    for (MetricData md : openTelemetryRule.getMetrics()) {
+      if (md.getName().contains("delay")) {
+        System.out.println("Metric Name: " + md.getName() + " | Histogram points: "
+            + md.getHistogramData().getPoints().size());
+      }
+    }
+    System.out.println("====================================================================\n");
+
+    boolean hasAttemptDelay = false;
+    boolean hasCallDelay = false;
+    for (MetricData m : openTelemetryRule.getMetrics()) {
+      if ("grpc.client.attempt.delay.duration".equals(m.getName())
+          && !m.getHistogramData().getPoints().isEmpty()) {
+        hasAttemptDelay = true;
+      }
+      if ("grpc.client.call.delay.duration".equals(m.getName())
+          && !m.getHistogramData().getPoints().isEmpty()) {
+        hasCallDelay = true;
+      }
+    }
+    assertThat(hasAttemptDelay).isFalse();
+    assertThat(hasCallDelay).isFalse();
   }
 
   private static class TestChannelBuilder extends ForwardingChannelBuilder2<TestChannelBuilder> {

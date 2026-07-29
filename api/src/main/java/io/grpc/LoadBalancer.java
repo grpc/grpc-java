@@ -710,7 +710,7 @@ public abstract class LoadBalancer {
      */
     public static PickResult withError(Status error) {
       Preconditions.checkArgument(!error.isOk(), "error status shouldn't be OK");
-      return new PickResult(null, null, error, false);
+      return new PickResult(null, null, error, false, null, "connecting", error.getDescription());
     }
 
     /**
