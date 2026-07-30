@@ -185,15 +185,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   ExternalProcessorFilterConfig getFilterConfig() {
     return filterConfig;
   }
-  
+
   @Override
   @SuppressWarnings("unchecked")
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
       MethodDescriptor<ReqT, RespT> method,
       CallOptions callOptions,
       Channel next) {
-    Executor callExecutor = callOptions.getExecutor();
-    SerializingExecutor serializingExecutor = new SerializingExecutor(callExecutor);
+    SerializingExecutor serializingExecutor = new SerializingExecutor(callOptions.getExecutor());
     
     ExternalProcessorGrpc.ExternalProcessorStub extProcStub = ExternalProcessorGrpc.newStub(
         extProcChannel)
@@ -791,7 +790,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     void drainPendingRequests() {
       synchronized (streamLock) {
-        if (config.getObservabilityMode() 
+        if (config.getObservabilityMode()
             || currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
           int toRequest = pendingRequests.getAndSet(0);
           if (toRequest > 0) {
@@ -891,6 +890,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     @Override
     public void request(int numMessages) {
       if (passThroughMode.get() || extProcStreamState.get().isCompleted()) {
+        super.request(numMessages);
+        return;
+      }
+      if (!config.getObservabilityMode()
+          && currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
         super.request(numMessages);
         return;
       }
@@ -1043,6 +1047,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       if (extProcStreamState.get().isDraining()) {
+        boolean canProceed = false;
+        synchronized (streamLock) {
+          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
+              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
+            canProceed = true;
+          }
+        }
+        if (canProceed) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        }
         return;
       }
 
@@ -1392,7 +1408,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (dataPlaneClientCall.getPassThroughMode().get() 
+      if (dataPlaneClientCall.getPassThroughMode().get()
           || dataPlaneClientCall.getExtProcStreamState().get().isCompleted() 
           || !sendResponseHeaders) {
         proceedWithHeaders(headers);
