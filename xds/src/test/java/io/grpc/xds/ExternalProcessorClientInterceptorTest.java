@@ -8562,10 +8562,6 @@ public class ExternalProcessorClientInterceptorTest {
             .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
             .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
             .build())
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
-            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
-            .build())
         .build();
     ConfigOrError<ExternalProcessorFilterConfig> configOrError =
         provider.parseFilterConfig(Any.pack(proto), filterContext);
@@ -11121,10 +11117,6 @@ public class ExternalProcessorClientInterceptorTest {
                 + "channel_credentials.insecure.v3.InsecureCredentials")
                     .build())
                 .build())
-            .build())
-        .setProcessingMode(ProcessingMode.newBuilder()
-            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
-            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
             .build())
         .setProcessingMode(ProcessingMode.newBuilder()
             .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
