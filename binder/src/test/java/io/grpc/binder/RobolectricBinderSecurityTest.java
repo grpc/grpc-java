@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.Assert.assertThrows;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
@@ -49,6 +50,10 @@ import io.grpc.stub.ClientCalls;
 import io.grpc.stub.ServerCalls;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -207,6 +212,19 @@ public final class RobolectricBinderSecurityTest {
     awaitNext(statusesToSet).set(Status.OK);
 
     assertThat(awaitResult(status).getCode()).isEqualTo(Status.Code.OK);
+  }
+
+  @Test
+  public void testAsyncServerSecurityPolicy_shutdownNow_cancelsAuthFutures() throws Exception {
+    ListenableFuture<Status> callResult = makeCall();
+    SettableFuture<Status> authResultFuture = awaitNext(statusesToSet);
+
+    channel.shutdownNow();
+    boolean terminationResult = channel.awaitTermination(10, SECONDS);
+    assertThat(terminationResult).isTrue();
+
+    assertThrows(CancellationException.class, () -> awaitResult(authResultFuture));
+    assertThat(awaitResult(callResult).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
   }
 
   private ListenableFuture<Status> makeCall() {
