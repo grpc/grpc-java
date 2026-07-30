@@ -556,9 +556,14 @@ public class Context {
   }
 
   /**
-    * Immediately supply a value from a {@link Supplier} with this context as the
+    * Immediately gets a value from a {@link Supplier} with this context as the
     * {@link #current} context.
+    *
+    * <p>This API is <a href="https://github.com/grpc/grpc-java/pull/12935">experimental</a> and
+    * subject to change.
+    *
     * @param supplier {@link Supplier} to use to produce the value.
+    * @see io.grpc.ExperimentalApi
     * @return result of supplier.
     */
   public <V> V supply(Supplier<V> supplier) {
