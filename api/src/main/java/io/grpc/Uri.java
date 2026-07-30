@@ -530,10 +530,6 @@ public final class Uri {
    * slashes are not segment delimiters but rather part of the first and only path segment.
    *
    * <p>Contrast absolute paths with rootless ones (see {@link #isPathRootless()}.
-   *
-   * <p>NB: The term "absolute" has two different meanings in RFC 3986 which are easily confused.
-   * This method tests for a property of this URI's path component. Contrast with {@link
-   * #isAbsolute()} which tests the URI itself for a different property.
    */
   public boolean isPathAbsolute() {
     return path.startsWith("/");
@@ -629,16 +625,6 @@ public final class Uri {
     return sb.toString();
   }
 
-  /**
-   * Returns true iff this URI has a scheme and an authority/path hierarchy, but no fragment.
-   *
-   * <p>All instances of {@link Uri} are RFC 3986 URIs, not "relative references", so this method is
-   * equivalent to {@code getFragment() == null}. It mostly exists for compatibility with {@link
-   * java.net.URI}.
-   */
-  public boolean isAbsolute() {
-    return scheme != null && fragment == null;
-  }
 
   /**
    * {@inheritDoc}
