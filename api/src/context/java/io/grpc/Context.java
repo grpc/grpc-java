@@ -561,7 +561,6 @@ public class Context {
     * @param supplier {@link Supplier} to use to produce the value.
     * @return result of supplier.
     */
-  @CanIgnoreReturnValue
   public <V> V supply(Supplier<V> supplier) {
     Context previous = attach();
     try {
