@@ -19,6 +19,7 @@ package io.grpc.binder;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Application;
@@ -154,17 +155,17 @@ public final class RobolectricBinderSecurityTest {
   @Test
   public void testAsyncServerSecurityPolicy_failed_returnsFailureStatus() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    statusesToSet.take().set(Status.ALREADY_EXISTS);
+    awaitNext(statusesToSet).set(Status.ALREADY_EXISTS);
 
-    assertThat(status.get().getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
+    assertThat(awaitResult(status).getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
   }
 
   @Test
   public void testAsyncServerSecurityPolicy_failedFuture_failsWithCodeInternal() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    statusesToSet.take().setException(new IllegalStateException("oops"));
+    awaitNext(statusesToSet).setException(new IllegalStateException("oops"));
 
-    Status failureStatus = status.get();
+    Status failureStatus = awaitResult(status);
     assertThat(failureStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(failureStatus.getDescription()).isEqualTo("Authorization future failed");
   }
@@ -173,18 +174,18 @@ public final class RobolectricBinderSecurityTest {
   public void testAsyncServerSecurityPolicy_failedFuture_subsequentCallHasOpaqueFailure()
       throws Exception {
     ListenableFuture<Status> firstStatusFuture = makeCall();
-    statusesToSet.take().setException(new IOException("ouch"));
+    awaitNext(statusesToSet).setException(new IOException("ouch"));
 
-    Status firstStatus = firstStatusFuture.get();
+    Status firstStatus = awaitResult(firstStatusFuture);
     assertThat(firstStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(firstStatus.getDescription()).isEqualTo("Authorization future failed");
 
     // TransportAuthorizationState evicts failed futures so the second call triggers a fresh
     // authorization check. Both calls must surface an opaque transport-level failure.
     ListenableFuture<Status> secondStatusFuture = makeCall();
-    statusesToSet.take().setException(new IOException("ouch"));
+    awaitNext(statusesToSet).setException(new IOException("ouch"));
 
-    Status secondStatus = secondStatusFuture.get();
+    Status secondStatus = awaitResult(secondStatusFuture);
     assertThat(secondStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(secondStatus.getDescription()).isEqualTo("Authorization future failed");
   }
@@ -193,9 +194,9 @@ public final class RobolectricBinderSecurityTest {
   public void testAsyncServerSecurityPolicy_failedFuture_cancelledFutureIsOpaque()
       throws Exception {
     ListenableFuture<Status> statusFuture = makeCall();
-    statusesToSet.take().cancel(false);
+    awaitNext(statusesToSet).cancel(false);
 
-    Status failureStatus = statusFuture.get();
+    Status failureStatus = awaitResult(statusFuture);
     assertThat(failureStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
     assertThat(failureStatus.getDescription()).isEqualTo("Authorization future failed");
   }
@@ -203,9 +204,9 @@ public final class RobolectricBinderSecurityTest {
   @Test
   public void testAsyncServerSecurityPolicy_allowed_returnsOkStatus() throws Exception {
     ListenableFuture<Status> status = makeCall();
-    statusesToSet.take().set(Status.OK);
+    awaitNext(statusesToSet).set(Status.OK);
 
-    assertThat(status.get().getCode()).isEqualTo(Status.Code.OK);
+    assertThat(awaitResult(status).getCode()).isEqualTo(Status.Code.OK);
   }
 
   private ListenableFuture<Status> makeCall() {
@@ -218,6 +219,18 @@ public final class RobolectricBinderSecurityTest {
         StatusRuntimeException.class,
         StatusRuntimeException::getStatus,
         directExecutor());
+  }
+
+  private static <T> T awaitNext(BlockingQueue<T> queue) throws Exception {
+    T item = queue.poll(10, SECONDS);
+    if (item == null) {
+      throw new TimeoutException("Queue timed out waiting for item");
+    }
+    return item;
+  }
+
+  private static <T> T awaitResult(Future<T> future) throws Exception {
+    return future.get(10, SECONDS);
   }
 
   private static MethodDescriptor<Empty, Empty> getMethodDescriptor() {
