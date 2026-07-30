@@ -88,6 +88,24 @@ public final class BinderTransportSecurity {
   }
 
   /**
+   * Informs this module that the transport with the specified 'attributes' is terminating.
+   *
+   * <p>Any resources allocated by this module will be released and no further resources will be
+   * allocated. Any ongoing background work will be canceled and no further background work will be
+   * initiated.
+   *
+   * <p>This method completes futures and therefore may execute arbitrary listener code on a
+   * potentially direct Executor. To avoid deadlock, callers must not hold any locks.
+   */
+  @Internal
+  public static void notifyTerminatedUnlocked(Attributes attributes) {
+    TransportAuthorizationState state = attributes.get(TRANSPORT_AUTHORIZATION_STATE);
+    if (state != null) {
+      state.notifyTerminatedUnlocked();
+    }
+  }
+
+  /**
    * Intercepts server calls and ensures they're authorized before allowing them to proceed.
    * Authentication state is fetched from the call attributes, inherited from the transport.
    */
@@ -174,6 +192,8 @@ public final class BinderTransportSecurity {
     private final ConcurrentHashMap<String, ListenableFuture<Status>> serviceAuthorization;
     private final Executor executor;
 
+    private volatile boolean isTerminated;
+
     /**
      * @param executor used for calling into the application. Must outlive the transport.
      */
@@ -204,11 +224,20 @@ public final class BinderTransportSecurity {
         return nonCancellationPropagating(checkThenActRaceWinner);
       }
 
-      try {
-        newPendingAuthResult.setFuture(
-            serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName));
-      } catch (Exception e) {  // Not just RuntimeException! Handle the "sneaky" checked case too.
-        newPendingAuthResult.setException(e);
+      // We only check isTerminated *after* the new future is visible to other threads in
+      // serviceAuthorization. In case of a race with a simultaneous call to notifyTerminated(),
+      // better to harmlessly cancel the new future twice rather than not cancel it at all.
+      if (!isTerminated) {
+        // If notifyTerminated() already cancelled newPendingAuthResult, setFuture() will forward
+        // that cancellation to its argument so it's safe to ignore the return value here.
+        try {
+          newPendingAuthResult.setFuture(
+              serverPolicyChecker.checkAuthorizationForServiceAsync(uid, serviceName));
+        } catch (Exception e) {  // Not just RuntimeException! Handle the "sneaky" checked case too.
+          newPendingAuthResult.setException(e);
+        }
+      } else {
+        newPendingAuthResult.cancel(false);
       }
 
       Futures.addCallback(
@@ -236,6 +265,21 @@ public final class BinderTransportSecurity {
       return nonCancellationPropagating(newPendingAuthResult);
     }
 
+    /**
+     * After this method returns, every future ever returned by a prior or concurrent call to
+     * checkAuthorization() is guaranteed to be complete. Every future returned by subsequent call
+     * to checkAuthorization() is also guaranteed to be complete.
+     */
+    void notifyTerminatedUnlocked() {
+      // Any entries added to serviceAuthorization *after* this assignment will be immediately
+      // canceled by the adding thread in checkAuthorization().
+      isTerminated = true;
+
+      // Cancel any entries added to serviceAuthorization *before* the volatile assignment above.
+      for (ListenableFuture<Status> authResult : serviceAuthorization.values()) {
+        authResult.cancel(false); // No-op for cached results (already done).
+      }
+    }
   }
 
   /**

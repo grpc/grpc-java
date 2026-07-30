@@ -183,7 +183,25 @@ public final class TransportAuthorizationStateTest {
     assertThat(authResult2.get()).isEqualTo(Status.OK);
   }
 
+  @Test
+  public void notifyTerminatedUnlocked_cancelsPendingAuthFutures() {
+    ListenableFuture<Status> authResult = authState.checkAuthorization(CODEGEN_METHOD);
+    assertThat(authResult.isDone()).isFalse();
 
+    authState.notifyTerminatedUnlocked();
+
+    assertThat(authResult.isCancelled()).isTrue();
+  }
+
+  @Test
+  public void checkAuthorization_afterTermination_returnsCancelledFuture() {
+    authState.notifyTerminatedUnlocked();
+
+    ListenableFuture<Status> authResult = authState.checkAuthorization(CODEGEN_METHOD);
+
+    assertThat(authResult.isCancelled()).isTrue();
+    assertThat(fakePolicyChecker.statusesToSet).isEmpty(); // fakePolicyChecker never called.
+  }
 
   @Test
   public void checkAuthorization_synchronousException_doesNotLeaveStrandedFuture()
