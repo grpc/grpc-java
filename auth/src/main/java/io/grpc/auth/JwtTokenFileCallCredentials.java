@@ -304,7 +304,12 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     if (expSeconds <= 0) {
       throw new IllegalArgumentException("Invalid 'exp' claim value: " + expSeconds);
     }
-    long expirationTimeMillis = (expSeconds - 30) * 1000;
+    long expirationTimeMillis;
+    if (expSeconds > Long.MAX_VALUE / 1000) {
+      expirationTimeMillis = Long.MAX_VALUE;
+    } else {
+      expirationTimeMillis = (expSeconds - 30) * 1000;
+    }
     return new TokenInfo(token, expirationTimeMillis);
   }
 
