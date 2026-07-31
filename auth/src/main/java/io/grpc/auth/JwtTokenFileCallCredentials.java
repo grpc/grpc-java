@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
-import com.google.common.io.Files;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -30,7 +29,9 @@ import io.grpc.Metadata;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -263,7 +264,11 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     if (length > 1048576) {
       throw new IOException("File size exceeds 1 MB limit: " + length);
     }
-    byte[] bytes = Files.toByteArray(file);
+    byte[] bytes;
+    try (InputStream in = new FileInputStream(file)) {
+      bytes = com.google.common.io.ByteStreams.toByteArray(
+          com.google.common.io.ByteStreams.limit(in, 1048577));
+    }
     if (bytes.length > 1048576) {
       throw new IOException("File size exceeds 1 MB limit: " + bytes.length);
     }
@@ -286,7 +291,7 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     JsonObject jsonObject;
     try {
       JsonElement jsonElement = JsonParser.parseString(payloadJson);
-      if (!jsonElement.isJsonObject()) {
+      if (jsonElement == null || !jsonElement.isJsonObject()) {
         throw new IllegalArgumentException("Payload is not a JSON object");
       }
       jsonObject = jsonElement.getAsJsonObject();

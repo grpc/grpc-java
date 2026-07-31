@@ -584,4 +584,24 @@ public class JwtTokenFileCallCredentialsTest {
       return Attributes.EMPTY;
     }
   }
+
+  @Test
+  public void applyMetadata_fileContentTooLarge_failsUnavailable() throws Exception {
+    File devZero = new File("/dev/zero");
+    org.junit.Assume.assumeTrue(devZero.exists());
+
+    JwtTokenFileCallCredentials credentials =
+        new JwtTokenFileCallCredentials(devZero.getAbsolutePath(), timeProvider);
+
+    RequestInfoImpl requestInfo = new RequestInfoImpl(SecurityLevel.PRIVACY_AND_INTEGRITY);
+    credentials.applyRequestMetadata(requestInfo, executor, applier1);
+    assertEquals(1, executor.runnables.size());
+    executor.runNext();
+
+    verify(applier1).fail(statusCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+    assertTrue(status.getDescription().contains("Failed to read token file"));
+    assertTrue(status.getCause().getMessage().contains("File size exceeds 1 MB limit"));
+  }
 }
