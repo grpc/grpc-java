@@ -165,7 +165,7 @@ public class XdsJwtCallCredsIntegrationTest {
                     ImmutableMap.of(
                         "type", "jwt_token_file",
                         "config", ImmutableMap.of(
-                            "token_file", jwtTokenFile.toAbsolutePath().toString())
+                            "jwt_token_file", jwtTokenFile.toAbsolutePath().toString())
                     )
                 ),
                 "server_features", Lists.newArrayList("xds_v3")

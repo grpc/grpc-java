@@ -1096,7 +1096,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1126,7 +1126,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1163,7 +1163,7 @@ public class GrpcBootstrapperImplTest {
           + "            {\n"
           + "              \"type\": \"jwt_token_file\",\n"
           + "              \"config\": {\n"
-          + "                \"token_file\": \"/var/run/secrets/authority_token\"\n"
+          + "                \"jwt_token_file\": \"/var/run/secrets/authority_token\"\n"
           + "              }\n"
           + "            }\n"
           + "          ]\n"
@@ -1214,7 +1214,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1255,7 +1255,7 @@ public class GrpcBootstrapperImplTest {
       bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
       XdsInitializationException e = assertThrows(XdsInitializationException.class,
           bootstrapper::bootstrap);
-      assertThat(e).hasMessageThat().contains("jwt_token_file' token_file missing or empty");
+      assertThat(e).hasMessageThat().contains("jwt_token_file' jwt_token_file missing or empty");
     } finally {
       setEnableXdsBootstrapCallCreds(false);
     }
