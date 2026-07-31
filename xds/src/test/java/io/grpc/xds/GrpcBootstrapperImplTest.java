@@ -1061,15 +1061,7 @@ public class GrpcBootstrapperImplTest {
   }
 
   private static void setEnableXdsBootstrapCallCreds(boolean enable) {
-    try {
-      java.lang.reflect.Field field =
-          io.grpc.xds.client.BootstrapperImpl.class
-              .getDeclaredField("enableXdsBootstrapCallCreds");
-      field.setAccessible(true);
-      field.set(null, enable);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
   }
 
   private static String getFilePath(JwtTokenFileCallCredentials credentials) {
@@ -1096,7 +1088,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1126,7 +1118,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1163,7 +1155,7 @@ public class GrpcBootstrapperImplTest {
           + "            {\n"
           + "              \"type\": \"jwt_token_file\",\n"
           + "              \"config\": {\n"
-          + "                \"token_file\": \"/var/run/secrets/authority_token\"\n"
+          + "                \"jwt_token_file\": \"/var/run/secrets/authority_token\"\n"
           + "              }\n"
           + "            }\n"
           + "          ]\n"
@@ -1214,7 +1206,7 @@ public class GrpcBootstrapperImplTest {
           + "        {\n"
           + "          \"type\": \"jwt_token_file\",\n"
           + "          \"config\": {\n"
-          + "            \"token_file\": \"/var/run/secrets/token\"\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
           + "          }\n"
           + "        }\n"
           + "      ]\n"
@@ -1255,7 +1247,7 @@ public class GrpcBootstrapperImplTest {
       bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
       XdsInitializationException e = assertThrows(XdsInitializationException.class,
           bootstrapper::bootstrap);
-      assertThat(e).hasMessageThat().contains("jwt_token_file' token_file missing or empty");
+      assertThat(e).hasMessageThat().contains("jwt_token_file' jwt_token_file missing or empty");
     } finally {
       setEnableXdsBootstrapCallCreds(false);
     }

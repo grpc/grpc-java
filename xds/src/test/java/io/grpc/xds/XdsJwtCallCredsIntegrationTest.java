@@ -165,7 +165,7 @@ public class XdsJwtCallCredsIntegrationTest {
                     ImmutableMap.of(
                         "type", "jwt_token_file",
                         "config", ImmutableMap.of(
-                            "token_file", jwtTokenFile.toAbsolutePath().toString())
+                            "jwt_token_file", jwtTokenFile.toAbsolutePath().toString())
                     )
                 ),
                 "server_features", Lists.newArrayList("xds_v3")
@@ -203,15 +203,7 @@ public class XdsJwtCallCredsIntegrationTest {
   }
 
   private static void setEnableXdsBootstrapCallCreds(boolean enable) {
-    try {
-      java.lang.reflect.Field field =
-          io.grpc.xds.client.BootstrapperImpl.class
-              .getDeclaredField("enableXdsBootstrapCallCreds");
-      field.setAccessible(true);
-      field.set(null, enable);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
   }
 
   private static Path generateTrustStore() throws Exception {

@@ -70,7 +70,7 @@ public abstract class BootstrapperImpl extends Bootstrapper {
   static boolean enableXdsFallback = GrpcUtil.getFlag(GRPC_EXPERIMENTAL_XDS_FALLBACK, true);
 
   @VisibleForTesting
-  static boolean enableXdsBootstrapCallCreds = GrpcUtil.getFlag(
+  public static boolean enableXdsBootstrapCallCreds = GrpcUtil.getFlag(
       "GRPC_EXPERIMENTAL_XDS_BOOTSTRAP_CALL_CREDS", false);
 
   @VisibleForTesting
@@ -322,13 +322,13 @@ public abstract class BootstrapperImpl extends Bootstrapper {
           throw new XdsInitializationException(
               "Invalid bootstrap: server " + serverUri + " with 'jwt_token_file' config missing");
         }
-        String tokenFile = JsonUtil.getString(config, "token_file");
-        if (tokenFile == null || tokenFile.isEmpty()) {
+        String jwtTokenFile = JsonUtil.getString(config, "jwt_token_file");
+        if (jwtTokenFile == null || jwtTokenFile.isEmpty()) {
           throw new XdsInitializationException(
               "Invalid bootstrap: server " + serverUri
-                  + " with 'jwt_token_file' token_file missing or empty");
+                  + " with 'jwt_token_file' jwt_token_file missing or empty");
         }
-        parsedCreds.add(new JwtTokenFileCallCredentials(tokenFile));
+        parsedCreds.add(new JwtTokenFileCallCredentials(jwtTokenFile));
       } else {
         logger.log(XdsLogLevel.INFO, "Skipping unsupported call credential type: {0}", type);
       }
