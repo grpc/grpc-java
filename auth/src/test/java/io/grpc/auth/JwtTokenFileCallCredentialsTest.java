@@ -462,6 +462,67 @@ public class JwtTokenFileCallCredentialsTest {
     verify(applier2, never()).fail(any());
   }
 
+  @Test
+  public void applyMetadata_backgroundRefreshFails_servesCachedTokenDuringBackoff()
+      throws Exception {
+    timeProvider.set(100_000);
+    String firstToken = createJwtToken(180); // expires at 150_000
+    File tokenFile = writeTokenToFile(firstToken);
+    
+    JwtTokenFileCallCredentials credentials =
+        new JwtTokenFileCallCredentials(tokenFile.getAbsolutePath(), timeProvider);
+
+    RequestInfoImpl requestInfo = new RequestInfoImpl(SecurityLevel.PRIVACY_AND_INTEGRITY);
+    
+    // 1. Populate the cache
+    credentials.applyRequestMetadata(requestInfo, executor, applier1);
+    assertEquals(1, executor.runnables.size());
+    executor.runNext();
+    verify(applier1).apply(any());
+
+    // Update the token file with an invalid one
+    updateTokenFile(tokenFile, "invalid-token");
+
+    // 2. Call again - it's expiring soon since 150_000 - 100_000 <= 60_000
+    credentials.applyRequestMetadata(requestInfo, executor, applier2);
+    // Applies synchronously
+    verify(applier2).apply(headersCaptor.capture());
+    assertEquals("Bearer " + firstToken, headersCaptor.getValue().get(AUTHORIZATION_HEADER));
+    
+    // Background task queued
+    assertEquals(1, executor.runnables.size());
+    executor.runNext(); // Task runs and fails, putting it in BACKOFF state
+    
+    // 3. Call again while in BACKOFF state. Time hasn't changed, still 100_000.
+    // Token is still valid.
+    MetadataApplier applier3 = Mockito.mock(MetadataApplier.class);
+    credentials.applyRequestMetadata(requestInfo, executor, applier3);
+    
+    // No new background tasks should be scheduled because it's in BACKOFF
+    assertEquals(0, executor.runnables.size());
+    
+    // It should STILL serve the cached token because it is valid
+    ArgumentCaptor<Metadata> headersCaptor3 = ArgumentCaptor.forClass(Metadata.class);
+    verify(applier3).apply(headersCaptor3.capture());
+    assertEquals("Bearer " + firstToken, headersCaptor3.getValue().get(AUTHORIZATION_HEADER));
+    verify(applier3, never()).fail(any());
+    
+    // Move time past backoff limit
+    timeProvider.set(105_000); // 105_000 > 100_000 + 1000
+    
+    // 4. Call again. Time is past backoff and expiring soon.
+    // It should serve cache AND schedule refresh.
+    MetadataApplier applier4 = Mockito.mock(MetadataApplier.class);
+    credentials.applyRequestMetadata(requestInfo, executor, applier4);
+    
+    assertEquals(1, executor.runnables.size());
+    executor.runNext(); // Consume the failing background task again
+    
+    ArgumentCaptor<Metadata> headersCaptor4 = ArgumentCaptor.forClass(Metadata.class);
+    verify(applier4).apply(headersCaptor4.capture());
+    assertEquals("Bearer " + firstToken, headersCaptor4.getValue().get(AUTHORIZATION_HEADER));
+  }
+
   private static class FakeTimeProvider implements JwtTokenFileCallCredentials.TimeProvider {
     private long currentTimeMillis = 0;
 

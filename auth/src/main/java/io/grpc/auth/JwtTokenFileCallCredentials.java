@@ -19,6 +19,12 @@ package io.grpc.auth;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.io.BaseEncoding;
+import com.google.common.io.Files;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import io.grpc.CallCredentials;
 import io.grpc.Metadata;
 import io.grpc.SecurityLevel;
@@ -29,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -109,18 +116,18 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
         readState = ReadState.IDLE;
       }
 
-      if (readState == ReadState.BACKOFF) {
-        failStatus = lastReadFailureStatus != null ? lastReadFailureStatus : Status.UNAVAILABLE;
-      } else {
-        boolean hasValidCache = cachedToken != null && now < expirationTimeMillis;
-        boolean expiringSoon = hasValidCache && (expirationTimeMillis - now <= 60000);
+      boolean hasValidCache = cachedToken != null && now < expirationTimeMillis;
+      boolean expiringSoon = hasValidCache && (expirationTimeMillis - now <= 60000);
 
-        if (hasValidCache) {
-          tokenToApply = new TokenInfo(cachedToken, expirationTimeMillis);
-          if (expiringSoon && readState == ReadState.IDLE) {
-            readState = ReadState.READING;
-            triggerRead = true;
-          }
+      if (hasValidCache) {
+        tokenToApply = new TokenInfo(cachedToken, expirationTimeMillis);
+        if (expiringSoon && readState == ReadState.IDLE) {
+          readState = ReadState.READING;
+          triggerRead = true;
+        }
+      } else {
+        if (readState == ReadState.BACKOFF) {
+          failStatus = lastReadFailureStatus != null ? lastReadFailureStatus : Status.UNAVAILABLE;
         } else {
           if (readState == ReadState.IDLE) {
             readState = ReadState.READING;
@@ -150,14 +157,14 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
             loadToken();
           }
         });
-      } catch (java.util.concurrent.RejectedExecutionException e) {
+      } catch (RejectedExecutionException e) {
         handleExecutorRejection(e, tokenToApply != null);
       }
     }
   }
 
   private void handleExecutorRejection(
-      java.util.concurrent.RejectedExecutionException e, boolean isBackgroundReload) {
+      RejectedExecutionException e, boolean isBackgroundReload) {
     log.log(Level.WARNING, "Executor rejected token read task", e);
     List<MetadataApplier> appliersToFail = new ArrayList<>();
     synchronized (lock) {
@@ -256,7 +263,7 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     if (length > 1048576) {
       throw new IOException("File size exceeds 1 MB limit: " + length);
     }
-    byte[] bytes = com.google.common.io.Files.toByteArray(file);
+    byte[] bytes = Files.toByteArray(file);
     if (bytes.length > 1048576) {
       throw new IOException("File size exceeds 1 MB limit: " + bytes.length);
     }
@@ -270,26 +277,26 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
     }
     byte[] payloadBytes;
     try {
-      payloadBytes = com.google.common.io.BaseEncoding.base64Url()
+      payloadBytes = BaseEncoding.base64Url()
           .omitPadding().decode(segments[1]);
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("Invalid Base64URL encoding in payload", e);
     }
     String payloadJson = new String(payloadBytes, StandardCharsets.UTF_8);
-    com.google.gson.JsonObject jsonObject;
+    JsonObject jsonObject;
     try {
-      com.google.gson.JsonElement jsonElement = com.google.gson.JsonParser.parseString(payloadJson);
+      JsonElement jsonElement = JsonParser.parseString(payloadJson);
       if (!jsonElement.isJsonObject()) {
         throw new IllegalArgumentException("Payload is not a JSON object");
       }
       jsonObject = jsonElement.getAsJsonObject();
-    } catch (com.google.gson.JsonSyntaxException e) {
+    } catch (JsonSyntaxException e) {
       throw new IllegalArgumentException("Invalid JSON payload", e);
     }
     if (!jsonObject.has("exp")) {
       throw new IllegalArgumentException("Payload does not contain 'exp' claim");
     }
-    com.google.gson.JsonElement expElement = jsonObject.get("exp");
+    JsonElement expElement = jsonObject.get("exp");
     if (!expElement.isJsonPrimitive() || !expElement.getAsJsonPrimitive().isNumber()) {
       throw new IllegalArgumentException("'exp' claim is not a number");
     }
