@@ -2782,6 +2782,56 @@ public class OpenTelemetryMetricsModuleTest {
     assertNotNull(serverTracer);
   }
 
+  @Test
+  public void clientCallDelayReasonChanged_noActiveStopwatch_noOp() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+          fakeClock.getStopwatchSupplier(),
+          resource,
+          emptyList(),
+          emptyList());
+
+      CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+
+      callAttemptsTracerFactory.recordCallDelayReasonChanged("reasonWithoutStopwatch");
+      assertNotNull(callAttemptsTracerFactory);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
+  public void clientAttemptDelayReasonChanged_noActiveStopwatch_noOp() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+          fakeClock.getStopwatchSupplier(),
+          resource,
+          emptyList(),
+          emptyList());
+
+      CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+      ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+      tracer.recordAttemptDelayReasonChanged("reasonWithoutStopwatch");
+      assertNotNull(tracer);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
   private static List<MetricData> sortByName(List<MetricData> metrics) {
     metrics.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
     return metrics;
