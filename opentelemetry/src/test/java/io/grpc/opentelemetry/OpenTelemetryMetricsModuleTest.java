@@ -2734,6 +2734,54 @@ public class OpenTelemetryMetricsModuleTest {
     }
   }
 
+  @Test
+  public void callEnded_beforeAttemptEnded_recordsFinishedCall() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+          fakeClock.getStopwatchSupplier(),
+          resource,
+          emptyList(),
+          emptyList());
+
+      CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+      ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+      callAttemptsTracerFactory.callEnded(Status.OK, CALL_OPTIONS);
+      callAttemptsTracerFactory.attemptEnded(CALL_OPTIONS);
+
+      assertNotNull(tracer);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
+  @Test
+  public void serverStreamClosed_calledTwice_secondCallNoOp() {
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(),
+        resource,
+        emptyList(),
+        emptyList());
+
+    ServerStreamTracer.Factory serverTracerFactory = module.getServerTracerFactory();
+    ServerStreamTracer serverTracer =
+        serverTracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
+
+    serverTracer.streamClosed(Status.OK);
+    serverTracer.streamClosed(Status.CANCELLED);
+
+    assertNotNull(serverTracer);
+  }
+
   private static List<MetricData> sortByName(List<MetricData> metrics) {
     metrics.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
     return metrics;
