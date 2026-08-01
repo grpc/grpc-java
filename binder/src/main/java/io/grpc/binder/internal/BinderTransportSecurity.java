@@ -108,7 +108,9 @@ public final class BinderTransportSecurity {
       Status authStatus;
       try {
         authStatus = Futures.getDone(authStatusFuture);
-      } catch (ExecutionException | CancellationException e) {
+      } catch (ExecutionException e) {
+        authStatus = statusFromFailedAuthorizationFuture(e.getCause());
+      } catch (CancellationException e) {
         authStatus = statusFromFailedAuthorizationFuture(e);
       }
 
@@ -149,10 +151,9 @@ public final class BinderTransportSecurity {
       return listener;
     }
 
-    private static Status statusFromFailedAuthorizationFuture(Throwable t) {
+    private static Status statusFromFailedAuthorizationFuture(Throwable cause) {
       // The actual failure is retained as the cause for debugging, but peers should see a
       // uniform transport-level failure instead of the underlying exception message.
-      Throwable cause = t instanceof ExecutionException && t.getCause() != null ? t.getCause() : t;
       return Status.INTERNAL.withCause(cause).withDescription("Authorization future failed");
     }
   }
