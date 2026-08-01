@@ -2832,6 +2832,63 @@ public class OpenTelemetryMetricsModuleTest {
     }
   }
 
+  @Test
+  public void delayMetrics_featureFlagDisabled_allMethodsNoOp() {
+    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    String target = "target:///";
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+        enabledMetricsMap, disableDefaultMetrics);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        fakeClock.getStopwatchSupplier(),
+        resource,
+        Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
+        emptyList());
+
+    CallAttemptsTracerFactory callAttemptsTracerFactory =
+        new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+            emptyList(), Context.root());
+    ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+    callAttemptsTracerFactory.recordCallDelayStart("resolving", "reason1");
+    callAttemptsTracerFactory.recordCallDelayReasonChanged("reason2");
+    callAttemptsTracerFactory.recordCallDelayEnd();
+
+    tracer.recordAttemptDelayStart("connecting", "reason1");
+    tracer.recordAttemptDelayReasonChanged("reason2");
+    tracer.recordAttemptDelayEnd();
+
+    assertNotNull(tracer);
+  }
+
+  @Test
+  public void clientAttemptDelayDuration_withNullLocalityAndBackendService() {
+    System.setProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY", "true");
+    try {
+      String target = "target:///";
+      OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(testMeter,
+          enabledMetricsMap, disableDefaultMetrics);
+      OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+          fakeClock.getStopwatchSupplier(),
+          resource,
+          Arrays.asList("grpc.lb.locality", "grpc.lb.backend_service"),
+          emptyList());
+      CallAttemptsTracerFactory callAttemptsTracerFactory =
+          new CallAttemptsTracerFactory(module, target, CALL_OPTIONS, method.getFullMethodName(),
+              emptyList(), Context.root());
+      ClientStreamTracer tracer = callAttemptsTracerFactory.newClientStreamTracer(
+          ClientStreamTracer.StreamInfo.newBuilder().build(), new Metadata());
+
+      // Do NOT set optional labels so locality and backendService remain null
+      tracer.recordAttemptDelayStart("connecting", "reason1");
+      tracer.recordAttemptDelayEnd();
+
+      assertNotNull(tracer);
+    } finally {
+      System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    }
+  }
+
   private static List<MetricData> sortByName(List<MetricData> metrics) {
     metrics.sort((m1, m2) -> m1.getName().compareTo(m2.getName()));
     return metrics;

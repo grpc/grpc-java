@@ -980,6 +980,36 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void delayTracing_featureFlagDisabled_allMethodsNoOp() {
+    System.clearProperty("GRPC_EXPERIMENTAL_ENABLE_DELAY_OBSERVABILITY");
+    OpenTelemetryTracingModule tracingModule = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    Span clientSpan = tracerRule.spanBuilder("test-client-span").startSpan();
+    CallAttemptsTracerFactory callTracer =
+        tracingModule.newClientCallTracer(clientSpan, method);
+    ClientStreamTracer clientStreamTracer =
+        callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+
+    callTracer.recordCallDelayStart("resolving", "reason1");
+    callTracer.recordCallDelayReasonChanged("reason2");
+    callTracer.recordCallDelayEnd();
+
+    clientStreamTracer.recordAttemptDelayStart("connecting", "reason1");
+    clientStreamTracer.recordAttemptDelayReasonChanged("reason2");
+    clientStreamTracer.recordAttemptDelayEnd();
+
+    clientStreamTracer.streamClosed(Status.OK);
+    callTracer.callEnded(Status.OK);
+    clientSpan.end();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    for (SpanData span : spans) {
+      assertTrue(!span.getName().equals("Call Delay"));
+      assertTrue(!span.getName().equals("Attempt Delay"));
+    }
+  }
+
+  @Test
   public void clientInterceptor() {
     testClientInterceptors(false);
   }
