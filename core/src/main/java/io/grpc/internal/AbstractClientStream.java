@@ -197,7 +197,11 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public final void cancel(Status reason) {
     Preconditions.checkArgument(!reason.isOk(), "Should not cancel with OK status");
+    if (cancelled || transportState().isListenerClosed()) {
+      return;
+    }
     cancelled = true;
+    transportState().getStatsTraceContext().clientCancelled(reason);
     abstractClientStreamSink().cancel(reason);
   }
 
@@ -249,6 +253,10 @@ public abstract class AbstractClientStream extends AbstractStream
       if (options.getOnReadyThreshold() != null) {
         this.setOnReadyThreshold(options.getOnReadyThreshold());
       }
+    }
+
+    protected final boolean isListenerClosed() {
+      return listenerClosed;
     }
 
     private void setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -457,9 +465,6 @@ public abstract class AbstractClientStream extends AbstractStream
         Status status, RpcProgress rpcProgress, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
-        if (status.getCode() == Status.Code.CANCELLED) {
-          statsTraceCtx.clientCancelled(status);
-        }
         statsTraceCtx.streamClosed(status);
         if (getTransportTracer() != null) {
           getTransportTracer().reportStreamClosed(status.isOk());
