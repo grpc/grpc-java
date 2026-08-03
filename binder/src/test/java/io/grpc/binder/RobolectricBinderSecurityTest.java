@@ -164,7 +164,40 @@ public final class RobolectricBinderSecurityTest {
     ListenableFuture<Status> status = makeCall();
     statusesToSet.take().setException(new IllegalStateException("oops"));
 
-    assertThat(status.get().getCode()).isEqualTo(Status.Code.INTERNAL);
+    Status failureStatus = status.get();
+    assertThat(failureStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(failureStatus.getDescription()).isEqualTo("Authorization future failed");
+  }
+
+  @Test
+  public void testAsyncServerSecurityPolicy_failedFuture_subsequentCallHasOpaqueFailure()
+      throws Exception {
+    ListenableFuture<Status> firstStatusFuture = makeCall();
+    statusesToSet.take().setException(new IOException("ouch"));
+
+    Status firstStatus = firstStatusFuture.get();
+    assertThat(firstStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(firstStatus.getDescription()).isEqualTo("Authorization future failed");
+
+    // TransportAuthorizationState evicts failed futures so the second call triggers a fresh
+    // authorization check. Both calls must surface an opaque transport-level failure.
+    ListenableFuture<Status> secondStatusFuture = makeCall();
+    statusesToSet.take().setException(new IOException("ouch"));
+
+    Status secondStatus = secondStatusFuture.get();
+    assertThat(secondStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(secondStatus.getDescription()).isEqualTo("Authorization future failed");
+  }
+
+  @Test
+  public void testAsyncServerSecurityPolicy_failedFuture_cancelledFutureIsOpaque()
+      throws Exception {
+    ListenableFuture<Status> statusFuture = makeCall();
+    statusesToSet.take().cancel(false);
+
+    Status failureStatus = statusFuture.get();
+    assertThat(failureStatus.getCode()).isEqualTo(Status.Code.INTERNAL);
+    assertThat(failureStatus.getDescription()).isEqualTo("Authorization future failed");
   }
 
   @Test
