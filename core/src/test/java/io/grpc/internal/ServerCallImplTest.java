@@ -493,6 +493,32 @@ public class ServerCallImplTest {
     assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
   }
 
+  @Test
+  public void triggerEvent_propagatesToStream() {
+    Object event = new Object();
+    call.triggerEvent(event);
+    verify(stream).triggerEvent(event);
+  }
+
+  @Test
+  public void streamListener_triggerEvent() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+    Object event = new Object();
+    streamListener.triggerEvent(event);
+    verify(callListener).onEvent(event);
+  }
+
+  @Test
+  public void streamListener_triggerEvent_cancelled() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+    Object event = new Object();
+    streamListener.closed(Status.CANCELLED);
+    streamListener.triggerEvent(event);
+    verify(callListener, never()).onEvent(event);
+  }
+
   private static class LongMarshaller implements Marshaller<Long> {
     @Override
     public InputStream stream(Long value) {

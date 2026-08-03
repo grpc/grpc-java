@@ -391,6 +391,9 @@ public class AbstractServerStreamTest {
 
     @Override
     public void closed(Status status) {}
+
+    @Override
+    public void triggerEvent(Object event) {}
   }
 
   private static class AbstractServerStreamBase extends AbstractServerStream {
