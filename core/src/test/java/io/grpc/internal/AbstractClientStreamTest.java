@@ -192,9 +192,40 @@ public class AbstractClientStreamTest {
     state.transportReportStatus(Status.OK, false, new Metadata());
 
     // Subsequent late cancellation
-    stream.cancel(Status.CANCELLED.withDescription("Late cancel"));
+    verify(mockTracer, never()).cancelled(any(Status.class));
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryFalse_doesNotNotifyTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {},
+        customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Server-initiated CANCELLED (stopDelivery = false)
+    state.transportReportStatus(Status.CANCELLED, false, new Metadata());
 
     verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(Status.CANCELLED);
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryTrue_notifiesTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(allocator, state, new BaseSink() {},
+        customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Client/Transport-initiated cancellation (stopDelivery = true)
+    Status cancelStatus = Status.CANCELLED.withDescription("Client cancelled");
+    state.transportReportStatus(cancelStatus, true, new Metadata());
+
+    verify(mockTracer).cancelled(cancelStatus);
+    verify(mockTracer).streamClosed(cancelStatus);
   }
 
   @Test
