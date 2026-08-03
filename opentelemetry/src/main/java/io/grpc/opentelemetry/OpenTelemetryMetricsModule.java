@@ -256,27 +256,7 @@ final class OpenTelemetryMetricsModule {
               .put(METHOD_KEY, fullMethodName)
               .put(TARGET_KEY, target)
               .put("grpc.delay_type", delayType);
-          if (module.localityEnabled) {
-            String savedLocality = locality;
-            if (savedLocality == null) {
-              savedLocality = "";
-            }
-            builder.put(LOCALITY_KEY, savedLocality);
-          }
-          if (module.backendServiceEnabled) {
-            String savedBackendService = backendService;
-            if (savedBackendService == null) {
-              savedBackendService = "";
-            }
-            builder.put(BACKEND_SERVICE_KEY, savedBackendService);
-          }
-          if (module.customLabelEnabled) {
-            builder.put(
-                CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
-          }
-          for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
-            plugin.addLabels(builder);
-          }
+          addOptionalLabels(builder);
           module.resource.clientAttemptDelayCounter()
               .record(delayNanos * SECONDS_PER_NANO, builder.build(), attemptsState.otelContext);
         }
@@ -347,32 +327,12 @@ final class OpenTelemetryMetricsModule {
     }
 
     void recordFinishedAttempt() {
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+      AttributesBuilder builder = Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target)
           .put(STATUS_KEY, statusCode.toString());
-      if (module.localityEnabled) {
-        String savedLocality = locality;
-        if (savedLocality == null) {
-          savedLocality = "";
-        }
-        builder.put(LOCALITY_KEY, savedLocality);
-      }
-      if (module.backendServiceEnabled) {
-        String savedBackendService = backendService;
-        if (savedBackendService == null) {
-          savedBackendService = "";
-        }
-        builder.put(BACKEND_SERVICE_KEY, savedBackendService);
-      }
-      if (module.customLabelEnabled) {
-        builder.put(
-            CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
-      }
-      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
-        plugin.addLabels(builder);
-      }
-      io.opentelemetry.api.common.Attributes attribute = builder.build();
+      addOptionalLabels(builder);
+      Attributes attribute = builder.build();
 
       if (module.resource.clientAttemptDurationCounter() != null ) {
         module.resource.clientAttemptDurationCounter()
@@ -385,6 +345,22 @@ final class OpenTelemetryMetricsModule {
       if (module.resource.clientTotalReceivedCompressedMessageSizeCounter() != null) {
         module.resource.clientTotalReceivedCompressedMessageSizeCounter()
             .record(inboundWireSize, attribute, attemptsState.otelContext);
+      }
+    }
+
+    private void addOptionalLabels(AttributesBuilder builder) {
+      if (module.localityEnabled) {
+        builder.put(LOCALITY_KEY, Objects.toString(locality, ""));
+      }
+      if (module.backendServiceEnabled) {
+        builder.put(BACKEND_SERVICE_KEY, Objects.toString(backendService, ""));
+      }
+      if (module.customLabelEnabled) {
+        builder.put(
+            CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
+      }
+      for (OpenTelemetryPlugin.ClientStreamPlugin plugin : streamPlugins) {
+        plugin.addLabels(builder);
       }
     }
   }
@@ -629,8 +605,7 @@ final class OpenTelemetryMetricsModule {
               delayNanos * SECONDS_PER_NANO,
               callLevelBaseAttributes.toBuilder()
                   .put("grpc.delay_type", delayType)
-                  .build(),
-              Context.current());
+                  .build());
         }
       }
     }
