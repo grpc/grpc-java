@@ -136,6 +136,10 @@ tasks.register("runInteropTestRemote") {
         int lastResult1Code = -1
         int lastResult2Code = -1
         for (int attempt = 0; attempt < maxChannelReuseRetries; attempt++) {
+            result1Body = ""
+            result2Body = ""
+            lastResult1Code = -1
+            lastResult2Code = -1
             try {
                 result1 = client.newCall(request).execute()
                 result2 = client.newCall(request).execute()
