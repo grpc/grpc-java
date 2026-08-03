@@ -201,7 +201,6 @@ public abstract class AbstractClientStream extends AbstractStream
       return;
     }
     cancelled = true;
-    transportState().getStatsTraceContext().clientCancelled(reason);
     abstractClientStreamSink().cancel(reason);
   }
 
@@ -443,13 +442,13 @@ public abstract class AbstractClientStream extends AbstractStream
 
       if (deframerClosed) {
         deframerClosedTask = null;
-        closeListener(status, rpcProgress, trailers);
+        closeListener(status, rpcProgress, trailers, stopDelivery);
       } else {
         deframerClosedTask =
             new Runnable() {
               @Override
               public void run() {
-                closeListener(status, rpcProgress, trailers);
+                closeListener(status, rpcProgress, trailers, stopDelivery);
               }
             };
         closeDeframer(stopDelivery);
@@ -462,9 +461,12 @@ public abstract class AbstractClientStream extends AbstractStream
      * @throws IllegalStateException if the call has not yet been started.
      */
     private void closeListener(
-        Status status, RpcProgress rpcProgress, Metadata trailers) {
+        Status status, RpcProgress rpcProgress, Metadata trailers, boolean stopDelivery) {
       if (!listenerClosed) {
         listenerClosed = true;
+        if (stopDelivery) {
+          statsTraceCtx.clientCancelled(status);
+        }
         statsTraceCtx.streamClosed(status);
         if (getTransportTracer() != null) {
           getTransportTracer().reportStreamClosed(status.isOk());
