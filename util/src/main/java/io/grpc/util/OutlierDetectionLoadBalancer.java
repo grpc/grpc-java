@@ -493,7 +493,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
             @Override
             public void streamClosed(Status status) {
               if (!cancelled) {
-                tracker.incrementCallCount(status);
+                tracker.incrementCallCount(status.isOk());
               }
               delegate().streamClosed(status);
             }
@@ -510,7 +510,7 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
             @Override
             public void streamClosed(Status status) {
               if (!cancelled) {
-                tracker.incrementCallCount(status);
+                tracker.incrementCallCount(status.isOk());
               }
             }
           };
@@ -571,13 +571,13 @@ public final class OutlierDetectionLoadBalancer extends LoadBalancer {
       return ImmutableSet.copyOf(subchannels);
     }
 
-    void incrementCallCount(Status status) {
+    void incrementCallCount(boolean success) {
       // If neither algorithm is configured, no point in incrementing counters.
       if (config.successRateEjection == null && config.failurePercentageEjection == null) {
         return;
       }
 
-      if (status.isOk()) {
+      if (success) {
         activeCallCounter.successCount.getAndIncrement();
       } else {
         activeCallCounter.failureCount.getAndIncrement();
