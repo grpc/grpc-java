@@ -287,6 +287,94 @@ public class InProcessTransportTest extends AbstractTransportTest {
         .cancelled(org.mockito.Mockito.any(Status.class));
   }
 
+  @Test
+  public void serverStream_closeWithCancelled_doesNotNotifyTracerCancelled() throws Exception {
+    server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), CallOptions.DEFAULT,
+        new ClientStreamTracer[] {mockTracer});
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+
+    Status serverStatus = Status.CANCELLED.withDescription("Server cancelled over wire");
+    serverStream.close(serverStatus, new Metadata());
+
+    org.mockito.Mockito.verify(mockTracer, org.mockito.Mockito.never())
+        .cancelled(org.mockito.Mockito.any(Status.class));
+    org.mockito.ArgumentCaptor<Status> statusCaptor =
+        org.mockito.ArgumentCaptor.forClass(Status.class);
+    org.mockito.Mockito.verify(mockTracer).streamClosed(statusCaptor.capture());
+    assertEquals(Status.Code.CANCELLED, statusCaptor.getValue().getCode());
+    assertEquals("Server cancelled over wire", statusCaptor.getValue().getDescription());
+  }
+
+  @Test
+  public void serverStream_closeWithDeadlineExceeded_noTracerCancelled() throws Exception {
+    server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), CallOptions.DEFAULT,
+        new ClientStreamTracer[] {mockTracer});
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+    StreamCreation serverStreamCreation =
+        serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+
+    Status serverStatus = Status.DEADLINE_EXCEEDED.withDescription("Server deadline exceeded");
+    serverStream.close(serverStatus, new Metadata());
+
+    org.mockito.Mockito.verify(mockTracer, org.mockito.Mockito.never())
+        .cancelled(org.mockito.Mockito.any(Status.class));
+    org.mockito.ArgumentCaptor<Status> statusCaptor =
+        org.mockito.ArgumentCaptor.forClass(Status.class);
+    org.mockito.Mockito.verify(mockTracer).streamClosed(statusCaptor.capture());
+    assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+    assertEquals("Server deadline exceeded", statusCaptor.getValue().getDescription());
+  }
+
+  @Test
+  public void clientStream_cancelWithDeadlineExceeded_notifiesTracerCancelled() throws Exception {
+    server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener =
+        serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    ClientStreamTracer mockTracer = org.mockito.Mockito.mock(ClientStreamTracer.class);
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), CallOptions.DEFAULT,
+        new ClientStreamTracer[] {mockTracer});
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+
+    Status cancelStatus = Status.DEADLINE_EXCEEDED.withDescription("Client deadline exceeded");
+    clientStream.cancel(cancelStatus);
+
+    org.mockito.Mockito.verify(mockTracer).cancelled(cancelStatus);
+    org.mockito.Mockito.verify(mockTracer).streamClosed(cancelStatus);
+  }
+
   private void assertAssumedMessageSize(
       TestStreamTracer streamTracerSender, TestStreamTracer streamTracerReceiver) {
     if (isEnabledSupportTracingMessageSizes()) {

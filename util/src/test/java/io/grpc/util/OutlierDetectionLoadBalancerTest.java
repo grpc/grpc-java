@@ -605,6 +605,58 @@ public class OutlierDetectionLoadBalancerTest {
   }
 
   /**
+   * Server-initiated CANCELLED status over the wire (stopDelivery = false) counts as failure
+   * and results in ejection under success rate algorithm.
+   */
+  @Test
+  public void successRateOneOutlier_serverInitiatedCancelledEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated CANCELLED status is counted as a failure, so subchannel1 should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * Server-initiated DEADLINE_EXCEEDED status over the wire (stopDelivery = false) counts
+   * as failure and results in ejection under success rate algorithm.
+   */
+  @Test
+  public void successRateOneOutlier_serverInitiatedDeadlineExceededEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setSuccessRateEjection(
+            new SuccessRateEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated DEADLINE_EXCEEDED status is counted as a failure, so subchannel1 is ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
    * The success rate algorithm ejects the outlier, but then the config changes so that similar
    * behavior no longer gets ejected.
    */
@@ -972,6 +1024,58 @@ public class OutlierDetectionLoadBalancerTest {
 
     // DEADLINE_EXCEEDED status should be excluded from call counting, so no ejections occur.
     assertEjectedSubchannels(ImmutableSet.of());
+  }
+
+  /**
+   * Server-initiated CANCELLED status over the wire (stopDelivery = false) counts as failure
+   * and results in ejection under failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentageOneOutlier_serverInitiatedCancelledEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns CANCELLED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.CANCELLED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated CANCELLED status is counted as a failure, so subchannel1 should be ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
+  }
+
+  /**
+   * Server-initiated DEADLINE_EXCEEDED status over the wire (stopDelivery = false) counts
+   * as failure and results in ejection under failure percentage algorithm.
+   */
+  @Test
+  public void failurePercentageOneOutlier_serverInitiatedDeadlineExceededEjected() {
+    OutlierDetectionLoadBalancerConfig config = new OutlierDetectionLoadBalancerConfig.Builder()
+        .setMaxEjectionPercent(50)
+        .setFailurePercentageEjection(
+            new FailurePercentageEjection.Builder()
+                .setMinimumHosts(3)
+                .setRequestVolume(10).build())
+        .setChildConfig(newChildConfig(roundRobinLbProvider, null)).build();
+
+    loadBalancer.acceptResolvedAddresses(buildResolvedAddress(config, servers));
+
+    // subchannel1 returns DEADLINE_EXCEEDED from server (no client cancellation tracer callback).
+    generateServerInitiatedLoad(ImmutableMap.of(subchannel1, Status.DEADLINE_EXCEEDED), 7);
+
+    // Move forward in time to a point where the detection timer has fired.
+    forwardTime(config);
+
+    // Server-initiated DEADLINE_EXCEEDED status is counted as a failure, so subchannel1 is ejected.
+    assertEjectedSubchannels(ImmutableSet.of(ImmutableSet.copyOf(servers.get(0).getAddresses())));
   }
 
   /**
@@ -1539,6 +1643,36 @@ public class OutlierDetectionLoadBalancerTest {
         }
         clientStreamTracer.streamClosed(status);
       }
+    }
+  }
+
+  // Generates 100 calls, simulating server-initiated status responses over the wire.
+  private void generateServerInitiatedLoad(
+      Map<Subchannel, Status> statusMap, int expectedStateChanges) {
+    deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel3, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel4, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(subchannel5, ConnectivityStateInfo.forNonError(READY));
+
+    verify(mockHelper, times(expectedStateChanges)).updateBalancingState(stateCaptor.capture(),
+        pickerCaptor.capture());
+    SubchannelPicker picker = pickerCaptor.getAllValues()
+        .get(pickerCaptor.getAllValues().size() - 1);
+
+    HashMap<Subchannel, Integer> callCountMap = new HashMap<>();
+    for (int i = 0; i < 100; i++) {
+      PickResult pickResult = picker
+          .pickSubchannel(mock(PickSubchannelArgs.class));
+      ClientStreamTracer clientStreamTracer = pickResult.getStreamTracerFactory()
+          .newClientStreamTracer(null, null);
+
+      Subchannel subchannel = (Subchannel) pickResult.getSubchannel().getInternalSubchannel();
+
+      int calls = callCountMap.containsKey(subchannel) ? callCountMap.get(subchannel) : 0;
+      callCountMap.put(subchannel, ++calls);
+      Status status = statusMap.containsKey(subchannel) ? statusMap.get(subchannel) : Status.OK;
+      clientStreamTracer.streamClosed(status);
     }
   }
 

@@ -229,6 +229,96 @@ public class AbstractClientStreamTest {
   }
 
   @Test
+  public void transportReportStatus_stopDeliveryFalse_deadlineExceeded_noTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Server-initiated DEADLINE_EXCEEDED (stopDelivery = false)
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("Server deadline exceeded");
+    state.transportReportStatus(status, false, new Metadata());
+
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(status);
+  }
+
+  @Test
+  public void transportReportStatus_stopDeliveryTrue_deadlineExceeded_notifiesTracerCancelled() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    final BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Client/Transport-initiated deadline exceeded (stopDelivery = true)
+    Status status = Status.DEADLINE_EXCEEDED.withDescription("Client deadline exceeded");
+    state.transportReportStatus(status, true, new Metadata());
+
+    verify(mockTracer).cancelled(status);
+    verify(mockTracer).streamClosed(status);
+  }
+
+  @Test
+  public void closeListener_directAssertions_stopDeliveryTrueAndFalse() {
+    ClientStreamTracer mockTracer1 = mock(ClientStreamTracer.class);
+    StatsTraceContext statsTraceCtx1 = new StatsTraceContext(new StreamTracer[] {mockTracer1});
+    BaseTransportState state1 = new BaseTransportState(statsTraceCtx1, transportTracer);
+    AbstractClientStream stream1 = new BaseAbstractClientStream(
+        allocator, state1, new BaseSink() {}, statsTraceCtx1, transportTracer);
+    stream1.start(mockListener);
+
+    // stopDelivery = true: clientCancelled is called before streamClosed
+    Status statusTrue = Status.CANCELLED.withDescription("stopDelivery true");
+    state1.transportReportStatus(statusTrue, true, new Metadata());
+    verify(mockTracer1).cancelled(statusTrue);
+    verify(mockTracer1).streamClosed(statusTrue);
+
+    ClientStreamTracer mockTracer2 = mock(ClientStreamTracer.class);
+    StatsTraceContext statsTraceCtx2 = new StatsTraceContext(new StreamTracer[] {mockTracer2});
+    BaseTransportState state2 = new BaseTransportState(statsTraceCtx2, transportTracer);
+    AbstractClientStream stream2 = new BaseAbstractClientStream(
+        allocator, state2, new BaseSink() {}, statsTraceCtx2, transportTracer);
+    stream2.start(mockListener);
+
+    // stopDelivery = false: clientCancelled is NOT called, only streamClosed
+    Status statusFalse = Status.CANCELLED.withDescription("stopDelivery false");
+    state2.transportReportStatus(statusFalse, false, new Metadata());
+    verify(mockTracer2, never()).cancelled(any(Status.class));
+    verify(mockTracer2).streamClosed(statusFalse);
+  }
+
+  @Test
+  public void closeListener_deferredDeframerClose_stopDeliveryFalse_delaysCloseListener() {
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
+    BaseTransportState state = new BaseTransportState(customStatsTraceCtx, transportTracer);
+    AbstractClientStream stream = new BaseAbstractClientStream(
+        allocator, state, new BaseSink() {}, customStatsTraceCtx, transportTracer);
+    stream.start(mockListener);
+
+    // Send partial message into deframer
+    byte[] data = new byte[] {0, 0, 0, 0, 2, 1}; // 2-byte frame, only 1 byte delivered
+    state.deframe(ReadableBuffers.wrap(data));
+
+    Status statusFalse = Status.CANCELLED.withDescription("deferred stopDelivery false");
+    state.transportReportStatus(statusFalse, false, new Metadata());
+
+    // Listener is not closed yet because deframer is mid-frame and waiting for complete frame
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer, never()).streamClosed(any(Status.class));
+
+    // Request message and provide remaining byte of frame to complete deframer processing
+    stream.request(1);
+    state.deframe(ReadableBuffers.wrap(new byte[] {2}));
+    verify(mockTracer, never()).cancelled(any(Status.class));
+    verify(mockTracer).streamClosed(any(Status.class));
+  }
+
+  @Test
   public void startFailsOnNullListener() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
