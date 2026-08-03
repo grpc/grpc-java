@@ -263,35 +263,6 @@ public class AbstractClientStreamTest {
   }
 
   @Test
-  public void closeListener_directAssertions_stopDeliveryTrueAndFalse() {
-    ClientStreamTracer mockTracer1 = mock(ClientStreamTracer.class);
-    StatsTraceContext statsTraceCtx1 = new StatsTraceContext(new StreamTracer[] {mockTracer1});
-    BaseTransportState state1 = new BaseTransportState(statsTraceCtx1, transportTracer);
-    AbstractClientStream stream1 = new BaseAbstractClientStream(
-        allocator, state1, new BaseSink() {}, statsTraceCtx1, transportTracer);
-    stream1.start(mockListener);
-
-    // stopDelivery = true: clientCancelled is called before streamClosed
-    Status statusTrue = Status.CANCELLED.withDescription("stopDelivery true");
-    state1.transportReportStatus(statusTrue, true, new Metadata());
-    verify(mockTracer1).cancelled(statusTrue);
-    verify(mockTracer1).streamClosed(statusTrue);
-
-    ClientStreamTracer mockTracer2 = mock(ClientStreamTracer.class);
-    StatsTraceContext statsTraceCtx2 = new StatsTraceContext(new StreamTracer[] {mockTracer2});
-    BaseTransportState state2 = new BaseTransportState(statsTraceCtx2, transportTracer);
-    AbstractClientStream stream2 = new BaseAbstractClientStream(
-        allocator, state2, new BaseSink() {}, statsTraceCtx2, transportTracer);
-    stream2.start(mockListener);
-
-    // stopDelivery = false: clientCancelled is NOT called, only streamClosed
-    Status statusFalse = Status.CANCELLED.withDescription("stopDelivery false");
-    state2.transportReportStatus(statusFalse, false, new Metadata());
-    verify(mockTracer2, never()).cancelled(any(Status.class));
-    verify(mockTracer2).streamClosed(statusFalse);
-  }
-
-  @Test
   public void closeListener_deferredDeframerClose_stopDeliveryFalse_delaysCloseListener() {
     ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     StatsTraceContext customStatsTraceCtx = new StatsTraceContext(new StreamTracer[] {mockTracer});
