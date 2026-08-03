@@ -100,6 +100,19 @@ public abstract class ServerCall<ReqT, RespT> {
      * <em>another</em> {@code onReady()} callback.
      */
     public void onReady() {}
+
+    /**
+     * A custom event has been triggered by the call.
+     *
+     * <p>This callback is guaranteed to run on the call's executor, serialized with other
+     * callbacks (like {@link #onMessage}, {@link #onHalfClose}). This means the implementation
+     * does not need internal synchronization to access call-specific state.
+     *
+     * @param event the triggered event.
+     */
+    public void onEvent(Object event) {
+      // Default no-op
+    }
   }
 
   /**
@@ -260,6 +273,18 @@ public abstract class ServerCall<ReqT, RespT> {
   @Nullable
   public String getAuthority() {
     return null;
+  }
+
+  /**
+   * Triggers a custom event to be processed by the listener.
+   * The event will be delivered to {@link Listener#onEvent(Object)} on the call's executor.
+   *
+   * <p>This method is thread-safe and can be called from any thread.
+   *
+   * @param event the event to trigger.
+   */
+  public void triggerEvent(Object event) {
+    // Default no-op
   }
 
   /**

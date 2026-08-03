@@ -430,6 +430,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
+      public void triggerEvent(Object event) {
+        clientStream.triggerServerEvent(event);
+      }
+
+      @Override
       public void request(int numMessages) {
         boolean onReady = clientStream.serverRequested(numMessages);
         if (onReady) {
@@ -730,6 +735,20 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       private synchronized void setListener(ServerStreamListener listener) {
         this.serverStreamListener = listener;
+      }
+
+      void triggerServerEvent(final Object event) {
+        synchronized (this) {
+          if (!closed && serverStreamListener != null) {
+            syncContext.executeLater(new Runnable() {
+              @Override
+              public void run() {
+                serverStreamListener.triggerEvent(event);
+              }
+            });
+          }
+        }
+        syncContext.drain();
       }
 
       @Override

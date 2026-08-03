@@ -781,6 +781,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     @Override
     public void onReady() {}
+
+    @Override
+    public void triggerEvent(Object event) {}
   }
 
   /**
@@ -958,6 +961,34 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         }
 
         callExecutor.execute(new OnReady());
+      }
+    }
+
+    @Override
+    public void triggerEvent(final Object event) {
+      try (TaskCloseable ignore = PerfMark.traceTask("ServerStreamListener.triggerEvent")) {
+        PerfMark.attachTag(tag);
+        final Link link = PerfMark.linkOut();
+
+        final class TriggerEvent extends ContextRunnable {
+          TriggerEvent() {
+            super(context);
+          }
+
+          @Override
+          public void runInContext() {
+            try (TaskCloseable ignore = PerfMark.traceTask("ServerCallListener(app).onEvent")) {
+              PerfMark.attachTag(tag);
+              PerfMark.linkIn(link);
+              getListener().triggerEvent(event);
+            } catch (Throwable t) {
+              internalClose(t);
+              throw t;
+            }
+          }
+        }
+
+        callExecutor.execute(new TriggerEvent());
       }
     }
   }
