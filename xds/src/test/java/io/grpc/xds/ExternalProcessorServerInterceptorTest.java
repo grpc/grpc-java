@@ -528,7 +528,7 @@ public class ExternalProcessorServerInterceptorTest {
           new SimpleServerCall(METHOD_SAY_HELLO_RAW), new Metadata(), nextHandler);
 
       assertThat(capturedExecutor.get()).isNotNull();
-      assertThat(capturedExecutor.get().getClass().getName()).contains("SynchronizationContext");
+      assertThat(capturedExecutor.get()).isSameInstanceAs(com.google.common.util.concurrent.MoreExecutors.directExecutor());
     } finally {
       if (responseObserverRef.get() != null) {
         responseObserverRef.get().onCompleted();
@@ -2021,30 +2021,7 @@ public class ExternalProcessorServerInterceptorTest {
     ExternalProcessorServerInterceptor interceptor =
         new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
 
-    ServerCall<InputStream, InputStream> dummyCall =
-        new ServerCall<InputStream, InputStream>() {
-          @Override
-          public void request(int numMessages) {}
-
-          @Override
-          public void sendHeaders(Metadata headers) {}
-
-          @Override
-          public void sendMessage(InputStream message) {}
-
-          @Override
-          public void close(Status status, Metadata trailers) {}
-
-          @Override
-          public boolean isCancelled() {
-            return false;
-          }
-
-          @Override
-          public MethodDescriptor<InputStream, InputStream> getMethodDescriptor() {
-            return METHOD_SAY_HELLO_RAW;
-          }
-        };
+    SimpleServerCall dummyCall = new SimpleServerCall(METHOD_SAY_HELLO_RAW);
 
     final AtomicBoolean startCallCalled = new AtomicBoolean();
     ServerCallHandler<InputStream, InputStream> dummyNext =
@@ -2146,30 +2123,7 @@ public class ExternalProcessorServerInterceptorTest {
     ExternalProcessorServerInterceptor interceptor =
         new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
 
-    ServerCall<InputStream, InputStream> dummyCall =
-        new ServerCall<InputStream, InputStream>() {
-          @Override
-          public void request(int numMessages) {}
-
-          @Override
-          public void sendHeaders(Metadata headers) {}
-
-          @Override
-          public void sendMessage(InputStream message) {}
-
-          @Override
-          public void close(Status status, Metadata trailers) {}
-
-          @Override
-          public boolean isCancelled() {
-            return false;
-          }
-
-          @Override
-          public MethodDescriptor<InputStream, InputStream> getMethodDescriptor() {
-            return METHOD_SAY_HELLO_RAW;
-          }
-        };
+    SimpleServerCall dummyCall = new SimpleServerCall(METHOD_SAY_HELLO_RAW);
 
     final AtomicBoolean startCallCalled = new AtomicBoolean();
     ServerCallHandler<InputStream, InputStream> dummyNext =

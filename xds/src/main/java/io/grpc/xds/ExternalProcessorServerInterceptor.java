@@ -244,7 +244,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     private final ServerCall<InputStream, InputStream> rawCall;
     private final ExternalProcessorGrpc.ExternalProcessorStub extProcStub;
-    private final SynchronizationContext syncContext;
     private final ExternalProcessorFilterConfig config;
     private final ScheduledExecutorService scheduler;
     private final Object streamLock = new Object();
@@ -307,16 +306,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         Context callContext) {
       super(rawCall);
       this.rawCall = rawCall;
-      this.syncContext = new SynchronizationContext(new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread t, Throwable e) {
-          logger.log(
-              Level.SEVERE,
-              "Uncaught exception in ExternalProcessorServerInterceptor SynchronizationContext",
-              e);
-        }
-      });
-      this.extProcStub = extProcStub.withExecutor(this.syncContext);
+      this.extProcStub = extProcStub.withExecutor(MoreExecutors.directExecutor());
       this.config = config;
       this.currentProcessingMode = config.getExternalProcessor().getProcessingMode();
       this.mutationFilter = new HeaderMutationFilter(mutationRulesConfig);
@@ -344,6 +334,25 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     boolean isExtProcStreamDraining() {
       return extProcStreamState.get().isDraining();
+    }
+
+    private boolean isSimpleServerCall(Class<?> clazz) {
+      if (clazz == null) {
+        return false;
+      }
+      if (clazz.getName().contains("SimpleServerCall")) {
+        return true;
+      }
+      return isSimpleServerCall(clazz.getSuperclass());
+    }
+
+    @Override
+    public void triggerEvent(Object event) {
+      if (isSimpleServerCall(rawCall.getClass())) {
+        wrappedListener.onEvent(event);
+      } else {
+        super.triggerEvent(event);
+      }
     }
 
     private void activateCall() {
@@ -424,154 +433,22 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           synchronized (streamLock) {
             extProcClientCallRequestObserver = requestStream;
           }
-          requestStream.setOnReadyHandler(DataPlaneServerCall.this::onExtProcStreamReady);
+          requestStream.setOnReadyHandler(() -> DataPlaneServerCall.this.triggerEvent(new ExtProcStreamReadyEvent()));
         }
 
         @Override
         public void onNext(ProcessingResponse response) {
-          try {
-            if (config.getObservabilityMode()) {
-              return;
-            }
-
-            if (response.hasImmediateResponse()) {
-              if (config.getDisableImmediateResponse()) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription(
-                        "Immediate response is disabled but received from external processor")
-                    .asRuntimeException());
-                return;
-              }
-              handleImmediateResponse(response.getImmediateResponse());
-              return;
-            }
-
-            EventType expected = expectedResponses.peek();
-            EventType received = null;
-            if (response.hasRequestHeaders()) {
-              received = EventType.REQUEST_HEADERS;
-            } else if (response.hasRequestBody()) {
-              received = EventType.REQUEST_BODY;
-            } else if (response.hasResponseHeaders()) {
-              received = EventType.RESPONSE_HEADERS;
-            } else if (response.hasResponseBody()) {
-              received = EventType.RESPONSE_BODY;
-            } else if (response.hasResponseTrailers()) {
-              received = EventType.RESPONSE_TRAILERS;
-            }
-
-            if (received != null) {
-              if (expected == null || expected != received) {
-                internalOnError(Status.UNAVAILABLE
-                    .withDescription("Protocol error: received response out of order. Expected: " 
-                        + expected + ", Received: " + received)
-                    .asRuntimeException());
-                return;
-              }
-              expectedResponses.poll();
-            }
-
-            if (response.getRequestDrain()) {
-              extProcStreamState.set(ExtProcStreamState.DRAINING);
-              halfCloseExtProcStream();
-              activateCall();
-            }
-
-            if (response.hasRequestHeaders()) {
-              if (response.getRequestHeaders().hasResponse()) {
-                if (response.getRequestHeaders().getResponse().getStatus()
-                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
-                  internalOnError(Status.UNAVAILABLE
-                      .withDescription("CONTINUE_AND_REPLACE is not supported")
-                      .asRuntimeException());
-                  return;
-                }
-                applyHeaderMutations(
-                    requestHeaders,
-                    response.getRequestHeaders().getResponse().getHeaderMutation(),
-                    mutationFilter,
-                    mutator);
-              }
-              activateCall();
-            }
-            else if (response.hasRequestBody()) {
-              if (validateCompressionSupport(response.getRequestBody())) {
-                handleRequestBodyResponse(response.getRequestBody());
-              }
-            }
-            else if (response.hasResponseHeaders()) {
-              if (response.getResponseHeaders().hasResponse()) {
-                if (response.getResponseHeaders().getResponse().getStatus()
-                    == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
-                  internalOnError(Status.UNAVAILABLE
-                      .withDescription("CONTINUE_AND_REPLACE is not supported")
-                      .asRuntimeException());
-                  return;
-                }
-                applyHeaderMutations(
-                    trailersOnly.get() ? savedTrailers : savedResponseHeaders,
-                    response.getResponseHeaders().getResponse().getHeaderMutation(),
-                    mutationFilter,
-                    mutator);
-              }
-              if (trailersOnly.get()) {
-                proceedWithClose();
-              } else {
-                proceedWithSendHeaders();
-              }
-            }
-            else if (response.hasResponseBody()) {
-              if (validateCompressionSupport(response.getResponseBody())) {
-                handleResponseBodyResponse(response.getResponseBody());
-              }
-            }
-            else if (response.hasResponseTrailers()) {
-              if (response.getResponseTrailers().hasHeaderMutation()) {
-                applyHeaderMutations(
-                    savedTrailers,
-                    response.getResponseTrailers().getHeaderMutation(),
-                    mutationFilter,
-                    mutator);
-              }
-              proceedWithClose();
-            }
-
-            checkEndOfStream();
-          } catch (Throwable t) {
-            internalOnError(t);
-          }
+          DataPlaneServerCall.this.triggerEvent(new ExtProcResponseEvent(response));
         }
 
         @Override
         public void onError(Throwable t) {
-          if (markExtProcStreamFailed(extProcStreamState)) {
-            synchronized (streamLock) {
-              extProcClientCallRequestObserver = null;
-            }
-            if (config.getObservabilityMode()
-                || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
-              handleFailOpen();
-            } else {
-              rawCall.close(
-                  Status.INTERNAL.withDescription("External processor stream failed")
-                      .withCause(t),
-                  new Metadata());
-            }
-          }
+          DataPlaneServerCall.this.triggerEvent(new ExtProcErrorEvent(t));
         }
 
         @Override
         public void onCompleted() {
-          ExtProcStreamState state = extProcStreamState.get();
-          if (state == ExtProcStreamState.DRAINING) {
-            if (markExtProcStreamCompleted(extProcStreamState)) {
-              handleFailOpen();
-            }
-          } else if (state == ExtProcStreamState.ACTIVE) {
-            internalOnError(Status.UNAVAILABLE
-                .withDescription("External processor stream completed without drain")
-                .asRuntimeException());
-          }
+          DataPlaneServerCall.this.triggerEvent(new ExtProcCompletedEvent());
         }
       });
 
@@ -645,7 +522,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       }
     }
 
-    private void onExtProcStreamReady() {
+    void onExtProcStreamReady() {
       drainPendingRequests();
       wrappedListener.onReadyNotify();
     }
@@ -710,6 +587,150 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       }
     }
 
+    void handleExtProcResponse(ProcessingResponse response) {
+      try {
+        if (config.getObservabilityMode()) {
+          return;
+        }
+
+        if (response.hasImmediateResponse()) {
+          if (config.getDisableImmediateResponse()) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription(
+                    "Immediate response is disabled but received from external processor")
+                .asRuntimeException());
+            return;
+          }
+          handleImmediateResponse(response.getImmediateResponse());
+          return;
+        }
+
+        EventType expected = expectedResponses.peek();
+        EventType received = null;
+        if (response.hasRequestHeaders()) {
+          received = EventType.REQUEST_HEADERS;
+        } else if (response.hasRequestBody()) {
+          received = EventType.REQUEST_BODY;
+        } else if (response.hasResponseHeaders()) {
+          received = EventType.RESPONSE_HEADERS;
+        } else if (response.hasResponseBody()) {
+          received = EventType.RESPONSE_BODY;
+        } else if (response.hasResponseTrailers()) {
+          received = EventType.RESPONSE_TRAILERS;
+        }
+
+        if (received != null) {
+          if (expected == null || expected != received) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("Protocol error: received response out of order. Expected: " 
+                    + expected + ", Received: " + received)
+                .asRuntimeException());
+            return;
+          }
+          expectedResponses.poll();
+        }
+
+        if (response.getRequestDrain()) {
+          extProcStreamState.set(ExtProcStreamState.DRAINING);
+          activateCall();
+          halfCloseExtProcStream();
+        }
+
+        if (response.hasRequestHeaders()) {
+          if (response.getRequestHeaders().hasResponse()) {
+            if (response.getRequestHeaders().getResponse().getStatus()
+                == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+              internalOnError(Status.UNAVAILABLE
+                  .withDescription("CONTINUE_AND_REPLACE is not supported")
+                  .asRuntimeException());
+              return;
+            }
+            applyHeaderMutations(
+                requestHeaders,
+                response.getRequestHeaders().getResponse().getHeaderMutation(),
+                mutationFilter,
+                mutator);
+          }
+          activateCall();
+        }
+        else if (response.hasRequestBody()) {
+          if (validateCompressionSupport(response.getRequestBody())) {
+            handleRequestBodyResponse(response.getRequestBody());
+          }
+        }
+        else if (response.hasResponseHeaders()) {
+          if (response.getResponseHeaders().hasResponse()) {
+            if (response.getResponseHeaders().getResponse().getStatus()
+                == CommonResponse.ResponseStatus.CONTINUE_AND_REPLACE) {
+              internalOnError(Status.UNAVAILABLE
+                  .withDescription("CONTINUE_AND_REPLACE is not supported")
+                  .asRuntimeException());
+              return;
+            }
+            applyHeaderMutations(
+                trailersOnly.get() ? savedTrailers : savedResponseHeaders,
+                response.getResponseHeaders().getResponse().getHeaderMutation(),
+                mutationFilter,
+                mutator);
+          }
+          if (trailersOnly.get()) {
+            proceedWithClose();
+          } else {
+            proceedWithSendHeaders();
+          }
+        }
+        else if (response.hasResponseBody()) {
+          if (validateCompressionSupport(response.getResponseBody())) {
+            handleResponseBodyResponse(response.getResponseBody());
+          }
+        }
+        else if (response.hasResponseTrailers()) {
+          if (response.getResponseTrailers().hasHeaderMutation()) {
+            applyHeaderMutations(
+                savedTrailers,
+                response.getResponseTrailers().getHeaderMutation(),
+                mutationFilter,
+                mutator);
+          }
+          proceedWithClose();
+        }
+
+        checkEndOfStream();
+      } catch (Throwable t) {
+        internalOnError(t);
+      }
+    }
+
+    void handleExtProcError(Throwable t) {
+      if (markExtProcStreamFailed(extProcStreamState)) {
+        synchronized (streamLock) {
+          extProcClientCallRequestObserver = null;
+        }
+        if (config.getObservabilityMode()
+            || (config.getFailureModeAllow() && !bodyMessageSentToExtProc.get())) {
+          handleFailOpen();
+        } else {
+          rawCall.close(
+              Status.INTERNAL.withDescription("External processor stream failed")
+                  .withCause(t),
+              new Metadata());
+        }
+      }
+    }
+
+    void handleExtProcCompleted() {
+      ExtProcStreamState state = extProcStreamState.get();
+      if (state == ExtProcStreamState.DRAINING) {
+        if (markExtProcStreamCompleted(extProcStreamState)) {
+          handleFailOpen();
+        }
+      } else if (state == ExtProcStreamState.ACTIVE) {
+        internalOnError(Status.UNAVAILABLE
+            .withDescription("External processor stream completed without drain")
+            .asRuntimeException());
+      }
+    }
+
     private void halfCloseExtProcStream() {
       synchronized (streamLock) {
         if (!isExtProcStreamCompleted() && extProcClientCallRequestObserver != null) {
@@ -733,19 +754,31 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public boolean isReady() {
+      System.out.println("JETSKI: isReady called. passThrough: " + passThroughMode.get() 
+          + ", extProcState: " + extProcStreamState.get() 
+          + ", dataPlaneState: " + dataPlaneCallState.get());
       if (passThroughMode.get()) {
-        return super.isReady();
+        boolean r = super.isReady();
+        System.out.println("JETSKI: isReady (passThrough) returning " + r);
+        return r;
       }
       if (isExtProcStreamCompleted()) {
-        return super.isReady();
+        boolean r = super.isReady();
+        System.out.println("JETSKI: isReady (extProcCompleted) returning " + r);
+        return r;
       }
       if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
+        System.out.println("JETSKI: isReady (IDLE & !obs) returning false");
         return false;
       }
       boolean sidecarReady = isSidecarReady();
+      System.out.println("JETSKI: sidecarReady: " + sidecarReady);
       if (config.getObservabilityMode()) {
-        return super.isReady() && sidecarReady;
+        boolean r = super.isReady() && sidecarReady;
+        System.out.println("JETSKI: isReady (observability) returning " + r);
+        return r;
       }
+      System.out.println("JETSKI: isReady returning " + sidecarReady);
       return sidecarReady;
     }
 
@@ -1168,145 +1201,156 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     void setDelegate(ServerCall.Listener<InputStream> delegate) {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        this.delegate = delegate;
-        dataPlaneServerCall.callContext.run(() -> {
-          InputStream msg;
-          while ((msg = savedMessages.poll()) != null) {
-            delegate.onMessage(msg);
-          }
-          if (halfCloseReceived) {
-            proceedWithHalfClose();
-          }
-        });
-      });
+      dataPlaneServerCall.triggerEvent(new SetDelegateEvent(delegate));
     }
 
-    void drainSavedMessages() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        ServerCall.Listener<InputStream> del = delegate;
-        if (del != null) {
-          dataPlaneServerCall.callContext.run(() -> {
-            InputStream msg;
-            while ((msg = savedMessages.poll()) != null) {
-              del.onMessage(msg);
-            }
-            if (halfCloseReceived) {
-              proceedWithHalfClose();
-            }
-          });
+    private void handleSetDelegate(ServerCall.Listener<InputStream> delegate) {
+      this.delegate = delegate;
+      dataPlaneServerCall.callContext.run(() -> {
+        InputStream msg;
+        while ((msg = savedMessages.poll()) != null) {
+          delegate.onMessage(msg);
+        }
+        if (halfCloseReceived) {
+          proceedWithHalfClose();
         }
       });
     }
 
     @Override
+    public void onEvent(Object event) {
+      if (dataPlaneServerCall.dataPlaneCallClosed.get()) {
+        return;
+      }
+
+      if (event instanceof ExtProcResponseEvent) {
+        dataPlaneServerCall.handleExtProcResponse(((ExtProcResponseEvent) event).getResponse());
+      } else if (event instanceof ExtProcErrorEvent) {
+        dataPlaneServerCall.handleExtProcError(((ExtProcErrorEvent) event).getCause());
+      } else if (event instanceof ExtProcCompletedEvent) {
+        dataPlaneServerCall.handleExtProcCompleted();
+      } else if (event instanceof ExtProcStreamReadyEvent) {
+        dataPlaneServerCall.onExtProcStreamReady();
+      } else if (event instanceof SetDelegateEvent) {
+        handleSetDelegate(((SetDelegateEvent) event).getDelegate());
+      }
+    }
+
+    void drainSavedMessages() {
+      ServerCall.Listener<InputStream> del = delegate;
+      if (del != null) {
+        dataPlaneServerCall.callContext.run(() -> {
+          InputStream msg;
+          while ((msg = savedMessages.poll()) != null) {
+            del.onMessage(msg);
+          }
+          if (halfCloseReceived) {
+            proceedWithHalfClose();
+          }
+        });
+      }
+    }
+
+    @Override
     public void onReady() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        dataPlaneServerCall.drainPendingRequests();
-        onReadyNotify();
-      });
+      dataPlaneServerCall.drainPendingRequests();
+      onReadyNotify();
     }
 
     void onReadyNotify() {
       ServerCall.Listener<InputStream> del = delegate;
-      if (del != null) {
+      if (del != null && dataPlaneServerCall.isReady()) {
         dataPlaneServerCall.callContext.run(del::onReady);
       }
     }
 
     @Override
     public void onMessage(InputStream message) {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        if (dataPlaneServerCall.requestSideClosed.get()) {
-          return;
-        }
-        ServerCall.Listener<InputStream> del = delegate;
-        if (dataPlaneServerCall.passThroughMode.get() && del != null) {
-          dataPlaneServerCall.callContext.run(() -> del.onMessage(message));
-          return;
-        }
+      if (dataPlaneServerCall.requestSideClosed.get()) {
+        return;
+      }
+      ServerCall.Listener<InputStream> del = delegate;
+      if (dataPlaneServerCall.passThroughMode.get() && del != null) {
+        dataPlaneServerCall.callContext.run(() -> del.onMessage(message));
+        return;
+      }
 
-        // If control stream is finished, or request body processing is disabled,
-        // or observability mode is enabled (which ignores mutations)
-        // OR the stream is in DRAINING state:
-        if (dataPlaneServerCall.isExtProcStreamCompleted()
-            || dataPlaneServerCall.isExtProcStreamDraining()
-            || dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
-                != ProcessingMode.BodySendMode.GRPC
-            || dataPlaneServerCall.config.getObservabilityMode()) {
+      // If control stream is finished, or request body processing is disabled,
+      // or observability mode is enabled (which ignores mutations)
+      // OR the stream is in DRAINING state:
+      if (dataPlaneServerCall.isExtProcStreamCompleted()
+          || dataPlaneServerCall.isExtProcStreamDraining()
+          || dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
+              != ProcessingMode.BodySendMode.GRPC
+          || dataPlaneServerCall.config.getObservabilityMode()) {
 
-          if (del == null || dataPlaneServerCall.isExtProcStreamDraining()) {
-            // Synchronously copy to the heap to prevent deframer buffer recycling
-            try {
-              ByteString copiedBytes = ByteString.readFrom(message);
-              savedMessages.add(new KnownLengthInputStream(copiedBytes));
-            } catch (IOException e) {
-              dataPlaneServerCall.rawCall.close(
-                  Status.INTERNAL.withDescription("Failed to buffer client request").withCause(e),
-                  new Metadata());
-            }
-          } else {
-            dataPlaneServerCall.callContext.run(() -> del.onMessage(message));
+        if (del == null || dataPlaneServerCall.isExtProcStreamDraining()) {
+          // Synchronously copy to the heap to prevent deframer buffer recycling
+          try {
+            ByteString copiedBytes = ByteString.readFrom(message);
+            savedMessages.add(new KnownLengthInputStream(copiedBytes));
+          } catch (IOException e) {
+            dataPlaneServerCall.rawCall.close(
+                Status.INTERNAL.withDescription("Failed to buffer client request").withCause(e),
+                new Metadata());
           }
-          return;
+        } else {
+          dataPlaneServerCall.callContext.run(() -> del.onMessage(message));
         }
+        return;
+      }
 
-        // Mode is GRPC and not in observability mode: dispatch immediately to ext_proc!
-        try {
-          ByteString bodyByteString = ByteString.readFrom(message);
-          sendRequestBodyToExtProc(bodyByteString, false);
-        } catch (IOException e) {
-          dataPlaneServerCall.rawCall.close(
-              Status.INTERNAL.withDescription("Failed to read client request").withCause(e),
-              new Metadata());
-        }
-      });
+      // Mode is GRPC and not in observability mode: dispatch immediately to ext_proc!
+      try {
+        ByteString bodyByteString = ByteString.readFrom(message);
+        sendRequestBodyToExtProc(bodyByteString, false);
+      } catch (IOException e) {
+        dataPlaneServerCall.rawCall.close(
+            Status.INTERNAL.withDescription("Failed to read client request").withCause(e),
+            new Metadata());
+      }
     }
 
     @Override
     public void onHalfClose() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        if (dataPlaneServerCall.requestSideClosed.get()) {
-          return;
-        }
-        dataPlaneServerCall.clientHalfCloseStartNanos = System.nanoTime();
-        dataPlaneServerCall.halfClosed.set(true);
-        halfCloseReceived = true;
-        if (dataPlaneServerCall.isExtProcStreamDraining()) {
-          return;
-        }
-        ServerCall.Listener<InputStream> del = delegate;
-        if ((dataPlaneServerCall.passThroughMode.get()
-            || dataPlaneServerCall.isExtProcStreamCompleted()) && del != null) {
-          proceedWithHalfClose();
-          return;
-        }
+      if (dataPlaneServerCall.requestSideClosed.get()) {
+        return;
+      }
+      dataPlaneServerCall.clientHalfCloseStartNanos = System.nanoTime();
+      dataPlaneServerCall.halfClosed.set(true);
+      halfCloseReceived = true;
+      if (dataPlaneServerCall.isExtProcStreamDraining()) {
+        return;
+      }
+      ServerCall.Listener<InputStream> del = delegate;
+      if ((dataPlaneServerCall.passThroughMode.get()
+          || dataPlaneServerCall.isExtProcStreamCompleted()) && del != null) {
+        proceedWithHalfClose();
+        return;
+      }
 
-        if (dataPlaneServerCall.dataPlaneCallState.get() == DataPlaneCallState.IDLE) {
-          halfCloseDeferred = true;
-          return;
-        }
+      if (dataPlaneServerCall.dataPlaneCallState.get() == DataPlaneCallState.IDLE) {
+        halfCloseDeferred = true;
+        return;
+      }
 
-        if (dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
-            == ProcessingMode.BodySendMode.NONE) {
-          proceedWithHalfClose();
-          return;
-        }
+      if (dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
+          == ProcessingMode.BodySendMode.NONE) {
+        proceedWithHalfClose();
+        return;
+      }
 
-        sendRequestBodyToExtProc(null, true);
-      });
+      sendRequestBodyToExtProc(null, true);
     }
 
     void handleDeferredHalfClose() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        if (dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
-                == ProcessingMode.BodySendMode.NONE
-            || dataPlaneServerCall.isExtProcStreamCompleted()) {
-          proceedWithHalfClose();
-        } else {
-          sendRequestBodyToExtProc(null, true);
-        }
-      });
+      if (dataPlaneServerCall.currentProcessingMode.getRequestBodyMode()
+              == ProcessingMode.BodySendMode.NONE
+          || dataPlaneServerCall.isExtProcStreamCompleted()) {
+        proceedWithHalfClose();
+      } else {
+        sendRequestBodyToExtProc(null, true);
+      }
     }
 
     void proceedWithHalfClose() {
@@ -1362,24 +1406,60 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public void onCancel() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        dataPlaneServerCall.cancelExtProcStream(
-            Status.CANCELLED.withDescription("Client cancelled RPC").asRuntimeException());
-        ServerCall.Listener<InputStream> del = delegate;
-        if (del != null) {
-          dataPlaneServerCall.callContext.run(del::onCancel);
-        }
-      });
+      dataPlaneServerCall.cancelExtProcStream(
+          Status.CANCELLED.withDescription("Client cancelled RPC").asRuntimeException());
+      ServerCall.Listener<InputStream> del = delegate;
+      if (del != null) {
+        dataPlaneServerCall.callContext.run(del::onCancel);
+      }
     }
 
     @Override
     public void onComplete() {
-      dataPlaneServerCall.syncContext.execute(() -> {
-        ServerCall.Listener<InputStream> del = delegate;
-        if (del != null) {
-          dataPlaneServerCall.callContext.run(del::onComplete);
-        }
-      });
+      ServerCall.Listener<InputStream> del = delegate;
+      if (del != null) {
+        dataPlaneServerCall.callContext.run(del::onComplete);
+      }
+    }
+  }
+
+  static final class ExtProcResponseEvent {
+    private final ProcessingResponse response;
+
+    ExtProcResponseEvent(ProcessingResponse response) {
+      this.response = response;
+    }
+
+    ProcessingResponse getResponse() {
+      return response;
+    }
+  }
+
+  static final class ExtProcErrorEvent {
+    private final Throwable cause;
+
+    ExtProcErrorEvent(Throwable cause) {
+      this.cause = cause;
+    }
+
+    Throwable getCause() {
+      return cause;
+    }
+  }
+
+  static final class ExtProcCompletedEvent {}
+
+  static final class ExtProcStreamReadyEvent {}
+
+  static final class SetDelegateEvent {
+    private final ServerCall.Listener<InputStream> delegate;
+
+    SetDelegateEvent(ServerCall.Listener<InputStream> delegate) {
+      this.delegate = delegate;
+    }
+
+    ServerCall.Listener<InputStream> getDelegate() {
+      return delegate;
     }
   }
 }
