@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
+import com.google.common.io.ByteStreams;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -45,15 +46,17 @@ import java.util.logging.Logger;
  * parses it to extract its expiration time, and caches/refreshes it.
  */
 public final class JwtTokenFileCallCredentials extends CallCredentials {
+  private static final int MAX_FILE_SIZE_BYTES = 1048576;
 
   private static final Logger log = Logger.getLogger(JwtTokenFileCallCredentials.class.getName());
 
   private static final Metadata.Key<String> AUTHORIZATION_HEADER =
       Metadata.Key.of("authorization", Metadata.ASCII_STRING_MARSHALLER);
 
-  private static final long INITIAL_BACKOFF_MS = 1000;
-  private static final long MAX_BACKOFF_MS = 60000;
-  private static final double BACKOFF_MULTIPLIER = 2.0;
+  private static final long INITIAL_BACKOFF_MILLIS = 1000;
+  private static final long MAX_BACKOFF_MILLIS = 120000;
+  private static final double BACKOFF_MULTIPLIER = 1.6;
+  private static final double JITTER = 0.2;
 
   private final String filePath;
   private final TimeProvider timeProvider;
@@ -69,7 +72,7 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
   private long expirationTimeMillis;
   private ReadState readState = ReadState.IDLE;
   private Status lastReadFailureStatus;
-  private long currentBackoffMs;
+  private long currentBackoffMillis;
   private long nextAttemptTimeMillis;
   private final List<MetadataApplier> queuedAppliers = new ArrayList<>();
 
@@ -122,11 +125,17 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
 
       if (hasValidCache) {
         tokenToApply = new TokenInfo(cachedToken, expirationTimeMillis);
+        if (readState == ReadState.BACKOFF && now >= nextAttemptTimeMillis) {
+          readState = ReadState.IDLE;
+        }
         if (expiringSoon && readState == ReadState.IDLE) {
           readState = ReadState.READING;
           triggerRead = true;
         }
       } else {
+        if (readState == ReadState.BACKOFF && now >= nextAttemptTimeMillis) {
+          readState = ReadState.IDLE;
+        }
         if (readState == ReadState.BACKOFF) {
           failStatus = lastReadFailureStatus != null ? lastReadFailureStatus : Status.UNAVAILABLE;
         } else {
@@ -214,7 +223,7 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
         expirationTimeMillis = tokenInfo.expirationTimeMillis;
         readState = ReadState.IDLE;
         lastReadFailureStatus = null;
-        currentBackoffMs = 0;
+        currentBackoffMillis = 0;
         nextAttemptTimeMillis = 0;
 
         appliersToApply.addAll(queuedAppliers);
@@ -223,13 +232,16 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
         lastReadFailureStatus = status;
         readState = ReadState.BACKOFF;
 
-        if (currentBackoffMs == 0) {
-          currentBackoffMs = INITIAL_BACKOFF_MS;
+        if (currentBackoffMillis == 0) {
+          currentBackoffMillis = INITIAL_BACKOFF_MILLIS;
         } else {
-          currentBackoffMs = Math.min(
-              (long) (currentBackoffMs * BACKOFF_MULTIPLIER), MAX_BACKOFF_MS);
+          currentBackoffMillis = Math.min(
+              (long) (currentBackoffMillis * BACKOFF_MULTIPLIER), MAX_BACKOFF_MILLIS);
         }
-        nextAttemptTimeMillis = timeProvider.currentTimeMillis() + currentBackoffMs;
+        double uniformRandom = Math.random() * 2 - 1;
+        long jitteredBackoff = (long) (currentBackoffMillis
+            + uniformRandom * JITTER * currentBackoffMillis);
+        nextAttemptTimeMillis = timeProvider.currentTimeMillis() + jitteredBackoff;
 
         appliersToFail.addAll(queuedAppliers);
         queuedAppliers.clear();
@@ -261,15 +273,15 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
   private TokenInfo readAndParseTokenFile() throws IOException {
     File file = new File(filePath);
     long length = file.length();
-    if (length > 1048576) {
+    if (length > MAX_FILE_SIZE_BYTES) {
       throw new IOException("File size exceeds 1 MB limit: " + length);
     }
     byte[] bytes;
     try (InputStream in = new FileInputStream(file)) {
-      bytes = com.google.common.io.ByteStreams.toByteArray(
-          com.google.common.io.ByteStreams.limit(in, 1048577));
+      bytes = ByteStreams.toByteArray(
+          ByteStreams.limit(in, MAX_FILE_SIZE_BYTES + 1));
     }
-    if (bytes.length > 1048576) {
+    if (bytes.length > MAX_FILE_SIZE_BYTES) {
       throw new IOException("File size exceeds 1 MB limit: " + bytes.length);
     }
     String token = new String(bytes, StandardCharsets.UTF_8).trim();

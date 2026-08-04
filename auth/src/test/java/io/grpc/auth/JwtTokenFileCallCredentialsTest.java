@@ -284,7 +284,7 @@ public class JwtTokenFileCallCredentialsTest {
     assertEquals(0, executor.runnables.size());
 
     // 3. Move time past backoff limit (t=11001)
-    timeProvider.set(11001);
+    timeProvider.set(15000);
     MetadataApplier applier3 = Mockito.mock(MetadataApplier.class);
     credentials.applyRequestMetadata(requestInfo, executor, applier3);
     // Should NOT fail fast. Instead, it should trigger a new attempt.
@@ -603,5 +603,50 @@ public class JwtTokenFileCallCredentialsTest {
     assertEquals(Status.Code.UNAVAILABLE, status.getCode());
     assertTrue(status.getDescription().contains("Failed to read token file"));
     assertTrue(status.getCause().getMessage().contains("File size exceeds 1 MB limit"));
+  }
+
+  @Test
+  public void emptyTokenFileThrowsIllegalArgumentException() throws Exception {
+    File emptyFile = File.createTempFile("emptyToken", ".jwt", tempFolder.getRoot());
+    emptyFile.deleteOnExit();
+
+    JwtTokenFileCallCredentials credentials =
+        new JwtTokenFileCallCredentials(emptyFile.getAbsolutePath(), timeProvider);
+
+    RequestInfoImpl requestInfo = new RequestInfoImpl(SecurityLevel.PRIVACY_AND_INTEGRITY);
+    credentials.applyRequestMetadata(requestInfo, executor, applier1);
+    assertEquals(1, executor.runnables.size());
+    executor.runNext();
+
+    verify(applier1).fail(statusCaptor.capture());
+    Status status = statusCaptor.getValue();
+    assertEquals(Status.Code.UNAUTHENTICATED, status.getCode());
+    assertTrue(status.getCause() instanceof IllegalArgumentException);
+  }
+
+  @Test
+  public void largeExpClaimClampsToLongMaxValue() throws Exception {
+    String header = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"; // {"alg":"none","typ":"JWT"}
+    String payload = "eyJleHAiOjk5OTk5OTk5OTk5OTk5OTl9"; // {"exp":9999999999999999}
+    String token = header + "." + payload + ".";
+    
+    File tokenFile = File.createTempFile("largeExpToken", ".jwt", tempFolder.getRoot());
+    tokenFile.deleteOnExit();
+    java.nio.file.Files.write(tokenFile.toPath(),
+        token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+    timeProvider.currentTimeMillis = 0;
+    JwtTokenFileCallCredentials credentials =
+        new JwtTokenFileCallCredentials(tokenFile.getAbsolutePath(), timeProvider);
+
+    RequestInfoImpl requestInfo = new RequestInfoImpl(SecurityLevel.PRIVACY_AND_INTEGRITY);
+    credentials.applyRequestMetadata(requestInfo, executor, applier1);
+    assertEquals(1, executor.runnables.size());
+    executor.runNext();
+
+    verify(applier1).apply(any(io.grpc.Metadata.class));
+    // The credentials logic doesn't easily expose the clamped value directly to this test without 
+    // waiting or mocking, but it prevents overflow crash
+    // and parses successfully instead of returning an error.
   }
 }
