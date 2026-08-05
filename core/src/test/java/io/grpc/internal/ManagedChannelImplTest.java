@@ -499,7 +499,10 @@ public class ManagedChannelImplTest {
 
   @Test
   public void childChannelConfigurator_passedToNameResolverArgs() {
-    ChannelConfigurator configurator = builder -> { };
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurator = builder -> {
+      configuratorInvoked[0] = true;
+    };
     channelBuilder.childChannelConfigurator(configurator);
     AtomicReference<NameResolver.Args> actualArgs = new AtomicReference<>();
     channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
@@ -528,12 +531,18 @@ public class ManagedChannelImplTest {
     });
     createChannel();
     assertNotNull(actualArgs.get());
-    assertSame(configurator, actualArgs.get().getChildChannelConfigurator());
+    ChannelConfigurator childConfigurator = actualArgs.get().getChildChannelConfigurator();
+    assertNotNull(childConfigurator);
+    childConfigurator.configureChannelBuilder(channelBuilder);
+    assertTrue(configuratorInvoked[0]);
   }
 
   @Test
   public void childChannelConfigurator_passedToResolvingOobChannelNameResolverArgs() {
-    ChannelConfigurator configurator = builder -> { };
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurator = builder -> {
+      configuratorInvoked[0] = true;
+    };
     channelBuilder.childChannelConfigurator(configurator);
     AtomicReference<NameResolver.Args> oobArgs = new AtomicReference<>();
     channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
@@ -567,7 +576,10 @@ public class ManagedChannelImplTest {
     ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
     oob.getState(true);
     assertNotNull(oobArgs.get());
-    assertSame(configurator, oobArgs.get().getChildChannelConfigurator());
+    ChannelConfigurator childConfigurator = oobArgs.get().getChildChannelConfigurator();
+    assertNotNull(childConfigurator);
+    childConfigurator.configureChannelBuilder(channelBuilder);
+    assertTrue(configuratorInvoked[0]);
     oob.shutdownNow();
   }
 

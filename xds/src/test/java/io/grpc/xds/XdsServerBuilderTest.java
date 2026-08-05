@@ -18,9 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsServerTestHelper.buildTestListener;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -33,6 +33,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
 import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -406,7 +407,10 @@ public class XdsServerBuilderTest {
 
   @Test
   public void start_passesChannelConfiguratorToClientPoolFactory() throws Exception {
-    ChannelConfigurator configurer = builder -> { };
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurer = builder -> {
+      configuratorInvoked[0] = true;
+    };
     XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
     @SuppressWarnings("unchecked")
     ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
@@ -420,8 +424,43 @@ public class XdsServerBuilderTest {
 
     Future<?> unused = startServerAsync();
 
+    ArgumentCaptor<ChannelConfigurator> configuratorCaptor =
+        ArgumentCaptor.forClass(ChannelConfigurator.class);
     verify(mockPoolFactory).getOrCreate(
-        any(), any(), any(), eq(configurer));
+        any(), any(), any(), configuratorCaptor.capture());
+    
+    ManagedChannelBuilder<?> testBuilder = mock(ManagedChannelBuilder.class);
+    configuratorCaptor.getValue().configureChannelBuilder(testBuilder);
+    assertThat(configuratorInvoked[0]).isTrue();
+  }
+
+  @Test
+  public void childChannelConfigurator_appendsConfigurators() throws Exception {
+    ChannelConfigurator configurer1 = builder -> { };
+    ChannelConfigurator configurer2 = builder -> { };
+    
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
+    when(mockPool.getObject()).thenReturn(xdsClient);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
+
+    buildBuilder(null);
+    builder.childChannelConfigurator(configurer1);
+    builder.childChannelConfigurator(configurer2);
+    builder.xdsClientPoolFactory(mockPoolFactory);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+
+    Future<?> unused = startServerAsync();
+
+    // The captured configurator should be a composite of configurer1 and configurer2
+    ArgumentCaptor<ChannelConfigurator> captor = ArgumentCaptor.forClass(ChannelConfigurator.class);
+    verify(mockPoolFactory).getOrCreate(
+        any(), any(), any(), captor.capture());
+    ChannelConfigurator captured = captor.getValue();
+    
+    assertNotSame(configurer1, captured);
+    assertNotSame(configurer2, captured);
   }
 
   @Test
