@@ -77,6 +77,7 @@ public abstract class Bootstrapper {
           false, false, false, false, null);
     }
 
+    @VisibleForTesting
     public static ServerInfo create(
         String target, Object implSpecificConfig,
         boolean ignoreResourceDeletion, boolean isTrustedXdsServer,
