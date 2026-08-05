@@ -433,6 +433,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       if (getRealStream() != null || delayEnded) {
         return;
       }
+      // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
       if (!Objects.equals(activeDelayType, newType)) {
         if (activeDelayType != null) {
           for (ClientStreamTracer tracer : tracers) {
@@ -447,6 +448,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
           }
         }
       }
+      // Delay type is unchanged, but the reason changed (e.g., priority failover).
       if (newType != null && newReason != null
           && !Objects.equals(activeDelayReason, newReason)) {
         activeDelayReason = newReason;
