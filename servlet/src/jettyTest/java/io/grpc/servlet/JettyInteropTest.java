@@ -30,6 +30,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.After;
 
+@SuppressWarnings("removal")
 public class JettyInteropTest extends AbstractInteropTest {
 
   private static final String HOST = "localhost";

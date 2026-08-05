@@ -47,6 +47,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 
+@SuppressWarnings("removal")
 public class JettyTransportTest extends AbstractTransportTest {
   private static final String MYAPP = "/service";
 
