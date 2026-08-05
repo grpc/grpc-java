@@ -170,7 +170,8 @@ public class TestUtils {
       provider = ConscryptLoader.newProvider();
     } catch (Throwable t) {
       Throwable root = Throwables.getRootCause(t);
-      // Conscrypt uses a newer version of glibc than available on older Linux distributions (e.g. RHEL 6/8)
+      // Conscrypt uses a newer version of glibc than available on older Linux distributions
+      // (e.g. RHEL 6/8)
       if (root instanceof UnsatisfiedLinkError && root.getMessage() != null
           && root.getMessage().contains("GLIBC_")) {
         conscryptInstallAttempted = true;
