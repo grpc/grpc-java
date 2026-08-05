@@ -382,8 +382,7 @@ public class GrpcXdsTransportFactoryTest {
     // 2. Server credentials are null -> resolves to factory credentials
     GrpcXdsTransportFactory factoryOnly = new GrpcXdsTransportFactory(factoryCreds, null);
     Bootstrapper.ServerInfo serverInfoNoCreds = Bootstrapper.ServerInfo.create(
-        "localhost:8080", InsecureChannelCredentials.create(),
-        false, false, false, false, null);
+        "localhost:8080", InsecureChannelCredentials.create());
     XdsTransportFactory.XdsTransport transportFactoryOnly = factoryOnly.create(serverInfoNoCreds);
     assertThat(getCallCredentials(transportFactoryOnly)).isSameInstanceAs(factoryCreds);
     transportFactoryOnly.shutdown();

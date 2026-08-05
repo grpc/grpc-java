@@ -77,16 +77,6 @@ public abstract class Bootstrapper {
           false, false, false, false, null);
     }
 
-    @VisibleForTesting
-    public static ServerInfo create(
-        String target, Object implSpecificConfig,
-        boolean ignoreResourceDeletion, boolean isTrustedXdsServer,
-        boolean resourceTimerIsTransientError, boolean failOnDataErrors) {
-      return new AutoValue_Bootstrapper_ServerInfo(target, implSpecificConfig,
-          ignoreResourceDeletion, isTrustedXdsServer,
-          resourceTimerIsTransientError, failOnDataErrors, null);
-    }
-
     public static ServerInfo create(
         String target, Object implSpecificConfig,
         boolean ignoreResourceDeletion, boolean isTrustedXdsServer,
