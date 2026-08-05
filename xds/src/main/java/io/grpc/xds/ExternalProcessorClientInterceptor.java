@@ -301,6 +301,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     // Path 1: Pending/buffered request body messages from downstream
     private final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
+    // Deferred half-close flag for upstream direction
+    private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
 
     // Path 2: Buffered request body messages from ext_proc server to forward upstream
     private final Queue<ByteString> pendingUpstreamBodyMessages =
@@ -310,8 +312,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     // Buffered mutated response bodies from ext_proc server
     private final Queue<ByteString> pendingMutatedResponseBodies =
         new java.util.concurrent.ConcurrentLinkedQueue<>();
-    // Deferred half-close flag for upstream direction
-    private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
 
     // Accumulated client window updates to send to ext_proc
     private long accumulatedWindowUpdateSidestreamToUpstream = 0;
