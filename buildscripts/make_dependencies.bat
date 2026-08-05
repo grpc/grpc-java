@@ -1,4 +1,20 @@
+choco feature enable -n allowEmptyChecksums
+
+set RETRY=0
+:install_pkgconfig
 choco install -y pkgconfiglite --allow-empty-checksums
+if %ERRORLEVEL% neq 0 (
+  if %RETRY% lss 3 (
+    set /a RETRY=%RETRY%+1
+    echo pkgconfiglite installation failed. Retrying %RETRY% of 3 in 5 seconds...
+    @rem Sleep for 5 seconds using the loopback ping trick (timeout command fails in non-interactive CI)
+    ping -n 6 127.0.0.1 >nul
+    goto :install_pkgconfig
+  )
+  echo Failed to install pkgconfiglite after 3 attempts.
+  exit /b 1
+)
+
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
 set PROTOBUF_VER=35.1
