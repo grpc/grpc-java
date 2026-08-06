@@ -179,9 +179,7 @@ public final class BinderSecurityTest {
   }
 
   @Test
-  public void testFailedFuturesPropagateOriginalException() throws Exception {
-    String errorMessage = "something went wrong";
-    IllegalStateException originalException = new IllegalStateException(errorMessage);
+  public void testFailedFuturesFailWithCodeInternal() throws Exception {
     createChannel(
         ServerSecurityPolicy.newBuilder()
             .servicePolicy(
@@ -189,7 +187,8 @@ public final class BinderSecurityTest {
                 new AsyncSecurityPolicy() {
                   @Override
                   public ListenableFuture<Status> checkAuthorizationAsync(int uid) {
-                    return Futures.immediateFailedFuture(originalException);
+                    return Futures.immediateFailedFuture(
+                        new IllegalStateException("internal to SecurityPolicy"));
                   }
                 })
             .build(),
@@ -197,7 +196,7 @@ public final class BinderSecurityTest {
     MethodDescriptor<Empty, Empty> method = methods.get("foo/method0");
 
     StatusRuntimeException sre = assertCallFailure(method, Status.INTERNAL);
-    assertThat(sre.getStatus().getDescription()).contains(errorMessage);
+    assertThat(sre.getStatus().getDescription()).isEqualTo("Authorization future failed");
   }
 
   @Test
