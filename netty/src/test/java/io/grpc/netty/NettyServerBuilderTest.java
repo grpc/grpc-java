@@ -41,6 +41,11 @@ public class NettyServerBuilderTest {
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
 
   @Test
+  public void disableHpackDynamicTableIsFluent() {
+    assertThat(builder.disableHpackDynamicTable()).isSameInstanceAs(builder);
+  }
+
+  @Test
   public void addMultipleListenAddresses() {
     builder.addListenAddress(new InetSocketAddress(8081));
     NettyServer server = builder.buildTransportServers(
