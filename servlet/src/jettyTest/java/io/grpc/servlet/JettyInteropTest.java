@@ -30,7 +30,6 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.junit.After;
 
-@SuppressWarnings("removal")
 public class JettyInteropTest extends AbstractInteropTest {
 
   private static final String HOST = "localhost";
@@ -55,6 +54,9 @@ public class JettyInteropTest extends AbstractInteropTest {
   }
 
   @Override
+  // RateControl is deprecated in Jetty 12 (used in grpc-servlet-jakarta) but still needed for
+  // compatibility with Jetty 10 (used in grpc-servlet).
+  @SuppressWarnings("removal")
   protected void startServer(ServerBuilder<?> builer) {
     GrpcServlet grpcServlet =
         new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
