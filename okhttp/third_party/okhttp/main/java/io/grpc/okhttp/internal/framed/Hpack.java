@@ -189,7 +189,7 @@ final class Hpack {
       int entriesToEvict = 0;
       if (bytesToRecover > 0) {
         // determine how many headers need to be evicted.
-        for (int j = dynamicTable.length - 1; j >= nextDynamicTableIndex && bytesToRecover > 0; j--) {
+        for (int j = dynamicTable.length - 1; j > nextDynamicTableIndex && bytesToRecover > 0; j--) {
           bytesToRecover -= dynamicTable[j].hpackSize;
           dynamicTableByteCount -= dynamicTable[j].hpackSize;
           dynamicTableHeaderCount--;
@@ -197,6 +197,7 @@ final class Hpack {
         }
         System.arraycopy(dynamicTable, nextDynamicTableIndex + 1, dynamicTable,
             nextDynamicTableIndex + 1 + entriesToEvict, dynamicTableHeaderCount);
+        Arrays.fill(dynamicTable, nextDynamicTableIndex + 1, nextDynamicTableIndex + 1 + entriesToEvict, null);
         nextDynamicTableIndex += entriesToEvict;
       }
       return entriesToEvict;
@@ -489,17 +490,21 @@ final class Hpack {
           out.writeByte(0x40);
           writeByteString(name);
           writeByteString(value);
-          insertIntoDynamicTable(header);
-        } else if (name.startsWith(PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
-          // Follow Chromes lead - only include the :authority pseudo header, but exclude all other
-          // pseudo headers. Literal Header Field without Indexing - Indexed Name.
+          insertIntoDynamicTable(new io.grpc.okhttp.internal.framed.Header(name, value));
+        } else if (name.startsWith(PSEUDO_PREFIX)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)
+            && !io.grpc.okhttp.internal.framed.Header.TARGET_PATH.equals(name)) {
+          // Allow :authority and :path pseudo headers to be indexed. Other pseudo headers are not
+          // indexed.
+          // This is a departure from original Chrome behavior, as gRPC paths (ServiceName/MethodName)
+          // are stable and benefit from indexing.
           writeInt(headerNameIndex, PREFIX_4_BITS, 0);
           writeByteString(value);
         } else {
           // Literal Header Field with Incremental Indexing - Indexed Name.
           writeInt(headerNameIndex, PREFIX_6_BITS, 0x40);
           writeByteString(value);
-          insertIntoDynamicTable(header);
+          insertIntoDynamicTable(new io.grpc.okhttp.internal.framed.Header(name, value));
         }
       }
     }
@@ -557,7 +562,7 @@ final class Hpack {
       int entriesToEvict = 0;
       if (bytesToRecover > 0) {
         // determine how many headers need to be evicted.
-        for (int j = dynamicTable.length - 1; j >= nextDynamicTableIndex && bytesToRecover > 0; j--) {
+        for (int j = dynamicTable.length - 1; j > nextDynamicTableIndex && bytesToRecover > 0; j--) {
           bytesToRecover -= dynamicTable[j].hpackSize;
           dynamicTableByteCount -= dynamicTable[j].hpackSize;
           dynamicTableHeaderCount--;
@@ -565,6 +570,7 @@ final class Hpack {
         }
         System.arraycopy(dynamicTable, nextDynamicTableIndex + 1, dynamicTable,
             nextDynamicTableIndex + 1 + entriesToEvict, dynamicTableHeaderCount);
+        Arrays.fill(dynamicTable, nextDynamicTableIndex + 1, nextDynamicTableIndex + 1 + entriesToEvict, null);
         nextDynamicTableIndex += entriesToEvict;
       }
       return entriesToEvict;
