@@ -47,6 +47,23 @@ import io.grpc.ExperimentalApi;
  * <p>Like {@code StreamObserver}, implementations are not required to be thread-safe; if multiple
  * threads will be writing to an instance concurrently, the application must synchronize its calls.
  *
+ * <p>On flow control: The {@link #isReady} state of an outbound {@link CallStreamObserver} is
+ * related to the number and size of messages written to its {@link StreamObserver#onNext} and
+ * whether the peer has consumed those messages by way of {@link StreamObserver#onNext} on the
+ * corresponding inbound. However, this effect may be delayed and is not guaranteed to be reflected
+ * message-for-message.
+ *
+ * <p>What's actually guaranteed:
+ *
+ * <ol>
+ *   <li>If an application keeps writing messages to an outbound {@link StreamObserver#onNext} but
+ *       the peer stops consuming them (whether by not returning from the {@link
+ *       StreamObserver#onNext} callback or by not {@link #request}ing those callbacks), then
+ *       eventually the outbound's {@link #isReady} will become false and stay that way.
+ *   <li>Once in that state of backpressure, requesting and consuming enough messages from the
+ *       'inbound' end will eventually cause the outbound to become ready again.
+ * </ol>
+ *
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing.
  *
@@ -87,9 +104,10 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
   public abstract void setOnReadyHandler(Runnable onReadyHandler);
 
   /**
-   * Disables automatic flow control where a token is returned to the peer after a call
-   * to the 'inbound' {@link io.grpc.stub.StreamObserver#onNext(Object)} has completed. If disabled
-   * an application must make explicit calls to {@link #request} to receive messages.
+   * Disables automatic flow control, a mode where another message is implicitly {@link #request}ed
+   * after each call to the inbound's {@link StreamObserver#onNext(Object)} returns.
+   *
+   * <p>If disabled an application must make explicit calls to {@link #request} to receive messages.
    *
    * <p>On client-side this method may only be called during {@link
    * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
@@ -116,8 +134,7 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
   public abstract void disableAutoInboundFlowControl();
 
   /**
-   * Requests the peer to produce {@code count} more messages to be delivered to the 'inbound'
-   * {@link StreamObserver}.
+   * Requests that {@code count} more messages be delivered to the 'inbound' {@link StreamObserver}.
    *
    * <p>This method is safe to call from multiple threads without external synchronization.
    *
