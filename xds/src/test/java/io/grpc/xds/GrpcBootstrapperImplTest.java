@@ -24,8 +24,10 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import io.grpc.CallCredentials;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.TlsChannelCredentials;
+import io.grpc.auth.JwtTokenFileCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.xds.client.AllowedGrpcServices;
@@ -1057,5 +1059,259 @@ public class GrpcBootstrapperImplTest {
             .setUserAgentVersion(buildVersion.getImplementationVersion())
             .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_DISABLE_OVERPROVISIONING)
             .addClientFeatures(GrpcBootstrapperImpl.CLIENT_FEATURE_RESOURCE_IN_SOTW);
+  }
+
+  private static void setEnableXdsBootstrapCallCreds(boolean enable) {
+    io.grpc.xds.client.BootstrapperImpl.enableXdsBootstrapCallCreds = enable;
+  }
+
+  private static String getFilePath(JwtTokenFileCallCredentials credentials) {
+    try {
+      java.lang.reflect.Field field =
+          JwtTokenFileCallCredentials.class.getDeclaredField("filePath");
+      field.setAccessible(true);
+      return (String) field.get(credentials);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_callCreds_flagDisabled() throws Exception {
+    setEnableXdsBootstrapCallCreds(false);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials()).isNull();
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_jwtTokenFileCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_authorities_jwtTokenFileCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"authorities\": {\n"
+          + "    \"a.com\": {\n"
+          + "      \"xds_servers\": [\n"
+          + "        {\n"
+          + "          \"server_uri\": \"td2.googleapis.com:443\",\n"
+          + "          \"channel_creds\": [\n"
+          + "            {\"type\": \"insecure\"}\n"
+          + "          ],\n"
+          + "          \"call_creds\": [\n"
+          + "            {\n"
+          + "              \"type\": \"jwt_token_file\",\n"
+          + "              \"config\": {\n"
+          + "                \"jwt_token_file\": \"/var/run/secrets/authority_token\"\n"
+          + "              }\n"
+          + "            }\n"
+          + "          ]\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  },\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [\n"
+          + "        {\"type\": \"insecure\"}\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.authorities()).hasSize(1);
+      AuthorityInfo authorityInfo = info.authorities().get("a.com");
+      assertThat(authorityInfo.xdsServers()).hasSize(1);
+      ServerInfo serverInfo = authorityInfo.xdsServers().get(0);
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/authority_token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_unsupportedCallCredsType_ignored() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"unsupported_type\",\n"
+          + "          \"config\": {\n"
+          + "            \"some_field\": \"some_val\"\n"
+          + "          }\n"
+          + "        },\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {\n"
+          + "            \"jwt_token_file\": \"/var/run/secrets/token\"\n"
+          + "          }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = Iterables.getOnlyElement(info.servers());
+      assertThat(serverInfo.callCredentials())
+          .isInstanceOf(JwtTokenFileCallCredentials.class);
+      assertThat(getFilePath((JwtTokenFileCallCredentials) serverInfo.callCredentials()))
+          .isEqualTo("/var/run/secrets/token");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_malformedCallCreds_throws() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": {}\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      XdsInitializationException e = assertThrows(XdsInitializationException.class,
+          bootstrapper::bootstrap);
+      assertThat(e).hasMessageThat().contains("jwt_token_file' jwt_token_file missing or empty");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_multipleValidCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token1\" }\n"
+          + "        },\n"
+          + "        {\n"
+          + "          \"type\": \"jwt_token_file\",\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token2\" }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      BootstrapInfo info = bootstrapper.bootstrap();
+      assertThat(info.servers()).hasSize(1);
+      ServerInfo serverInfo = info.servers().get(0);
+      CallCredentials creds = serverInfo.callCredentials();
+      assertThat(creds).isNotNull();
+      assertThat(creds).isInstanceOf(io.grpc.CompositeCallCredentials.class);
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
+  }
+
+  @Test
+  public void parseBootstrap_xdsServers_missingTypeCallCreds() throws Exception {
+    setEnableXdsBootstrapCallCreds(true);
+    try {
+      String rawData = "{\n"
+          + "  \"xds_servers\": [\n"
+          + "    {\n"
+          + "      \"server_uri\": \"" + SERVER_URI + "\",\n"
+          + "      \"channel_creds\": [{\"type\": \"insecure\"}],\n"
+          + "      \"call_creds\": [\n"
+          + "        {\n"
+          + "          \"config\": { \"jwt_token_file\": \"/var/run/secrets/token\" }\n"
+          + "        }\n"
+          + "      ]\n"
+          + "    }\n"
+          + "  ]\n"
+          + "}";
+      bootstrapper.setFileReader(createFileReader(BOOTSTRAP_FILE_PATH, rawData));
+      bootstrapper.bootstrap();
+      fail("Expected exception");
+    } catch (XdsInitializationException e) {
+      assertThat(e).hasMessageThat().contains("with 'call_creds' type unspecified");
+    } finally {
+      setEnableXdsBootstrapCallCreds(false);
+    }
   }
 }

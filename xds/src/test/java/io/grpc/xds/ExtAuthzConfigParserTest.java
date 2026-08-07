@@ -64,7 +64,8 @@ public class ExtAuthzConfigParserTest {
   }
 
   private static ServerInfo dummyServerInfo() {
-    return ServerInfo.create("test_target", Collections.emptyMap(), false, true, false, false);
+    return ServerInfo.create(
+        "test_target", Collections.emptyMap(), false, true, false, false, null);
   }
 
   private ExtAuthz.Builder extAuthzBuilder;
