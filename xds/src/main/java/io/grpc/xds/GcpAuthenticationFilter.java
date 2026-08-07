@@ -132,7 +132,8 @@ final class GcpAuthenticationFilter implements Filter {
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig config,
-      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
+      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler,
+      Filter.ResourceCleanupRegistry cleanupRegistry) {
 
     ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
     synchronized (callCredentialsCache) {

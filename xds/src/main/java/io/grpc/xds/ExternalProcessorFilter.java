@@ -123,7 +123,8 @@ public class ExternalProcessorFilter implements Filter {
   @Nullable
   @Override
   public ClientInterceptor buildClientInterceptor(FilterConfig filterConfig,
-      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler) {
+      @Nullable FilterConfig overrideConfig, ScheduledExecutorService scheduler,
+      Filter.ResourceCleanupRegistry cleanupRegistry) {
     ExternalProcessorFilterConfig extProcFilterConfig =
         (ExternalProcessorFilterConfig) filterConfig;
     if (overrideConfig != null) {

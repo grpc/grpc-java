@@ -199,7 +199,8 @@ final class FaultFilter implements Filter {
   @Override
   public ClientInterceptor buildClientInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig,
-      final ScheduledExecutorService scheduler) {
+      final ScheduledExecutorService scheduler,
+      Filter.ResourceCleanupRegistry cleanupRegistry) {
     checkNotNull(config, "config");
     if (overrideConfig != null) {
       config = overrideConfig;
