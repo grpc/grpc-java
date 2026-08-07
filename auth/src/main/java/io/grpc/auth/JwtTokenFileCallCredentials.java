@@ -125,17 +125,11 @@ public final class JwtTokenFileCallCredentials extends CallCredentials {
 
       if (hasValidCache) {
         tokenToApply = new TokenInfo(cachedToken, expirationTimeMillis);
-        if (readState == ReadState.BACKOFF && now >= nextAttemptTimeMillis) {
-          readState = ReadState.IDLE;
-        }
         if (expiringSoon && readState == ReadState.IDLE) {
           readState = ReadState.READING;
           triggerRead = true;
         }
       } else {
-        if (readState == ReadState.BACKOFF && now >= nextAttemptTimeMillis) {
-          readState = ReadState.IDLE;
-        }
         if (readState == ReadState.BACKOFF) {
           failStatus = lastReadFailureStatus != null ? lastReadFailureStatus : Status.UNAVAILABLE;
         } else {
