@@ -64,6 +64,7 @@ import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -85,6 +86,7 @@ class NettyClientTransport implements ConnectionClientTransport,
   private final AsciiString userAgent;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final Set<AsciiString> neverIndexedMetadataKeys;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -120,6 +122,7 @@ class NettyClientTransport implements ConnectionClientTransport,
       ProtocolNegotiator negotiator,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -145,6 +148,8 @@ class NettyClientTransport implements ConnectionClientTransport,
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.neverIndexedMetadataKeys =
+        Preconditions.checkNotNull(neverIndexedMetadataKeys, "neverIndexedMetadataKeys");
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -247,6 +252,7 @@ class NettyClientTransport implements ConnectionClientTransport,
             keepAliveManager,
             autoFlowControl,
             flowControlWindow,
+            neverIndexedMetadataKeys,
             maxHeaderListSize,
             softLimitHeaderListSize,
             GrpcUtil.STOPWATCH_SUPPLIER,
