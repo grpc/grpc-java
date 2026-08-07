@@ -1107,14 +1107,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
             com.google.protobuf.ByteString body = streamed.getBody();
             boolean sendImmediately = false;
             synchronized (streamLock) {
-              if (sidestreamToUpstreamWindow <= 0) {
-                internalOnError(Status.INTERNAL
-                    .withDescription(
-                        "Flow control violation: received client body from ext_proc "
-                        + "when window is closed")
-                    .asRuntimeException());
-                return;
-              }
               sidestreamToUpstreamWindow -= body.size();
               if (super.isReady() && pendingUpstreamBodyMessages.isEmpty()) {
                 sendImmediately = true;
@@ -1152,14 +1144,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           com.google.protobuf.ByteString body = streamed.getBody();
           final int bodySize = body.size();
           synchronized (streamLock) {
-            if (sidestreamToDownstreamWindow <= 0) {
-              internalOnError(Status.INTERNAL
-                  .withDescription(
-                      "Flow control violation: received server body from ext_proc "
-                      + "when window is closed")
-                  .asRuntimeException());
-              return;
-            }
             sidestreamToDownstreamWindow -= bodySize;
           }
           deliverResponseBody(body, listener);
