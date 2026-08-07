@@ -186,11 +186,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     return filterConfig;
   }
 
-  @VisibleForTesting
-  ManagedChannel getExtProcChannel() {
-    return extProcChannel;
-  }
-
   @Override
   @SuppressWarnings("unchecked")
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -231,7 +226,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       extProcStub = extProcStub.withInterceptors(
           io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
     }
-
 
     // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
     // InputStream.
@@ -290,6 +284,42 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final HeaderMutator mutator = HeaderMutator.create();
     private final AtomicInteger pendingRequests = new AtomicInteger(0);
     private final ProcessingMode currentProcessingMode;
+
+    // Default initial window size
+    private static final long DEFAULT_INITIAL_WINDOW_SIZE = 65536;
+
+    // Outbound (sending) windows
+    private long downstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    private long upstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+
+    // Inbound (receiving) windows
+    private long sidestreamToUpstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    private long sidestreamToDownstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+
+    // Threshold to trigger standalone client window updates
+    private static final long WINDOW_UPDATE_THRESHOLD = DEFAULT_INITIAL_WINDOW_SIZE / 2;
+
+    // Path 1: Pending/buffered request body messages from downstream
+    private final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
+    // Deferred half-close flag for upstream direction
+    private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
+
+    // Path 2: Buffered request body messages from ext_proc server to forward upstream
+    private final Queue<ByteString> pendingUpstreamBodyMessages =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
+    // Path 4: Outstanding requests from downstream for pulling responses
+    private int downstreamRequestsPending = 0;
+    // Buffered mutated response bodies from ext_proc server
+    private final Queue<ByteString> pendingMutatedResponseBodies =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
+
+    // Accumulated client window updates to send to ext_proc
+    private long accumulatedWindowUpdateSidestreamToUpstream = 0;
+    private long accumulatedWindowUpdateSidestreamToDownstream = 0;
+
+    // Flag to track if FlowControlInit was sent in the initial message
+    private boolean flowControlInitSent = false;
+
     private final MethodDescriptor<?, ?> method;
     private final Channel channel;
     private final MetricRecorder metricsRecorder;
@@ -315,6 +345,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
+
+    Object getStreamLock() {
+      return streamLock;
+    }
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -342,8 +376,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       this.target = checkNotNull(target, "target");
       this.backendService = checkNotNull(backendService, "backendService");
     }
-
-
 
     private void activateCall() {
       if ((extProcStreamState.get() == ExtProcStreamState.FAILED
@@ -411,8 +443,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       return true;
     }
 
-
-
     @Override
     public void start(Listener<InputStream> responseListener, Metadata headers) {
       this.callContext = Context.current();
@@ -437,6 +467,25 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           try {
             if (config.getObservabilityMode()) {
               return;
+            }
+
+            if (response.hasServerWindowUpdate()) {
+              ProcessingResponse.ServerWindowUpdate update = response.getServerWindowUpdate();
+              boolean wasReady = isReady();
+              synchronized (streamLock) {
+                downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
+                upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
+                drainPendingRequestBodyMessages();
+                drainPendingRequests();
+                if (wrappedListener != null) {
+                  wrappedListener.drainSavedMessages();
+                }
+              }
+              // If isReady() becomes true (depends on updated downstreamToSidestreamWindow),
+              // notify the client application via onReadyNotify() (runs unlocked).
+              if (!wasReady && isReady()) {
+                onReadyNotify();
+              }
             }
 
             if (response.hasImmediateResponse()) {
@@ -667,9 +716,70 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           requestToSend = ProcessingRequest.newBuilder(requestToSend)
               .setObservabilityMode(true)
               .build();
+        } else if (!flowControlInitSent) {
+          requestToSend = ProcessingRequest.newBuilder(requestToSend)
+              .setFlowControlInit(ProcessingRequest.FlowControlInit.newBuilder()
+                  .setInitialWindowDownstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowSidestreamToUpstream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowUpstreamToSidestreama(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowSidestreamToDownstream(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .build())
+              .build();
+          flowControlInitSent = true;
         }
 
         extProcClientCallRequestObserver.onNext(requestToSend);
+      }
+    }
+
+    void mergeAccumulatedWindowUpdates(ProcessingRequest.Builder requestBuilder) {
+      synchronized (streamLock) {
+        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
+        long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
+
+        if (incrementUpstream > 0 || incrementDownstream > 0) {
+          requestBuilder.setClientWindowUpdate(
+              ProcessingRequest.ClientWindowUpdate.newBuilder()
+                  .setWindowIncrementSidestreamToUpstream(incrementUpstream)
+                  .setWindowIncrementSidestreamToDownstream(incrementDownstream)
+                  .build());
+          accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
+          accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
+          sidestreamToUpstreamWindow += incrementUpstream;
+          sidestreamToDownstreamWindow += incrementDownstream;
+        }
+      }
+    }
+
+    private void trySendAccumulatedWindowUpdates() {
+      synchronized (streamLock) {
+        if (extProcStreamState.get().isCompleted()) {
+          return;
+        }
+        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
+        long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
+
+        boolean shouldSend = (incrementUpstream > 0 || incrementDownstream > 0) && (
+            (incrementUpstream >= WINDOW_UPDATE_THRESHOLD)
+            || (incrementDownstream >= WINDOW_UPDATE_THRESHOLD)
+            || (sidestreamToUpstreamWindow <= 0 && accumulatedWindowUpdateSidestreamToUpstream > 0)
+            || (sidestreamToDownstreamWindow <= 0
+                && accumulatedWindowUpdateSidestreamToDownstream > 0)
+        );
+
+        if (shouldSend) {
+          accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
+          accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
+          sidestreamToUpstreamWindow += incrementUpstream;
+          sidestreamToDownstreamWindow += incrementDownstream;
+
+          sendToExtProc(ProcessingRequest.newBuilder()
+              .setClientWindowUpdate(ProcessingRequest.ClientWindowUpdate.newBuilder()
+                  .setWindowIncrementSidestreamToUpstream(incrementUpstream)
+                  .setWindowIncrementSidestreamToDownstream(incrementDownstream)
+                  .build())
+              .build());
+        }
       }
     }
 
@@ -678,10 +788,22 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       onReadyNotify();
     }
 
-    private void drainPendingRequests() {
-      int toRequest = pendingRequests.getAndSet(0);
-      if (toRequest > 0) {
-        super.request(toRequest);
+    void drainPendingRequests() {
+      synchronized (streamLock) {
+        if (config.getObservabilityMode()
+            || currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
+          int toRequest = pendingRequests.getAndSet(0);
+          if (toRequest > 0) {
+            super.request(toRequest);
+          }
+          return;
+        }
+
+        // Normal mode flow control: pull 1 message at a time
+        if (isSidecarReady() && upstreamToSidestreamWindow > 0 && pendingRequests.get() > 0) {
+          super.request(1);
+          pendingRequests.decrementAndGet();
+        }
       }
     }
 
@@ -730,7 +852,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       wrappedListener.onReadyNotify();
     }
 
-    private boolean isSidecarReady() {
+    boolean isSidecarReady() {
       ExtProcStreamState state = extProcStreamState.get();
       if (state.isCompleted()) {
         return true;
@@ -755,11 +877,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (dataPlaneCallState.get() == DataPlaneCallState.IDLE && !config.getObservabilityMode()) {
         return false;
       }
-      boolean sidecarReady = isSidecarReady();
-      if (config.getObservabilityMode()) {
-        return super.isReady() && sidecarReady;
+      synchronized (streamLock) {
+        boolean sidecarReady = isSidecarReady();
+        if (config.getObservabilityMode()) {
+          return super.isReady() && sidecarReady;
+        }
+        return downstreamToSidestreamWindow > 0 && sidecarReady
+            && pendingRequestBodyMessages.isEmpty();
       }
-      return sidecarReady;
     }
 
     @Override
@@ -768,16 +893,43 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         super.request(numMessages);
         return;
       }
-      if (!config.getObservabilityMode() 
+      if (!config.getObservabilityMode()
           && currentProcessingMode.getResponseBodyMode() != ProcessingMode.BodySendMode.GRPC) {
         super.request(numMessages);
         return;
       }
-      if (!isSidecarReady()) {
-        pendingRequests.addAndGet(numMessages);
-        return;
+      synchronized (streamLock) {
+        boolean sendResponseBodiesToExtProc = config.getObservabilityMode()
+            || currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC;
+
+        if (!sendResponseBodiesToExtProc) {
+          // We do not send response bodies to ext_proc server at all. Bypassed.
+          super.request(numMessages);
+          return;
+        }
+
+        // We send response bodies to ext_proc server (either in normal GRPC mode or
+        // observability mode).
+        // Gated by ext_proc server readiness.
+        // i.e. normal GRPC response body mode
+        boolean normalFlowControl = !config.getObservabilityMode();
+
+        if (normalFlowControl) {
+          pendingRequests.addAndGet(numMessages);
+          downstreamRequestsPending += numMessages;
+          drainPendingMutatedResponseBodies();
+          if (isSidecarReady()) {
+            drainPendingRequests();
+          }
+        } else {
+          // Observability mode: gate on readiness but pull all at once
+          if (isSidecarReady()) {
+            super.request(numMessages);
+          } else {
+            pendingRequests.addAndGet(numMessages);
+          }
+        }
       }
-      super.request(numMessages);
     }
 
     @Override
@@ -812,29 +964,60 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           }
           return;
         }
-      }
 
-      if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
-        super.sendMessage(message);
-        return;
-      }
-
-      // Mode is GRPC
-      try {
-        ByteString bodyByteString = outboundStreamToByteString(message);
-        sendToExtProc(ProcessingRequest.newBuilder()
-            .setRequestBody(HttpBody.newBuilder()
-                .setBody(bodyByteString)
-                .setEndOfStream(false)
-                .build())
-            .build());
-        bodyMessageSentToExtProc.set(true);
-
-        if (config.getObservabilityMode()) {
-          super.sendMessage(new KnownLengthInputStream(bodyByteString));
+        if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE) {
+          super.sendMessage(message);
+          return;
         }
-      } catch (IOException e) {
-        rawCall.cancel("Failed to serialize message for External Processor", e);
+
+        // Mode is GRPC
+        try {
+          ByteString bodyByteString = outboundStreamToByteString(message);
+          if (config.getObservabilityMode()) {
+            sendToExtProc(ProcessingRequest.newBuilder()
+                .setRequestBody(HttpBody.newBuilder()
+                    .setBody(bodyByteString)
+                    .setEndOfStream(false)
+                    .build())
+                .build());
+            bodyMessageSentToExtProc.set(true);
+            super.sendMessage(new KnownLengthInputStream(bodyByteString));
+          } else {
+            if (downstreamToSidestreamWindow <= 0 || !pendingRequestBodyMessages.isEmpty()) {
+              pendingRequestBodyMessages.add(bodyByteString);
+            } else {
+              sendRequestBodyToExtProc(bodyByteString);
+            }
+          }
+        } catch (IOException e) {
+          rawCall.cancel("Failed to serialize message for External Processor", e);
+        }
+      }
+    }
+
+    private void sendRequestBodyToExtProc(ByteString body) {
+      synchronized (streamLock) {
+        downstreamToSidestreamWindow -= body.size();
+        ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+            .setRequestBody(HttpBody.newBuilder()
+                .setBody(body)
+                .setEndOfStream(false)
+                .build());
+        mergeAccumulatedWindowUpdates(builder);
+        sendToExtProc(builder.build());
+        bodyMessageSentToExtProc.set(true);
+      }
+    }
+
+    private void drainPendingRequestBodyMessages() {
+      synchronized (streamLock) {
+        while (downstreamToSidestreamWindow > 0 && !pendingRequestBodyMessages.isEmpty()) {
+          ByteString body = pendingRequestBodyMessages.poll();
+          sendRequestBodyToExtProc(body);
+        }
+        if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.get()) {
+          halfClose();
+        }
       }
     }
 
@@ -892,11 +1075,18 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
 
       // Mode is GRPC
-      sendToExtProc(ProcessingRequest.newBuilder()
-          .setRequestBody(HttpBody.newBuilder()
-              .setEndOfStreamWithoutMessage(true)
-              .build())
-          .build());
+      synchronized (streamLock) {
+        if (!pendingRequestBodyMessages.isEmpty()) {
+          return;
+        }
+
+        ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+            .setRequestBody(HttpBody.newBuilder()
+                .setEndOfStreamWithoutMessage(true)
+                .build());
+        mergeAccumulatedWindowUpdates(builder);
+        sendToExtProc(builder.build());
+      }
     }
 
     @Override
@@ -919,11 +1109,31 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
           if (!streamed.getEndOfStreamWithoutMessage()) {
-            super.sendMessage(new KnownLengthInputStream(streamed.getBody()));
+            com.google.protobuf.ByteString body = streamed.getBody();
+            boolean sendImmediately = false;
+            synchronized (streamLock) {
+              sidestreamToUpstreamWindow -= body.size();
+              if (super.isReady() && pendingUpstreamBodyMessages.isEmpty()) {
+                sendImmediately = true;
+                accumulatedWindowUpdateSidestreamToUpstream += body.size();
+              } else {
+                pendingUpstreamBodyMessages.add(body);
+              }
+            }
+            if (sendImmediately) {
+              super.sendMessage(new KnownLengthInputStream(body));
+              trySendAccumulatedWindowUpdates();
+            }
           }
           if (streamed.getEndOfStream() || streamed.getEndOfStreamWithoutMessage()) {
-            if (requestSideClosed.compareAndSet(false, true)) {
-              proceedWithHalfClose();
+            synchronized (streamLock) {
+              if (pendingUpstreamBodyMessages.isEmpty()) {
+                if (requestSideClosed.compareAndSet(false, true)) {
+                  proceedWithHalfClose();
+                }
+              } else {
+                pendingUpstreamHalfClose.set(true);
+              }
             }
           }
         }
@@ -936,7 +1146,81 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          listener.onExternalBody(streamed.getBody());
+          com.google.protobuf.ByteString body = streamed.getBody();
+          final int bodySize = body.size();
+          synchronized (streamLock) {
+            sidestreamToDownstreamWindow -= bodySize;
+          }
+          deliverResponseBody(body, listener);
+        }
+      }
+    }
+
+    private void deliverResponseBody(ByteString body, DataPlaneListener listener) {
+      synchronized (streamLock) {
+        if (downstreamRequestsPending > 0) {
+          downstreamRequestsPending--;
+          final int bodySize = body.size();
+          callContext.run(() -> {
+            try {
+              listener.onExternalBody(body);
+            } finally {
+              synchronized (streamLock) {
+                accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+              }
+              trySendAccumulatedWindowUpdates();
+            }
+          });
+        } else {
+          pendingMutatedResponseBodies.add(body);
+        }
+      }
+    }
+
+    private void drainPendingMutatedResponseBodies() {
+      synchronized (streamLock) {
+        while (downstreamRequestsPending > 0 && !pendingMutatedResponseBodies.isEmpty()) {
+          ByteString body = pendingMutatedResponseBodies.poll();
+          downstreamRequestsPending--;
+          pendingRequests.decrementAndGet();
+          final int bodySize = body.size();
+          callContext.run(() -> {
+            try {
+              wrappedListener.onExternalBody(body);
+            } finally {
+              synchronized (streamLock) {
+                accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+              }
+              trySendAccumulatedWindowUpdates();
+            }
+          });
+        }
+      }
+    }
+
+    void drainPendingUpstreamBodyMessages() {
+      while (true) {
+        ByteString body = null;
+        boolean triggerHalfClose = false;
+        synchronized (streamLock) {
+          if (super.isReady() && !pendingUpstreamBodyMessages.isEmpty()) {
+            body = pendingUpstreamBodyMessages.poll();
+            accumulatedWindowUpdateSidestreamToUpstream += body.size();
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingUpstreamHalfClose.compareAndSet(true, false)) {
+              triggerHalfClose = true;
+            }
+          }
+        }
+        if (body == null) {
+          break;
+        }
+        super.sendMessage(new KnownLengthInputStream(body));
+        trySendAccumulatedWindowUpdates();
+        if (triggerHalfClose) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
         }
       }
     }
@@ -1053,6 +1337,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   private static class DataPlaneListener extends SimpleForwardingClientCallListener<InputStream> {
     private final ClientCall<?, ?> rawCall;
     private final DataPlaneClientCall dataPlaneClientCall;
+    // Path 3: Upstream response bodies queued because upstream to sidestream window not available,
+    // response headers not cleared by ext_proc or ext_proc stream draining
     private final Queue<InputStream> savedMessages = new ConcurrentLinkedQueue<>();
     private boolean inboundPassThrough = false;
     @Nullable private volatile Metadata savedHeaders;
@@ -1090,6 +1376,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onReady() {
+      dataPlaneClientCall.drainPendingUpstreamBodyMessages();
+      dataPlaneClientCall.trySendAccumulatedWindowUpdates();
       dataPlaneClientCall.drainPendingRequests();
       onReadyNotify();
     }
@@ -1109,7 +1397,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      if (dataPlaneClientCall.getPassThroughMode().get() 
+      if (dataPlaneClientCall.getPassThroughMode().get()
           || dataPlaneClientCall.getExtProcStreamState().get().isCompleted() 
           || !sendResponseHeaders) {
         proceedWithHeaders(headers);
@@ -1131,7 +1419,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onMessage(InputStream message) {
-      synchronized (savedMessages) {
+      synchronized (dataPlaneClientCall.getStreamLock()) {
         if (inboundPassThrough) {
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
           return;
@@ -1150,34 +1438,60 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
           }
           return;
         }
-      }
 
-      if (dataPlaneClientCall.getPassThroughMode().get()) {
-        dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-        return;
-      }
-
-      if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
-          || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
-              != ProcessingMode.BodySendMode.GRPC) {
-        dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
-        return;
-      }
-
-      try {
-        ByteString bodyByteString = ByteString.readFrom(message);
-        sendResponseBodyToExtProc(bodyByteString, false);
-        dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
-
-        if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
-          // If needed, downstream reading can be made more optimal by creating a wrapped
-          // Inputstream wraps the underlying bytestring and that implements HasByteBuffer,
-          // Detachable, KnownLength
-          dataPlaneClientCall.getCallContext().run(
-              () -> delegate().onMessage(bodyByteString.newInput()));
+        if (dataPlaneClientCall.getPassThroughMode().get()) {
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+          return;
         }
-      } catch (IOException e) {
-        rawCall.cancel("Failed to read server response", e);
+
+        if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
+            || dataPlaneClientCall.getCurrentProcessingMode().getResponseBodyMode()
+                != ProcessingMode.BodySendMode.GRPC) {
+          dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
+          return;
+        }
+
+        try {
+          ByteString bodyByteString = ByteString.readFrom(message);
+          if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
+            sendResponseBodyToExtProc(bodyByteString, false);
+            dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            dataPlaneClientCall.getCallContext().run(
+                () -> delegate().onMessage(bodyByteString.newInput()));
+          } else {
+            if (dataPlaneClientCall.upstreamToSidestreamWindow <= 0 || !savedMessages.isEmpty()) {
+              savedMessages.add(new KnownLengthInputStream(bodyByteString));
+            } else {
+              dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
+              sendResponseBodyToExtProc(bodyByteString, false);
+              dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            }
+            dataPlaneClientCall.drainPendingRequests();
+          }
+        } catch (IOException e) {
+          rawCall.cancel("Failed to read server response", e);
+        }
+      }
+    }
+
+    void drainSavedMessages() {
+      synchronized (dataPlaneClientCall.getStreamLock()) {
+        while (dataPlaneClientCall.isSidecarReady()
+            && dataPlaneClientCall.upstreamToSidestreamWindow > 0
+            && !savedMessages.isEmpty()) {
+          InputStream msg = savedMessages.poll();
+          if (msg != null) {
+            try {
+              ByteString bodyByteString = ByteString.readFrom(msg);
+              dataPlaneClientCall.upstreamToSidestreamWindow -= bodyByteString.size();
+              sendResponseBodyToExtProc(bodyByteString, false);
+              dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
+            } catch (IOException e) {
+              rawCall.cancel("Failed to read buffered response body", e);
+            }
+          }
+        }
+        dataPlaneClientCall.drainPendingRequests();
       }
     }
 
@@ -1236,7 +1550,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     void proceedWithHeaders() {
       if (savedHeaders != null) {
         proceedWithHeaders(savedHeaders);
-        synchronized (savedMessages) {
+        synchronized (dataPlaneClientCall.getStreamLock()) {
           savedHeaders = null;
           if (!dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
             InputStream msg;
@@ -1296,7 +1610,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void proceedWithSavedMessages() {
-      synchronized (savedMessages) {
+      synchronized (dataPlaneClientCall.getStreamLock()) {
         InputStream msg;
         while ((msg = savedMessages.poll()) != null) {
           final InputStream finalMsg = msg;
@@ -1381,9 +1695,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
       bodyBuilder.setEndOfStream(endOfStream);
 
-      dataPlaneClientCall.sendToExtProc(ProcessingRequest.newBuilder()
-          .setResponseBody(bodyBuilder.build())
-          .build());
+      ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+          .setResponseBody(bodyBuilder.build());
+      dataPlaneClientCall.mergeAccumulatedWindowUpdates(builder);
+      dataPlaneClientCall.sendToExtProc(builder.build());
     }
   }
 }
