@@ -40,6 +40,19 @@ public class ForwardingClientStreamTracerTest {
         Collections.<Method>emptyList());
   }
 
+  @Test
+  public void attemptDelayMethodsForwarded() {
+    TestClientStreamTracer tracer = new TestClientStreamTracer();
+    tracer.recordAttemptDelayStart("connecting", "test");
+    org.mockito.Mockito.verify(mockDelegate).recordAttemptDelayStart("connecting", "test");
+
+    tracer.recordAttemptDelayReasonChanged("test2");
+    org.mockito.Mockito.verify(mockDelegate).recordAttemptDelayReasonChanged("test2");
+
+    tracer.recordAttemptDelayEnd();
+    org.mockito.Mockito.verify(mockDelegate).recordAttemptDelayEnd();
+  }
+
   private final class TestClientStreamTracer extends ForwardingClientStreamTracer {
     @Override
     protected ClientStreamTracer delegate() {

@@ -918,6 +918,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               inUseStateAggregator.updateObjectInUse(pendingCallsInUseObject, true);
             }
             pendingCalls.add(pendingCall);
+            pendingCall.notifyQueuedForNameResolution();
           } else {
             pendingCall.reprocess();
           }
@@ -997,6 +998,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final MethodDescriptor<ReqT, RespT> method;
       final CallOptions callOptions;
       private final long callCreationTime;
+      private volatile boolean queuedForResolution;
+      private volatile boolean callCancelled;
+      private final AtomicBoolean delayEnded = new AtomicBoolean();
 
       PendingCall(Context context, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions) {
         super(
@@ -1010,14 +1014,42 @@ final class ManagedChannelImpl extends ManagedChannel implements
         this.callCreationTime = ticker.nanoTime();
       }
 
+      void notifyQueuedForNameResolution() {
+        boolean shouldStart = false;
+        synchronized (this) {
+          if (!callCancelled && !queuedForResolution) {
+            queuedForResolution = true;
+            shouldStart = true;
+          }
+        }
+        if (shouldStart) {
+          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+            factory.recordCallDelayStart(
+                "resolving", "waiting for name resolution or service config");
+          }
+        }
+      }
+
+      private void endDelayIfNeeded() {
+        if (queuedForResolution && delayEnded.compareAndSet(false, true)) {
+          for (ClientStreamTracer.Factory factory : callOptions.getStreamTracerFactories()) {
+            factory.recordCallDelayEnd();
+          }
+        }
+      }
+
       /** Called when it's ready to create a real call and reprocess the pending call. */
       void reprocess() {
+        endDelayIfNeeded();
         ClientCall<ReqT, RespT> realCall;
         Context previous = context.attach();
         try {
-          CallOptions delayResolutionOption = callOptions.withOption(NAME_RESOLUTION_DELAYED,
-              ticker.nanoTime() - callCreationTime);
-          realCall = newClientCall(method, delayResolutionOption);
+          CallOptions effectiveOptions = callOptions;
+          if (queuedForResolution) {
+            effectiveOptions = callOptions.withOption(NAME_RESOLUTION_DELAYED,
+                ticker.nanoTime() - callCreationTime);
+          }
+          realCall = newClientCall(method, effectiveOptions);
         } finally {
           context.detach(previous);
         }
@@ -1037,6 +1069,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       @Override
       protected void callCancelled() {
+        synchronized (this) {
+          callCancelled = true;
+        }
+        endDelayIfNeeded();
         super.callCancelled();
         syncContext.execute(new PendingCallRemoval());
       }

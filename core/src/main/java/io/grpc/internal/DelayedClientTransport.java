@@ -405,6 +405,8 @@ final class DelayedClientTransport implements ManagedClientTransport {
     @Nullable private String activeDelayType;
     @GuardedBy("this")
     @Nullable private String activeDelayReason;
+    @GuardedBy("this")
+    private boolean delayEnded;
 
     private PendingStream(PickSubchannelArgs args, ClientStreamTracer[] tracers,
         @Nullable String initialType, @Nullable String initialReason) {
@@ -428,11 +430,11 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * structured transition event is appended to the active span without span re-creation.
      */
     synchronized void updateDelay(@Nullable String newType, @Nullable String newReason) {
-      if (getRealStream() != null) {
+      if (getRealStream() != null || delayEnded) {
         return;
       }
+      // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
       if (!Objects.equals(activeDelayType, newType)) {
-        // Delay type changed (e.g., from RLS lookup to connecting). End the previous delay.
         if (activeDelayType != null) {
           for (ClientStreamTracer tracer : tracers) {
             tracer.recordAttemptDelayEnd();
@@ -446,8 +448,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
           }
         }
       }
-      if (newType != null && newReason != null && !Objects.equals(activeDelayReason, newReason)) {
-        // Delay type is unchanged, but the reason changed (e.g., priority failover).
+      // Delay type is unchanged, but the reason changed (e.g., priority failover).
+      if (newType != null && newReason != null
+          && !Objects.equals(activeDelayReason, newReason)) {
         activeDelayReason = newReason;
         for (ClientStreamTracer tracer : tracers) {
           tracer.recordAttemptDelayReasonChanged(newReason);
@@ -459,6 +462,10 @@ final class DelayedClientTransport implements ManagedClientTransport {
      * Ends active attempt delay segment telemetry upon stream creation or stream cancellation.
      */
     synchronized void endDelay() {
+      if (delayEnded) {
+        return;
+      }
+      delayEnded = true;
       if (activeDelayType != null) {
         for (ClientStreamTracer tracer : tracers) {
           tracer.recordAttemptDelayEnd();
@@ -469,8 +476,9 @@ final class DelayedClientTransport implements ManagedClientTransport {
     }
 
     Runnable setStreamAndEndDelay(ClientStream stream) {
+      Runnable runnable = setStream(stream);
       endDelay();
-      return setStream(stream);
+      return runnable;
     }
 
     /** Runnable may be null. */

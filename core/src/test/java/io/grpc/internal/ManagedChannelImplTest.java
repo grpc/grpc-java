@@ -1906,6 +1906,10 @@ public class ManagedChannelImplTest {
         same(method), same(headers), ArgumentMatchers.any(),
         ArgumentMatchers.<ClientStreamTracer[]>any());
     assertThat(headers.getAll(metadataKey)).containsExactly(callCredValue);
+    if (oob instanceof ManagedChannelImpl.OobChannel) {
+      ((ManagedChannelImpl.OobChannel) oob)
+          .updateAddresses(Collections.singletonList(addressGroup));
+    }
     oob.shutdownNow();
 
     // Verify that resolving oob channel does not
