@@ -252,16 +252,16 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
 
   @Test
   public void clientAuthorizesServerUidsInOrder() throws Exception {
-    // TODO(jdcormie): In real Android, Binder#getCallingUid is thread-local but Robolectric only
-    //  lets us fake value this *globally*. So the ShadowBinder#setCallingUid() here unrealistically
-    //  affects the server's view of the client's uid too. For now this doesn't matter because this
-    //  test never exercises server SecurityPolicy.
-    ShadowBinder.setCallingUid(EPHEMERAL_SERVER_UID);
-
     serverPkgInfo.applicationInfo.uid = SERVER_APP_UID;
     shadowOf(application.getPackageManager()).installPackage(serverPkgInfo);
     shadowOf(application.getPackageManager()).addOrUpdateService(serviceInfo);
-    server = newServer(ImmutableList.of());
+    server =
+        newServerBuilder()
+            .setClientBinderDecorator(
+                RobolectricUidPropagation.newUidPassingBinderDecorator(EPHEMERAL_SERVER_UID))
+            .setStreamTracerFactories(ImmutableList.of())
+            .build();
+    registerServerWithRobolectric((BinderServer) server);
     server.start(serverListener);
 
     SettableAsyncSecurityPolicy securityPolicy = new SettableAsyncSecurityPolicy();
@@ -270,6 +270,7 @@ public final class RobolectricBinderTransportTest extends AbstractTransportTest 
             .setFactory(
                 newClientTransportFactoryBuilder()
                     .setSecurityPolicy(securityPolicy)
+                    .setInboundBinderDecorator(RobolectricUidPropagation.newUidRestoringBinderDecorator())
                     .buildClientTransportFactory())
             .build();
     runIfNotNull(client.start(mockClientTransportListener));
