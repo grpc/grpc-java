@@ -85,6 +85,7 @@ class NettyClientTransport implements ConnectionClientTransport,
   private final AsciiString userAgent;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
+  private final boolean disableHpackDynamicTable;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -120,6 +121,7 @@ class NettyClientTransport implements ConnectionClientTransport,
       ProtocolNegotiator negotiator,
       boolean autoFlowControl,
       int flowControlWindow,
+      boolean disableHpackDynamicTable,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -145,6 +147,7 @@ class NettyClientTransport implements ConnectionClientTransport,
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
+    this.disableHpackDynamicTable = disableHpackDynamicTable;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -247,6 +250,7 @@ class NettyClientTransport implements ConnectionClientTransport,
             keepAliveManager,
             autoFlowControl,
             flowControlWindow,
+            disableHpackDynamicTable,
             maxHeaderListSize,
             softLimitHeaderListSize,
             GrpcUtil.STOPWATCH_SUPPLIER,

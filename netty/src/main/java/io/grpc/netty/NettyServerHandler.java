@@ -70,7 +70,6 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.EmptyHttp2Headers;
@@ -164,6 +163,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxStreams,
       boolean autoFlowControl,
       int flowControlWindow,
+      boolean disableHpackDynamicTable,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       int maxMessageSize,
@@ -184,8 +184,7 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ServerHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new Http2InboundFrameLogger(
         new DefaultHttp2FrameReader(headersDecoder), frameLogger);
-    Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
+    Http2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(disableHpackDynamicTable);
     Http2FrameWriter frameWriter =
         new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(encoder), frameLogger);
     return newHandler(
@@ -198,6 +197,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxStreams,
         autoFlowControl,
         flowControlWindow,
+        disableHpackDynamicTable,
         maxHeaderListSize,
         softLimitHeaderListSize,
         maxMessageSize,
@@ -225,6 +225,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxStreams,
       boolean autoFlowControl,
       int flowControlWindow,
+      boolean disableHpackDynamicTable,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       int maxMessageSize,
@@ -282,6 +283,9 @@ class NettyServerHandler extends AbstractNettyHandler {
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(maxStreams);
     settings.maxHeaderListSize(maxHeaderListSize);
+    if (disableHpackDynamicTable) {
+      settings.headerTableSize(0);
+    }
 
     return new NettyServerHandler(
         channelUnused,

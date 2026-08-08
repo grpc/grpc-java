@@ -138,6 +138,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private int maxConcurrentStreams = Integer.MAX_VALUE;
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private int softLimitHeaderListSize = Integer.MAX_VALUE;
+  private boolean disableHpackDynamicTable;
   private boolean permitKeepAliveWithoutCalls = true;
   private long permitKeepAliveTimeInNanos = 0;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -472,6 +473,24 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
 
     assertEquals(maxHeaderListSize, captor.getValue().maxHeaderListSize().longValue());
+    assertNull(captor.getValue().headerTableSize());
+  }
+
+  @Test
+  public void shouldAdvertiseZeroHpackDynamicTable() throws Exception {
+    disableHpackDynamicTable = true;
+    manualSetUp();
+
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+    assertEquals(0, captor.getValue().headerTableSize().longValue());
+    assertEquals(4096,
+        frameReader().configuration().headersConfiguration().maxHeaderTableSize());
+
+    channelRead(serializeSettingsAck());
+
+    assertEquals(0, frameReader().configuration().headersConfiguration().maxHeaderTableSize());
   }
 
   @Test
@@ -1425,6 +1444,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
         maxConcurrentStreams,
         autoFlowControl,
         flowControlWindow,
+        disableHpackDynamicTable,
         maxHeaderListSize,
         softLimitHeaderListSize,
         DEFAULT_MAX_MESSAGE_SIZE,
