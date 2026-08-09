@@ -94,6 +94,7 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
    * @param enabled whether message compression is enabled
    * @param compressorName the name of the compressor being used (e.g., "gzip")
    */
+  @Override
   public final void setMessageCompression(boolean enabled, String compressorName) {
     if (enabled && "gzip".equals(compressorName)) {
       clientSentGzipRequest = true;
