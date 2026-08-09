@@ -669,11 +669,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      public void setMessageCompression(boolean enabled, String compressorName) {
-        // noop
-      }
-
-      @Override
       public void optimizeForDirectExecutor() {}
 
       @Override
@@ -895,12 +890,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         }
         syncContext.drain();
       }
-
-      @Override
-      public void setMessageCompression(boolean enable) {}
-
-      @Override
-      public void setMessageCompression(boolean enabled, String compressorName) {}
 
       @Override
       public void setAuthority(String string) {
