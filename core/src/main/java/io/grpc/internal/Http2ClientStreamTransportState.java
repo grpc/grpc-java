@@ -16,6 +16,9 @@
 
 package io.grpc.internal;
 
+import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
+import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
+
 import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
@@ -312,9 +315,9 @@ public abstract class Http2ClientStreamTransportState extends AbstractClientStre
 
     String acceptEncoding = new String(acceptEncodingBytes, StandardCharsets.US_ASCII);
     // Check if gzip is in the accepted encodings (comma-separated list)
-    String[] encodings = GrpcUtil.ACCEPT_ENCODING_SPLITTER.split(acceptEncoding);
+    Iterable<String> encodingsIterable = GrpcUtil.ACCEPT_ENCODING_SPLITTER.split(acceptEncoding);
     boolean gzipAccepted = false;
-    for (String encoding : encodings) {
+    for (String encoding : encodingsIterable) {
       if ("gzip".equalsIgnoreCase(encoding.trim())) {
         gzipAccepted = true;
         break;
