@@ -70,7 +70,9 @@ dependencies {
     testImplementation project(':grpc-inprocess')
     testImplementation libraries.opentelemetry.api
     testImplementation libraries.opentelemetry.sdk.testing
-    testImplementation libraries.cel.compiler
+    testImplementation(libraries.cel.compiler) {
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
     testImplementation testFixtures(project(':grpc-core')),
             testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-util'))

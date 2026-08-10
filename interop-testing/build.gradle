@@ -41,10 +41,12 @@ dependencies {
     runtimeOnly libraries.opencensus.impl,
             libraries.netty.tcnative,
             libraries.netty.tcnative.classes,
-            libraries.opentelemetry.exporter.prometheus, // For xds interop client
             project(':grpc-googleapis'),
             project(':grpc-grpclb'),
             project(':grpc-rls')
+    runtimeOnly(libraries.opentelemetry.exporter.prometheus) { // For xds interop client
+        exclude group: 'com.google.protobuf', module: 'protobuf-java'
+    }
     testImplementation testFixtures(project(':grpc-api')),
             testFixtures(project(':grpc-core')),
             project(':grpc-inprocess'),

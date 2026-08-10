@@ -16,7 +16,7 @@ java {
 }
 
 def grpcVersion = '1.84.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protocVersion = '3.25.8'
+def protocVersion = '3.25.9'
 
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}",
