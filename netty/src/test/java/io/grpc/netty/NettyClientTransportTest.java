@@ -1343,6 +1343,10 @@ public class NettyClientTransportTest {
     @Override
     public void closed(Status status) {
     }
+
+    @Override
+    public void triggerEvent(Object event) {
+    }
   }
 
   private final class EchoServerListener implements ServerListener {
