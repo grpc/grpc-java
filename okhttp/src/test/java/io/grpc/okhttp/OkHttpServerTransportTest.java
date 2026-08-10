@@ -1519,6 +1519,10 @@ public class OkHttpServerTransportTest {
     public void onReady() {
     }
 
+    @Override
+    public void triggerEvent(Object event) {
+    }
+
     static String getContent(InputStream message) throws IOException {
       try {
         return new String(ByteStreams.toByteArray(message), UTF_8);
