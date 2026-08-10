@@ -668,6 +668,16 @@ abstract class Inbound<L extends StreamListener, T extends BinderTransport>
       listener.closed(status);
     }
 
+    void triggerEvent(Object event) {
+      ServerStreamListener localListener;
+      synchronized (this) {
+        localListener = listener;
+      }
+      if (localListener != null) {
+        localListener.triggerEvent(event);
+      }
+    }
+
     @GuardedBy("this")
     void onCloseSent(Status status) {
       if (!isClosed()) {

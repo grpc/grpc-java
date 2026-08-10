@@ -169,7 +169,7 @@ final class SingleMessageServerStream implements ServerStream {
 
   @Override
   public void triggerEvent(Object event) {
-    // Ignore.
+    inbound.triggerEvent(event);
   }
 
   @Override
