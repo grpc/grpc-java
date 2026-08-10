@@ -279,7 +279,8 @@ public abstract class ServerCall<ReqT, RespT> {
    * Triggers a custom event to be processed by the listener.
    * The event will be delivered to {@link Listener#onEvent(Object)} on the call's executor.
    *
-   * <p>This method is thread-safe and can be called from any thread.
+   * <p>This method is thread-safe and can be called from any thread. No events will be delivered
+   * after the RPC is cancelled or completed.
    *
    * @param event the event to trigger.
    */
