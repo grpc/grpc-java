@@ -178,9 +178,7 @@ public abstract class AbstractServerStream extends AbstractStream
     transportState().runOnTransportThread(new Runnable() {
       @Override
       public void run() {
-        if (transportState().listener != null) {
-          transportState().listener.triggerEvent(event);
-        }
+        transportState().triggerEvent(event);
       }
     });
   }
@@ -270,6 +268,13 @@ public abstract class AbstractServerStream extends AbstractStream
     }
 
 
+
+    public final void triggerEvent(Object event) {
+      if (listenerClosed) {
+        return;
+      }
+      listener().triggerEvent(event);
+    }
 
     @Override
     protected ServerStreamListener listener() {
