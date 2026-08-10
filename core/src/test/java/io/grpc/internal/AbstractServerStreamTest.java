@@ -362,6 +362,31 @@ public class AbstractServerStreamTest {
   }
 
   @Test
+  public void triggerEvent_propagatesToListener() {
+    ServerStreamListener listener = mock(ServerStreamListener.class);
+    stream.transportState().setListener(listener);
+
+    Object event = new Object();
+    stream.triggerEvent(event);
+
+    verify(listener).triggerEvent(event);
+  }
+
+  @Test
+  public void triggerEvent_ignoredAfterClose() {
+    ServerStreamListener listener = mock(ServerStreamListener.class);
+    stream.transportState().setListener(listener);
+
+    stream.close(Status.OK, new Metadata());
+    stream.transportState().complete();
+
+    Object event = new Object();
+    stream.triggerEvent(event);
+
+    verify(listener, never()).triggerEvent(any());
+  }
+
+  @Test
   public void changeOnReadyThreshold() {
     stream.setListener(new ServerStreamListenerBase());
     stream.transportState().onStreamAllocated();
