@@ -147,6 +147,17 @@ public abstract class AbstractClientStream extends AbstractStream
     transportState().setDecompressorRegistry(decompressorRegistry);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Delegates to the transport state so that subclasses (e.g., NettyClientStream,
+   * InProcessClientStream) inherit the new implementation via their TransportState.
+   */
+  @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    transportState().setMessageCompression(enabled, compressorName);
+  }
+
   /** {@inheritDoc} */
   @Override
   protected abstract TransportState transportState();
