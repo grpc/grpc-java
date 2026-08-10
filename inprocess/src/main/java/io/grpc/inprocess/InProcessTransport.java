@@ -947,6 +947,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       @Override
       public void appendTimeoutInsight(InsightBuilder insight) {
       }
+
+      @Override
+      public void setMessageCompression(boolean enabled, String compressorName) {
+        // noop
+      }
     }
   }
 
