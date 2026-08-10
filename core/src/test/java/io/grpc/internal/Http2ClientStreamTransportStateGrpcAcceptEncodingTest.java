@@ -62,7 +62,6 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
 
   private TransportTracer transportTracer;
   @Mock private ClientStreamListener mockListener;
-  @Captor private ArgumentCaptor<Status> statusCaptor;
 
   @Before
   public void setUp() {
@@ -207,7 +206,6 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
   }
 
   private static class BaseTransportState extends Http2ClientStreamTransportState {
-    private int onReadyThreshold;
 
     public BaseTransportState(TransportTracer transportTracer, CallOptions options) {
       super(DEFAULT_MAX_MESSAGE_SIZE, StatsTraceContext.NOOP, transportTracer, options);
@@ -216,27 +214,3 @@ public class Http2ClientStreamTransportStateGrpcAcceptEncodingTest {
     public BaseTransportState(TransportTracer transportTracer) {
       this(transportTracer, CallOptions.DEFAULT);
     }
-
-    @Override
-    protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
-      transportReportStatus(status, stopDelivery, trailers);
-    }
-
-    @Override
-    public void deframeFailed(Throwable cause) {}
-
-    @Override
-    public void bytesRead(int processedBytes) {}
-
-    @Override
-    public void runOnTransportThread(Runnable r) {
-      r.run();
-    }
-
-    @Override
-    void setOnReadyThreshold(int numBytes) {
-      onReadyThreshold = numBytes;
-      super.setOnReadyThreshold(numBytes);
-    }
-  }
-}
