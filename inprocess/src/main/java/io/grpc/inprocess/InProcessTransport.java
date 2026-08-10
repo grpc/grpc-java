@@ -668,7 +668,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         // noop
       }
 
-      @Override
       public void setMessageCompression(boolean enabled, String compressorName) {
         // noop
       }
