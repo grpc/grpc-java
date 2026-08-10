@@ -110,6 +110,7 @@ public abstract class ServerCall<ReqT, RespT> {
      *
      * @param event the triggered event.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
     public void onEvent(Object event) {
       // Default no-op
     }
@@ -284,6 +285,7 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * @param event the event to trigger.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
   public void triggerEvent(Object event) {
     // Default no-op
   }
