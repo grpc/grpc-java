@@ -739,7 +739,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       void triggerServerEvent(final Object event) {
         synchronized (this) {
-          if (!closed && serverStreamListener != null) {
+          if (!closed) {
             syncContext.executeLater(new Runnable() {
               @Override
               public void run() {
