@@ -860,6 +860,11 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       pendingHalfClose.set(true);
 
       if (extProcStreamState.get().isCompleted()) {
+        if (passThroughMode.get()) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
+        }
         return;
       }
 
