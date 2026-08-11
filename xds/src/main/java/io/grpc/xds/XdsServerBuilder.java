@@ -46,6 +46,7 @@ import java.util.function.Function;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
+
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers.
  */
@@ -118,7 +119,12 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
    * @return this
    */
   public XdsServerBuilder childChannelConfigurator(ChannelConfigurator channelConfigurator) {
-    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
+    checkNotNull(channelConfigurator, "channelConfigurator");
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
     return this;
   }
 

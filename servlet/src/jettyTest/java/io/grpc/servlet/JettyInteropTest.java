@@ -54,6 +54,9 @@ public class JettyInteropTest extends AbstractInteropTest {
   }
 
   @Override
+  // RateControl is deprecated in Jetty 12 (used in grpc-servlet-jakarta) but still needed for
+  // compatibility with Jetty 10 (used in grpc-servlet).
+  @SuppressWarnings("removal")
   protected void startServer(ServerBuilder<?> builer) {
     GrpcServlet grpcServlet =
         new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
