@@ -1671,6 +1671,21 @@ public class InternalSubchannelTest {
     );
   }
 
+  @Test
+  public void transportFactoryClosed_shutsDownSubchannelSafely() {
+    SocketAddress addr = mock(SocketAddress.class);
+    createInternalSubchannel(addr);
+    assertEquals(IDLE, internalSubchannel.getState());
+
+    when(mockTransportFactory.newClientTransport(any(), any(), any()))
+        .thenThrow(new IllegalStateException("The transport factory is closed."));
+
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertExactCallbackInvokes(
+        "onStateChange:CONNECTING", "onStateChange:SHUTDOWN", "onTerminated");
+    assertEquals(SHUTDOWN, internalSubchannel.getState());
+  }
+
   private void assertNoCallbackInvoke() {
     while (fakeExecutor.runDueTasks() > 0) {}
     assertEquals(0, callbackInvokes.size());

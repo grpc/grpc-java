@@ -273,10 +273,20 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     TransportLogger transportLogger = new TransportLogger();
     // In case the transport logs in the constructor, use the subchannel logId
     transportLogger.logId = getLogId();
-    ConnectionClientTransport transport =
-        new CallTracingTransport(
-            transportFactory
-                .newClientTransport(address, options, transportLogger), callsTracer);
+    ConnectionClientTransport rawTransport;
+    try {
+      rawTransport =
+          transportFactory.newClientTransport(address, options, transportLogger);
+    } catch (IllegalStateException e) {
+      channelLogger.log(
+          ChannelLogLevel.WARNING, "Transport factory is closed, shutting down subchannel", e);
+      shutdown(
+          Status.UNAVAILABLE
+              .withDescription("Transport factory is closed")
+              .withCause(e));
+      return;
+    }
+    ConnectionClientTransport transport = new CallTracingTransport(rawTransport, callsTracer);
     transportLogger.logId = transport.getLogId();
     channelz.addClientSocket(transport);
     pendingTransport = transport;
