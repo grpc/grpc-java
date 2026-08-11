@@ -1,3 +1,4 @@
 build --cxxopt=-std=c++17 --host_cxxopt=-std=c++17
+build --@com_google_protobuf//bazel/flags:allow_nonstandard_protoc=true
 
 common:skip_android --deleted_packages=android,binder
