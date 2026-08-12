@@ -972,6 +972,40 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeTracer.delayEndedCount);
   }
 
+  @Test
+  public void streamDelayMetrics_allBranchCombinations() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    // 1. Initial stream with no picker set (initialType defaults to "connecting")
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("client channel: waiting for picker"),
+        fakeTracer.startedDelayReasons);
+
+    // 2. Reprocess with same delay type ("connecting") but new reason ("attempting to connect")
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "attempting to connect")));
+    assertEquals(Collections.singletonList("attempting to connect"),
+        fakeTracer.changedDelayReasons);
+
+    // 3. Reprocess with a different delay type ("rls_lookup_pending")
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("rls_lookup_pending", "RLS pending")));
+    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Arrays.asList("connecting", "rls_lookup_pending"), fakeTracer.startedDelayTypes);
+
+    // 4. Double endDelay call is no-op
+    stream.cancel(Status.CANCELLED);
+    assertEquals(2, fakeTracer.delayEndedCount);
+
+    // 5. Additional endDelay after cancellation is ignored
+    stream.cancel(Status.CANCELLED);
+    assertEquals(2, fakeTracer.delayEndedCount);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

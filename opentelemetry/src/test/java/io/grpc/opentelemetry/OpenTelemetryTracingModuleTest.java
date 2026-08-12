@@ -481,6 +481,40 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void attemptDelayTracing_duplicateStartAndReasonChanged_handlesGracefully() {
+    Span parentSpan = openTelemetryRule.getOpenTelemetry()
+        .getTracer("test").spanBuilder("parent").startSpan();
+    OpenTelemetryTracingModule module = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    OpenTelemetryTracingModule.CallAttemptsTracerFactory factory =
+        module.newClientCallTracer(parentSpan, method);
+
+    ClientStreamTracer tracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+        new Metadata());
+
+    // Initial attempt delay start
+    tracer.recordAttemptDelayStart("connecting", "initial reason");
+    // Duplicate start with same delay type triggers recordAttemptDelayReasonChanged
+    tracer.recordAttemptDelayStart("connecting", "updated reason");
+    // Explicit recordAttemptDelayReasonChanged
+    tracer.recordAttemptDelayReasonChanged("third reason");
+    tracer.recordAttemptDelayEnd();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData attemptDelaySpan = null;
+    for (SpanData s : spans) {
+      if ("Attempt Delay".equals(s.getName())) {
+        attemptDelaySpan = s;
+        break;
+      }
+    }
+    assertNotNull(attemptDelaySpan);
+    assertEquals("connecting",
+        attemptDelaySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+  }
+
+  @Test
   public void clientCallDelayTracing_endToEnd_nameResolutionError() throws Exception {
     final CountDownLatch resolutionLatch = new CountDownLatch(1);
     final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();
