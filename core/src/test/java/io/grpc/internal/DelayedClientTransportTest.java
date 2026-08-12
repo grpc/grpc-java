@@ -997,13 +997,26 @@ public class DelayedClientTransportTest {
     assertEquals(1, fakeTracer.delayEndedCount);
     assertEquals(Arrays.asList("connecting", "rls_lookup_pending"), fakeTracer.startedDelayTypes);
 
-    // 4. Double endDelay call is no-op
-    stream.cancel(Status.CANCELLED);
+    // 4. Reprocess with default PickResult.withNoResult() (defaults to "connecting")
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult()));
     assertEquals(2, fakeTracer.delayEndedCount);
 
-    // 5. Additional endDelay after cancellation is ignored
+    // 5. Cancel stream ends active delay
     stream.cancel(Status.CANCELLED);
-    assertEquals(2, fakeTracer.delayEndedCount);
+    assertEquals(3, fakeTracer.delayEndedCount);
+
+    // 6. Direct updateDelay with null type and null reason
+    fakeTracer = new FakeStreamTracer();
+    customTracers = new ClientStreamTracer[] { fakeTracer };
+    ClientStream stream2 = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    fakeTracer.startedDelayTypes.clear();
+    stream2.start(streamListener);
+    
+    // Explicitly update delay to null
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult()));
+    
+    // 7. Cancel stream2 (endDelay when activeDelayType is null)
+    stream2.cancel(Status.CANCELLED);
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

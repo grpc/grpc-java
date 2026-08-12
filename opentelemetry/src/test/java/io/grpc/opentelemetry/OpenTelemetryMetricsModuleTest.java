@@ -1842,6 +1842,61 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
+  public void clientCallDelayMetrics_withBaggageAndStreamPlugins_recordsContextAndLabels() {
+    OpenTelemetryPlugin.ClientStreamPlugin fakeClientStreamPlugin =
+        new OpenTelemetryPlugin.ClientStreamPlugin() {
+          @Override
+          public void addLabels(
+              io.opentelemetry.api.common.AttributesBuilder builder) {
+            builder.put(
+                io.opentelemetry.api.common.AttributeKey.stringKey("custom_key"), "custom_val");
+          }
+        };
+    OpenTelemetryPlugin fakePlugin = new OpenTelemetryPlugin() {
+      @Override
+      public ClientCallPlugin newClientCallPlugin() {
+        return new ClientCallPlugin() {
+          @Override
+          public ClientStreamPlugin newClientStreamPlugin() {
+            return fakeClientStreamPlugin;
+          }
+        };
+      }
+
+      @Override
+      public ServerStreamPlugin newServerStreamPlugin(Metadata inboundMetadata) {
+        return new ServerStreamPlugin() {};
+      }
+    };
+
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        openTelemetryTesting.getOpenTelemetry().getMeterProvider().get("grpc-java"),
+        ImmutableMap.of("grpc.client.call.delay.duration", true),
+        false);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource,
+        emptyList(), Collections.singletonList(fakePlugin));
+
+    io.opentelemetry.api.baggage.Baggage baggage = io.opentelemetry.api.baggage.Baggage.builder()
+        .put("baggage_key", "baggage_val").build();
+    io.opentelemetry.context.Context otelContext =
+        io.opentelemetry.context.Context.current().with(baggage);
+
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+            emptyList(), otelContext);
+
+    factory.recordCallDelayStart("resolving", "resolving reason");
+    factory.recordCallDelayEnd();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.call.delay.duration"));
+  }
+
+  @Test
   public void clientCallDelayDuration_endToEnd_nameResolutionError() throws Exception {
     final CountDownLatch resolutionLatch = new CountDownLatch(1);
     final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();
