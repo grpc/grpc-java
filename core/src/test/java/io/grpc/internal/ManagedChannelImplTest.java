@@ -4662,6 +4662,34 @@ public class ManagedChannelImplTest {
     verify(mockTracerFactory).recordCallDelayEnd();
   }
 
+  @Test
+  public void nameResolutionDelay_duplicateNotifyAndCancel_handlesGracefully() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+    timer.runDueTasks();
+    executor.runDueTasks();
+
+    // Multiple cancellation/endDelay calls should be handled cleanly
+    call.cancel("First cancel", null);
+    call.cancel("Second cancel", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+
+    verify(mockTracerFactory).recordCallDelayStart(any(), any());
+    verify(mockTracerFactory).recordCallDelayEnd();
+  }
+
 
   @Test
   public void validTargetNoResolver_throws() {

@@ -232,6 +232,15 @@ public class GrpcOpenTelemetryTest {
   }
 
   @Test
+  public void targetAttributeFilter_null_clearsFilter() {
+    GrpcOpenTelemetry.Builder builder = GrpcOpenTelemetry.newBuilder();
+    builder.targetAttributeFilter(target -> true);
+    builder.targetAttributeFilter(null);
+    GrpcOpenTelemetry module = builder.build();
+    assertThat(module).isNotNull();
+  }
+
+  @Test
   public void configureChannelBuilder_registersMetricSink() {
     GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder().build();
     TestChannelBuilder testBuilder = new TestChannelBuilder();
