@@ -1887,8 +1887,17 @@ public class OpenTelemetryMetricsModuleTest {
             module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
             emptyList(), otelContext);
 
+    // Test recordCallDelayEnd when no delay is active
+    factory.recordCallDelayEnd();
+
     factory.recordCallDelayStart("resolving", "resolving reason");
     factory.recordCallDelayEnd();
+
+    ClientStreamTracer tracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+        new Metadata());
+    // Test recordAttemptDelayEnd when no attempt delay is active
+    tracer.recordAttemptDelayEnd();
 
     assertThat(openTelemetryTesting.getMetrics())
         .anySatisfy(
