@@ -83,6 +83,7 @@ import io.opentelemetry.api.OpenTelemetry;
 import io.opentelemetry.api.baggage.Baggage;
 import io.opentelemetry.api.baggage.propagation.W3CBaggagePropagator;
 import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.DoubleHistogram;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.context.Context;
@@ -1824,7 +1825,7 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
             module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
-            emptyList(), io.opentelemetry.context.Context.root());
+            emptyList(), Context.root());
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(
         ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
@@ -1846,10 +1847,8 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryPlugin.ClientStreamPlugin fakeClientStreamPlugin =
         new OpenTelemetryPlugin.ClientStreamPlugin() {
           @Override
-          public void addLabels(
-              io.opentelemetry.api.common.AttributesBuilder builder) {
-            builder.put(
-                io.opentelemetry.api.common.AttributeKey.stringKey("custom_key"), "custom_val");
+          public void addLabels(AttributesBuilder builder) {
+            builder.put(AttributeKey.stringKey("custom_key"), "custom_val");
           }
         };
     OpenTelemetryPlugin fakePlugin = new OpenTelemetryPlugin() {
@@ -1877,10 +1876,9 @@ public class OpenTelemetryMetricsModuleTest {
         new FakeClock().getStopwatchSupplier(), resource,
         emptyList(), Collections.singletonList(fakePlugin));
 
-    io.opentelemetry.api.baggage.Baggage baggage = io.opentelemetry.api.baggage.Baggage.builder()
+    Baggage baggage = Baggage.builder()
         .put("baggage_key", "baggage_val").build();
-    io.opentelemetry.context.Context otelContext =
-        io.opentelemetry.context.Context.current().with(baggage);
+    Context otelContext = Context.current().with(baggage);
 
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(

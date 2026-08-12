@@ -438,14 +438,14 @@ final class OpenTelemetryMetricsModule {
       // CallAttemptsTracerFactory constructor. attemptsPerCall will be non-zero after the first
       // attempt, as first attempt cannot be a transparent retry.
       if (attemptsPerCall.get() > 0) {
-        AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+        AttributesBuilder builder = Attributes.builder()
             .put(METHOD_KEY, fullMethodName)
             .put(TARGET_KEY, target);
         if (module.customLabelEnabled) {
           builder.put(
               CUSTOM_LABEL_KEY, info.getCallOptions().getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
         }
-        io.opentelemetry.api.common.Attributes attribute = builder.build();
+        Attributes attribute = builder.build();
         if (module.resource.clientAttemptCountCounter() != null) {
           module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
         }
