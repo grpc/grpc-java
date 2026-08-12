@@ -1019,6 +1019,18 @@ public class DelayedClientTransportTest {
     stream2.cancel(Status.CANCELLED);
   }
 
+  @Test
+  public void streamDelayMetrics_emptyTracersAndNullInitialReason() {
+    ClientStreamTracer[] emptyTracers = new ClientStreamTracer[0];
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("resolving", "")));
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, emptyTracers);
+    stream.start(streamListener);
+
+    // Update delay with empty tracers and empty reason
+    delayedTransport.reprocess(fakePicker(PickResult.withNoResult("connecting", "")));
+    stream.cancel(Status.CANCELLED);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override
