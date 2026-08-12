@@ -454,6 +454,31 @@ public class OpenTelemetryTracingModuleTest {
   }
 
   @Test
+  public void clientCallDelayTracing_duplicateStartAndNullType_handlesGracefully() {
+    OpenTelemetryTracingModule module = new OpenTelemetryTracingModule(
+        openTelemetryRule.getOpenTelemetry());
+    OpenTelemetryTracingModule.CallAttemptsTracerFactory factory =
+        module.newClientCallTracer(null, method);
+
+    // Call start with null delayType to cover fallback branch
+    factory.recordCallDelayStart(null, "initial reason");
+    // Duplicate start with same null type triggers recordCallDelayReasonChanged
+    factory.recordCallDelayStart(null, "updated reason");
+    factory.recordCallDelayEnd();
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData callDelaySpan = null;
+    for (SpanData s : spans) {
+      if ("Call Delay".equals(s.getName())) {
+        callDelaySpan = s;
+        break;
+      }
+    }
+    assertNotNull(callDelaySpan);
+    assertEquals("", callDelaySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
+  }
+
+  @Test
   public void clientCallDelayTracing_endToEnd_nameResolutionError() throws Exception {
     final CountDownLatch resolutionLatch = new CountDownLatch(1);
     final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();

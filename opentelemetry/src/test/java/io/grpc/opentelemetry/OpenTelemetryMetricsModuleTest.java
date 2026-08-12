@@ -1790,6 +1790,30 @@ public class OpenTelemetryMetricsModuleTest {
   }
 
   @Test
+  public void clientCallDelayDuration_duplicateStart_ignoresSecondStart() {
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        openTelemetryTesting.getOpenTelemetry().getMeterProvider().get("grpc-java"),
+        ImmutableMap.of("grpc.client.call.delay.duration", true),
+        false);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+            emptyList(), io.opentelemetry.context.Context.root());
+
+    factory.recordCallDelayStart("resolving", "first start");
+    // Duplicate call with same delay type should be ignored
+    factory.recordCallDelayStart("resolving", "second start");
+    factory.recordCallDelayEnd();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.call.delay.duration"));
+  }
+
+  @Test
   public void clientCallDelayDuration_endToEnd_nameResolutionError() throws Exception {
     final CountDownLatch resolutionLatch = new CountDownLatch(1);
     final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();

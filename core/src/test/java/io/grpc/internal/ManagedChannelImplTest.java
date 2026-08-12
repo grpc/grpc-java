@@ -4637,6 +4637,31 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
   }
 
+  @Test
+  public void nameResolutionDelay_callCancelledBeforeNotify_doesNotRecordDelayStart() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+    // Cancel immediately before notifyQueuedForNameResolution can proceed
+    call.cancel("Cancelled before notify", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+
+    // Verify recordCallDelayEnd is called, but no new recordCallDelayStart occurs
+    // after cancellation
+    verify(mockTracerFactory).recordCallDelayEnd();
+  }
+
 
   @Test
   public void validTargetNoResolver_throws() {
