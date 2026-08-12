@@ -173,7 +173,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
   private final LoadBalancerProvider loadBalancerFactory;
-  private final ClientTransportFactory originalTransportFactory;
+  private final RefCountedClientTransportFactory originalTransportFactory;
   @Nullable
   private final ChannelCredentials originalChannelCreds;
   private final ClientTransportFactory transportFactory;
@@ -562,11 +562,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
-    this.originalTransportFactory = clientTransportFactory;
+    if (clientTransportFactory instanceof RefCountedClientTransportFactory) {
+      this.originalTransportFactory = (RefCountedClientTransportFactory) clientTransportFactory;
+    } else {
+      this.originalTransportFactory = new RefCountedClientTransportFactory(clientTransportFactory);
+    }
     this.offloadExecutorHolder =
         new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
+        originalTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -1462,7 +1466,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
           if (channelCreds instanceof DefaultChannelCreds) {
-            transportFactory = originalTransportFactory;
+            transportFactory = originalTransportFactory.retain();
             callCredentials = null;
           } else {
             SwapChannelCredentialsResult swapResult =
