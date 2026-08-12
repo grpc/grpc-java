@@ -214,13 +214,13 @@ final class OpenTelemetryTracingModule {
       activeCallDelayType = delayType;
       Span delaySpan = otelTracer.spanBuilder("Call Delay")
           .setParent(Context.current().with(clientSpan))
-          .setAttribute("grpc.delay_type", delayType)
+          .setAttribute("grpc.delay_type", delayType != null ? delayType : "")
           .startSpan();
       activeCallDelaySpan = delaySpan;
       delaySpan.addEvent(
           "Delay state transition",
           Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), delayType,
+              AttributeKey.stringKey("grpc.delay_type"), delayType != null ? delayType : "",
               AttributeKey.stringKey("grpc.delay_reason"), delayReason));
     }
 
@@ -231,19 +231,18 @@ final class OpenTelemetryTracingModule {
           || activeCallDelaySpan == null) {
         return;
       }
-      String type = activeCallDelayType;
       activeCallDelaySpan.addEvent(
           "Delay state transition",
           Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), type != null ? type : "",
+              AttributeKey.stringKey("grpc.delay_type"),
+              activeCallDelayType != null ? activeCallDelayType : "",
               AttributeKey.stringKey("grpc.delay_reason"), delayReason));
     }
 
     @Override
     public synchronized void recordCallDelayEnd() {
-      Span delaySpan = activeCallDelaySpan;
-      if (delaySpan != null) {
-        delaySpan.end();
+      if (activeCallDelaySpan != null) {
+        activeCallDelaySpan.end();
         activeCallDelaySpan = null;
         activeCallDelayType = null;
       }

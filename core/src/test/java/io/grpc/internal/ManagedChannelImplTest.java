@@ -4527,6 +4527,118 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void nameResolutionDelay_recordsStartAndEndOnTracerFactory() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+
+    verify(mockTracerFactory).recordCallDelayStart(
+        eq("resolving"), eq("waiting for name resolution or service config"));
+    verify(mockTracerFactory, never()).recordCallDelayEnd();
+
+    nameResolverFactory.allResolved();
+    timer.runDueTasks();
+    executor.runDueTasks();
+    verify(mockTracerFactory).recordCallDelayEnd();
+
+    call.cancel("Cleanup test", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+  }
+
+  @Test
+  public void nameResolutionDelay_cancelledBeforeResolution_recordsEndOnTracerFactory() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+
+    verify(mockTracerFactory).recordCallDelayStart(
+        eq("resolving"), eq("waiting for name resolution or service config"));
+
+    call.cancel("Cancelled during name resolution", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+    verify(mockTracerFactory).recordCallDelayEnd();
+  }
+
+  @Test
+  public void nameResolutionDelay_nameResolutionError_recordsEndOnTracerFactory() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(false)
+            .setError(Status.UNAVAILABLE.withDescription("Name resolution failed"))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+
+    verify(mockTracerFactory).recordCallDelayStart(
+        eq("resolving"), eq("waiting for name resolution or service config"));
+
+    nameResolverFactory.allResolved();
+    timer.runDueTasks();
+    executor.runDueTasks();
+    verify(mockTracerFactory).recordCallDelayEnd();
+
+    call.cancel("Cleanup test", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+  }
+
+  @Test
+  public void nameResolutionDelay_alreadyResolved_doesNotRecordDelay() {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setResolvedAtStart(true)
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    createChannel();
+
+    ClientStreamTracer.Factory mockTracerFactory = mock(ClientStreamTracer.Factory.class);
+    when(mockTracerFactory.newClientStreamTracer(any(), any()))
+        .thenReturn(new ClientStreamTracer() {});
+    ClientCall<String, Integer> call = channel.newCall(method,
+        CallOptions.DEFAULT.withStreamTracerFactory(mockTracerFactory));
+    call.start(mockCallListener, new Metadata());
+    timer.runDueTasks();
+    executor.runDueTasks();
+
+    verify(mockTracerFactory, never()).recordCallDelayStart(any(), any());
+    verify(mockTracerFactory, never()).recordCallDelayEnd();
+
+    call.cancel("Cleanup test", null);
+    timer.runDueTasks();
+    executor.runDueTasks();
+  }
+
+
+  @Test
   public void validTargetNoResolver_throws() {
     NameResolverProvider nameResolverProvider = new NameResolverProvider() {
       @Override

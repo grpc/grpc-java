@@ -381,7 +381,7 @@ final class OpenTelemetryMetricsModule {
     @Nullable private Stopwatch activeCallDelayStopwatch;
     @GuardedBy("this")
     @Nullable private String activeCallDelayType;
-    private final io.opentelemetry.api.common.Attributes callLevelBaseAttributes;
+    private final Attributes callLevelBaseAttributes;
     private long retryDelayNanos;
     private long callLatencyNanos;
     private final Object lock = new Object();
@@ -407,19 +407,18 @@ final class OpenTelemetryMetricsModule {
       this.attemptDelayStopwatch = module.stopwatchSupplier.get();
       this.callStopWatch = module.stopwatchSupplier.get().start();
 
-      AttributesBuilder builder = io.opentelemetry.api.common.Attributes.builder()
+      AttributesBuilder builder = Attributes.builder()
           .put(METHOD_KEY, fullMethodName)
           .put(TARGET_KEY, target);
       if (module.customLabelEnabled) {
         builder.put(
             CUSTOM_LABEL_KEY, callOptions.getOption(Grpc.CALL_OPTION_CUSTOM_LABEL));
       }
-      io.opentelemetry.api.common.Attributes attribute = builder.build();
-      this.callLevelBaseAttributes = attribute;
+      this.callLevelBaseAttributes = builder.build();
 
       // Record here in case mewClientStreamTracer() would never be called.
       if (module.resource.clientAttemptCountCounter() != null) {
-        module.resource.clientAttemptCountCounter().add(1, attribute, otelContext);
+        module.resource.clientAttemptCountCounter().add(1, callLevelBaseAttributes, otelContext);
       }
     }
 

@@ -67,6 +67,7 @@ import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusOr;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.inprocess.InProcessSocketAddress;
@@ -1773,6 +1774,100 @@ public class OpenTelemetryMetricsModuleTest {
       channel.shutdownNow();
       channel.awaitTermination(5, TimeUnit.SECONDS);
       NameResolverRegistry.getDefaultRegistry().deregister(slowResolverProvider);
+    }
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .anySatisfy(
+            metric -> assertThat(metric)
+                .hasName("grpc.client.call.delay.duration")
+                .hasHistogramSatisfying(
+                    histogram -> histogram.hasPointsSatisfying(
+                        point -> {
+                          point.hasAttribute(METHOD_KEY, method.getFullMethodName());
+                          point.hasAttribute(
+                              AttributeKey.stringKey("grpc.delay_type"), "resolving");
+                        })));
+  }
+
+  @Test
+  public void clientCallDelayDuration_endToEnd_nameResolutionError() throws Exception {
+    final CountDownLatch resolutionLatch = new CountDownLatch(1);
+    final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();
+
+    final AtomicReference<SynchronizationContext> capturedSyncContext = new AtomicReference<>();
+
+    NameResolverProvider errorResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "errresmetric";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        capturedSyncContext.set(args.getSynchronizationContext());
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "errresmetric";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            capturedListener.set(listener);
+            resolutionLatch.countDown();
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(errorResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryTesting.getOpenTelemetry())
+        .enableMetrics(Collections.singleton("grpc.client.call.delay.duration"))
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("errresmetric:///test-error-metric-service")
+            .defaultLoadBalancingPolicy("pick_first");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      resolutionLatch.await(5, TimeUnit.SECONDS);
+
+      // Fail name resolution with an error inside SynchronizationContext
+      capturedSyncContext.get().execute(() -> capturedListener.get().onResult2(
+          NameResolver.ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromStatus(
+                  Status.UNAVAILABLE.withDescription("Name resolution error")))
+              .build()));
+
+      call.cancel("End test", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, TimeUnit.SECONDS);
+      NameResolverRegistry.getDefaultRegistry().deregister(errorResolverProvider);
     }
 
     assertThat(openTelemetryTesting.getMetrics())

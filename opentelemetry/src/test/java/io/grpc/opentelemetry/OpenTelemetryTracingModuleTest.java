@@ -67,6 +67,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StatusOr;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.inprocess.InProcessSocketAddress;
@@ -450,6 +451,99 @@ public class OpenTelemetryTracingModuleTest {
       }
     }
     assertTrue(foundTransition);
+  }
+
+  @Test
+  public void clientCallDelayTracing_endToEnd_nameResolutionError() throws Exception {
+    final CountDownLatch resolutionLatch = new CountDownLatch(1);
+    final AtomicReference<NameResolver.Listener2> capturedListener = new AtomicReference<>();
+    final AtomicReference<SynchronizationContext> capturedSyncContext = new AtomicReference<>();
+
+    NameResolverProvider errorResolverProvider = new NameResolverProvider() {
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 5;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return "errresspan";
+      }
+
+      @Override
+      public Collection<Class<? extends SocketAddress>> getProducedSocketAddressTypes() {
+        return Collections.singleton(InProcessSocketAddress.class);
+      }
+
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        capturedSyncContext.set(args.getSynchronizationContext());
+        return new NameResolver() {
+          @Override
+          public String getServiceAuthority() {
+            return "errresspan";
+          }
+
+          @Override
+          public void start(Listener2 listener) {
+            capturedListener.set(listener);
+            resolutionLatch.countDown();
+          }
+
+          @Override
+          public void shutdown() {}
+        };
+      }
+    };
+    NameResolverRegistry.getDefaultRegistry().register(errorResolverProvider);
+
+    GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetryRule.getOpenTelemetry())
+        .enableTracing(true)
+        .build();
+
+    InProcessChannelBuilder channelBuilder =
+        InProcessChannelBuilder.forTarget("errresspan:///test-service")
+            .defaultLoadBalancingPolicy("pick_first");
+    grpcOpenTelemetry.configureChannelBuilder(channelBuilder);
+    ManagedChannel channel = channelBuilder.build();
+    try {
+      ClientCall<String, String> call = channel.newCall(method, CallOptions.DEFAULT);
+      call.start(new ClientCall.Listener<String>() {}, new Metadata());
+      call.request(1);
+
+      resolutionLatch.await(5, TimeUnit.SECONDS);
+
+      // Complete name resolution with an error inside SynchronizationContext
+      capturedSyncContext.get().execute(() -> capturedListener.get().onResult2(
+          NameResolver.ResolutionResult.newBuilder()
+              .setAddressesOrError(StatusOr.fromStatus(
+                  Status.UNAVAILABLE.withDescription("Name resolution error")))
+              .build()));
+
+      call.cancel("End test", null);
+    } finally {
+      channel.shutdownNow();
+      channel.awaitTermination(5, TimeUnit.SECONDS);
+      NameResolverRegistry.getDefaultRegistry().deregister(errorResolverProvider);
+    }
+
+    List<SpanData> spans = openTelemetryRule.getSpans();
+    SpanData callDelaySpan = null;
+    for (SpanData s : spans) {
+      if ("Call Delay".equals(s.getName())) {
+        callDelaySpan = s;
+        break;
+      }
+    }
+    assertNotNull(callDelaySpan);
+    assertEquals("resolving",
+        callDelaySpan.getAttributes().get(AttributeKey.stringKey("grpc.delay_type")));
   }
 
   @Test
