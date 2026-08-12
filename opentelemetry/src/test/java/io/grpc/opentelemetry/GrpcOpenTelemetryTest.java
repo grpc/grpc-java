@@ -493,6 +493,11 @@ public class GrpcOpenTelemetryTest {
     }
 
     @Override
+    public TestChannelBuilder intercept(ClientInterceptor... interceptors) {
+      return this;
+    }
+
+    @Override
     public TestChannelBuilder addMetricSink(MetricSink metricSink) {
       this.metricSink = metricSink;
       return this;

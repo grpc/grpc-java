@@ -455,10 +455,12 @@ public class OpenTelemetryTracingModuleTest {
 
   @Test
   public void clientCallDelayTracing_duplicateStartAndNullType_handlesGracefully() {
+    Span parentSpan = openTelemetryRule.getOpenTelemetry()
+        .getTracer("test").spanBuilder("parent").startSpan();
     OpenTelemetryTracingModule module = new OpenTelemetryTracingModule(
         openTelemetryRule.getOpenTelemetry());
     OpenTelemetryTracingModule.CallAttemptsTracerFactory factory =
-        module.newClientCallTracer(null, method);
+        module.newClientCallTracer(parentSpan, method);
 
     // Call start with null delayType to cover fallback branch
     factory.recordCallDelayStart(null, "initial reason");
