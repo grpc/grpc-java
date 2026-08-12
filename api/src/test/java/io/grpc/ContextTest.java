@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -555,10 +556,10 @@ public class ContextTest {
   }
 
   @Test
-  public void testSupply() throws Exception {
+  public void supply_executesSupplierUnderTargetContextAndRestoresPrevious() {
     Context base = Context.current().withValue(PET, "cat");
     Context current = Context.current().withValue(PET, "fish");
-    current.attach();
+    Context toRestore = current.attach();
 
     final Object ret = new Object();
     Supplier<Object> supplier = new Supplier<Object>() {
@@ -569,29 +570,58 @@ public class ContextTest {
       }
     };
 
-    assertSame(ret, base.supply(supplier));
+    Object result = base.supply(supplier);
+
+    assertSame(ret, result);
     assertSame(base, observed);
     assertSame(current, Context.current());
 
-    assertSame(ret, current.supply(supplier));
+    current.detach(toRestore);
+  }
+
+  @Test
+  public void supply_whenContextIsAlreadyCurrent_executesAndMaintainsContext() {
+    Context current = Context.current().withValue(PET, "fish");
+    Context toRestore = current.attach();
+
+    final Object ret = new Object();
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        runner.run();
+        return ret;
+      }
+    };
+
+    Object result = current.supply(supplier);
+
+    assertSame(ret, result);
     assertSame(current, observed);
     assertSame(current, Context.current());
 
+    current.detach(toRestore);
+  }
+
+  @Test
+  public void supply_whenSupplierThrows_propagatesExceptionAndRestoresPreviousContext() {
+    Context base = Context.current().withValue(PET, "cat");
+    Context current = Context.current().withValue(PET, "fish");
+    Context toRestore = current.attach();
+
     final TestError err = new TestError();
-    try {
-      base.supply(new Supplier<Object>() {
-        @Override
-        public Object get() {
-          throw err;
-        }
-      });
-      fail("Excepted exception");
-    } catch (TestError ex) {
-      assertSame(err, ex);
-    }
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        throw err;
+      }
+    };
+
+    TestError thrown = assertThrows(TestError.class, () -> base.supply(supplier));
+
+    assertSame(err, thrown);
     assertSame(current, Context.current());
 
-    current.detach(Context.ROOT);
+    current.detach(toRestore);
   }
 
   @Test
