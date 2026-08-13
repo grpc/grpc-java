@@ -2,7 +2,7 @@ choco feature enable -n allowEmptyChecksums
 
 set RETRY=0
 :install_pkgconfig
-choco install -y pkgconfiglite --allow-empty-checksums
+choco install -y pkgconfiglite --allow-empty-checksums --force
 if %ERRORLEVEL% neq 0 (
   if %RETRY% lss 3 (
     set /a RETRY=%RETRY%+1
@@ -40,11 +40,11 @@ if not exist "%CMAKE_NAME%" (
 set PATH=%PATH%;%cd%\%CMAKE_NAME%\bin
 :hasCmake
 @rem GitHub requires TLSv1.2, and for whatever reason our powershell doesn't have it enabled
-powershell -command "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/google/protobuf/releases/download/v%PROTOBUF_VER%/protobuf-%PROTOBUF_VER%.zip -OutFile protobuf.zip }" || exit /b 1
-powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
+call :RunPowershellWithRetry "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/google/protobuf/releases/download/v%PROTOBUF_VER%/protobuf-%PROTOBUF_VER%.zip -OutFile protobuf.zip }" || exit /b 1
+call :RunPowershellWithRetry "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('protobuf.zip', '.') }" || exit /b 1
 del protobuf.zip
-powershell -command "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/abseil/abseil-cpp/archive/refs/tags/%ABSL_VERSION%.zip -OutFile absl.zip }" || exit /b 1
-powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('absl.zip', '.') }" || exit /b 1
+call :RunPowershellWithRetry "$ProgressPreference = 'SilentlyContinue'; $ErrorActionPreference = 'stop'; & { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 ; iwr https://github.com/abseil/abseil-cpp/archive/refs/tags/%ABSL_VERSION%.zip -OutFile absl.zip }" || exit /b 1
+call :RunPowershellWithRetry "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('absl.zip', '.') }" || exit /b 1
 del absl.zip
 move abseil-cpp-%ABSL_VERSION% protobuf-%PROTOBUF_VER%\third_party\abseil-cpp
 mkdir protobuf-%PROTOBUF_VER%\build
@@ -74,8 +74,25 @@ goto :eof
 
 :installCmake
 
-powershell -command "$ErrorActionPreference = 'stop'; & { iwr https://cmake.org/files/v3.3/%CMAKE_NAME%.zip -OutFile cmake.zip }" || exit /b 1
-powershell -command "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('cmake.zip', '.') }" || exit /b 1
+call :RunPowershellWithRetry "$ErrorActionPreference = 'stop'; & { iwr https://cmake.org/files/v3.3/%CMAKE_NAME%.zip -OutFile cmake.zip }" || exit /b 1
+call :RunPowershellWithRetry "$ErrorActionPreference = 'stop'; & { Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('cmake.zip', '.') }" || exit /b 1
 del cmake.zip
 goto :eof
+
+@rem Helper to retry powershell commands (e.g. for transient network failures during iwr)
+:RunPowershellWithRetry
+set "PS_CMD=%~1"
+set PS_RETRY=0
+:ps_retry_loop
+powershell -command "%PS_CMD%"
+if %ERRORLEVEL% equ 0 exit /b 0
+if %PS_RETRY% lss 3 (
+  set /a PS_RETRY=%PS_RETRY%+1
+  echo PowerShell command failed. Retrying %PS_RETRY% of 3 in 5 seconds...
+  ping -n 6 127.0.0.1 >nul
+  goto :ps_retry_loop
+)
+echo PowerShell command failed after 3 attempts: %PS_CMD%
+exit /b 1
+
 
