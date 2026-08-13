@@ -2139,6 +2139,8 @@ public abstract class AbstractTransportTest {
     // Close the stream from client side
     clientStream.cancel(Status.CANCELLED);
 
+    serverStreamListener.awaitClose(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
     Object event = new Object();
     serverStream.triggerEvent(event);
 
