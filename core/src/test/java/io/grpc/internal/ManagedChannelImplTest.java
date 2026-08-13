@@ -4824,6 +4824,46 @@ public class ManagedChannelImplTest {
         });
   }
 
+  @Test
+  public void oobChannelTermination_doesNotCloseSharedTransportFactory() {
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn(
+            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
+
+    // Shutting down OOB channel should release its reference but not close the
+    // shared transport factory
+    oob.shutdownNow();
+    verify(mockTransportFactory, never()).close();
+
+    // Terminating the main channel releases the final reference and closes the
+    // transport factory
+    channel.shutdownNow();
+    verify(mockTransportFactory).close();
+  }
+
   @SuppressWarnings("unchecked")
   private static Map<String, Object> parseConfig(String json) throws Exception {
     return (Map<String, Object>) JsonParser.parse(json);
