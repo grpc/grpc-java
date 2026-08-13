@@ -44,7 +44,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Interoperability tests for disabling the HPACK dynamic table. */
+/** Interoperability tests for configuring the HPACK dynamic table. */
 @RunWith(JUnit4.class)
 public final class HpackDynamicTableInteropTest {
   private static final int CALL_COUNT = 3;
@@ -62,10 +62,10 @@ public final class HpackDynamicTableInteropTest {
   private final AtomicInteger requestsWithExpectedMetadata = new AtomicInteger();
 
   @Test
-  public void defaultOkHttpClient_interoperatesWithDisabledNettyServer() throws Exception {
+  public void defaultOkHttpClient_interoperatesWithZeroTableNettyServer() throws Exception {
     Server server = startServer(
         NettyServerBuilder.forPort(0, InsecureServerCredentials.create())
-            .disableHpackDynamicTable());
+            .hpackDynamicTableSize(0));
     ManagedChannel channel = grpcCleanup.register(
         OkHttpChannelBuilder.forAddress("localhost", server.getPort())
             .usePlaintext()
@@ -75,13 +75,13 @@ public final class HpackDynamicTableInteropTest {
   }
 
   @Test
-  public void disabledNettyClient_interoperatesWithDefaultOkHttpServer() throws Exception {
+  public void zeroTableNettyClient_interoperatesWithDefaultOkHttpServer() throws Exception {
     Server server = startServer(
         OkHttpServerBuilder.forPort(0, InsecureServerCredentials.create()));
     ManagedChannel channel = grpcCleanup.register(
         NettyChannelBuilder.forAddress("localhost", server.getPort())
             .usePlaintext()
-            .disableHpackDynamicTable()
+            .hpackDynamicTableSize(0)
             .build());
 
     makeRepeatedCalls(channel);

@@ -149,7 +149,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -207,7 +207,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -288,7 +288,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -357,7 +357,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -439,7 +439,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -494,7 +494,7 @@ public class NettyServerTest {
             1, // ignore
             false, // ignore
             1, // ignore
-            false, // disableHpackDynamicTable
+            GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
             1, // ignore
             1, // ignore
             1, // ignore
@@ -643,7 +643,7 @@ public class NettyServerTest {
         1, // ignore
         false, // ignore
         1, // ignore
-        false, // disableHpackDynamicTable
+        GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE,
         1, // ignore
         1, // ignore
         1, // ignore

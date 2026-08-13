@@ -35,7 +35,8 @@ public class GrpcHttp2HeadersEncoderTest {
 
   @Test
   public void dynamicTableEnabledByDefault() throws Exception {
-    GrpcHttp2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(false);
+    GrpcHttp2HeadersEncoder encoder =
+        new GrpcHttp2HeadersEncoder(GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE);
     ByteBuf first = Unpooled.buffer();
     ByteBuf second = Unpooled.buffer();
     try {
@@ -55,7 +56,7 @@ public class GrpcHttp2HeadersEncoderTest {
 
   @Test
   public void dynamicTableDisabledPermanently_staticTableStillUsed() throws Exception {
-    GrpcHttp2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(true);
+    GrpcHttp2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(0);
     DefaultHttp2HeadersDecoder decoder = new DefaultHttp2HeadersDecoder();
     ByteBuf first = Unpooled.buffer();
     ByteBuf second = Unpooled.buffer();
@@ -83,6 +84,25 @@ public class GrpcHttp2HeadersEncoderTest {
       first.release();
       second.release();
       staticHeader.release();
+      encoder.close();
+    }
+  }
+
+  @Test
+  public void configuredDynamicTableSizeCapsPeerSetting() throws Exception {
+    GrpcHttp2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(8192);
+    try {
+      assertThat(encoder.maxHeaderTableSize()).isEqualTo(4096);
+
+      encoder.maxHeaderTableSize(8192);
+      assertThat(encoder.maxHeaderTableSize()).isEqualTo(8192);
+
+      encoder.maxHeaderTableSize(16384);
+      assertThat(encoder.maxHeaderTableSize()).isEqualTo(8192);
+
+      encoder.maxHeaderTableSize(2048);
+      assertThat(encoder.maxHeaderTableSize()).isEqualTo(2048);
+    } finally {
       encoder.close();
     }
   }

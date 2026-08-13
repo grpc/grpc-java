@@ -17,29 +17,31 @@
 package io.grpc.netty;
 
 import io.netty.handler.codec.http2.DefaultHttp2HeadersEncoder;
+import io.netty.handler.codec.http2.Http2CodecUtil;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2HeadersEncoder;
 
 /** HTTP/2 headers encoder with gRPC's HPACK configuration. */
 final class GrpcHttp2HeadersEncoder extends DefaultHttp2HeadersEncoder {
+  static final int DEFAULT_DYNAMIC_TABLE_SIZE = Http2CodecUtil.DEFAULT_HEADER_TABLE_SIZE;
   private static final int DEFAULT_DYNAMIC_TABLE_ARRAY_SIZE_HINT = 16;
   private static final int MIN_DYNAMIC_TABLE_ARRAY_SIZE_HINT = 2;
 
-  private final boolean disableDynamicTable;
+  private final int configuredMaxDynamicTableSize;
 
-  GrpcHttp2HeadersEncoder(boolean disableDynamicTable) {
+  GrpcHttp2HeadersEncoder(int configuredMaxDynamicTableSize) {
     super(
         Http2HeadersEncoder.NEVER_SENSITIVE,
         false,
-        disableDynamicTable
+        configuredMaxDynamicTableSize == 0
             ? MIN_DYNAMIC_TABLE_ARRAY_SIZE_HINT : DEFAULT_DYNAMIC_TABLE_ARRAY_SIZE_HINT,
         Integer.MAX_VALUE);
-    this.disableDynamicTable = disableDynamicTable;
-    if (disableDynamicTable) {
+    this.configuredMaxDynamicTableSize = configuredMaxDynamicTableSize;
+    if (configuredMaxDynamicTableSize < DEFAULT_DYNAMIC_TABLE_SIZE) {
       try {
-        super.maxHeaderTableSize(0);
+        super.maxHeaderTableSize(configuredMaxDynamicTableSize);
       } catch (Http2Exception e) {
-        // Zero is always a valid HPACK dynamic table size.
+        // Non-negative configured sizes are valid HPACK dynamic table sizes.
         throw new AssertionError(e);
       }
     }
@@ -47,6 +49,6 @@ final class GrpcHttp2HeadersEncoder extends DefaultHttp2HeadersEncoder {
 
   @Override
   public void maxHeaderTableSize(long max) throws Http2Exception {
-    super.maxHeaderTableSize(disableDynamicTable ? 0 : max);
+    super.maxHeaderTableSize(Math.min(configuredMaxDynamicTableSize, max));
   }
 }

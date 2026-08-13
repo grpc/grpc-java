@@ -91,7 +91,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final ChannelGroup channelGroup;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
-  private final boolean disableHpackDynamicTable;
+  private final int hpackDynamicTableSize;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -130,7 +130,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       int maxStreamsPerConnection,
       boolean autoFlowControl,
       int flowControlWindow,
-      boolean disableHpackDynamicTable,
+      int hpackDynamicTableSize,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -162,7 +162,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.maxStreamsPerConnection = maxStreamsPerConnection;
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
-    this.disableHpackDynamicTable = disableHpackDynamicTable;
+    this.hpackDynamicTableSize = hpackDynamicTableSize;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -268,7 +268,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
                     maxStreamsPerConnection,
                     autoFlowControl,
                     flowControlWindow,
-                    disableHpackDynamicTable,
+                    hpackDynamicTableSize,
                     maxMessageSize,
                     maxHeaderListSize,
                     softLimitHeaderListSize,

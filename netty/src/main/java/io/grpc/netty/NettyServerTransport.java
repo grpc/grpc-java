@@ -69,7 +69,7 @@ class NettyServerTransport implements ServerTransport {
   private boolean terminated;
   private final boolean autoFlowControl;
   private final int flowControlWindow;
-  private final boolean disableHpackDynamicTable;
+  private final int hpackDynamicTableSize;
   private final int maxMessageSize;
   private final int maxHeaderListSize;
   private final int softLimitHeaderListSize;
@@ -96,7 +96,7 @@ class NettyServerTransport implements ServerTransport {
       int maxStreams,
       boolean autoFlowControl,
       int flowControlWindow,
-      boolean disableHpackDynamicTable,
+      int hpackDynamicTableSize,
       int maxMessageSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
@@ -120,7 +120,7 @@ class NettyServerTransport implements ServerTransport {
     this.maxStreams = maxStreams;
     this.autoFlowControl = autoFlowControl;
     this.flowControlWindow = flowControlWindow;
-    this.disableHpackDynamicTable = disableHpackDynamicTable;
+    this.hpackDynamicTableSize = hpackDynamicTableSize;
     this.maxMessageSize = maxMessageSize;
     this.maxHeaderListSize = maxHeaderListSize;
     this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -284,7 +284,7 @@ class NettyServerTransport implements ServerTransport {
         maxStreams,
         autoFlowControl,
         flowControlWindow,
-        disableHpackDynamicTable,
+        hpackDynamicTableSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
         maxMessageSize,

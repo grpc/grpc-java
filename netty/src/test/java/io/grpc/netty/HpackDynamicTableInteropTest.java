@@ -48,18 +48,19 @@ public class HpackDynamicTableInteropTest {
   private static final String REQUEST_METADATA_VALUE = "repeated-request-metadata-value";
   private static final String RESPONSE_METADATA_VALUE = "repeated-response-metadata-value";
 
-  @Parameters(name = "clientDisabled={0}, serverDisabled={1}")
+  @Parameters(name = "clientTableSize={0}, serverTableSize={1}")
   public static Iterable<Object[]> data() {
     return Arrays.asList(new Object[][] {
-        {false, false}, {false, true}, {true, false}, {true, true}
+        {4096, 4096}, {4096, 8192}, {8192, 4096}, {8192, 8192},
+        {0, 4096}, {4096, 0}, {0, 0}
     });
   }
 
   @Parameter(0)
-  public boolean clientDisabled;
+  public int clientTableSize;
 
   @Parameter(1)
-  public boolean serverDisabled;
+  public int serverTableSize;
 
   private Server server;
   private ManagedChannel channel;
@@ -85,17 +86,13 @@ public class HpackDynamicTableInteropTest {
             ServerInterceptors.intercept(
                 new SimpleServiceImpl(),
                 MetadataUtils.newAttachMetadataServerInterceptor(responseMetadata)));
-    if (serverDisabled) {
-      serverBuilder.disableHpackDynamicTable();
-    }
+    serverBuilder.hpackDynamicTableSize(serverTableSize);
     server = serverBuilder.build().start();
 
     NettyChannelBuilder channelBuilder = NettyChannelBuilder
         .forAddress("localhost", server.getPort())
         .usePlaintext();
-    if (clientDisabled) {
-      channelBuilder.disableHpackDynamicTable();
-    }
+    channelBuilder.hpackDynamicTableSize(clientTableSize);
     channel = channelBuilder.build();
 
     Metadata requestMetadata = new Metadata();

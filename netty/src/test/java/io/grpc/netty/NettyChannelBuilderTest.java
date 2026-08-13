@@ -50,10 +50,17 @@ public class NettyChannelBuilderTest {
   private final SslContext noSslContext = null;
 
   @Test
-  public void disableHpackDynamicTableIsFluent() {
+  public void hpackDynamicTableSizeAllowsZeroAndIsFluent() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
 
-    assertThat(builder.disableHpackDynamicTable()).isSameInstanceAs(builder);
+    assertThat(builder.hpackDynamicTableSize(0)).isSameInstanceAs(builder);
+  }
+
+  @Test
+  public void hpackDynamicTableSizeRejectsNegative() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("foo");
+
+    assertThrows(IllegalArgumentException.class, () -> builder.hpackDynamicTableSize(-1));
   }
 
   private void shutdown(ManagedChannel mc) throws Exception {
