@@ -1801,17 +1801,48 @@ public class OpenTelemetryMetricsModuleTest {
     OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
         new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
             module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
-            emptyList(), io.opentelemetry.context.Context.root());
+            emptyList(), Context.root());
 
     factory.recordCallDelayStart("resolving", "first start");
     // Duplicate call with same delay type should be ignored
     factory.recordCallDelayStart("resolving", "second start");
+
+    // Transition to a different delay type while active (exercises Objects.equals == false)
+    factory.recordCallDelayStart("connecting", "transition to connecting");
     factory.recordCallDelayEnd();
 
     assertThat(openTelemetryTesting.getMetrics())
         .anySatisfy(
             metric -> assertThat(metric)
                 .hasName("grpc.client.call.delay.duration"));
+  }
+
+  @Test
+  public void clientCallDelayDuration_unstartedDelayEnd_recordsNoMetric() {
+    OpenTelemetryMetricsResource resource = GrpcOpenTelemetry.createMetricInstruments(
+        openTelemetryTesting.getOpenTelemetry().getMeterProvider().get("grpc-java"),
+        ImmutableMap.of("grpc.client.call.delay.duration", true,
+            "grpc.client.attempt.delay.duration", true),
+        false);
+    OpenTelemetryMetricsModule module = new OpenTelemetryMetricsModule(
+        new FakeClock().getStopwatchSupplier(), resource, emptyList(), emptyList());
+    OpenTelemetryMetricsModule.CallAttemptsTracerFactory factory =
+        new OpenTelemetryMetricsModule.CallAttemptsTracerFactory(
+            module, "target:///", CallOptions.DEFAULT, method.getFullMethodName(),
+            emptyList(), Context.root());
+
+    // Calling recordCallDelayEnd when no delay is active should not record metrics
+    factory.recordCallDelayEnd();
+
+    ClientStreamTracer tracer = factory.newClientStreamTracer(
+        ClientStreamTracer.StreamInfo.newBuilder().setCallOptions(CallOptions.DEFAULT).build(),
+        new Metadata());
+    // Calling recordAttemptDelayEnd when no attempt delay is active should not record metrics
+    tracer.recordAttemptDelayEnd();
+
+    assertThat(openTelemetryTesting.getMetrics())
+        .extracting("name")
+        .doesNotContain("grpc.client.call.delay.duration", "grpc.client.attempt.delay.duration");
   }
 
   @Test
@@ -1834,6 +1865,8 @@ public class OpenTelemetryMetricsModuleTest {
     tracer.recordAttemptDelayStart("connecting", "r1");
     // Duplicate call with same delay type should be ignored
     tracer.recordAttemptDelayStart("connecting", "r2");
+    // Transition to a different delay type while active (exercises Objects.equals == false)
+    tracer.recordAttemptDelayStart("rls_lookup_pending", "r3");
     tracer.recordAttemptDelayEnd();
 
     assertThat(openTelemetryTesting.getMetrics())

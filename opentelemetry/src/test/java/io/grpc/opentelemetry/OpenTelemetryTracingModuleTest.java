@@ -497,6 +497,8 @@ public class OpenTelemetryTracingModuleTest {
     tracer.recordAttemptDelayStart("connecting", "initial reason");
     // Duplicate start with same delay type triggers recordAttemptDelayReasonChanged
     tracer.recordAttemptDelayStart("connecting", "updated reason");
+    // Transition to a different delay type while active (exercises Objects.equals == false)
+    tracer.recordAttemptDelayStart("rls_lookup_pending", "transition to rls");
     // Explicit recordAttemptDelayReasonChanged
     tracer.recordAttemptDelayReasonChanged("third reason");
     tracer.recordAttemptDelayEnd();

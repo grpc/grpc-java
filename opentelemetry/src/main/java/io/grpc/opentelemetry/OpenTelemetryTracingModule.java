@@ -297,13 +297,13 @@ final class OpenTelemetryTracingModule {
       // All attempt queuing segments use the strict child span name "Attempt Delay".
       Span delaySpan = otelTracer.spanBuilder("Attempt Delay")
           .setParent(Context.current().with(span))
-          .setAttribute("grpc.delay_type", delayType)
+          .setAttribute("grpc.delay_type", delayType != null ? delayType : "")
           .startSpan();
       activeDelaySpan = delaySpan;
       delaySpan.addEvent(
           "Delay state transition",
           Attributes.of(
-              AttributeKey.stringKey("grpc.delay_type"), delayType,
+              AttributeKey.stringKey("grpc.delay_type"), delayType != null ? delayType : "",
               AttributeKey.stringKey("grpc.delay_reason"), delayReason));
     }
 
@@ -324,10 +324,9 @@ final class OpenTelemetryTracingModule {
 
     @Override
     public synchronized void recordAttemptDelayEnd() {
-      Span delaySpan = activeDelaySpan;
-      if (delaySpan != null) {
+      if (activeDelaySpan != null) {
         // End active child span upon pick completion or transport cancellation.
-        delaySpan.end();
+        activeDelaySpan.end();
         activeDelaySpan = null;
         activeDelayType = null;
       }

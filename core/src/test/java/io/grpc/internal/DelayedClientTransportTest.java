@@ -1031,6 +1031,27 @@ public class DelayedClientTransportTest {
     stream.cancel(Status.CANCELLED);
   }
 
+  @Test
+  public void streamDelayMetrics_delayEndedWhileRealStreamNull_updateDelayReturnsEarly() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    DelayedClientTransport.PendingStream pendingStream =
+        (DelayedClientTransport.PendingStream) delayedTransport.newStream(
+            method, headers, callOptions, customTracers);
+    pendingStream.start(streamListener);
+
+    // End delay directly while realStream is still null (sets delayEnded = true)
+    pendingStream.endDelay();
+    assertEquals(1, fakeTracer.delayEndedCount);
+
+    // updateDelay after delayEnded when getRealStream() == null should return early
+    // without starting a new delay segment
+    pendingStream.updateDelay("connecting", "new reason");
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
   private static TransportProvider newTransportProvider(final ClientTransport transport) {
     return new TransportProvider() {
       @Override

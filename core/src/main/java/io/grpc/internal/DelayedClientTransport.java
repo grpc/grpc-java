@@ -396,7 +396,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
     return "client channel: waiting for picker";
   }
 
-  private class PendingStream extends DelayedStream {
+  class PendingStream extends DelayedStream {
     private final PickSubchannelArgs args;
     private final Context context = Context.current();
     private final ClientStreamTracer[] tracers;
