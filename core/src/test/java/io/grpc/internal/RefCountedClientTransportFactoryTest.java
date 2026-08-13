@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -67,5 +68,14 @@ public class RefCountedClientTransportFactoryTest {
 
     factory.close();
     verify(mockDelegate).close();
+  }
+
+  @Test
+  public void closeMoreThanRetain_throwsIllegalStateException() {
+    RefCountedClientTransportFactory factory = new RefCountedClientTransportFactory(mockDelegate);
+    factory.close();
+    verify(mockDelegate).close();
+
+    assertThrows(IllegalStateException.class, factory::close);
   }
 }

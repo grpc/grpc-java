@@ -16,7 +16,9 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import java.net.SocketAddress;
@@ -33,7 +35,7 @@ final class RefCountedClientTransportFactory implements ClientTransportFactory {
   private final AtomicInteger refCount = new AtomicInteger(1);
 
   public RefCountedClientTransportFactory(ClientTransportFactory delegate) {
-    this.delegate = Preconditions.checkNotNull(delegate, "delegate");
+    this.delegate = checkNotNull(delegate, "delegate");
   }
 
   public RefCountedClientTransportFactory retain() {
@@ -64,7 +66,9 @@ final class RefCountedClientTransportFactory implements ClientTransportFactory {
 
   @Override
   public void close() {
-    if (refCount.decrementAndGet() == 0) {
+    int count = refCount.decrementAndGet();
+    checkState(count >= 0, "Reference count has gone negative: %s", count);
+    if (count == 0) {
       delegate.close();
     }
   }

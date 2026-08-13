@@ -1466,6 +1466,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
           if (channelCreds instanceof DefaultChannelCreds) {
+            // TODO(kannanjgithub) We should eventually refactor ManagedChannelImplBuilder so
+            // callCredentials can be resolved lazily at build() time, allowing transport factory
+            // retention to happen strictly inside buildClientTransportFactory().
             transportFactory = originalTransportFactory.retain();
             callCredentials = null;
           } else {
