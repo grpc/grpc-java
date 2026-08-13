@@ -2117,6 +2117,36 @@ public abstract class AbstractTransportTest {
     clientStream.cancel(Status.CANCELLED);
   }
 
+  @Test
+  public void serverStream_triggerEvent_afterClose() throws Exception {
+    server.start(serverListener);
+    client = newClientTransport(server);
+    startTransport(client, mockClientTransportListener);
+    MockServerTransportListener serverTransportListener
+        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    serverTransport = serverTransportListener.transport;
+
+    ClientStream clientStream = client.newStream(
+        methodDescriptor, new Metadata(), callOptions, noopTracers);
+    ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
+    clientStream.start(clientStreamListener);
+
+    StreamCreation serverStreamCreation
+        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ServerStream serverStream = serverStreamCreation.stream;
+    ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
+
+    // Close the stream from client side
+    clientStream.cancel(Status.CANCELLED);
+
+    Object event = new Object();
+    serverStream.triggerEvent(event);
+
+    // Verify listener did NOT receive the event
+    Object receivedEvent = serverStreamListener.eventQueue.poll(100, TimeUnit.MILLISECONDS);
+    assertNull(receivedEvent);
+  }
+
   /**
    * Helper that simply does an RPC. It can be used similar to a sleep for negative testing: to give
    * time for actions _not_ to happen. Since it is based on doing an actual RPC with actual
