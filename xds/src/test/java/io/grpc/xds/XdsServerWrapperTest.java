@@ -488,6 +488,62 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  public void shutdownNow_afterShutdown_stillUnblocksStartThread() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdown();
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+      assertThat(ex).hasCauseThat().hasMessageThat().isEqualTo("server is forcefully shut down");
+    }
+  }
+
+  @Test
+  public void shutdownNow_calledTwice_forcefullyShutsDownDelegateOnce() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdownNow();
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+    }
+    verify(mockServer, times(1)).shutdownNow();
+  }
+
+  @Test
   public void initialStartIoException() throws Exception {
     final SettableFuture<Server> start = SettableFuture.create();
     Executors.newSingleThreadExecutor().execute(new Runnable() {

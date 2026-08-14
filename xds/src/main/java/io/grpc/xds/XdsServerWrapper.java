@@ -118,6 +118,10 @@ final class XdsServerWrapper extends Server {
   private final CountDownLatch internalTerminationLatch = new CountDownLatch(1);
   private final SettableFuture<Exception> initialStartFuture = SettableFuture.create();
   private boolean initialStarted;
+  // Must be accessed in syncContext.
+  // Guards the forceful-shutdown work in shutdownNow(), independently of the shutdown AtomicBoolean
+  // above, so it isn't skipped when shutdown()
+  private boolean shutdownNowed;
   private ScheduledHandle restartTimer;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -408,16 +412,15 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public Server shutdownNow() {
-    if (!shutdown.compareAndSet(false, true)) {
-      return this;
-    }
+    shutdown();
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!delegate.isShutdown()) {
-          delegate.shutdownNow();
+        if (shutdownNowed) {
+          return;
         }
-        internalShutdown();
+        shutdownNowed = true;
+        delegate.shutdownNow();
         initialStartFuture.set(new IOException("server is forcefully shut down"));
       }
     });
