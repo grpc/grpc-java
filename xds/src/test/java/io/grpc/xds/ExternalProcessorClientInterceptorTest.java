@@ -276,7 +276,6 @@ public class ExternalProcessorClientInterceptorTest {
             .build());
   }
 
-
   // --- Category 1: Configuration Override ---
 
   @Test
@@ -8363,7 +8362,581 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 15: Inbound Backpressure (request(n) / pendingRequests) ---
+  // --- Category 15: Ext-proc fail-open draining of flow-control queues ---
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testFailOpen_DrainsInboundQueuesInOrder() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SEND)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final CountDownLatch extProcReceivedHeadersLatch = new CountDownLatch(1);
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .build());
+                  extProcReceivedHeadersLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final CountDownLatch backendSentMessage2Latch = new CountDownLatch(1);
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, (call, headers) -> {
+          call.sendHeaders(new Metadata());
+          // Send message 1 (70k to close window)
+          String largeMessage70k = new String(new char[70000]).replace('\0', 'a');
+          call.sendMessage(largeMessage70k);
+
+          new Thread(() -> {
+            try {
+              if (extProcReceivedHeadersLatch.await(5, TimeUnit.SECONDS)) {
+                // Send message 2 (unsolicited, will be buffered in savedMessages)
+                call.sendMessage("backend-msg-2");
+                backendSentMessage2Latch.countDown();
+              }
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+            }
+          }).start();
+
+          return new ServerCall.Listener<String>() {
+            @Override
+            public void onMessage(String message) {}
+
+            @Override
+            public void onHalfClose() {}
+
+            @Override
+            public void onCancel() {}
+          };
+        })
+        .build());
+
+    final List<String> appReceivedMessages = new CopyOnWriteArrayList<>();
+    final CountDownLatch callClosedLatch = new CountDownLatch(1);
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+            dataPlaneChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {
+      @Override
+      public void onMessage(String message) {
+        appReceivedMessages.add(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        callClosedLatch.countDown();
+      }
+    }, new Metadata());
+
+    proxyCall.request(10);
+
+    // Wait for backend to send message 2
+    assertThat(backendSentMessage2Latch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Verify app received nothing yet (buffered in savedMessages)
+    assertThat(appReceivedMessages).isEmpty();
+
+    // Trigger fail-open by error on ext_proc stream
+    responseObserverRef.get().onError(Status.UNAVAILABLE.asException());
+
+    // Verify call is NOT closed
+    assertThat(callClosedLatch.getCount()).isEqualTo(1);
+
+    // Verify all buffered messages are drained in order: largeMessage70k then backend-msg-2
+    String largeMessage70k = new String(new char[70000]).replace('\0', 'a');
+    assertThat(appReceivedMessages).containsExactly(largeMessage70k, "backend-msg-2").inOrder();
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testFailOpen_DrainsBlockedRequests() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch extProcReceivedHeadersLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // Respond with headers AND negative window update to block outbound body
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .setServerWindowUpdate(ProcessingResponse.ServerWindowUpdate.newBuilder()
+                          .setWindowIncrementDownstreamToSidestream(-65536) // Reduce window to 0
+                          .build())
+                      .build());
+                  extProcReceivedHeadersLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> sentToBackend = new CopyOnWriteArrayList<>();
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, (call, headers) -> {
+          call.sendHeaders(new Metadata());
+          call.request(100);
+          return new ServerCall.Listener<String>() {
+            @Override
+            public void onMessage(String message) {}
+
+            @Override
+            public void onHalfClose() {}
+
+            @Override
+            public void onCancel() {}
+          };
+        })
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    ClientInterceptor backendInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        ClientCall<ReqT, RespT> delegateCall = next.newCall(method, callOptions);
+        return new SimpleForwardingClientCall<ReqT, RespT>(delegateCall) {
+          @Override
+          public void sendMessage(ReqT message) {
+            try {
+              InputStream is = (InputStream) message;
+              byte[] bytes = com.google.common.io.ByteStreams.toByteArray(is);
+              String str = new String(bytes, StandardCharsets.UTF_8);
+              sentToBackend.add(str);
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
+            super.sendMessage(message);
+          }
+        };
+      }
+    };
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(dataPlaneChannel, backendInterceptor);
+
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+            interceptedChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
+
+    assertThat(extProcReceivedHeadersLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // These should now be buffered because window is 0
+    proxyCall.sendMessage("msg-1");
+    proxyCall.sendMessage("msg-2");
+
+    assertThat(sentToBackend).isEmpty();
+
+    // Trigger fail-open
+    responseObserverRef.get().onError(Status.UNAVAILABLE.asException());
+
+    // Verify messages are drained
+    assertThat(sentToBackend).containsExactly("msg-1", "msg-2").inOrder();
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testFailOpen_DrainsDrainingRequests() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch extProcReceivedHeadersLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // Respond with headers AND request_drain = true to trigger DRAINING state
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .setRequestDrain(true)
+                      .build());
+                  extProcReceivedHeadersLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> sentToBackend = new CopyOnWriteArrayList<>();
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, (call, headers) -> {
+          call.sendHeaders(new Metadata());
+          call.request(100);
+          return new ServerCall.Listener<String>() {
+            @Override
+            public void onMessage(String message) {}
+
+            @Override
+            public void onHalfClose() {}
+
+            @Override
+            public void onCancel() {}
+          };
+        })
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    ClientInterceptor backendInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        ClientCall<ReqT, RespT> delegateCall = next.newCall(method, callOptions);
+        return new SimpleForwardingClientCall<ReqT, RespT>(delegateCall) {
+          @Override
+          public void sendMessage(ReqT message) {
+            try {
+              InputStream is = (InputStream) message;
+              byte[] bytes = com.google.common.io.ByteStreams.toByteArray(is);
+              String str = new String(bytes, StandardCharsets.UTF_8);
+              sentToBackend.add(str);
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
+            super.sendMessage(message);
+          }
+        };
+      }
+    };
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(dataPlaneChannel, backendInterceptor);
+
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+            interceptedChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
+
+    assertThat(extProcReceivedHeadersLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Send msg-1. Since state is DRAINING, it should be buffered in pendingDrainingMessages.
+    proxyCall.sendMessage("msg-1");
+
+    assertThat(sentToBackend).isEmpty();
+
+    // Trigger fail-open
+    responseObserverRef.get().onError(Status.UNAVAILABLE.asException());
+
+    // Verify message is drained
+    assertThat(sentToBackend).containsExactly("msg-1");
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testFailOpen_ResumesDrainingOnReady() throws Exception {
+    ExternalProcessor proto = createBaseProto(extProcServerName)
+        .setFailureModeAllow(true)
+        .setProcessingMode(ProcessingMode.newBuilder()
+            .setRequestBodyMode(ProcessingMode.BodySendMode.GRPC)
+            .setResponseBodyMode(ProcessingMode.BodySendMode.NONE)
+            .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+            .setResponseTrailerMode(ProcessingMode.HeaderSendMode.SKIP)
+            .build())
+        .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final AtomicReference<StreamObserver<ProcessingResponse>> responseObserverRef =
+        new AtomicReference<>();
+    final CountDownLatch extProcReceivedHeadersLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          public StreamObserver<ProcessingRequest> process(
+              final StreamObserver<ProcessingResponse> responseObserver) {
+            responseObserverRef.set(responseObserver);
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasRequestHeaders()) {
+                  // Respond with headers AND negative window update to block outbound body
+                  responseObserver.onNext(ProcessingResponse.newBuilder()
+                      .setRequestHeaders(HeadersResponse.newBuilder().build())
+                      .setServerWindowUpdate(ProcessingResponse.ServerWindowUpdate.newBuilder()
+                          .setWindowIncrementDownstreamToSidestream(-65536) // Reduce window to 0
+                          .build())
+                      .build());
+                  extProcReceivedHeadersLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    String uniqueExtProcServerName = InProcessServerBuilder.generateName();
+    grpcCleanup.register(InProcessServerBuilder.forName(uniqueExtProcServerName)
+        .addService(extProcImpl)
+        .directExecutor()
+        .build().start());
+
+    CachedChannelManager channelManager = new CachedChannelManager(config -> {
+      return grpcCleanup.register(
+          InProcessChannelBuilder.forName(uniqueExtProcServerName).directExecutor().build());
+    });
+
+    ExternalProcessorClientInterceptor interceptor = new ExternalProcessorClientInterceptor(
+        filterConfig, channelManager, scheduler, FAKE_CONTEXT);
+
+    final List<String> sentToBackend = new CopyOnWriteArrayList<>();
+    final AtomicBoolean backendReady = new AtomicBoolean(true);
+    final AtomicReference<ClientCall.Listener<String>> backendListenerRef = new AtomicReference<>();
+
+    dataPlaneServiceRegistry.addService(ServerServiceDefinition.builder("test.TestService")
+        .addMethod(METHOD_BIDI_STREAMING, (call, headers) -> {
+          call.sendHeaders(new Metadata());
+          call.request(100);
+          return new ServerCall.Listener<String>() {
+            @Override
+            public void onMessage(String message) {}
+
+            @Override
+            public void onHalfClose() {}
+
+            @Override
+            public void onCancel() {}
+          };
+        })
+        .build());
+
+    ManagedChannel dataPlaneChannel = grpcCleanup.register(
+        InProcessChannelBuilder.forName(dataPlaneServerName).directExecutor().build());
+
+    ClientInterceptor backendInterceptor = new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        ClientCall<ReqT, RespT> delegateCall = next.newCall(method, callOptions);
+        return new SimpleForwardingClientCall<ReqT, RespT>(delegateCall) {
+          @Override
+          public void start(ClientCall.Listener<RespT> responseListener, Metadata headers) {
+            backendListenerRef.set((ClientCall.Listener<String>) responseListener);
+            super.start(responseListener, headers);
+          }
+
+          @Override
+          public void sendMessage(ReqT message) {
+            try {
+              InputStream is = (InputStream) message;
+              byte[] bytes = com.google.common.io.ByteStreams.toByteArray(is);
+              String str = new String(bytes, StandardCharsets.UTF_8);
+              sentToBackend.add(str);
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
+            super.sendMessage(message);
+          }
+
+          @Override
+          public boolean isReady() {
+            return backendReady.get();
+          }
+        };
+      }
+    };
+    Channel interceptedChannel =
+        ClientInterceptors.intercept(dataPlaneChannel, backendInterceptor);
+
+    ClientCall<String, String> proxyCall =
+        interceptCall(interceptor, METHOD_BIDI_STREAMING,
+            DEFAULT_CALL_OPTIONS.withExecutor(MoreExecutors.directExecutor()),
+            interceptedChannel);
+
+    proxyCall.start(new ClientCall.Listener<String>() {}, new Metadata());
+    proxyCall.request(1);
+
+    assertThat(extProcReceivedHeadersLatch.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // 1. Backend not ready
+    backendReady.set(false);
+
+    // 2. Send msg-1, msg-2 (buffered in pendingRequestBodyMessages)
+    proxyCall.sendMessage("msg-1");
+    proxyCall.sendMessage("msg-2");
+
+    assertThat(sentToBackend).isEmpty();
+
+    // 3. Trigger fail-open while backend is NOT ready
+    responseObserverRef.get().onError(Status.UNAVAILABLE.asException());
+
+    // Verify still nothing sent
+    assertThat(sentToBackend).isEmpty();
+
+    // 4. Make backend ready and trigger onReady
+    backendReady.set(true);
+    backendListenerRef.get().onReady();
+
+    // Verify messages are drained
+    assertThat(sentToBackend).containsExactly("msg-1", "msg-2").inOrder();
+
+    proxyCall.cancel("Cleanup", null);
+    channelManager.close();
+  }
+
+  // --- Category 16: Inbound Backpressure (request(n) / pendingRequests) ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -8895,7 +9468,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 16: Error Handling & Security ---
+  // --- Category 17: Error Handling & Security ---
 
   @Test
   @SuppressWarnings("FutureReturnValueIgnored")
@@ -10182,7 +10755,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 17: Immediate Response Handling ---
+  // --- Category 18: Immediate Response Handling ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -10792,7 +11365,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 18: Resource Management ---
+  // --- Category 19: Resource Management ---
 
   @Test
   public void givenFilter_whenClosed_thenCachedChannelManagerIsClosed() throws Exception {
@@ -10805,7 +11378,7 @@ public class ExternalProcessorClientInterceptorTest {
     Mockito.verify(mockChannelManager).close();
   }
 
-  // --- Category 19: Data plane rpc cancellation ---
+  // --- Category 20: Data plane rpc cancellation ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -10901,7 +11474,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 20: Flow Control when side stream is full ---
+  // --- Category 21: Flow Control when side stream is full ---
 
   @Test
   @SuppressWarnings("unchecked")
@@ -12629,9 +13202,9 @@ public class ExternalProcessorClientInterceptorTest {
     // Fail the ext_proc stream to trigger fail-open.
     responseObserverRef.get().onError(Status.INTERNAL.asRuntimeException());
 
-    // Fail-open will see pendingHalfClose = true, set requestSideClosed = true,
-    // and immediately invoke transport.halfClose()
-    assertThat(halfCloseCallCount.get()).isEqualTo(1);
+    // Fail-open will see pendingHalfClose = true, but since we have queued messages
+    // (Mutated1) and transport is not ready, it will defer half-close.
+    assertThat(halfCloseCallCount.get()).isEqualTo(0);
 
     // Now make transport ready and trigger onReady callback
     transportReady.set(true);
@@ -12639,12 +13212,8 @@ public class ExternalProcessorClientInterceptorTest {
     assertThat(listener).isNotNull();
     listener.onReady();
 
-    // The queued message should be drained, forwarded to backend server call.
-    // The delayed half-close is triggered, but since requestSideClosed was already true (via
-    // fail-open),
-    // it will evaluate to false in compareAndSet and NOT invoke transport.halfClose() again.
+    // The queued message should be drained, and then the deferred half-close is triggered.
     assertThat(sendMessageCount.get()).isEqualTo(1);
-    // Verify that transport.halfClose() was still called exactly once
     assertThat(halfCloseCallCount.get()).isEqualTo(1);
 
     proxyCall.cancel("Cleanup", null);
@@ -15552,7 +16121,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 21: Streaming Completeness (Client & Bi-Di) ---
+  // --- Category 22: Streaming Completeness (Client & Bi-Di) ---
 
   @Test
   @SuppressWarnings({"unchecked", "FutureReturnValueIgnored"})
@@ -16158,7 +16727,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 22: Header Forwarding ---
+  // --- Category 23: Header Forwarding ---
 
   @Test
   public void
@@ -16682,7 +17251,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 23: Request Attributes ---
+  // --- Category 24: Request Attributes ---
 
   @Test
   public void parseFilterConfig_withUnrecognizedRequestAttribute_isIgnored() {
@@ -16939,7 +17508,7 @@ public class ExternalProcessorClientInterceptorTest {
 
 
 
-  // --- Category 24: Response Ordering Checks ---
+  // --- Category 25: Response Ordering Checks ---
 
   @Test
   public void givenOutOfOrderReqResponses_whenMessageArrivesBeforeHeaders_thenFails()
@@ -17682,7 +18251,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 25: Header Response Status Checks ---
+  // --- Category 26: Header Response Status Checks ---
 
   @Test
   public void givenRequestHeadersResponse_whenStatusIsContinueAndReplace_thenFails()
@@ -18227,7 +18796,7 @@ public class ExternalProcessorClientInterceptorTest {
     realScheduler.shutdown();
   }
 
-  // --- Category 26: Call activation with failure mode allow on and off ---
+  // --- Category 27: Call activation with failure mode allow on and off ---
   @Test
   public void
       givenRequestHeaderModeSend_Fma_true_whenExtProcTerminates_thenCallIsActivated()
@@ -18774,7 +19343,7 @@ public class ExternalProcessorClientInterceptorTest {
     channelManager.close();
   }
 
-  // --- Category 27: Request-Scoped Context Propagation ---
+  // --- Category 28: Request-Scoped Context Propagation ---
 
   @Test
   public void clientInterceptor_contextPropagatedToStartCall() throws Exception {
@@ -19121,7 +19690,7 @@ public class ExternalProcessorClientInterceptorTest {
     }
   }
 
-  // --- Category 28: Header Option Value Spec Compliance and Validation ---
+  // --- Category 29: Header Option Value Spec Compliance and Validation ---
 
   @Test
   @SuppressWarnings("unchecked")
