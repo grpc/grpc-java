@@ -90,6 +90,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Client-side interceptor for external processing filter.
@@ -273,11 +274,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final ClientCall<InputStream, InputStream> rawCall;
     private final DataPlaneDelayedCall<InputStream, InputStream> delayedCall;
     private final ScheduledExecutorService scheduler;
-    private final Object streamLock = new Object();
+    final Object streamLock = new Object();
     @Nullable private volatile EventType expectedRequestResponse;
     @Nullable private volatile EventType expectedResponseResponse;
     @Nullable private volatile ClientCallStreamObserver<ProcessingRequest>
         extProcClientCallRequestObserver;
+    @GuardedBy("streamLock")
     private final Queue<InputStream> pendingDrainingMessages =
         new ConcurrentLinkedQueue<>();
     @Nullable private volatile DataPlaneListener wrappedListener;
@@ -290,35 +292,46 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private static final long DEFAULT_INITIAL_WINDOW_SIZE = 65536;
 
     // Outbound (sending) windows
+    @GuardedBy("streamLock")
     private long downstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    @GuardedBy("streamLock")
     private long upstreamToSidestreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
 
     // Inbound (receiving) windows
+    @GuardedBy("streamLock")
     private long sidestreamToUpstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
+    @GuardedBy("streamLock")
     private long sidestreamToDownstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
 
     // Threshold to trigger standalone client window updates
     private static final long WINDOW_UPDATE_THRESHOLD = DEFAULT_INITIAL_WINDOW_SIZE / 2;
 
     // Path 1: Pending/buffered request body messages from downstream
+    @GuardedBy("streamLock")
     private final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
     // Deferred half-close flag for upstream direction
     private final AtomicBoolean pendingUpstreamHalfClose = new AtomicBoolean(false);
 
     // Path 2: Buffered request body messages from ext_proc server to forward upstream
+    @GuardedBy("streamLock")
     private final Queue<ByteString> pendingUpstreamBodyMessages =
         new java.util.concurrent.ConcurrentLinkedQueue<>();
     // Path 4: Outstanding requests from downstream for pulling responses
+    @GuardedBy("streamLock")
     private int downstreamRequestsPending = 0;
     // Buffered mutated response bodies from ext_proc server
+    @GuardedBy("streamLock")
     private final Queue<ByteString> pendingMutatedResponseBodies =
         new java.util.concurrent.ConcurrentLinkedQueue<>();
 
     // Accumulated client window updates to send to ext_proc
+    @GuardedBy("streamLock")
     private long accumulatedWindowUpdateSidestreamToUpstream = 0;
+    @GuardedBy("streamLock")
     private long accumulatedWindowUpdateSidestreamToDownstream = 0;
 
     // Flag to track if FlowControlInit was sent in the initial message
+    @GuardedBy("streamLock")
     private boolean flowControlInitSent = false;
 
     private final MethodDescriptor<?, ?> method;
@@ -346,10 +359,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
-
-    Object getStreamLock() {
-      return streamLock;
-    }
 
     protected DataPlaneClientCall(
         DataPlaneDelayedCall<InputStream, InputStream> delayedCall,
@@ -733,22 +742,21 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @GuardedBy("streamLock")
     void mergeAccumulatedWindowUpdates(ProcessingRequest.Builder requestBuilder) {
-      synchronized (streamLock) {
-        long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
-        long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
+      long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
+      long incrementDownstream = accumulatedWindowUpdateSidestreamToDownstream;
 
-        if (incrementUpstream > 0 || incrementDownstream > 0) {
-          requestBuilder.setClientWindowUpdate(
-              ProcessingRequest.ClientWindowUpdate.newBuilder()
-                  .setWindowIncrementSidestreamToUpstream(incrementUpstream)
-                  .setWindowIncrementSidestreamToDownstream(incrementDownstream)
-                  .build());
-          accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
-          accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
-          sidestreamToUpstreamWindow += incrementUpstream;
-          sidestreamToDownstreamWindow += incrementDownstream;
-        }
+      if (incrementUpstream > 0 || incrementDownstream > 0) {
+        requestBuilder.setClientWindowUpdate(
+            ProcessingRequest.ClientWindowUpdate.newBuilder()
+                .setWindowIncrementSidestreamToUpstream(incrementUpstream)
+                .setWindowIncrementSidestreamToDownstream(incrementDownstream)
+                .build());
+        accumulatedWindowUpdateSidestreamToUpstream -= incrementUpstream;
+        accumulatedWindowUpdateSidestreamToDownstream -= incrementDownstream;
+        sidestreamToUpstreamWindow += incrementUpstream;
+        sidestreamToDownstreamWindow += incrementDownstream;
       }
     }
 
@@ -885,6 +893,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       onReadyNotify();
     }
 
+    @GuardedBy("streamLock")
     boolean isSidecarReady() {
       ExtProcStreamState state = extProcStreamState.get();
       if (state.isCompleted()) {
@@ -893,10 +902,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       if (state.isDraining()) {
         return false;
       }
-      synchronized (streamLock) {
-        ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
-        return observer != null && observer.isReady();
-      }
+      ClientCallStreamObserver<ProcessingRequest> observer = extProcClientCallRequestObserver;
+      return observer != null && observer.isReady();
     }
 
     @Override
@@ -1028,29 +1035,27 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @GuardedBy("streamLock")
     private void sendRequestBodyToExtProc(ByteString body) {
-      synchronized (streamLock) {
-        downstreamToSidestreamWindow -= body.size();
-        ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
-            .setRequestBody(HttpBody.newBuilder()
-                .setBody(body)
-                .setEndOfStream(false)
-                .build());
-        mergeAccumulatedWindowUpdates(builder);
-        sendToExtProc(builder.build());
-        bodyMessageSentToExtProc.set(true);
-      }
+      downstreamToSidestreamWindow -= body.size();
+      ProcessingRequest.Builder builder = ProcessingRequest.newBuilder()
+          .setRequestBody(HttpBody.newBuilder()
+              .setBody(body)
+              .setEndOfStream(false)
+              .build());
+      mergeAccumulatedWindowUpdates(builder);
+      sendToExtProc(builder.build());
+      bodyMessageSentToExtProc.set(true);
     }
 
+    @GuardedBy("streamLock")
     private void drainPendingRequestBodyMessages() {
-      synchronized (streamLock) {
-        while (downstreamToSidestreamWindow > 0 && !pendingRequestBodyMessages.isEmpty()) {
-          ByteString body = pendingRequestBodyMessages.poll();
-          sendRequestBodyToExtProc(body);
-        }
-        if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.get()) {
-          halfClose();
-        }
+      while (downstreamToSidestreamWindow > 0 && !pendingRequestBodyMessages.isEmpty()) {
+        ByteString body = pendingRequestBodyMessages.poll();
+        sendRequestBodyToExtProc(body);
+      }
+      if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.get()) {
+        halfClose();
       }
     }
 
@@ -1500,7 +1505,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void onMessage(InputStream message) {
-      synchronized (dataPlaneClientCall.getStreamLock()) {
+      synchronized (dataPlaneClientCall.streamLock) {
         if (inboundPassThrough) {
           dataPlaneClientCall.getCallContext().run(() -> delegate().onMessage(message));
           return;
@@ -1556,7 +1561,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void drainSavedMessages() {
-      synchronized (dataPlaneClientCall.getStreamLock()) {
+      synchronized (dataPlaneClientCall.streamLock) {
         while (dataPlaneClientCall.isSidecarReady()
             && dataPlaneClientCall.upstreamToSidestreamWindow > 0
             && !savedMessages.isEmpty()) {
@@ -1631,7 +1636,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     void proceedWithHeaders() {
       if (savedHeaders != null) {
         proceedWithHeaders(savedHeaders);
-        synchronized (dataPlaneClientCall.getStreamLock()) {
+        synchronized (dataPlaneClientCall.streamLock) {
           savedHeaders = null;
           if (!dataPlaneClientCall.getExtProcStreamState().get().isDraining()) {
             InputStream msg;
@@ -1695,7 +1700,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void proceedWithSavedMessages() {
-      synchronized (dataPlaneClientCall.getStreamLock()) {
+      synchronized (dataPlaneClientCall.streamLock) {
         InputStream msg;
         while ((msg = savedMessages.poll()) != null) {
           final InputStream finalMsg = msg;
@@ -1765,6 +1770,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    @GuardedBy("dataPlaneClientCall.streamLock")
     private void sendResponseBodyToExtProc(
         @Nullable ByteString bodyByteString, boolean endOfStream) {
       if (dataPlaneClientCall.getExtProcStreamState().get().isCompleted()
