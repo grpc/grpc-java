@@ -77,6 +77,7 @@ import io.grpc.xds.internal.headermutations.HeaderMutationRulesConfig;
 import io.grpc.xds.internal.headermutations.HeaderMutator;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Queue;
@@ -1152,44 +1153,52 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void deliverResponseBody(ByteString body, DataPlaneListener listener) {
+      boolean shouldDeliver = false;
       synchronized (streamLock) {
         if (downstreamRequestsPending > 0) {
           downstreamRequestsPending--;
-          final int bodySize = body.size();
-          callContext.run(() -> {
-            try {
-              listener.onExternalBody(body);
-            } finally {
-              synchronized (streamLock) {
-                accumulatedWindowUpdateSidestreamToDownstream += bodySize;
-              }
-              trySendAccumulatedWindowUpdates();
-            }
-          });
+          shouldDeliver = true;
         } else {
           pendingMutatedResponseBodies.add(body);
         }
       }
+      if (shouldDeliver) {
+        final int bodySize = body.size();
+        callContext.run(() -> {
+          try {
+            listener.onExternalBody(body);
+          } finally {
+            synchronized (streamLock) {
+              accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+            }
+            trySendAccumulatedWindowUpdates();
+          }
+        });
+      }
     }
 
     private void drainPendingMutatedResponseBodies() {
+      List<ByteString> toDeliver = new ArrayList<>();
       synchronized (streamLock) {
         while (downstreamRequestsPending > 0 && !pendingMutatedResponseBodies.isEmpty()) {
           ByteString body = pendingMutatedResponseBodies.poll();
           downstreamRequestsPending--;
           pendingRequests.decrementAndGet();
-          final int bodySize = body.size();
-          callContext.run(() -> {
-            try {
-              wrappedListener.onExternalBody(body);
-            } finally {
-              synchronized (streamLock) {
-                accumulatedWindowUpdateSidestreamToDownstream += bodySize;
-              }
-              trySendAccumulatedWindowUpdates();
-            }
-          });
+          toDeliver.add(body);
         }
+      }
+      for (ByteString body : toDeliver) {
+        final int bodySize = body.size();
+        callContext.run(() -> {
+          try {
+            wrappedListener.onExternalBody(body);
+          } finally {
+            synchronized (streamLock) {
+              accumulatedWindowUpdateSidestreamToDownstream += bodySize;
+            }
+            trySendAccumulatedWindowUpdates();
+          }
+        });
       }
     }
 
