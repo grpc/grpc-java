@@ -1248,30 +1248,28 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     void drainPendingUpstreamBodyMessages() {
-      List<ByteString> toSend = new ArrayList<>();
-      boolean triggerHalfClose = false;
-      synchronized (streamLock) {
-        if (super.isReady()) {
-          ByteString body;
-          while ((body = pendingUpstreamBodyMessages.poll()) != null) {
-            toSend.add(body);
+      while (true) {
+        ByteString body = null;
+        boolean triggerHalfClose = false;
+        synchronized (streamLock) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+            body = pendingUpstreamBodyMessages.poll();
             accumulatedWindowUpdateSidestreamToUpstream += body.size();
-          }
-          if (pendingUpstreamBodyMessages.isEmpty()
-              && pendingUpstreamHalfClose.compareAndSet(true, false)) {
-            triggerHalfClose = true;
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingUpstreamHalfClose.compareAndSet(true, false)) {
+              triggerHalfClose = true;
+            }
           }
         }
-      }
-      for (ByteString body : toSend) {
+        if (body == null) {
+          break;
+        }
         super.sendMessage(new KnownLengthInputStream(body));
-      }
-      if (!toSend.isEmpty()) {
         trySendAccumulatedWindowUpdates();
-      }
-      if (triggerHalfClose) {
-        if (requestSideClosed.compareAndSet(false, true)) {
-          proceedWithHalfClose();
+        if (triggerHalfClose) {
+          if (requestSideClosed.compareAndSet(false, true)) {
+            proceedWithHalfClose();
+          }
         }
       }
     }
@@ -1305,56 +1303,51 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void drainPendingDrainingMessages() {
-      List<ByteString> mutatedToSend = new ArrayList<>();
-      List<ByteString> blockedToSend = new ArrayList<>();
-      List<InputStream> drainingToSend = new ArrayList<>();
-      boolean fullyDrained = false;
-      boolean triggerHalfClose = false;
+      while (true) {
+        Object msg = null; // Can be ByteString or InputStream
+        boolean isMutated = false;
+        boolean triggerHalfClose = false;
 
-      synchronized (streamLock) {
-        fullyDrained = pendingUpstreamBodyMessages.isEmpty()
-            && pendingRequestBodyMessages.isEmpty()
-            && pendingDrainingMessages.isEmpty();
-
-        if (!fullyDrained && super.isReady()) {
-          ByteString body;
-          while ((body = pendingUpstreamBodyMessages.poll()) != null) {
-            mutatedToSend.add(body);
-          }
-          while ((body = pendingRequestBodyMessages.poll()) != null) {
-            blockedToSend.add(body);
-          }
-          InputStream msg;
-          while ((msg = pendingDrainingMessages.poll()) != null) {
-            drainingToSend.add(msg);
-          }
-          fullyDrained = pendingUpstreamBodyMessages.isEmpty()
+        synchronized (streamLock) {
+          if (!pendingUpstreamBodyMessages.isEmpty() && super.isReady()) {
+            msg = pendingUpstreamBodyMessages.poll();
+            isMutated = true;
+          } else if (pendingUpstreamBodyMessages.isEmpty()
+              && !pendingRequestBodyMessages.isEmpty() && super.isReady()) {
+            msg = pendingRequestBodyMessages.poll();
+            isMutated = true;
+          } else if (pendingUpstreamBodyMessages.isEmpty()
               && pendingRequestBodyMessages.isEmpty()
-              && pendingDrainingMessages.isEmpty();
-        }
+              && !pendingDrainingMessages.isEmpty() && super.isReady()) {
+            msg = pendingDrainingMessages.poll();
+            isMutated = false;
+          }
 
-        if (fullyDrained) {
-          passThroughMode.set(true);
-          if (pendingHalfClose.get()) {
-            triggerHalfClose = true;
+          if (msg == null) {
+            if (pendingUpstreamBodyMessages.isEmpty()
+                && pendingRequestBodyMessages.isEmpty()
+                && pendingDrainingMessages.isEmpty()) {
+              passThroughMode.set(true);
+              if (pendingHalfClose.get()) {
+                triggerHalfClose = true;
+              }
+            }
           }
         }
-      }
 
-      // Send messages outside the streamLock to prevent potential deadlocks
-      for (ByteString body : mutatedToSend) {
-        super.sendMessage(new KnownLengthInputStream(body));
-      }
-      for (ByteString body : blockedToSend) {
-        super.sendMessage(new KnownLengthInputStream(body));
-      }
-      for (InputStream msg : drainingToSend) {
-        super.sendMessage(msg);
-      }
+        if (msg == null) {
+          if (triggerHalfClose) {
+            if (requestSideClosed.compareAndSet(false, true)) {
+              proceedWithHalfClose();
+            }
+          }
+          break;
+        }
 
-      if (triggerHalfClose) {
-        if (requestSideClosed.compareAndSet(false, true)) {
-          proceedWithHalfClose();
+        if (isMutated) {
+          super.sendMessage(new KnownLengthInputStream((ByteString) msg));
+        } else {
+          super.sendMessage((InputStream) msg);
         }
       }
     }
