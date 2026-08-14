@@ -324,7 +324,7 @@ final class CachingRlsLbClient {
   @GuardedBy("lock")
   private CachedRouteLookupResponse asyncRlsCall(
       RouteLookupRequestKey routeLookupRequestKey, @Nullable BackoffPolicy backoffPolicy,
-      RouteLookupRequest.Reason routeLookupReason) {
+      RouteLookupRequest.Reason routeLookupReason, @Nullable String staleHeaderData) {
     if (throttler.shouldThrottle()) {
       logger.log(ChannelLogLevel.DEBUG, "[RLS Entry {0}] Throttled RouteLookup",
           routeLookupRequestKey);
@@ -336,7 +336,8 @@ final class CachingRlsLbClient {
     }
     final SettableFuture<RouteLookupResponse> response = SettableFuture.create();
     io.grpc.lookup.v1.RouteLookupRequest routeLookupRequest = REQUEST_CONVERTER.convert(
-        RouteLookupRequest.create(routeLookupRequestKey.keyMap(), routeLookupReason));
+        RouteLookupRequest.create(
+            routeLookupRequestKey.keyMap(), routeLookupReason, staleHeaderData));
     logger.log(ChannelLogLevel.DEBUG,
         "[RLS Entry {0}] Starting RouteLookup: {1}", routeLookupRequestKey, routeLookupRequest);
     rlsStub.withDeadlineAfter(callTimeoutNanos, TimeUnit.NANOSECONDS)
@@ -386,7 +387,7 @@ final class CachingRlsLbClient {
         }
         return asyncRlsCall(routeLookupRequestKey, cacheEntry instanceof BackoffCacheEntry
             ? ((BackoffCacheEntry) cacheEntry).backoffPolicy : null,
-            RouteLookupRequest.Reason.REASON_MISS);
+            RouteLookupRequest.Reason.REASON_MISS, /* staleHeaderData= */ null);
       }
 
       if (cacheEntry instanceof DataCacheEntry) {
@@ -717,7 +718,7 @@ final class CachingRlsLbClient {
         logger.log(ChannelLogLevel.DEBUG,
             "[RLS Entry {0}] Cache entry is stale, refreshing", routeLookupRequestKey);
         asyncRlsCall(routeLookupRequestKey, /* backoffPolicy= */ null,
-            RouteLookupRequest.Reason.REASON_STALE);
+            RouteLookupRequest.Reason.REASON_STALE, getHeaderData());
       }
     }
 
