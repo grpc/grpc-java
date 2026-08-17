@@ -864,6 +864,19 @@ final class OkHttpServerTransport implements ServerTransport,
       // concerned with the window being exceeded at this point.
       in.require(length);
 
+      // connection window update
+      // The connection window must be updated even if the stream is in an errored state.
+      // See RFC 9113, section 6.9
+      connectionUnacknowledgedBytesRead += paddedLength;
+      if (connectionUnacknowledgedBytesRead
+          >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
+        synchronized (lock) {
+          frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
+          frameWriter.flush();
+        }
+        connectionUnacknowledgedBytesRead = 0;
+      }
+
       synchronized (lock) {
         StreamState stream = streams.get(streamId);
         if (stream == null) {
@@ -886,17 +899,6 @@ final class OkHttpServerTransport implements ServerTransport,
         Buffer buf = new Buffer();
         buf.write(in.getBuffer(), length);
         stream.inboundDataReceived(buf, length, paddedLength - length, inFinished);
-      }
-
-      // connection window update
-      connectionUnacknowledgedBytesRead += paddedLength;
-      if (connectionUnacknowledgedBytesRead
-          >= config.flowControlWindow * Utils.DEFAULT_WINDOW_UPDATE_RATIO) {
-        synchronized (lock) {
-          frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
-          frameWriter.flush();
-        }
-        connectionUnacknowledgedBytesRead = 0;
       }
     }
 
