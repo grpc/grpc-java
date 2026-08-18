@@ -319,10 +319,14 @@ java_grpc_library(
     deps = [":xds_orca_java_proto"],
 )
 
-java_rpc_toolchain(
+load("@rules_proto//proto:defs.bzl", "proto_lang_toolchain")
+
+proto_lang_toolchain(
     name = "java_grpc_library_toolchain",
+    command_line = "--rpc-plugin_out=%s",
     plugin = "//compiler:grpc_java_plugin",
-    runtime = [":java_grpc_library_deps"],
+    plugin_format_flag = "--plugin=protoc-gen-rpc-plugin=%s",
+    runtime = ":java_grpc_library_deps",
 )
 
 java_library(
