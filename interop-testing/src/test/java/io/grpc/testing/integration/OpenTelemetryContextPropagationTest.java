@@ -78,10 +78,9 @@ public class OpenTelemetryContextPropagationTest extends AbstractInteropTest {
         .build();
     this.tracer = openTelemetrySdk
         .getTracer("grpc-java-interop-test");
-    GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
-        .sdk(openTelemetrySdk);
-    InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
-    grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+    grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .sdk(openTelemetrySdk)
+        .build();
     this.censusClient = isCensusClient;
   }
 

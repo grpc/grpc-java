@@ -30,6 +30,11 @@ public final class InternalGrpcOpenTelemetry {
     builder.plugin(plugin);
   }
 
+  /**
+   * @deprecated Tracing is enabled by default whenever GrpcOpenTelemetry is configured.
+   */
+  @Deprecated
+  @SuppressWarnings("InlineMeSuggester")
   public static void enableTracing(GrpcOpenTelemetry.Builder builder, boolean enable) {
     builder.enableTracing(enable);
   }

@@ -327,10 +327,9 @@ public class TestServiceClient {
                       previous, GrpcTraceBinContextPropagator.defaultInstance()))
           .build();
       this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
-      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
-          .sdk(openTelemetrySdk);
-      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
-      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+      GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetrySdk)
+          .build();
       grpcOpenTelemetry.registerGlobal();
     }
     tester.setUp();
