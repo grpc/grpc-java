@@ -25,6 +25,7 @@ import static io.grpc.xds.XdsAttributes.ATTR_FILTER_CHAIN_SELECTOR_MANAGER;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.errorprone.annotations.DoNotCall;
 import io.grpc.Attributes;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
@@ -36,10 +37,15 @@ import io.grpc.netty.InternalNettyServerCredentials;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.xds.FilterChainMatchingProtocolNegotiators.FilterChainMatchingNegotiatorServerFactory;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
+
 
 /**
  * A version of {@link ServerBuilder} to create xDS managed servers.
@@ -56,8 +62,11 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
   private XdsClientPoolFactory xdsClientPoolFactory =
           SharedXdsClientPoolProvider.getDefaultProvider();
   private Map<String, ?> bootstrapOverride;
+  @Nullable private Function<String, String> ldsResourceNameResolver;
   private long drainGraceTime = 10;
   private TimeUnit drainGraceTimeUnit = TimeUnit.MINUTES;
+  private ChannelConfigurator channelConfigurator = builder -> { };
+
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate, int port) {
     this.delegate = nettyDelegate;
@@ -100,6 +109,25 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return this;
   }
 
+  /**
+   * Sets the configurator that will be stored in the server built by this builder.
+   *
+   * <p>This configurator will subsequently be used to configure any child channels
+   * created by that server.
+   *
+   * @param channelConfigurator the configurator to store in the channel.
+   * @return this
+   */
+  public XdsServerBuilder childChannelConfigurator(ChannelConfigurator channelConfigurator) {
+    checkNotNull(channelConfigurator, "channelConfigurator");
+    ChannelConfigurator oldConfigurator = this.channelConfigurator;
+    this.channelConfigurator = builder -> {
+      oldConfigurator.configureChannelBuilder(builder);
+      channelConfigurator.configureChannelBuilder(builder);
+    };
+    return this;
+  }
+
   @DoNotCall("Unsupported. Use forPort(int, ServerCredentials) instead")
   public static ServerBuilder<?> forPort(int port) {
     throw new UnsupportedOperationException(
@@ -117,6 +145,25 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
     return new XdsServerBuilder(nettyDelegate, port);
   }
 
+  /** Creates a gRPC server builder for the given address. */
+  public static XdsServerBuilder forAddress(
+      SocketAddress address, ServerCredentials serverCredentials) {
+    checkNotNull(address, "address");
+    checkNotNull(serverCredentials, "serverCredentials");
+    InternalProtocolNegotiator.ServerFactory originalNegotiatorFactory =
+        InternalNettyServerCredentials.toNegotiator(serverCredentials);
+    ServerCredentials wrappedCredentials =
+        InternalNettyServerCredentials.create(
+            new FilterChainMatchingNegotiatorServerFactory(originalNegotiatorFactory));
+    NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(address, wrappedCredentials);
+    int port = 0;
+    if (address instanceof InetSocketAddress) {
+      InetSocketAddress inetSocketAddress = (InetSocketAddress) address;
+      port = inetSocketAddress.getPort();
+    }
+    return new XdsServerBuilder(nettyDelegate, port);
+  }
+
   @Override
   public Server build() {
     checkState(isServerBuilt.compareAndSet(false, true), "Server already built!");
@@ -127,8 +174,26 @@ public final class XdsServerBuilder extends ForwardingServerBuilder<XdsServerBui
       builder.set(ATTR_DRAIN_GRACE_NANOS, drainGraceTimeUnit.toNanos(drainGraceTime));
     }
     InternalNettyServerBuilder.eagAttributes(delegate, builder.build());
-    return new XdsServerWrapper("0.0.0.0:" + port, delegate, xdsServingStatusListener,
-            filterChainSelectorManager, xdsClientPoolFactory, bootstrapOverride, filterRegistry);
+    return new XdsServerWrapper(
+        "0.0.0.0:" + port,
+        delegate,
+        xdsServingStatusListener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        ldsResourceNameResolver,
+        filterRegistry,
+        this.channelConfigurator);
+  }
+
+  /**
+   * Provides a function that takes the listening address and returns the LDS resource name. When
+   * provided, this overrides the server_listener_resource_name_template in the bootstrap.
+   */
+  public XdsServerBuilder ldsResourceNameResolver(
+      Function<String, String> ldsResourceNameResolver) {
+    this.ldsResourceNameResolver = checkNotNull(ldsResourceNameResolver, "ldsResourceNameResolver");
+    return this;
   }
 
   @VisibleForTesting

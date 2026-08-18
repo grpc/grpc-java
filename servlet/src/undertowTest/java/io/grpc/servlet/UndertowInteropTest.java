@@ -47,6 +47,7 @@ import org.junit.Test;
 public class UndertowInteropTest extends AbstractInteropTest {
   private static final String HOST = "localhost";
   private static final String MYAPP = "/grpc.testing.TestService";
+  private static final long MAX_ENTITY_SIZE = AbstractInteropTest.MAX_MESSAGE_SIZE;
   private int port;
   private Undertow server;
   private DeploymentManager manager;
@@ -101,6 +102,7 @@ public class UndertowInteropTest extends AbstractInteropTest {
         .addPrefixPath("/", servletHandler); // for unimplementedService test
     server = Undertow.builder()
         .setServerOption(UndertowOptions.ENABLE_HTTP2, true)
+        .setServerOption(UndertowOptions.MAX_ENTITY_SIZE, MAX_ENTITY_SIZE)
         .setServerOption(UndertowOptions.SHUTDOWN_TIMEOUT, 5000 /* 5 sec */)
         .addHttpListener(0, HOST)
         .setHandler(path)

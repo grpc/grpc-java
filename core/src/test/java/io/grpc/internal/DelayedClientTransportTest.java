@@ -51,6 +51,10 @@ import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -770,6 +774,202 @@ public class DelayedClientTransportTest {
         .matches("\\[wait_for_ready, "
             + "Last Pick Failure=Status\\{code=PERMISSION_DENIED, description=null, cause=null\\},"
             + " connecting_and_lb_delay=[0-9]+ns, was_still_waiting]");
+  }
+
+  @Test
+  public void streamDelayMetrics() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("pick_first: attempting to connect"),
+        fakeTracer.startedDelayReasons);
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("rls_lookup_pending", "RLS request pending.")));
+
+    assertEquals(1, fakeTracer.delayEndedCount);
+    assertEquals(Arrays.asList("connecting", "rls_lookup_pending"),
+        fakeTracer.startedDelayTypes);
+    assertEquals(Arrays.asList("pick_first: attempting to connect", "RLS request pending."),
+        fakeTracer.startedDelayReasons);
+
+    delayedTransport.reprocess(mockPicker);
+
+    assertEquals(2, fakeTracer.delayEndedCount);
+  }
+
+  @Test
+  public void streamDelayMetrics_cancelled() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+
+    stream.cancel(Status.CANCELLED);
+
+    assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
+  @Test
+  public void streamDelayMetrics_shutdownNow() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    ClientStream stream = delayedTransport.newStream(method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+
+    delayedTransport.shutdownNow(Status.UNAVAILABLE);
+
+    assertEquals(1, fakeTracer.delayEndedCount);
+  }
+
+  @Test
+  public void streamDelayMetrics_cadenceReasonUpdate_doesNotStartNewTypeSegment() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "attempt 1")));
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("attempt 1"), fakeTracer.startedDelayReasons);
+
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "attempt 2")));
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("attempt 1"), fakeTracer.startedDelayReasons);
+    assertEquals(Collections.singletonList("attempt 2"), fakeTracer.changedDelayReasons);
+    assertEquals(0, fakeTracer.delayEndedCount);
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_clientChannelInit() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    // No picker reprocessed yet (lastPicker == null)
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList("client channel: waiting for picker"),
+        fakeTracer.startedDelayReasons);
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_subchannelStateMismatch() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    io.grpc.LoadBalancer.Subchannel disconnectedSubchannel =
+        mock(io.grpc.LoadBalancer.Subchannel.class);
+    when(disconnectedSubchannel.getInternalSubchannel())
+        .thenReturn(newTransportProvider(null));
+
+    delayedTransport.reprocess(fakePicker(PickResult.withSubchannel(disconnectedSubchannel)));
+    delayedTransport.newStream(method, headers, callOptions, customTracers);
+
+    assertEquals(Collections.singletonList("subchannel_state_mismatch"),
+        fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList(
+        "subchannel returned by LB picker has no connected subchannel"),
+        fakeTracer.startedDelayReasons);
+  }
+
+  @Test
+  public void streamDelayMetrics_channelFallback_waitForReadyFailed() {
+    FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    delayedTransport.reprocess(fakePicker(PickResult.withError(Status.UNAVAILABLE)));
+    CallOptions wfrOptions = callOptions.withWaitForReady();
+    delayedTransport.newStream(method, headers, wfrOptions, customTracers);
+
+    assertEquals(Collections.singletonList("picker_failing_with_wait_for_ready"),
+        fakeTracer.startedDelayTypes);
+    assertEquals(Collections.singletonList(
+        "wait_for_ready RPC failed with status: " + Status.UNAVAILABLE),
+        fakeTracer.startedDelayReasons);
+  }
+
+  private static final class FakeStreamTracer extends ClientStreamTracer {
+    final List<String> startedDelayTypes = new ArrayList<>();
+    final List<String> startedDelayReasons = new ArrayList<>();
+    final List<String> changedDelayReasons = new ArrayList<>();
+    int delayEndedCount = 0;
+
+    @Override
+    public void recordAttemptDelayStart(String delayType, String delayReason) {
+      startedDelayTypes.add(delayType);
+      startedDelayReasons.add(delayReason);
+    }
+
+    @Override
+    public void recordAttemptDelayReasonChanged(String delayReason) {
+      changedDelayReasons.add(delayReason);
+    }
+
+    @Override
+    public void recordAttemptDelayEnd() {
+      delayEndedCount++;
+    }
+  }
+
+  private static SubchannelPicker fakePicker(final PickResult result) {
+    return new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return result;
+      }
+    };
+  }
+
+  @Test
+  public void streamDelayMetrics_updateDelayAfterCancellation_isNoOp() {
+    final FakeStreamTracer fakeTracer = new FakeStreamTracer();
+    ClientStreamTracer[] customTracers = new ClientStreamTracer[] { fakeTracer };
+
+    // Create a pending stream
+    delayedTransport.reprocess(fakePicker(
+        PickResult.withNoResult("connecting", "pick_first: attempting to connect")));
+    final ClientStream stream = delayedTransport.newStream(
+        method, headers, callOptions, customTracers);
+    stream.start(streamListener);
+
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(0, fakeTracer.delayEndedCount);
+
+    // Reprocess with a custom picker that cancels the stream during the pick.
+    // This exactly simulates the concurrent timing race.
+    SubchannelPicker racePicker = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        stream.cancel(Status.CANCELLED);
+        return PickResult.withNoResult("connecting", "retry-backoff");
+      }
+    };
+
+    delayedTransport.reprocess(racePicker);
+
+    // VERIFICATION:
+    // The updateDelay called after the cancellation must be ignored because of our check.
+    assertEquals(Collections.singletonList("connecting"), fakeTracer.startedDelayTypes);
+    assertEquals(1, fakeTracer.delayEndedCount);
   }
 
   private static TransportProvider newTransportProvider(final ClientTransport transport) {

@@ -37,6 +37,7 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -155,6 +156,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private static final LoadBalancer.PickDetailsConsumer NOOP_PICK_DETAILS_CONSUMER =
       new LoadBalancer.PickDetailsConsumer() {};
 
+  /**
+   * Retrieves the user-provided configuration function for internal child channels.
+   *
+   * <p>This is intended for use by gRPC internal components
+   * that are responsible for creating auxiliary {@code ManagedChannel} instances.
+   */
+  private final ChannelConfigurator channelConfigurator;
+
   private final InternalLogId logId;
   private final String target;
   @Nullable
@@ -164,7 +173,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolverProvider nameResolverProvider;
   private final NameResolver.Args nameResolverArgs;
   private final LoadBalancerProvider loadBalancerFactory;
-  private final ClientTransportFactory originalTransportFactory;
+  private final RefCountedClientTransportFactory originalTransportFactory;
   @Nullable
   private final ChannelCredentials originalChannelCreds;
   private final ClientTransportFactory transportFactory;
@@ -545,17 +554,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
+    this.channelConfigurator = checkNotNull(builder.channelConfigurator,
+            "channelConfigurator");
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.originalChannelCreds = builder.channelCredentials;
-    this.originalTransportFactory = clientTransportFactory;
+    if (clientTransportFactory instanceof RefCountedClientTransportFactory) {
+      this.originalTransportFactory = (RefCountedClientTransportFactory) clientTransportFactory;
+    } else {
+      this.originalTransportFactory = new RefCountedClientTransportFactory(clientTransportFactory);
+    }
     this.offloadExecutorHolder =
         new ExecutorHolder(checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.transportFactory = new CallCredentialsApplyingTransportFactory(
-        clientTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
+        originalTransportFactory, builder.callCredentials, this.offloadExecutorHolder);
     this.scheduledExecutor =
         new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
@@ -589,7 +604,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setOffloadExecutor(this.offloadExecutorHolder)
             .setOverrideAuthority(this.authorityOverride)
             .setMetricRecorder(this.metricRecorder)
-            .setNameResolverRegistry(builder.nameResolverRegistry);
+            .setNameResolverRegistry(builder.nameResolverRegistry)
+            .setChildChannelConfigurator(this.channelConfigurator);
     builder.copyAllNameResolverCustomArgsTo(nameResolverArgsBuilder);
     this.nameResolverArgs = nameResolverArgsBuilder.build();
     this.nameResolver = getNameResolver(
@@ -1450,7 +1466,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           final ClientTransportFactory transportFactory;
           CallCredentials callCredentials;
           if (channelCreds instanceof DefaultChannelCreds) {
-            transportFactory = originalTransportFactory;
+            // TODO(kannanjgithub) We should eventually refactor ManagedChannelImplBuilder so
+            // callCredentials can be resolved lazily at build() time, allowing transport factory
+            // retention to happen strictly inside buildClientTransportFactory().
+            transportFactory = originalTransportFactory.retain();
             callCredentials = null;
           } else {
             SwapChannelCredentialsResult swapResult =
@@ -1488,6 +1507,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
 
       ResolvingOobChannelBuilder builder = new ResolvingOobChannelBuilder();
+
+      // Note that we follow the global configurator pattern and try to fuse the configurations as
+      // soon as the builder gets created
+      channelConfigurator.configureChannelBuilder(builder);
+      builder.childChannelConfigurator(channelConfigurator);
 
       return builder
           // TODO(zdapeng): executors should not outlive the parent channel.

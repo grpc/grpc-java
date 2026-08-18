@@ -31,6 +31,7 @@ import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -188,7 +189,8 @@ final class XdsNameResolver extends NameResolver {
     } else {
       checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.xdsClientPool = new BootstrappingXdsClientPool(
-          xdsClientPoolFactory, target, bootstrapOverride, metricRecorder);
+          xdsClientPoolFactory, target, bootstrapOverride, metricRecorder,
+          nameResolverArgs.getChildChannelConfigurator());
     }
     this.random = checkNotNull(random, "random");
     this.filterRegistry = checkNotNull(filterRegistry, "filterRegistry");
@@ -1065,16 +1067,19 @@ final class XdsNameResolver extends NameResolver {
     private final @Nullable Map<String, ?> bootstrapOverride;
     private final MetricRecorder metricRecorder;
     private ObjectPool<XdsClient> xdsClientPool;
+    private final ChannelConfigurator channelConfigurator;
 
     BootstrappingXdsClientPool(
         XdsClientPoolFactory xdsClientPoolFactory,
         String target,
         @Nullable Map<String, ?> bootstrapOverride,
-        MetricRecorder metricRecorder) {
+        MetricRecorder metricRecorder,
+        ChannelConfigurator channelConfigurator) {
       this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
       this.target = checkNotNull(target, "target");
       this.bootstrapOverride = bootstrapOverride;
-      this.metricRecorder = checkNotNull(metricRecorder, "metricRecorder");
+      this.metricRecorder = metricRecorder;
+      this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
     }
 
     @Override
@@ -1087,7 +1092,8 @@ final class XdsNameResolver extends NameResolver {
           bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
         }
         this.xdsClientPool =
-            xdsClientPoolFactory.getOrCreate(target, bootstrapInfo, metricRecorder);
+            xdsClientPoolFactory.getOrCreate(
+                target, bootstrapInfo, metricRecorder, channelConfigurator);
       }
       return xdsClientPool.getObject();
     }

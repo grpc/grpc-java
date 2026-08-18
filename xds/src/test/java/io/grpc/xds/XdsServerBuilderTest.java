@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsServerTestHelper.buildTestListener;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
@@ -30,15 +31,19 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.BindableService;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InsecureServerCredentials;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.StatusOr;
+import io.grpc.internal.ObjectPool;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsListenerResource.LdsUpdate;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClient;
 import io.grpc.xds.XdsServerTestHelper.FakeXdsClientPoolFactory;
+import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.internal.security.CommonTlsContextTestsUtil;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -89,6 +94,16 @@ public class XdsServerBuilderTest {
       builder.xdsServingStatusListener(xdsServingStatusListener);
     }
     tlsContextManager = mock(TlsContextManager.class);
+  }
+
+  private void buildServerForAddress(SocketAddress address) throws IOException {
+    builder =
+        XdsServerBuilder.forAddress(
+            address, XdsServerCredentials.create(InsecureServerCredentials.create()));
+    builder.xdsClientPoolFactory(xdsClientPoolFactory);
+    builder.overrideBootstrapForTest(XdsServerTestHelper.RAW_BOOTSTRAP);
+    tlsContextManager = mock(TlsContextManager.class);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
   }
 
   private void verifyServer(
@@ -273,6 +288,70 @@ public class XdsServerBuilderTest {
   }
 
   @Test
+  public void forAddress_nullAddress_throws() {
+    try {
+      XdsServerBuilder.forAddress(
+          null, XdsServerCredentials.create(InsecureServerCredentials.create()));
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("address");
+    }
+  }
+
+  @Test
+  public void forAddress_nullCredentials_throws() {
+    try {
+      XdsServerBuilder.forAddress(new InetSocketAddress(0), null);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("serverCredentials");
+    }
+  }
+
+  @Test
+  public void forAddress_inetSocketAddress_startsAndShutsDown()
+      throws IOException, InterruptedException, TimeoutException, ExecutionException {
+    buildServerForAddress(new InetSocketAddress(0));
+    Future<Throwable> future = startServerAsync();
+    XdsServerTestHelper.generateListenerUpdate(
+        xdsClient,
+        CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+        tlsContextManager);
+    verifyServer(future, null, null);
+    verifyShutdown();
+  }
+
+  @Test
+  public void forAddress_inetSocketAddress_withSpecificPort()
+      throws IOException, InterruptedException, TimeoutException, ExecutionException {
+    ServerSocket serverSocket = new ServerSocket(0);
+    int localPort = serverSocket.getLocalPort();
+    serverSocket.close();
+    buildServerForAddress(new InetSocketAddress("0.0.0.0", localPort));
+    Future<Throwable> future = startServerAsync();
+    // The server only transitions to serving once it receives an LDS update whose
+    // listening address matches the address the server was configured with.
+    EnvoyServerProtoData.Listener listener =
+        buildTestListener(
+            "listener1",
+            "0.0.0.0:" + localPort,
+            ImmutableList.of(),
+            CommonTlsContextTestsUtil.buildTestInternalDownstreamTlsContext("CERT1", "VA1"),
+            null,
+            tlsContextManager);
+    xdsClient.deliverLdsUpdate(LdsUpdate.forTcpListener(listener));
+    verifyServer(future, null, null);
+    assertThat(xdsServer.getPort()).isEqualTo(localPort);
+    verifyShutdown();
+  }
+
+  @Test
+  public void forAddress_customSocketAddress_builds() throws IOException {
+    buildServerForAddress(new SocketAddress() {});
+    assertThat(xdsServer).isNotNull();
+  }
+
+  @Test
   public void xdsServer_2ndBuild_expectException() throws IOException {
     XdsServerBuilder.XdsServingStatusListener mockXdsServingStatusListener =
         mock(XdsServerBuilder.XdsServingStatusListener.class);
@@ -321,8 +400,77 @@ public class XdsServerBuilderTest {
     buildBuilder(null);
     builder.overrideBootstrapForTest(b);
     xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
-    Future<Throwable> unused = startServerAsync();
+    Future<?> unused = startServerAsync();
     assertThat(xdsClientPoolFactory.savedBootstrapInfo.node().getId())
         .isEqualTo(XdsServerTestHelper.BOOTSTRAP_INFO.node().getId());
+  }
+
+  @Test
+  public void start_passesChannelConfiguratorToClientPoolFactory() throws Exception {
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurer = builder -> {
+      configuratorInvoked[0] = true;
+    };
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
+    when(mockPool.getObject()).thenReturn(xdsClient);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
+
+    buildBuilder(null);
+    builder.childChannelConfigurator(configurer);
+    builder.xdsClientPoolFactory(mockPoolFactory);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+
+    Future<?> unused = startServerAsync();
+
+    ArgumentCaptor<ChannelConfigurator> configuratorCaptor =
+        ArgumentCaptor.forClass(ChannelConfigurator.class);
+    verify(mockPoolFactory).getOrCreate(
+        any(), any(), any(), configuratorCaptor.capture());
+    
+    ManagedChannelBuilder<?> testBuilder = mock(ManagedChannelBuilder.class);
+    configuratorCaptor.getValue().configureChannelBuilder(testBuilder);
+    assertThat(configuratorInvoked[0]).isTrue();
+  }
+
+  @Test
+  public void childChannelConfigurator_appendsConfigurators() throws Exception {
+    ChannelConfigurator configurer1 = builder -> { };
+    ChannelConfigurator configurer2 = builder -> { };
+    
+    XdsClientPoolFactory mockPoolFactory = mock(XdsClientPoolFactory.class);
+    @SuppressWarnings("unchecked")
+    ObjectPool<XdsClient> mockPool = mock(ObjectPool.class);
+    when(mockPool.getObject()).thenReturn(xdsClient);
+    when(mockPoolFactory.getOrCreate(any(), any(), any(), any())).thenReturn(mockPool);
+
+    buildBuilder(null);
+    builder.childChannelConfigurator(configurer1);
+    builder.childChannelConfigurator(configurer2);
+    builder.xdsClientPoolFactory(mockPoolFactory);
+    xdsServer = cleanupRule.register((XdsServerWrapper) builder.build());
+
+    Future<?> unused = startServerAsync();
+
+    // The captured configurator should be a composite of configurer1 and configurer2
+    ArgumentCaptor<ChannelConfigurator> captor = ArgumentCaptor.forClass(ChannelConfigurator.class);
+    verify(mockPoolFactory).getOrCreate(
+        any(), any(), any(), captor.capture());
+    ChannelConfigurator captured = captor.getValue();
+    
+    assertNotSame(configurer1, captured);
+    assertNotSame(configurer2, captured);
+  }
+
+  @Test
+  public void childChannelConfigurator_nullThrows() throws IOException {
+    buildBuilder(null);
+    try {
+      builder.childChannelConfigurator(null);
+      fail("exception expected");
+    } catch (NullPointerException expected) {
+      assertThat(expected).hasMessageThat().contains("channelConfigurator");
+    }
   }
 }

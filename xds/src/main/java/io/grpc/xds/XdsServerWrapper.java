@@ -29,8 +29,7 @@ import com.google.common.net.InetAddresses;
 import com.google.common.util.concurrent.SettableFuture;
 import io.envoyproxy.envoy.config.core.v3.SocketAddress.Protocol;
 import io.grpc.Attributes;
-import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
-import io.grpc.ForwardingServerCallListener.SimpleForwardingServerCallListener;
+import io.grpc.ChannelConfigurator;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -65,7 +64,6 @@ import io.grpc.xds.client.XdsClient;
 import io.grpc.xds.client.XdsClient.ResourceWatcher;
 import io.grpc.xds.internal.security.SslContextProviderSupplier;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
@@ -80,6 +78,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -110,6 +109,7 @@ final class XdsServerWrapper extends Server {
   private final ThreadSafeRandom random = ThreadSafeRandomImpl.instance;
   private final XdsClientPoolFactory xdsClientPoolFactory;
   private final @Nullable Map<String, ?> bootstrapOverride;
+  private final @Nullable Function<String, String> ldsResourceNameResolver;
   private final XdsServingStatusListener listener;
   private final FilterChainSelectorManager filterChainSelectorManager;
   private final AtomicBoolean started = new AtomicBoolean(false);
@@ -118,6 +118,10 @@ final class XdsServerWrapper extends Server {
   private final CountDownLatch internalTerminationLatch = new CountDownLatch(1);
   private final SettableFuture<Exception> initialStartFuture = SettableFuture.create();
   private boolean initialStarted;
+  // Must be accessed in syncContext.
+  // Guards the forceful-shutdown work in shutdownNow(), independently of the shutdown AtomicBoolean
+  // above, so it isn't skipped when shutdown()
+  private boolean shutdownNowed;
   private ScheduledHandle restartTimer;
   private ObjectPool<XdsClient> xdsClientPool;
   private XdsClient xdsClient;
@@ -131,6 +135,55 @@ final class XdsServerWrapper extends Server {
   // Default filter chain Filter instances are unique per Server, and per filter's name+typeUrl.
   // NamedFilterConfig.filterStateKey -> filter_instance.
   private final HashMap<String, Filter> activeFiltersDefaultChain = new HashMap<>();
+
+  private final ChannelConfigurator channelConfigurator;
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable Function<String, String> ldsResourceNameResolver,
+      FilterRegistry filterRegistry,
+      ChannelConfigurator channelConfigurator) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        ldsResourceNameResolver,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        channelConfigurator);
+    sharedTimeService = true;
+  }
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      FilterRegistry filterRegistry,
+      ChannelConfigurator channelConfigurator) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        null,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        channelConfigurator);
+    sharedTimeService = true;
+  }
 
   XdsServerWrapper(
       String listenerAddress,
@@ -147,8 +200,33 @@ final class XdsServerWrapper extends Server {
         filterChainSelectorManager,
         xdsClientPoolFactory,
         bootstrapOverride,
+        null,
         filterRegistry,
-        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE));
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        builder -> { });
+    sharedTimeService = true;
+  }
+
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable Function<String, String> ldsResourceNameResolver,
+      FilterRegistry filterRegistry) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        ldsResourceNameResolver,
+        filterRegistry,
+        SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE),
+        builder -> { });
     sharedTimeService = true;
   }
 
@@ -162,6 +240,79 @@ final class XdsServerWrapper extends Server {
           @Nullable Map<String, ?> bootstrapOverride,
           FilterRegistry filterRegistry,
           ScheduledExecutorService timeService) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        null,
+        filterRegistry,
+        timeService,
+        builder -> { });
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable Function<String, String> ldsResourceNameResolver,
+      FilterRegistry filterRegistry,
+      ScheduledExecutorService timeService) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        ldsResourceNameResolver,
+        filterRegistry,
+        timeService,
+        builder -> { });
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+          String listenerAddress,
+          ServerBuilder<?> delegateBuilder,
+          XdsServingStatusListener listener,
+          FilterChainSelectorManager filterChainSelectorManager,
+          XdsClientPoolFactory xdsClientPoolFactory,
+          @Nullable Map<String, ?> bootstrapOverride,
+          FilterRegistry filterRegistry,
+          ScheduledExecutorService timeService,
+          ChannelConfigurator channelConfigurator) {
+    this(
+        listenerAddress,
+        delegateBuilder,
+        listener,
+        filterChainSelectorManager,
+        xdsClientPoolFactory,
+        bootstrapOverride,
+        null,
+        filterRegistry,
+        timeService,
+        channelConfigurator);
+  }
+
+  @VisibleForTesting
+  XdsServerWrapper(
+      String listenerAddress,
+      ServerBuilder<?> delegateBuilder,
+      XdsServingStatusListener listener,
+      FilterChainSelectorManager filterChainSelectorManager,
+      XdsClientPoolFactory xdsClientPoolFactory,
+      @Nullable Map<String, ?> bootstrapOverride,
+      @Nullable Function<String, String> ldsResourceNameResolver,
+      FilterRegistry filterRegistry,
+      ScheduledExecutorService timeService,
+      ChannelConfigurator channelConfigurator) {
     this.listenerAddress = checkNotNull(listenerAddress, "listenerAddress");
     this.delegateBuilder = checkNotNull(delegateBuilder, "delegateBuilder");
     this.delegateBuilder.intercept(new ConfigApplyingInterceptor());
@@ -170,9 +321,11 @@ final class XdsServerWrapper extends Server {
         = checkNotNull(filterChainSelectorManager, "filterChainSelectorManager");
     this.xdsClientPoolFactory = checkNotNull(xdsClientPoolFactory, "xdsClientPoolFactory");
     this.bootstrapOverride = bootstrapOverride;
+    this.ldsResourceNameResolver = ldsResourceNameResolver;
     this.timeService = checkNotNull(timeService, "timeService");
     this.filterRegistry = checkNotNull(filterRegistry,"filterRegistry");
     this.delegate = delegateBuilder.build();
+    this.channelConfigurator = checkNotNull(channelConfigurator, "channelConfigurator");
   }
 
   @Override
@@ -206,7 +359,8 @@ final class XdsServerWrapper extends Server {
         bootstrapInfo = new GrpcBootstrapperImpl().bootstrap(bootstrapOverride);
       }
       xdsClientPool = xdsClientPoolFactory.getOrCreate(
-          "#server", bootstrapInfo, new MetricRecorder() {});
+          "#server", bootstrapInfo, new MetricRecorder() {},
+          channelConfigurator);
     } catch (Exception e) {
       StatusException statusException = Status.UNAVAILABLE.withDescription(
               "Failed to initialize xDS").withCause(e).asException();
@@ -215,21 +369,28 @@ final class XdsServerWrapper extends Server {
       return;
     }
     xdsClient = xdsClientPool.getObject();
-    String listenerTemplate = xdsClient.getBootstrapInfo().serverListenerResourceNameTemplate();
-    if (listenerTemplate == null) {
-      StatusException statusException =
-          Status.UNAVAILABLE.withDescription(
-              "Can only support xDS v3 with listener resource name template").asException();
-      listener.onNotServing(statusException);
-      initialStartFuture.set(statusException);
-      xdsClient = xdsClientPool.returnObject(xdsClient);
-      return;
+    String resourceName;
+    if (ldsResourceNameResolver != null) {
+      resourceName = ldsResourceNameResolver.apply(listenerAddress);
+    } else {
+      String listenerTemplate = xdsClient.getBootstrapInfo().serverListenerResourceNameTemplate();
+      if (listenerTemplate == null) {
+        StatusException statusException =
+            Status.UNAVAILABLE
+                .withDescription("Can only support xDS v3 with listener resource name template")
+                .asException();
+        listener.onNotServing(statusException);
+        initialStartFuture.set(statusException);
+        xdsClient = xdsClientPool.returnObject(xdsClient);
+        return;
+      }
+      String replacement = listenerAddress;
+      if (listenerTemplate.startsWith(XDSTP_SCHEME)) {
+        replacement = XdsClient.percentEncodePath(replacement);
+      }
+      resourceName = listenerTemplate.replaceAll("%s", replacement);
     }
-    String replacement = listenerAddress;
-    if (listenerTemplate.startsWith(XDSTP_SCHEME)) {
-      replacement = XdsClient.percentEncodePath(replacement);
-    }
-    discoveryState = new DiscoveryState(listenerTemplate.replaceAll("%s", replacement));
+    discoveryState = new DiscoveryState(resourceName);
   }
 
   @Override
@@ -251,16 +412,15 @@ final class XdsServerWrapper extends Server {
 
   @Override
   public Server shutdownNow() {
-    if (!shutdown.compareAndSet(false, true)) {
-      return this;
-    }
+    shutdown();
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
-        if (!delegate.isShutdown()) {
-          delegate.shutdownNow();
+        if (shutdownNowed) {
+          return;
         }
-        internalShutdown();
+        shutdownNowed = true;
+        delegate.shutdownNow();
         initialStartFuture.set(new IOException("server is forcefully shut down"));
       }
     });
@@ -684,13 +844,8 @@ final class XdsServerWrapper extends Server {
               .buildKeepingLast();
 
           // Interceptors for this vhost/route combo.
-          boolean hasExtProc = false;
           List<ServerInterceptor> interceptors = new ArrayList<>(filterConfigs.size());
           for (NamedFilterConfig namedFilter : filterConfigs) {
-            String typeUrl = namedFilter.filterConfig.typeUrl();
-            if (typeUrl.equals(ExternalProcessorFilter.TYPE_URL)) {
-              hasExtProc = true;
-            }
             String name = namedFilter.name;
             FilterConfig config = namedFilter.filterConfig;
             FilterConfig overrideConfig = perRouteOverrides.get(name);
@@ -707,15 +862,7 @@ final class XdsServerWrapper extends Server {
 
           // Combine interceptors produced by different filters into a single one that executes
           // them sequentially. The order is preserved.
-          if (hasExtProc) {
-            List<ServerInterceptor> withRawMessage = new ArrayList<>();
-            withRawMessage.add(new TransportRawMessageServerInterceptor());
-            withRawMessage.addAll(interceptors);
-            withRawMessage.add(new ApplicationRawMessageServerInterceptor());
-            perRouteInterceptors.put(route, combineInterceptors(withRawMessage));
-          } else {
-            perRouteInterceptors.put(route, combineInterceptors(interceptors));
-          }
+          perRouteInterceptors.put(route, combineInterceptors(interceptors));
         }
       }
 
@@ -886,112 +1033,6 @@ final class XdsServerWrapper extends Server {
           updateSelector();
         }
       }
-    }
-  }
-
-  private static final Attributes.Key<MethodDescriptor<?, ?>> ATTR_ORIGINAL_METHOD =
-      Attributes.Key.create("io.grpc.xds.ATTR_ORIGINAL_METHOD");
-
-  static final class TransportRawMessageServerInterceptor implements ServerInterceptor {
-    private static final MethodDescriptor.Marshaller<InputStream> RAW_MARSHALLER =
-        new MethodDescriptor.Marshaller<InputStream>() {
-          @Override
-          public InputStream stream(InputStream value) {
-            return value;
-          }
-
-          @Override
-          public InputStream parse(InputStream stream) {
-            return stream;
-          }
-        };
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      final MethodDescriptor<ReqT, RespT> method = call.getMethodDescriptor();
-      final MethodDescriptor<InputStream, InputStream> rawMethod =
-          method.toBuilder(RAW_MARSHALLER, RAW_MARSHALLER).build();
-
-      final Attributes attrs = call.getAttributes().toBuilder()
-          .set(ATTR_ORIGINAL_METHOD, method)
-          .build();
-
-      ServerCall<InputStream, InputStream> rawCall =
-          new SimpleForwardingServerCall<InputStream, InputStream>(
-              (ServerCall<InputStream, InputStream>) (ServerCall<?, ?>) call) {
-            @Override
-            public MethodDescriptor<InputStream, InputStream> getMethodDescriptor() {
-              return rawMethod;
-            }
-
-            @Override
-            public Attributes getAttributes() {
-              return attrs;
-            }
-
-            @Override
-            public void sendMessage(InputStream message) {
-              call.sendMessage(method.getResponseMarshaller().parse(message));
-            }
-          };
-
-      @SuppressWarnings("unchecked")
-      ServerCallHandler<InputStream, InputStream> rawNext =
-          (ServerCallHandler<InputStream, InputStream>) (ServerCallHandler<?, ?>) next;
-
-      final ServerCall.Listener<InputStream> rawListener = rawNext.startCall(rawCall, headers);
-
-      return new SimpleForwardingServerCallListener<ReqT>(
-          (ServerCall.Listener<ReqT>) (ServerCall.Listener<?>) rawListener) {
-        @Override
-        public void onMessage(ReqT message) {
-          rawListener.onMessage(method.getRequestMarshaller().stream(message));
-        }
-      };
-    }
-  }
-
-  static final class ApplicationRawMessageServerInterceptor implements ServerInterceptor {
-    @Override
-    public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-        final ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-      @SuppressWarnings("unchecked")
-      final MethodDescriptor<ReqT, RespT> originalMethod =
-          (MethodDescriptor<ReqT, RespT>) call.getAttributes().get(ATTR_ORIGINAL_METHOD);
-      checkState(originalMethod != null, "Missing ATTR_ORIGINAL_METHOD attribute");
-
-      ServerCall<ReqT, RespT> appCall =
-          new SimpleForwardingServerCall<ReqT, RespT>(call) {
-            @Override
-            public MethodDescriptor<ReqT, RespT> getMethodDescriptor() {
-              return originalMethod;
-            }
-
-            @Override
-            public void sendMessage(RespT message) {
-              @SuppressWarnings("unchecked")
-              ServerCall<InputStream, InputStream> rawCall =
-                  (ServerCall<InputStream, InputStream>) (ServerCall<?, ?>) call;
-              rawCall.sendMessage(originalMethod.getResponseMarshaller().stream(message));
-            }
-          };
-
-      final ServerCall.Listener<ReqT> appListener = next.startCall(appCall, headers);
-
-      @SuppressWarnings("unchecked")
-      ServerCall.Listener<ReqT> rawListener =
-          (ServerCall.Listener<ReqT>) (ServerCall.Listener<?>)
-              new SimpleForwardingServerCallListener<InputStream>(
-                  (ServerCall.Listener<InputStream>) (ServerCall.Listener<?>) appListener) {
-            @Override
-            public void onMessage(InputStream message) {
-              appListener.onMessage(originalMethod.getRequestMarshaller().parse(message));
-            }
-          };
-
-      return rawListener;
     }
   }
 

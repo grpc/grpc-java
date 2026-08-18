@@ -124,7 +124,8 @@ final class GrpclbState {
   static final RoundRobinEntry BUFFER_ENTRY = new RoundRobinEntry() {
       @Override
       public PickResult picked(PickSubchannelArgs args) {
-        return PickResult.withNoResult();
+        return PickResult.withNoResult(
+            "connecting", "grpclb: waiting for backend server list");
       }
 
       @Override

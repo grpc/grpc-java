@@ -68,6 +68,7 @@ import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelCredentials;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
@@ -494,6 +495,92 @@ public class ManagedChannelImplTest {
     verify(mockCallListener).onClose(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertSame(Status.DEADLINE_EXCEEDED.getCode(), status.getCode());
+  }
+
+  @Test
+  public void childChannelConfigurator_passedToNameResolverArgs() {
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurator = builder -> {
+      configuratorInvoked[0] = true;
+    };
+    channelBuilder.childChannelConfigurator(configurator);
+    AtomicReference<NameResolver.Args> actualArgs = new AtomicReference<>();
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        actualArgs.set(args);
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn("test.example.com");
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    assertNotNull(actualArgs.get());
+    ChannelConfigurator childConfigurator = actualArgs.get().getChildChannelConfigurator();
+    assertNotNull(childConfigurator);
+    childConfigurator.configureChannelBuilder(channelBuilder);
+    assertTrue(configuratorInvoked[0]);
+  }
+
+  @Test
+  public void childChannelConfigurator_passedToResolvingOobChannelNameResolverArgs() {
+    final boolean[] configuratorInvoked = new boolean[1];
+    ChannelConfigurator configurator = builder -> {
+      configuratorInvoked[0] = true;
+    };
+    channelBuilder.childChannelConfigurator(configurator);
+    AtomicReference<NameResolver.Args> oobArgs = new AtomicReference<>();
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        if (targetUri.toString().contains("oobauthority")) {
+          oobArgs.set(args);
+        }
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn(
+            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
+    oob.getState(true);
+    assertNotNull(oobArgs.get());
+    ChannelConfigurator childConfigurator = oobArgs.get().getChildChannelConfigurator();
+    assertNotNull(childConfigurator);
+    childConfigurator.configureChannelBuilder(channelBuilder);
+    assertTrue(configuratorInvoked[0]);
+    oob.shutdownNow();
   }
 
   @Test
@@ -4735,6 +4822,46 @@ public class ManagedChannelImplTest {
             subchannel.shutdown();
           }
         });
+  }
+
+  @Test
+  public void oobChannelTermination_doesNotCloseSharedTransportFactory() {
+    channelBuilder.nameResolverRegistry.register(new NameResolverProvider() {
+      @Override
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+        NameResolver resolver = mock(NameResolver.class);
+        when(resolver.getServiceAuthority()).thenReturn(
+            targetUri.getAuthority() != null ? targetUri.getAuthority() : targetUri.getPath());
+        return resolver;
+      }
+
+      @Override
+      public String getDefaultScheme() {
+        return expectedUri.getScheme();
+      }
+
+      @Override
+      protected boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      protected int priority() {
+        return 10;
+      }
+    });
+    createChannel();
+    ManagedChannel oob = helper.createResolvingOobChannelBuilder("oobauthority").build();
+
+    // Shutting down OOB channel should release its reference but not close the
+    // shared transport factory
+    oob.shutdownNow();
+    verify(mockTransportFactory, never()).close();
+
+    // Terminating the main channel releases the final reference and closes the
+    // transport factory
+    channel.shutdownNow();
+    verify(mockTransportFactory).close();
   }
 
   @SuppressWarnings("unchecked")

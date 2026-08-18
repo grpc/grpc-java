@@ -92,11 +92,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Execute application code directly in the transport thread.
-   *
-   * <p>Depending on the underlying transport, using a direct executor may lead to substantial
-   * performance improvements. However, it also requires the application to not block under
+   * Execute application code directly in the transport thread. The application must not block under
    * any circumstances.
+   *
+   * <p>Depending on the underlying transport and the application code, using a direct executor may
+   * lead to 10s of µs latency reduction but causes a substantial performance degradation when
+   * misused.
    *
    * <p>Calling this method is semantically equivalent to calling {@link #executor(Executor)} and
    * passing in a direct executor. However, this is the preferred way as it may allow the transport
@@ -108,7 +109,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T directExecutor();
 
   /**
-   * Provides a custom executor.
+   * Set the default executor for callbacks. This is used for async and future stub callbacks, but
+   * can be overridden by {@link CallOptions#withExecutor} and {@code stub.withExecutor()}. Blocking
+   * stubs specify a per-RPC executor. This is also used for {@link
+   * ManagedChannel#notifyWhenStateChanged}.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
@@ -664,6 +668,23 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public <X> T setNameResolverArg(NameResolver.Args.Key<X> key, X value) {
     throw new UnsupportedOperationException();
+  }
+
+
+  /**
+   * Sets a configurator that will be applied to all internal child channels created by this
+   * channel.
+   *
+   * <p>This allows injecting universal configuration (like interceptors)
+   * into auxiliary channels created by gRPC infrastructure, such as xDS control plane connections.
+   *
+   * @param channelConfigurator the configurator to apply.
+   * @return this
+   * @since 1.83.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12574")
+  public T childChannelConfigurator(ChannelConfigurator channelConfigurator) {
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   /**

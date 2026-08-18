@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
 /**
  * Executes compiled CEL expressions that extract a string.
  */
-public final class CelStringExtractor {
+final class CelStringExtractor {
   private final CelRuntime.Program program;
   @Nullable
   private final String defaultValue;
@@ -40,7 +40,7 @@ public final class CelStringExtractor {
    * Compiles the AST into a CelStringExtractor with an optional default value.
    * Throws an Exception if evaluation fails during compilation setup.
    */
-  public static CelStringExtractor compile(CelAbstractSyntaxTree ast, @Nullable String defaultValue)
+  static CelStringExtractor compile(CelAbstractSyntaxTree ast, @Nullable String defaultValue)
       throws CelEvaluationException {
     if (ast.getResultType() != SimpleType.STRING && ast.getResultType() != SimpleType.DYN) {
       throw new IllegalArgumentException(
@@ -55,7 +55,7 @@ public final class CelStringExtractor {
    * Compiles the AST into a CelStringExtractor with no default value.
    * Throws an Exception if evaluation fails during compilation setup.
    */
-  public static CelStringExtractor compile(CelAbstractSyntaxTree ast)
+  static CelStringExtractor compile(CelAbstractSyntaxTree ast)
       throws CelEvaluationException {
     return compile(ast, null);
   }
@@ -65,7 +65,7 @@ public final class CelStringExtractor {
    * Returns the default value if the result is not a string or if evaluation
    * fails.
    */
-  public String extract(Object input) throws CelEvaluationException {
+  String extract(Object input) throws CelEvaluationException {
     if (input instanceof CelVariableResolver) {
       try {
         Object result = program.eval((CelVariableResolver) input);

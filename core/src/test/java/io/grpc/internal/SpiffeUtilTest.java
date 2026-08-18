@@ -230,6 +230,9 @@ public class SpiffeUtilTest {
     private static final String SPIFFE_TRUST_BUNDLE_DUPLICATES = "spiffebundle_duplicates.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_ROOT = "spiffebundle_wrong_root.json";
     private static final String SPIFFE_TRUST_BUNDLE_WRONG_SEQ = "spiffebundle_wrong_seq_type.json";
+    private static final String SPIFFE_TRUST_BUNDLE_MISSING_X5C = "spiffebundle_missing_x5c.json";
+    private static final String SPIFFE_TRUST_BUNDLE_EMPTY_X5C = "spiffebundle_empty_x5c.json";
+    private static final String SPIFFE_TRUST_BUNDLE_IGNORED_KEYS = "spiffebundle_ignored_keys.json";
     private static final String DOMAIN_ERROR_MESSAGE =
         " Certificate loading for trust domain 'google.com' failed.";
 
@@ -330,6 +333,54 @@ public class SpiffeUtilTest {
     }
 
     @Test
+    public void loadTrustBundleFromFileWithMultiCertsSuccessTest() throws Exception {
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(
+          copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTS));
+      assertEquals(1, tb.getSequenceNumbers().size());
+      assertEquals(123L, (long) tb.getSequenceNumbers().get("google.com"));
+      assertEquals(1, tb.getBundleMap().size());
+      assertEquals(1, tb.getBundleMap().get("google.com").size());
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(
+          tb.getBundleMap().get("google.com").toArray(new X509Certificate[0]));
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileWithMissingX5cSuccessTest() throws Exception {
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(
+          copyFileToTmp(SPIFFE_TRUST_BUNDLE_MISSING_X5C));
+      assertEquals(1, tb.getBundleMap().size());
+      assertEquals(1, tb.getBundleMap().get("google.com").size());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileWithEmptyX5cSuccessTest() throws Exception {
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(
+          copyFileToTmp(SPIFFE_TRUST_BUNDLE_EMPTY_X5C));
+      assertEquals(1, tb.getBundleMap().size());
+      assertEquals(1, tb.getBundleMap().get("google.com").size());
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(
+          tb.getBundleMap().get("google.com").toArray(new X509Certificate[0]));
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+    }
+
+    @Test
+    public void loadTrustBundleFromFileWithIgnoredKeysSuccessTest() throws Exception {
+      SpiffeBundle tb = SpiffeUtil.loadTrustBundleFromFile(
+          copyFileToTmp(SPIFFE_TRUST_BUNDLE_IGNORED_KEYS));
+      assertEquals(1, tb.getSequenceNumbers().size());
+      assertEquals(123L, (long) tb.getSequenceNumbers().get("google.com"));
+      assertEquals(1, tb.getBundleMap().size());
+      assertEquals(1, tb.getBundleMap().get("google.com").size());
+      Optional<SpiffeId> spiffeId = SpiffeUtil.extractSpiffeId(
+          tb.getBundleMap().get("google.com").toArray(new X509Certificate[0]));
+      assertTrue(spiffeId.isPresent());
+      assertEquals("foo.bar.com", spiffeId.get().getTrustDomain());
+    }
+
+    @Test
     public void loadTrustBundleFromFileFailureTest() {
       // Check the exception if JSON root element is different from 'trust_domains'
       NullPointerException npe = assertThrows(NullPointerException.class, () -> SpiffeUtil
@@ -366,11 +417,6 @@ public class SpiffeUtilTest {
           .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_USE)));
       assertEquals("'use' parameter must be 'x509-svid' but 'i_am_not_x509-svid' found."
           + DOMAIN_ERROR_MESSAGE, iae.getMessage());
-      // Check the exception if multiple certs are provided for 'x5c'
-      iae = assertThrows(IllegalArgumentException.class, () -> SpiffeUtil
-          .loadTrustBundleFromFile(copyFileToTmp(SPIFFE_TRUST_BUNDLE_WRONG_MULTI_CERTS)));
-      assertEquals("Exactly 1 certificate is expected, but 2 found." + DOMAIN_ERROR_MESSAGE,
-          iae.getMessage());
     }
 
     @Test

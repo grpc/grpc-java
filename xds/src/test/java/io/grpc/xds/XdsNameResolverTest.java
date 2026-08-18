@@ -47,6 +47,7 @@ import com.google.protobuf.util.Durations;
 import com.google.re2j.Pattern;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ChannelConfigurator;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
@@ -67,6 +68,7 @@ import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.NoopClientCall;
 import io.grpc.NoopClientCall.NoopClientCallListener;
+import io.grpc.ProxyDetector;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
@@ -398,14 +400,15 @@ public class XdsNameResolverTest {
     String serviceAuthority = "[::FFFF:129.144.52.38]:80";
     bootstrapInfo = BootstrapInfo.builder()
         .servers(ImmutableList.of(ServerInfo.create(
-            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false, false)))
+            "td.googleapis.com", InsecureChannelCredentials.create(), true, true, false, false,
+            null)))
         .node(Node.newBuilder().build())
         .authorities(
             ImmutableMap.of(targetAuthority, AuthorityInfo.create(
                 "xdstp://" + targetAuthority + "/envoy.config.listener.v3.Listener/%s?foo=1&bar=2",
                 ImmutableList.of(ServerInfo.create(
                     "td.googleapis.com", InsecureChannelCredentials.create(),
-                    true, true, false, false)))))
+                    true, true, false, false, null)))))
         .build();
     expectedLdsResourceName = "xdstp://xds.authority.com/envoy.config.listener.v3.Listener/"
         + "%5B::FFFF:129.144.52.38%5D:80?bar=2&foo=1"; // query param canonified
@@ -2509,6 +2512,7 @@ public class XdsNameResolverTest {
   private final class FakeXdsClientPoolFactory implements XdsClientPoolFactory {
     Set<String> targets = new HashSet<>();
     XdsClient xdsClient = new FakeXdsClient();
+    ChannelConfigurator savedChannelConfigurator;
 
     @Override
     @Nullable
@@ -2520,6 +2524,25 @@ public class XdsNameResolverTest {
     public ObjectPool<XdsClient> getOrCreate(
         String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder) {
       targets.add(target);
+      return new ObjectPool<XdsClient>() {
+        @Override
+        public XdsClient getObject() {
+          return xdsClient;
+        }
+
+        @Override
+        public XdsClient returnObject(Object object) {
+          return null;
+        }
+      };
+    }
+
+    @Override
+    public ObjectPool<XdsClient> getOrCreate(
+        String target, BootstrapInfo bootstrapInfo, MetricRecorder metricRecorder,
+        ChannelConfigurator channelConfigurator) {
+      targets.add(target);
+      this.savedChannelConfigurator = channelConfigurator;
       return new ObjectPool<XdsClient>() {
         @Override
         public XdsClient getObject() {
@@ -2970,6 +2993,43 @@ public class XdsNameResolverTest {
     void deliverErrorStatus() {
       listener.onClose(Status.UNAVAILABLE, new Metadata());
     }
+  }
+
+  @Test
+  public void start_passesChannelConfiguratorToClientPoolFactory() {
+    ChannelConfigurator channelConfigurator = builder -> { };
+
+    // Build NameResolver.Args containing the channel configurator
+    NameResolver.Args args = NameResolver.Args.newBuilder()
+        .setDefaultPort(8080)
+        .setProxyDetector(mock(ProxyDetector.class))
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(serviceConfigParser)
+        .setChannelLogger(mock(ChannelLogger.class))
+        .setChildChannelConfigurator(channelConfigurator)
+        .build();
+
+    XdsNameResolver resolver = new XdsNameResolver(
+        targetUri,
+        null, // targetAuthority (nullable)
+        AUTHORITY, // name
+        null, // overrideAuthority (nullable)
+        serviceConfigParser,
+        syncContext,
+        scheduler,
+        xdsClientPoolFactory,
+        mockRandom,
+        FilterRegistry.getDefaultRegistry(),
+        rawBootstrap,
+        metricRecorder,
+        args);
+
+    // Start the resolver
+    resolver.start(mockListener);
+
+    assertThat(xdsClientPoolFactory.savedChannelConfigurator).isSameInstanceAs(channelConfigurator);
+
+    resolver.shutdown();
   }
 
   private static class StringMarshaller implements MethodDescriptor.Marshaller<String> {

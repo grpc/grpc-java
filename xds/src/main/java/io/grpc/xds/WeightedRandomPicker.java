@@ -132,7 +132,12 @@ final class WeightedRandomPicker extends SubchannelPicker {
       checkNotNull(childPicker, "childPicker not found");
     }
 
-    return childPicker.pickSubchannel(args);
+    PickResult res = childPicker.pickSubchannel(args);
+    if (!res.hasResult() && res.getDelayType() != null) {
+      return PickResult.withNoResult(res.getDelayType(),
+          "weighted_target: " + (res.getDelayReason() != null ? res.getDelayReason() : ""));
+    }
+    return res;
   }
 
   @Override
