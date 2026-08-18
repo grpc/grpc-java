@@ -1,5 +1,3 @@
-choco feature enable -n allowEmptyChecksums
-
 set RETRY=0
 :install_pkgconfig
 choco install -y pkgconfiglite --allow-empty-checksums --force
