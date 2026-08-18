@@ -61,8 +61,16 @@ final class RlsProtoData {
     /** Returns a map of key values extracted via key builders for the gRPC or HTTP request. */
     abstract ImmutableMap<String, String> keyMap();
 
+    @Nullable
+    abstract String staleHeaderData();
+
+    static RouteLookupRequest create(
+        ImmutableMap<String, String> keyMap, Reason reason, @Nullable String staleHeaderData) {
+      return new AutoValue_RlsProtoData_RouteLookupRequest(reason, keyMap, staleHeaderData);
+    }
+
     static RouteLookupRequest create(ImmutableMap<String, String> keyMap, Reason reason) {
-      return new AutoValue_RlsProtoData_RouteLookupRequest(reason, keyMap);
+      return create(keyMap, reason, null);
     }
   }
 

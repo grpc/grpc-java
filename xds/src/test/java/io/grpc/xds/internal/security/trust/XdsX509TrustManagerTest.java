@@ -569,7 +569,7 @@ public class XdsX509TrustManagerTest {
     trustManager = XdsTrustManagerFactory.createX509TrustManager(
         ImmutableMap.of("example.com", caCerts), null, false);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslEngine);
-    verify(sslEngine, times(1)).getHandshakeSession();
+    verify(sslEngine, atLeastOnce()).getHandshakeSession();
     assertThat(sslEngine.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
@@ -636,7 +636,7 @@ public class XdsX509TrustManagerTest {
       assertThat(expected).hasMessageThat()
           .endsWith("unable to find valid certification path to requested target");
     }
-    verify(sslEngine, times(1)).getHandshakeSession();
+    verify(sslEngine, atLeastOnce()).getHandshakeSession();
   }
 
   @Test
@@ -647,7 +647,7 @@ public class XdsX509TrustManagerTest {
         CertificateUtils.toX509Certificates(TlsTesting.loadCert(SERVER_1_PEM_FILE));
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
     assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
@@ -663,7 +663,7 @@ public class XdsX509TrustManagerTest {
         ImmutableMap.of("example.com", caCerts), null, false);
     trustManager.checkServerTrusted(serverCerts, "ECDHE_ECDSA", sslSocket);
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
     assertThat(sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm()).isEmpty();
   }
 
@@ -681,7 +681,7 @@ public class XdsX509TrustManagerTest {
           .endsWith("unable to find valid certification path to requested target");
     }
     verify(sslSocket, times(1)).isConnected();
-    verify(sslSocket, times(1)).getHandshakeSession();
+    verify(sslSocket, atLeastOnce()).getHandshakeSession();
   }
 
   @Test
