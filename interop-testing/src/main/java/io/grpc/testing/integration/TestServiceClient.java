@@ -78,7 +78,6 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -230,9 +229,9 @@ public class TestServiceClient {
         numThreads = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
-      } else if ("enable_opentelemetry".equals(key) || "enable_otel_tracing".equals(key)) {
+      } else if ("enable_opentelemetry".equals(key)) {
         enableOpentelemetry = Boolean.parseBoolean(value);
-      } else if ("otel_collector_address".equals(key) || "otlp_collector_address".equals(key)) {
+      } else if ("otel_collector_address".equals(key)) {
         otelCollectorAddress = value;
       } else {
         System.err.println("Unknown argument: " + key);
