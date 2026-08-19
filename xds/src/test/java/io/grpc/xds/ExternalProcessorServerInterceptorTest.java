@@ -8671,6 +8671,130 @@ public class ExternalProcessorServerInterceptorTest {
   }
 
   @Test
+  public void serverInterceptor_immediateResponse_duringResponseHeaders_closesCall()
+      throws Exception {
+    ExternalProcessor proto =
+        createBaseProto(extProcServerName)
+            .setProcessingMode(
+                ProcessingMode.newBuilder()
+                    .setRequestHeaderMode(ProcessingMode.HeaderSendMode.SKIP)
+                    .setResponseHeaderMode(ProcessingMode.HeaderSendMode.SEND)
+                    .build())
+            .build();
+    ConfigOrError<ExternalProcessorFilterConfig> configOrError =
+        provider.parseFilterConfig(Any.pack(proto), filterContext);
+    assertThat(configOrError.errorDetail).isNull();
+    ExternalProcessorFilterConfig filterConfig = configOrError.config;
+
+    final CountDownLatch extProcLatch = new CountDownLatch(1);
+
+    ExternalProcessorGrpc.ExternalProcessorImplBase extProcImpl =
+        new ExternalProcessorGrpc.ExternalProcessorImplBase() {
+          @Override
+          @SuppressWarnings("unchecked")
+          public StreamObserver<ProcessingRequest> process(
+              StreamObserver<ProcessingResponse> responseObserver) {
+            ((ServerCallStreamObserver<ProcessingResponse>) responseObserver).request(100);
+            return new StreamObserver<ProcessingRequest>() {
+              @Override
+              public void onNext(ProcessingRequest request) {
+                if (request.hasResponseHeaders()) {
+                  responseObserver.onNext(
+                      ProcessingResponse.newBuilder()
+                          .setImmediateResponse(
+                              io.envoyproxy.envoy.service.ext_proc.v3.ImmediateResponse.newBuilder()
+                                  .setGrpcStatus(
+                                      io.envoyproxy.envoy.service.ext_proc.v3.GrpcStatus
+                                          .newBuilder()
+                                          .setStatus(Status.UNAUTHENTICATED.getCode().value())
+                                          .build())
+                                  .setDetails("Immediate Auth Failure on Response Headers")
+                                  .build())
+                          .build());
+                  responseObserver.onCompleted();
+                  extProcLatch.countDown();
+                }
+              }
+
+              @Override
+              public void onError(Throwable t) {}
+
+              @Override
+              public void onCompleted() {}
+            };
+          }
+        };
+
+    grpcCleanup.register(
+        InProcessServerBuilder.forName(extProcServerName)
+            .addService(extProcImpl)
+            .directExecutor()
+            .build()
+            .start());
+
+    CachedChannelManager channelManager =
+        new CachedChannelManager(
+            config ->
+                grpcCleanup.register(
+                    InProcessChannelBuilder.forName(extProcServerName).directExecutor().build()));
+
+    ExternalProcessorServerInterceptor interceptor =
+        new ExternalProcessorServerInterceptor(filterConfig, channelManager, FAKE_CONTEXT);
+
+    dataPlaneHandler =
+        new DataPlaneServiceHandler() {
+          @Override
+          public void sayHello(InputStream request, StreamObserver<InputStream> responseObserver) {
+            // Send a message, which triggers response headers
+            responseObserver.onNext(request);
+            // Don't complete yet, we expect to be aborted
+          }
+        };
+
+    startDataPlane(interceptor);
+
+    io.grpc.ClientCall<InputStream, InputStream> clientCall =
+        dataPlaneChannel.newCall(METHOD_SAY_HELLO_RAW, io.grpc.CallOptions.DEFAULT);
+
+    final CountDownLatch callCompletedLatch = new CountDownLatch(1);
+    final AtomicReference<Status> closedStatus = new AtomicReference<>();
+    final List<String> clientEvents = Collections.synchronizedList(new ArrayList<>());
+    clientCall.start(
+        new io.grpc.ClientCall.Listener<InputStream>() {
+          @Override
+          public void onHeaders(Metadata headers) {
+            clientEvents.add("HEADERS");
+          }
+
+          @Override
+          public void onMessage(InputStream message) {
+            clientEvents.add("MESSAGE");
+          }
+
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            closedStatus.set(status);
+            clientEvents.add("CLOSE:" + status.getCode());
+            callCompletedLatch.countDown();
+          }
+        },
+        new Metadata());
+
+    clientCall.request(1);
+    clientCall.sendMessage(new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8)));
+    clientCall.halfClose();
+
+    assertThat(extProcLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(callCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(closedStatus.get().getCode()).isEqualTo(Status.Code.UNAUTHENTICATED);
+    assertThat(closedStatus.get().getDescription()).isEqualTo("Immediate Auth Failure on Response Headers");
+    // Client should NOT receive HEADERS or MESSAGE because it was aborted during response headers
+    assertThat(clientEvents).containsExactly("CLOSE:UNAUTHENTICATED");
+    
+    channelManager.close();
+  }
+
+  @Test
   public void serverInterceptor_immediateResponseDisabled_whenReceived_thenStreamErrored()
       throws Exception {
     ExternalProcessor proto =

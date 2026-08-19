@@ -334,7 +334,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     final AtomicReference<ExtProcStreamState> extProcStreamState =
         new AtomicReference<>(ExtProcStreamState.ACTIVE);
     final AtomicBoolean passThroughMode = new AtomicBoolean(false);
-    final AtomicBoolean halfClosed = new AtomicBoolean(false);
     final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
     final AtomicBoolean dataPlaneCallClosed = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
@@ -1717,7 +1716,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         return;
       }
       dataPlaneServerCall.clientHalfCloseStartNanos = System.nanoTime();
-      dataPlaneServerCall.halfClosed.set(true);
       halfCloseReceived = true;
       if (dataPlaneServerCall.isExtProcStreamDraining()) {
         return;
