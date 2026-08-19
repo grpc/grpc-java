@@ -29,13 +29,11 @@ import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
 import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
-import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.net.InetSocketAddress;
@@ -171,10 +169,6 @@ public class TestServiceServer {
     try {
       if (enableOpentelemetry) {
         AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
-            .addPropagatorCustomizer(
-                (previous, config) ->
-                    TextMapPropagator.composite(
-                        previous, GrpcTraceBinContextPropagator.defaultInstance()))
             .build();
         this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
         GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()

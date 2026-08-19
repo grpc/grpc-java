@@ -58,7 +58,6 @@ import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.GrpcTraceBinContextPropagator;
 import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
@@ -71,7 +70,6 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
-import io.opentelemetry.context.propagation.TextMapPropagator;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import java.io.File;
@@ -321,10 +319,6 @@ public class TestServiceClient {
   void setUp() {
     if (enableOpentelemetry) {
       AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
-          .addPropagatorCustomizer(
-              (previous, config) ->
-                  TextMapPropagator.composite(
-                      previous, GrpcTraceBinContextPropagator.defaultInstance()))
           .build();
       this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
       GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
