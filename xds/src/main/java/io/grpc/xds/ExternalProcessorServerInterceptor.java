@@ -57,7 +57,6 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.stub.ClientCallStreamObserver;
@@ -88,17 +87,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Server-side interceptor for external processing filter.
  */
 final class ExternalProcessorServerInterceptor implements ServerInterceptor {
-  private static final Logger logger = Logger.getLogger(
-      ExternalProcessorServerInterceptor.class.getName());
 
   @VisibleForTesting
   static DoubleHistogramMetricInstrument clientHeadersDuration;
@@ -118,7 +112,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       5d,     10d,      20d,      50d,     100d);
 
   static {
-    initMetricInstruments();
+     initMetricInstruments();
   }
 
   public static synchronized void initMetricInstruments() {
@@ -251,8 +245,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     final Object streamLock = new Object();
     private final Queue<EventType> expectedResponses = new ConcurrentLinkedQueue<>();
     private volatile ClientCallStreamObserver<ProcessingRequest> extProcClientCallRequestObserver;
-    private final Queue<InputStream> pendingDrainingMessages = new ConcurrentLinkedQueue<>();
-    private final Queue<InputStream> savedOutgoingMessages = new ConcurrentLinkedQueue<>();
+    private final Queue<InputStream> pendingDrainingOutgoingMessages = new ConcurrentLinkedQueue<>();
+    private final Queue<InputStream> savedOutgoingMessagesAwaitingHeaderMutation = new ConcurrentLinkedQueue<>();
     private volatile DataPlaneServerListener wrappedListener;
     private final HeaderMutationFilter mutationFilter;
     private final HeaderMutator mutator = HeaderMutator.create();
@@ -294,11 +288,12 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     @GuardedBy("streamLock")
     private long sidestreamToDownstreamWindow = DEFAULT_INITIAL_WINDOW_SIZE;
 
-    // Path 1: Pending/buffered request body messages from client to send to ext_proc
+    // Path 1 flow control: Pending/buffered request body messages from client to send to
+    // ext_proc
     @GuardedBy("streamLock")
     final Queue<ByteString> pendingRequestBodyMessages = new ConcurrentLinkedQueue<>();
 
-    // Path 2: Buffered mutated request bodies from ext_proc to deliver to App
+    // Path 2 flow control: Buffered mutated request bodies from ext_proc to deliver to App
     @GuardedBy("streamLock")
     final Queue<StreamedBodyResponse> pendingMutatedRequestBodies = new ConcurrentLinkedQueue<>();
     @GuardedBy("streamLock")
@@ -306,13 +301,13 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     @GuardedBy("streamLock")
     private final AtomicInteger pendingTransportRequests = new AtomicInteger(0);
 
-    // Path 3: Pending/buffered response body messages from App to send to ext_proc
+    // Path 3 flow control: Pending/buffered response body messages from App to send to ext_proc
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingResponseBodyMessages = new ConcurrentLinkedQueue<>();
     @GuardedBy("streamLock")
     private final AtomicBoolean pendingClose = new AtomicBoolean(false);
 
-    // Path 4: Buffered mutated response bodies from ext_proc to send to client transport
+    // Path 4 flow control: Buffered mutated response bodies from ext_proc to send to client transport
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingDownstreamBodyMessages = new ConcurrentLinkedQueue<>();
 
@@ -577,12 +572,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
         if (requestToSend.hasRequestHeaders()) {
           expectedResponses.add(EventType.REQUEST_HEADERS);
-        } else if (requestToSend.hasRequestBody()) {
-          expectedResponses.add(EventType.REQUEST_BODY);
         } else if (requestToSend.hasResponseHeaders()) {
           expectedResponses.add(EventType.RESPONSE_HEADERS);
-        } else if (requestToSend.hasResponseBody()) {
-          expectedResponses.add(EventType.RESPONSE_BODY);
         } else if (requestToSend.hasResponseTrailers()) {
           expectedResponses.add(EventType.RESPONSE_TRAILERS);
         }
@@ -750,12 +741,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         EventType received = null;
         if (response.hasRequestHeaders()) {
           received = EventType.REQUEST_HEADERS;
-        } else if (response.hasRequestBody()) {
-          received = EventType.REQUEST_BODY;
         } else if (response.hasResponseHeaders()) {
           received = EventType.RESPONSE_HEADERS;
-        } else if (response.hasResponseBody()) {
-          received = EventType.RESPONSE_BODY;
         } else if (response.hasResponseTrailers()) {
           received = EventType.RESPONSE_TRAILERS;
         }
@@ -769,6 +756,20 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             return;
           }
           expectedResponses.poll();
+        } else if (response.hasRequestBody()) {
+          if (expected == EventType.REQUEST_HEADERS) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("Protocol error: received request_body before request_headers response.")
+                .asRuntimeException());
+            return;
+          }
+        } else if (response.hasResponseBody()) {
+          if (expected == EventType.RESPONSE_HEADERS) {
+            internalOnError(Status.UNAVAILABLE
+                .withDescription("Protocol error: received response_body before headers response.")
+                .asRuntimeException());
+            return;
+          }
         }
 
         if (response.getRequestDrain()) {
@@ -1004,7 +1005,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           proceedWithSendHeaders(savedResponseHeaders);
           savedResponseHeaders = null;
           InputStream msg;
-          while ((msg = savedOutgoingMessages.poll()) != null) {
+          while ((msg = savedOutgoingMessagesAwaitingHeaderMutation.poll()) != null) {
             sendMessage(msg);
           }
           if (savedStatus != null) {
@@ -1043,9 +1044,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           if (passThroughMode.get()) {
             sendRawImmediately = true;
           } else if (savedResponseHeaders != null) {
-            savedOutgoingMessages.add(new KnownLengthInputStream(bodyByteString));
+            savedOutgoingMessagesAwaitingHeaderMutation.add(new KnownLengthInputStream(bodyByteString));
           } else if (isExtProcStreamDraining() || isExtProcStreamCompleted()) {
-            pendingDrainingMessages.add(new KnownLengthInputStream(bodyByteString));
+            pendingDrainingOutgoingMessages.add(new KnownLengthInputStream(bodyByteString));
           } else if (currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.NONE) {
             sendRawImmediately = true;
           } else if (config.getObservabilityMode()) {
@@ -1263,6 +1264,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             sidestreamToUpstreamWindow -= bodySize;
           }
           deliverRequestBody(streamed);
+          trySendAccumulatedWindowUpdates();
         }
       }
     }
@@ -1277,10 +1279,19 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     int drainPendingMutatedRequestBodies() {
       List<StreamedBodyResponse> toDeliver = new ArrayList<>();
       synchronized (streamLock) {
-        while (pendingAppRequests.get() > 0 && !pendingMutatedRequestBodies.isEmpty()) {
-          StreamedBodyResponse streamed = pendingMutatedRequestBodies.poll();
-          pendingAppRequests.decrementAndGet();
-          toDeliver.add(streamed);
+        while (true) {
+          if (pendingMutatedRequestBodies.isEmpty()) {
+            break;
+          }
+          StreamedBodyResponse peeked = pendingMutatedRequestBodies.peek();
+          if (peeked.getEndOfStreamWithoutMessage()) {
+            toDeliver.add(pendingMutatedRequestBodies.poll());
+          } else if (pendingAppRequests.get() > 0) {
+            pendingAppRequests.decrementAndGet();
+            toDeliver.add(pendingMutatedRequestBodies.poll());
+          } else {
+            break;
+          }
         }
       }
       for (StreamedBodyResponse streamed : toDeliver) {
@@ -1319,6 +1330,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             sidestreamToDownstreamWindow -= bodySize;
           }
           deliverResponseBodyToClient(body);
+          trySendAccumulatedWindowUpdates();
         }
       }
     }
@@ -1390,10 +1402,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       closeExtProcStream();
     }
 
-    private void drainPendingDrainingMessages() {
+    private void drainPendingDrainingOutgoingMessages() {
       synchronized (streamLock) {
         InputStream msg;
-        while ((msg = pendingDrainingMessages.poll()) != null) {
+        while ((msg = pendingDrainingOutgoingMessages.poll()) != null) {
           super.sendMessage(msg);
         }
         passThroughMode.set(true);
@@ -1451,22 +1463,22 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             isByteString = true;
           } else if (super.isReady() && pendingDownstreamBodyMessages.isEmpty()
               && pendingResponseBodyMessages.isEmpty()
-              && !savedOutgoingMessages.isEmpty()) {
-            msg = savedOutgoingMessages.poll();
+              && !savedOutgoingMessagesAwaitingHeaderMutation.isEmpty()) {
+            msg = savedOutgoingMessagesAwaitingHeaderMutation.poll();
             isByteString = false;
           } else if (super.isReady() && pendingDownstreamBodyMessages.isEmpty()
               && pendingResponseBodyMessages.isEmpty()
-              && savedOutgoingMessages.isEmpty()
-              && !pendingDrainingMessages.isEmpty()) {
-            msg = pendingDrainingMessages.poll();
+              && savedOutgoingMessagesAwaitingHeaderMutation.isEmpty()
+              && !pendingDrainingOutgoingMessages.isEmpty()) {
+            msg = pendingDrainingOutgoingMessages.poll();
             isByteString = false;
           }
 
           if (msg == null) {
             if (pendingDownstreamBodyMessages.isEmpty()
                 && pendingResponseBodyMessages.isEmpty()
-                && savedOutgoingMessages.isEmpty()
-                && pendingDrainingMessages.isEmpty()) {
+                && savedOutgoingMessagesAwaitingHeaderMutation.isEmpty()
+                && pendingDrainingOutgoingMessages.isEmpty()) {
               passThroughMode.set(true);
               if (pendingClose.get()) {
                 triggerClose = true;
@@ -1535,7 +1547,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     void unblockAfterStreamComplete() {
       proceedWithSendHeaders();
-      drainPendingDrainingMessages();
+      drainPendingDrainingOutgoingMessages();
       wrappedListener.drainSavedMessages();
       wrappedListener.onReadyNotify();
       proceedWithClose();
