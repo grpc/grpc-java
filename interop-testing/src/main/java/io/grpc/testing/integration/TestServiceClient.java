@@ -72,11 +72,14 @@ import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -143,6 +146,7 @@ public class TestServiceClient {
   private int soakResponseSize = 314159;
   private int numThreads = 1;
   private String additionalMetadata = "";
+  private String otelCollectorAddress;
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -226,8 +230,10 @@ public class TestServiceClient {
         numThreads = Integer.parseInt(value);
       } else if ("additional_metadata".equals(key)) {
         additionalMetadata = value;
-      } else if ("enable_opentelemetry".equals(key)) {
+      } else if ("enable_opentelemetry".equals(key) || "enable_otel_tracing".equals(key)) {
         enableOpentelemetry = Boolean.parseBoolean(value);
+      } else if ("otel_collector_address".equals(key) || "otlp_collector_address".equals(key)) {
+        otelCollectorAddress = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -318,8 +324,20 @@ public class TestServiceClient {
   @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void setUp() {
     if (enableOpentelemetry) {
-      AutoConfiguredOpenTelemetrySdk autoSdk = AutoConfiguredOpenTelemetrySdk.builder()
-          .build();
+      AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
+          AutoConfiguredOpenTelemetrySdk.builder();
+      Map<String, String> properties = new HashMap<>();
+      properties.put("otel.traces.exporter", "otlp");
+      properties.put("otel.bsp.schedule.delay", "100");
+      if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
+        String endpoint = otelCollectorAddress;
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+          endpoint = "http://" + endpoint;
+        }
+        properties.put("otel.exporter.otlp.endpoint", endpoint);
+      }
+      sdkBuilder.addPropertiesSupplier(() -> properties);
+      AutoConfiguredOpenTelemetrySdk autoSdk = sdkBuilder.build();
       this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
       GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
           .sdk(openTelemetrySdk)
