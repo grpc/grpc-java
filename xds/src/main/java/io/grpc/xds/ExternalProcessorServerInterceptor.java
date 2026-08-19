@@ -343,6 +343,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     final AtomicBoolean responseHeadersSent = new AtomicBoolean(false);
     final AtomicBoolean trailersOnly = new AtomicBoolean(false);
     final AtomicBoolean terminationTriggered = new AtomicBoolean(false);
+    private final AtomicBoolean closeCalled = new AtomicBoolean(false);
 
     protected DataPlaneServerCall(
         ServerCall<InputStream, InputStream> rawCall,
@@ -441,8 +442,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         metricsRecorder.recordDoubleHistogram(
             instrument,
             durationSecs,
-            ImmutableList.of("server"),
-            ImmutableList.of("server"));
+            ImmutableList.of(),
+            ImmutableList.of());
       }
     }
 
@@ -1080,6 +1081,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public void close(Status status, Metadata trailers) {
+      if (!closeCalled.compareAndSet(false, true)) {
+        return;
+      }
       serverTrailersStartNanos = System.nanoTime();
       if (isExtProcStreamFailed()
           && !config.getObservabilityMode()
