@@ -27,6 +27,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -275,6 +276,160 @@ public class CachingRlsLbClientTest {
 
     inOrder.verifyNoMoreInteractions();
   }
+
+  @Test
+  public void asyncRefresh_sendsStaleHeaderData() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(ImmutableList.of("target"), "stale-header-v1")));
+
+    // Initial lookup: cache miss
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.isPending()).isTrue();
+
+    // RLS server response arrives
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+    resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isTrue();
+    assertThat(resp.getHeaderData()).isEqualTo("stale-header-v1");
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
+
+    // Advance fake clock past staleAge
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
+
+    rlsServerImpl.routeLookupReason = null;
+    rlsServerImpl.routeLookupStaleHeaderData = null;
+
+    // Lookup on stale entry: returns cached response immediately
+    resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isTrue();
+    assertThat(resp.getHeaderData()).isEqualTo("stale-header-v1");
+
+    // Async refresh finishes
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_STALE);
+    assertThat(rlsServerImpl.routeLookupStaleHeaderData).isEqualTo("stale-header-v1");
+  }
+
+  @Test
+  public void updatedHeaderData_replacesCachedHeaderData() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(ImmutableList.of("target"), "stale-header-v1")));
+
+    // Initial lookup
+    getInSyncContext(routeLookupRequestKey);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    // RLS server updated to return new header data
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(ImmutableList.of("target"), "updated-header-v2")));
+
+    // Advance fake clock past staleAge
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
+
+    // Stale lookup triggers background refresh
+    getInSyncContext(routeLookupRequestKey);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    // Verify cache entry is updated with new header data
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.getHeaderData()).isEqualTo("updated-header-v2");
+
+    // Advance past staleAge again
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.staleAgeInNanos(), TimeUnit.NANOSECONDS);
+    rlsServerImpl.routeLookupStaleHeaderData = null;
+
+    // Next stale refresh sends updated stale_header_data
+    getInSyncContext(routeLookupRequestKey);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    assertThat(rlsServerImpl.routeLookupStaleHeaderData).isEqualTo("updated-header-v2");
+  }
+
+  @Test
+  public void expiredEntry_cacheMiss_clearsStaleHeaderData() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "foo", "method-key", "bar"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(ImmutableList.of("target"), "stale-header-v1")));
+
+    // Initial lookup
+    getInSyncContext(routeLookupRequestKey);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    // Advance fake clock past maxAge (expiration)
+    fakeClock.forwardTime(ROUTE_LOOKUP_CONFIG.maxAgeInNanos(), TimeUnit.NANOSECONDS);
+
+    rlsServerImpl.routeLookupReason = null;
+    rlsServerImpl.routeLookupStaleHeaderData = null;
+
+    // Expired entry triggers cache miss
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.isPending()).isTrue();
+
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    assertThat(rlsServerImpl.routeLookupReason).isEqualTo(
+        io.grpc.lookup.v1.RouteLookupRequest.Reason.REASON_MISS);
+    assertThat(rlsServerImpl.routeLookupStaleHeaderData).isEmpty();
+  }
+
+  @Test
+  public void rlsPicker_attachesHeaderDataToPickedRpcs() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "service1",
+                "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(
+                ImmutableList.of("primary.cloudbigtable.googleapis.com"),
+                "header-rls-data-value")));
+
+    // Populate cache and wait for server response
+    getInSyncContext(routeLookupRequestKey);
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, times(3))
+        .updateBalancingState(any(ConnectivityState.class), pickerCaptor.capture());
+
+    Metadata headers = new Metadata();
+    headers.put(RLS_DATA_KEY, "old-header-data");
+
+    PickResult pickResult = getPickResultForCreate(pickerCaptor, headers);
+
+    assertThat(pickResult.getStatus().isOk()).isTrue();
+    assertThat(headers.get(RLS_DATA_KEY)).isEqualTo("header-rls-data-value");
+  }
+
 
   @Test
   public void rls_withCustomRlsChannelServiceConfig() throws Exception {
@@ -605,6 +760,70 @@ public class CachingRlsLbClientTest {
     assertThat(pickResult.getStatus().getDescription()).contains("fallback not available");
     assertThat(fakeThrottler.getNumThrottled()).isEqualTo(1);
     assertThat(fakeThrottler.getNumUnthrottled()).isEqualTo(1);
+  }
+
+  @Test
+  public void rls_pendingLookup_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper)
+        .updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("service1/create").build(),
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
+    assertThat(pickResult.getDelayType()).isEqualTo("rls_lookup_pending");
+    assertThat(pickResult.getDelayReason()).contains("Route Lookup Service query pending");
+  }
+
+  @Test
+  public void rls_childPolicyDelayed_returnsDelayAttributes() throws Exception {
+    setUpRlsLbClient();
+    RlsProtoData.RouteLookupRequestKey routeLookupRequestKey =
+        RlsProtoData.RouteLookupRequestKey.create(
+            ImmutableMap.of(
+                "server", "bigtable.googleapis.com", "service-key", "service1",
+                "method-key", "create"));
+    rlsServerImpl.setLookupTable(
+        ImmutableMap.of(
+            routeLookupRequestKey,
+            RouteLookupResponse.create(
+                ImmutableList.of("target1"), "header")));
+
+    CachedRouteLookupResponse resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isFalse();
+    fakeClock.forwardTime(SERVER_LATENCY_MILLIS, TimeUnit.MILLISECONDS);
+
+    resp = getInSyncContext(routeLookupRequestKey);
+    assertThat(resp.hasData()).isTrue();
+
+    LbPolicyConfiguration.ChildPolicyWrapper wrapper = resp.getChildPolicyWrapper();
+    wrapper.getHelper().updateBalancingState(ConnectivityState.CONNECTING, new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(LoadBalancer.PickSubchannelArgs args) {
+        return PickResult.withNoResult("connecting", "TCP handshake in progress");
+      }
+    });
+
+    ArgumentCaptor<SubchannelPicker> pickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper, atLeastOnce())
+        .updateBalancingState(any(), pickerCaptor.capture());
+    PickResult pickResult = pickerCaptor.getValue().pickSubchannel(
+        new PickSubchannelArgsImpl(
+            TestMethodDescriptors.voidMethod().toBuilder()
+                .setFullMethodName("service1/create").build(),
+            new Metadata(),
+            CallOptions.DEFAULT,
+            new PickDetailsConsumer() {}));
+    assertThat(pickResult.hasResult()).isFalse();
+    assertThat(pickResult.getDelayType()).isEqualTo("connecting");
+    assertThat(pickResult.getDelayReason()).isEqualTo(
+        "RLS child (target1) delayed: TCP handshake in progress");
   }
 
   @Test
@@ -1055,6 +1274,7 @@ public class CachingRlsLbClientTest {
     private Map<RlsProtoData.RouteLookupRequestKey, RouteLookupResponse> lookupTable =
         ImmutableMap.of();
     io.grpc.lookup.v1.RouteLookupRequest.Reason routeLookupReason;
+    String routeLookupStaleHeaderData;
 
     public StaticFixedDelayRlsServerImpl(
         long responseDelayNano, ScheduledExecutorService scheduledExecutorService) {
@@ -1078,6 +1298,7 @@ public class CachingRlsLbClientTest {
                 @Override
                 public void run() {
                   routeLookupReason = request.getReason();
+                  routeLookupStaleHeaderData = request.getStaleHeaderData();
                   RouteLookupResponse response =
                       lookupTable.get(
                           RlsProtoData.RouteLookupRequestKey.create(

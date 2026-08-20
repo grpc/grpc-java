@@ -15,14 +15,14 @@ pluginManagement {
     plugins {
         // https://developer.android.com/build/releases/gradle-plugin
         // 8+ has many changes: https://github.com/grpc/grpc-java/issues/10152
-        id "com.android.application" version "7.4.1"
-        id "com.android.library" version "7.4.1"
+        id "com.android.application" version "7.4.2"
+        id "com.android.library" version "7.4.2"
 	// https://github.com/kt3k/coveralls-gradle-plugin/tags
         id "com.github.kt3k.coveralls" version "2.12.2"
 	// https://github.com/GoogleCloudPlatform/appengine-plugins/releases
         id "com.google.cloud.tools.appengine" version "2.8.7"
         // https://github.com/GoogleContainerTools/jib/blob/master/jib-gradle-plugin/CHANGELOG.md
-        id "com.google.cloud.tools.jib" version "3.5.3"
+        id "com.google.cloud.tools.jib" version "3.5.4"
 	// https://github.com/google/osdetector-gradle-plugin/tags
         id "com.google.osdetector" version "1.7.3"
         // https://github.com/google/protobuf-gradle-plugin/releases
@@ -33,7 +33,7 @@ pluginManagement {
         // 8.3.1 breaks apache imports for netty/shaded, fixed in 8.3.2
         id "com.gradleup.shadow" version "8.3.0"
         // https://github.com/melix/japicmp-gradle-plugin/blob/master/CHANGELOG.txt
-        id "me.champeau.gradle.japicmp" version "0.4.2"
+        id "me.champeau.gradle.japicmp" version "0.4.6"
         // https://github.com/melix/jmh-gradle-plugin/releases
         id "me.champeau.jmh" version "0.7.3"
         // https://github.com/tbroyer/gradle-errorprone-plugin/releases

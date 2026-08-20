@@ -251,6 +251,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
   @GuardedBy("this")
   abstract void notifyTerminated();
 
+  void notifyTerminatedUnlocked() {}
+
   void releaseExecutors() {
     executorServicePool.returnObject(scheduledExecutorService);
   }
@@ -334,6 +336,8 @@ public abstract class BinderTransport implements IBinder.DeathRecipient {
               // Not holding any locks here just in case some listener runs on a direct Executor.
               future.cancel(false); // No effect if already isDone().
             }
+
+            notifyTerminatedUnlocked();
 
             synchronized (this) {
               notifyTerminated();

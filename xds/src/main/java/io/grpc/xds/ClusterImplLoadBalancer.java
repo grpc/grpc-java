@@ -196,7 +196,8 @@ final class ClusterImplLoadBalancer extends LoadBalancer {
   private final class ClusterImplLbHelper extends ForwardingLoadBalancerHelper {
     private final AtomicLong inFlights;
     private ConnectivityState currentState = ConnectivityState.IDLE;
-    private SubchannelPicker currentPicker = new FixedResultPicker(PickResult.withNoResult());
+    private SubchannelPicker currentPicker = new FixedResultPicker(
+        PickResult.withNoResult("connecting", "cluster_impl: initializing"));
     private List<DropOverload> dropPolicies = Collections.emptyList();
     private long maxConcurrentRequests = DEFAULT_PER_CLUSTER_MAX_CONCURRENT_REQUESTS;
     @Nullable

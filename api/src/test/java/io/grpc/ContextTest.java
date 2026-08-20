@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -49,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -551,6 +553,75 @@ public class ContextTest {
     assertSame(current, Context.current());
 
     current.detach(Context.ROOT);
+  }
+
+  @Test
+  public void supply_executesSupplierUnderTargetContextAndRestoresPrevious() {
+    Context base = Context.current().withValue(PET, "cat");
+    Context current = Context.current().withValue(PET, "fish");
+    Context toRestore = current.attach();
+
+    final Object ret = new Object();
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        runner.run();
+        return ret;
+      }
+    };
+
+    Object result = base.supply(supplier);
+
+    assertSame(ret, result);
+    assertSame(base, observed);
+    assertSame(current, Context.current());
+
+    current.detach(toRestore);
+  }
+
+  @Test
+  public void supply_whenContextIsAlreadyCurrent_executesAndMaintainsContext() {
+    Context current = Context.current().withValue(PET, "fish");
+    Context toRestore = current.attach();
+
+    final Object ret = new Object();
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        runner.run();
+        return ret;
+      }
+    };
+
+    Object result = current.supply(supplier);
+
+    assertSame(ret, result);
+    assertSame(current, observed);
+    assertSame(current, Context.current());
+
+    current.detach(toRestore);
+  }
+
+  @Test
+  public void supply_whenSupplierThrows_propagatesExceptionAndRestoresPreviousContext() {
+    Context base = Context.current().withValue(PET, "cat");
+    Context current = Context.current().withValue(PET, "fish");
+    Context toRestore = current.attach();
+
+    final TestError err = new TestError();
+    Supplier<Object> supplier = new Supplier<Object>() {
+      @Override
+      public Object get() {
+        throw err;
+      }
+    };
+
+    TestError thrown = assertThrows(TestError.class, () -> base.supply(supplier));
+
+    assertSame(err, thrown);
+    assertSame(current, Context.current());
+
+    current.detach(toRestore);
   }
 
   @Test

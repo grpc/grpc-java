@@ -182,6 +182,50 @@ public class XdsServerWrapperTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  public void testBootstrap_ldsResourceNameResolver() throws Exception {
+    Bootstrapper.BootstrapInfo b =
+        Bootstrapper.BootstrapInfo.builder()
+            .servers(
+                Arrays.asList(
+                    Bootstrapper.ServerInfo.create("uri", InsecureChannelCredentials.create())))
+            .node(EnvoyProtoData.Node.newBuilder().setId("id").build())
+            .serverListenerResourceNameTemplate("grpc/server?udpa.resource.listening_address=%s")
+            .build();
+    XdsClient xdsClient = mock(XdsClient.class);
+    XdsListenerResource listenerResource = XdsListenerResource.getInstance();
+    when(xdsClient.getBootstrapInfo()).thenReturn(b);
+    xdsServerWrapper =
+        new XdsServerWrapper(
+            "[::FFFF:129.144.52.38]:80",
+            mockBuilder,
+            listener,
+            selectorManager,
+            new FakeXdsClientPoolFactory(xdsClient),
+            XdsServerTestHelper.RAW_BOOTSTRAP,
+            addr -> "xdstp://resolved_name/" + addr,
+            filterRegistry);
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  xdsServerWrapper.start();
+                } catch (IOException ex) {
+                  // ignore
+                }
+              }
+            });
+    verify(xdsClient, timeout(5000))
+        .watchXdsResource(
+            eq(listenerResource),
+            eq("xdstp://resolved_name/[::FFFF:129.144.52.38]:80"),
+            any(ResourceWatcher.class),
+            any(SynchronizationContext.class));
+  }
+
+  @Test
   public void testBootstrap_noTemplate() throws Exception {
     Bootstrapper.BootstrapInfo b =
         Bootstrapper.BootstrapInfo.builder()
@@ -441,6 +485,62 @@ public class XdsServerWrapperTest {
       assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
       assertThat(ex).hasCauseThat().hasMessageThat().isEqualTo("server is forcefully shut down");
     }
+  }
+
+  @Test
+  public void shutdownNow_afterShutdown_stillUnblocksStartThread() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdown();
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+      assertThat(ex).hasCauseThat().hasMessageThat().isEqualTo("server is forcefully shut down");
+    }
+  }
+
+  @Test
+  public void shutdownNow_calledTwice_forcefullyShutsDownDelegateOnce() throws Exception {
+    final SettableFuture<Server> start = SettableFuture.create();
+    Executors.newSingleThreadExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                try {
+                  start.set(xdsServerWrapper.start());
+                } catch (Exception ex) {
+                  start.setException(ex);
+                }
+              }
+            });
+    assertThat(xdsClient.ldsResource.get(5, TimeUnit.SECONDS))
+        .isEqualTo("grpc/server?udpa.resource.listening_address=0.0.0.0:1");
+    xdsServerWrapper.shutdownNow();
+    xdsServerWrapper.shutdownNow();
+    try {
+      start.get(5, TimeUnit.SECONDS);
+      fail("should have thrown but not");
+    } catch (ExecutionException ex) {
+      assertThat(ex).hasCauseThat().isInstanceOf(IOException.class);
+    }
+    verify(mockServer, times(1)).shutdownNow();
   }
 
   @Test

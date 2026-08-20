@@ -25,6 +25,7 @@ import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_LDS;
 import static io.grpc.xds.XdsTestControlPlaneService.ADS_TYPE_URL_RDS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -360,6 +361,36 @@ public class CdsLoadBalancer2Test {
     assertThat(this.lastXdsConfig.getClusters()).containsKey(clusterName);
     shutdownLoadBalancer();
     assertThat(this.lastXdsConfig.getClusters()).doesNotContainKey(clusterName);
+  }
+
+  @Test
+  public void discoverDynamicCluster_pending_emitsToken() {
+    String clusterName = "cluster2";
+    CdsConfig cdsConfig = new CdsConfig(clusterName, /*dynamic=*/ true);
+    
+    XdsConfig xdsConfig = new XdsConfig(null, null, null, ImmutableMap.of());
+    
+    loadBalancer.acceptResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Collections.emptyList())
+        .setAttributes(Attributes.newBuilder()
+          .set(XdsAttributes.XDS_CONFIG, xdsConfig)
+          .set(
+              XdsAttributes.XDS_CLUSTER_SUBSCRIPT_REGISTRY,
+              new XdsConfig.XdsClusterSubscriptionRegistry() {
+                @Override
+                public XdsConfig.Subscription subscribeToCluster(String clusterName) {
+                  return mock(XdsConfig.Subscription.class);
+                }
+              })
+          .build())
+        .setLoadBalancingPolicyConfig(cdsConfig)
+        .build());
+        
+    verify(helper).updateBalancingState(eq(ConnectivityState.CONNECTING), pickerCaptor.capture());
+    PickResult result = pickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class));
+    assertThat(result.getDelayType()).isEqualTo("cds_dynamic_discovery");
+    assertThat(result.getDelayReason())
+        .isEqualTo("waiting for CDS resource definition for cluster cluster2");
   }
 
   @Test
@@ -730,6 +761,18 @@ public class CdsLoadBalancer2Test {
         });
     // trigger does not exist timer, so broken config is more obvious
     fakeClock.forwardTime(10, TimeUnit.MINUTES);
+  }
+
+  @Test
+  public void cds_resolutionError_updatesAttemptDelay() {
+    loadBalancer.handleNameResolutionError(
+        Status.UNAVAILABLE.withDescription("cds lookup failed"));
+    verify(helper, atLeastOnce()).updateBalancingState(
+        eq(ConnectivityState.TRANSIENT_FAILURE), pickerCaptor.capture());
+    PickResult pick = pickerCaptor.getValue().pickSubchannel(
+        mock(PickSubchannelArgs.class));
+    assertThat(pick.getStatus().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+    assertThat(pick.getStatus().getDescription()).contains("cds lookup failed");
   }
 
   private static void assertPickerStatus(SubchannelPicker picker, Status expectedStatus)  {

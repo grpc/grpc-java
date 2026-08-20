@@ -107,7 +107,8 @@ final class LazyLoadBalancer extends ForwardingLoadBalancer {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         // activate() is a no-op after shutdown()
         helper.getSynchronizationContext().execute(LazyDelegate.this::activate);
-        return PickResult.withNoResult();
+        return PickResult.withNoResult(
+            "connecting", "lazy: waiting for connection");
       }
     }
   }

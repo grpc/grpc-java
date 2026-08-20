@@ -287,4 +287,174 @@ public class CompositeReadableBufferTest {
 
     assertEquals(value.length(), composite.readableBytes());
   }
+
+  @Test
+  public void coalesceOnMaxSmallBuffers() {
+    composite = new CompositeReadableBuffer();
+    // 1000 1-byte buffers
+    for (int i = 0; i < 1000; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(1, composite.getBufferCount());
+    assertEquals(1000, composite.readableBytes());
+  }
+
+  @Test
+  public void coalesceBeyondMaxSmallBuffers() {
+    composite = new CompositeReadableBuffer();
+    // 1001 1-byte buffers
+    for (int i = 0; i < 1001; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(2, composite.getBufferCount());
+    assertEquals(1001, composite.readableBytes());
+  }
+
+  @Test
+  public void coalesceMultipleBatchesOfSmallBuffers() {
+    composite = new CompositeReadableBuffer();
+    // 2000 1-byte buffers
+    for (int i = 0; i < 2000; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(2, composite.getBufferCount());
+    assertEquals(2000, composite.readableBytes());
+  }
+
+  @Test
+  public void coalesceBeforeLargeBuffer() {
+    composite = new CompositeReadableBuffer();
+    // 500 small frames
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    // 1 large frame
+    composite.addBuffer(ReadableBuffers.wrap(new byte[1024]));
+
+    // The 500 small frames should be coalesced into 1, followed by the 1 large frame
+    assertEquals(2, composite.getBufferCount());
+    assertEquals(1524, composite.readableBytes());
+  }
+
+  @Test
+  public void largeBufferResetsTailSmallBufferCount() {
+    composite = new CompositeReadableBuffer();
+    // Add 1 large buffer
+    composite.addBuffer(ReadableBuffers.wrap(new byte[1024]));
+    assertEquals(1, composite.getBufferCount());
+
+    // Add 999 small buffers right after the large buffer (leaving total small tail at 999)
+    for (int i = 0; i < 999; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+
+    // Since only 999 small buffers are at the tail right after the large buffer,
+    // they must NOT be coalesced yet. Total buffers in queue should be 1 + 999 = 1000.
+    assertEquals(1000, composite.getBufferCount());
+    assertEquals(1024 + 999, composite.readableBytes());
+  }
+
+  @Test
+  public void noCoalesceOnLargeFrames() {
+    composite = new CompositeReadableBuffer();
+    // 1001 1024-byte frames
+    for (int i = 0; i < 1001; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[1024]));
+    }
+    assertEquals(1001, composite.getBufferCount());
+    assertEquals(1001 * 1024, composite.readableBytes());
+  }
+
+  @Test
+  public void skipCoalesceIfMarked() {
+    composite = new CompositeReadableBuffer();
+    composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    composite.mark();
+
+    // Add 1000 more 1-byte buffers, reaching 1001 total
+    for (int i = 0; i < 1000; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+
+    // Should skip coalescing due to marked=true
+    assertEquals(1001, composite.getBufferCount());
+    assertEquals(1001, composite.readableBytes());
+  }
+
+  @Test
+  public void readBytesAdjustsTailSmallBufferCount() {
+    composite = new CompositeReadableBuffer();
+    // Add 500 1-byte buffers
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    // Read 200 buffers via readBytes(int) without mark
+    ReadableBuffer read = composite.readBytes(200);
+    read.close();
+
+    // Now add 500 more 1-byte buffers
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(800, composite.getBufferCount());
+    assertEquals(800, composite.readableBytes());
+  }
+
+  @Test
+  public void advanceBufferAdjustsTailSmallBufferCount() {
+    composite = new CompositeReadableBuffer();
+    // Add 500 1-byte buffers
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    // Read 200 buffers via skipBytes (which calls advanceBuffer)
+    composite.skipBytes(200);
+
+    // Now add 500 more 1-byte buffers
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(800, composite.getBufferCount());
+    assertEquals(800, composite.readableBytes());
+  }
+
+  @Test
+  public void coalesceClosesCoalescedBuffers() {
+    composite = new CompositeReadableBuffer();
+    ReadableBuffer mock1 = mock(ReadableBuffer.class);
+    when(mock1.readableBytes()).thenReturn(1);
+    ReadableBuffer mock2 = mock(ReadableBuffer.class);
+    when(mock2.readableBytes()).thenReturn(1);
+    composite.addBuffer(mock1);
+    composite.addBuffer(mock2);
+
+    // Large buffer triggers coalesce of mock1 and mock2 around line 76
+    composite.addBuffer(ReadableBuffers.wrap(new byte[1024]));
+
+    verify(mock1).close();
+    verify(mock2).close();
+  }
+
+  @Test
+  public void closeResetsTailSmallBufferCount() {
+    composite = new CompositeReadableBuffer();
+    // Add 500 small buffers
+    for (int i = 0; i < 500; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    composite.close();
+    assertEquals(0, composite.getBufferCount());
+
+    // After close(), tailSmallBufferCount should be exactly 0.
+    // Adding 999 (MAX_SMALL_BUFFERS - 1) small buffers right after close should NOT trigger
+    // coalescing, resulting in exactly 999 buffers.
+    for (int i = 0; i < 999; i++) {
+      composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    }
+    assertEquals(999, composite.getBufferCount());
+
+    // Adding the 1000th small buffer should trigger coalescing down to 1 buffer.
+    composite.addBuffer(ReadableBuffers.wrap(new byte[] {1}));
+    assertEquals(1, composite.getBufferCount());
+  }
 }

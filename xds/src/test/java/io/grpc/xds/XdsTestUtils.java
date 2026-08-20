@@ -86,7 +86,7 @@ public class XdsTestUtils {
           + ".HttpConnectionManager";
   static final Bootstrapper.ServerInfo EMPTY_BOOTSTRAPPER_SERVER_INFO =
       Bootstrapper.ServerInfo.create(
-      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false);
+      "td.googleapis.com", InsecureChannelCredentials.create(), false, true, false, false, null);
   static final Bootstrapper.BootstrapInfo EMPTY_BOOTSTRAP =
       Bootstrapper.BootstrapInfo.builder()
           .servers(com.google.common.collect.ImmutableList.of(EMPTY_BOOTSTRAPPER_SERVER_INFO))

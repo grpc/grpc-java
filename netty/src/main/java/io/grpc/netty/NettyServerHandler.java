@@ -103,6 +103,7 @@ import io.perfmark.Tag;
 import io.perfmark.TaskCloseable;
 import java.text.MessageFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -164,6 +165,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       int maxStreams,
       boolean autoFlowControl,
       int flowControlWindow,
+      Set<AsciiString> neverIndexedMetadataKeys,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       int maxMessageSize,
@@ -185,7 +187,10 @@ class NettyServerHandler extends AbstractNettyHandler {
     Http2FrameReader frameReader = new Http2InboundFrameLogger(
         new DefaultHttp2FrameReader(headersDecoder), frameLogger);
     Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
+        NettyClientHandler.sensitivityDetector(neverIndexedMetadataKeys),
+        false,
+        16,
+        Integer.MAX_VALUE);
     Http2FrameWriter frameWriter =
         new Http2OutboundFrameLogger(new DefaultHttp2FrameWriter(encoder), frameLogger);
     return newHandler(
@@ -252,6 +257,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         maxMessageSize);
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
+    connection.remote().maxActiveStreams(maxStreams);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
     dist.minAllocationChunk(MIN_ALLOCATED_CHUNK); // Increased for benchmarks performance.
     DefaultHttp2RemoteFlowController controller =
