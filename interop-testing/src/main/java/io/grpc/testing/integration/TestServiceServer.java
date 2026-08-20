@@ -173,6 +173,7 @@ public class TestServiceServer {
           AutoConfiguredOpenTelemetrySdk.builder();
       Map<String, String> properties = new HashMap<>();
       properties.put("otel.traces.exporter", "otlp");
+      // Reduce BatchSpanProcessor export delay from default 5000ms to 100ms for fast test runs.
       properties.put("otel.bsp.schedule.delay", "100");
       if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
         String endpoint = otelCollectorAddress;
