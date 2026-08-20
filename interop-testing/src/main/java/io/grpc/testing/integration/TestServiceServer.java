@@ -28,25 +28,25 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
-import java.net.InetSocketAddress;
-import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
-import java.util.HashMap;
-import java.util.Map;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Server that manages startup/shutdown of a single {@code TestService}. */
 public class TestServiceServer {
@@ -174,7 +174,9 @@ public class TestServiceServer {
       Map<String, String> properties = new HashMap<>();
       properties.put("otel.traces.exporter", "otlp");
       properties.put("otel.bsp.schedule.delay", "100");
+      if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
         String endpoint = otelCollectorAddress;
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
           endpoint = "http://" + endpoint;
         }
         properties.put("otel.exporter.otlp.endpoint", endpoint);

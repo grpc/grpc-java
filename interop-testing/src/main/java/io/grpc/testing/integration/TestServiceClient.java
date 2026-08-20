@@ -57,6 +57,8 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -68,24 +70,22 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
-import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
-import java.util.HashMap;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -328,7 +328,9 @@ public class TestServiceClient {
       Map<String, String> properties = new HashMap<>();
       properties.put("otel.traces.exporter", "otlp");
       properties.put("otel.bsp.schedule.delay", "100");
+      if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
         String endpoint = otelCollectorAddress;
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
           endpoint = "http://" + endpoint;
         }
         properties.put("otel.exporter.otlp.endpoint", endpoint);
