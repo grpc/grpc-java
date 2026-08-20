@@ -302,6 +302,64 @@ public class NettyClientTransportTest {
     }
   }
 
+  @Test
+  public void networkErrorOverridesGracefulShutdownStatus() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    callMeMaybe(transport.start(clientTransportListener));
+    
+    // 1. Trigger graceful shutdown
+    Status gracefulStatus = Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+    transport.shutdown(gracefulStatus);
+    
+    // 2. Simulate a real network drop (e.g., Connection Reset)
+    java.io.IOException networkCause = new java.io.IOException("Connection reset by peer");
+    transport.channel().pipeline().fireExceptionCaught(networkCause);
+    transport.channel().pipeline().fireChannelInactive();
+
+    // 3. Verify the listener receives the IO error, NOT the graceful status
+    verify(clientTransportListener, timeout(5000)).transportShutdown(
+        org.mockito.ArgumentMatchers.argThat(status -> 
+            status != null && status.getCause() instanceof java.io.IOException
+        ), 
+        org.mockito.ArgumentMatchers.any()
+    );
+  }
+
+  @Test
+  public void activeRpcSeesNetworkErrorNotGracefulShutdownStatus() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator());
+    callMeMaybe(transport.start(clientTransportListener));
+    verify(clientTransportListener, timeout(5000)).transportReady();
+
+    // An RPC that stays open — mirrors the streaming call in the bug report.
+    Rpc rpc = new Rpc(transport);
+
+    // 1. Graceful shutdown, exactly as ManagedChannel.shutdown() triggers it.
+    Status gracefulStatus = Status.UNAVAILABLE.withDescription("Channel shutdown invoked");
+    transport.shutdown(gracefulStatus);
+    // Block until shutdown is actually processed, so channelInactive below can't race ahead of it.
+    verify(clientTransportListener, timeout(5000))
+        .transportShutdown(org.mockito.ArgumentMatchers.eq(gracefulStatus), 
+         org.mockito.ArgumentMatchers.any());
+
+    // 2. The peer dies outright — no exceptionCaught, just channelInactive.
+    //    This matches a SIGKILL'd server (issue #12812), unlike the existing test
+    //    which injects an IOException via fireExceptionCaught first.
+    transport.channel().pipeline().fireChannelInactive();
+
+    // 3. The still-open RPC should report the real network closure, not the stale
+    //    graceful-shutdown reason that has nothing to do with why it actually failed.
+    try {
+      rpc.waitForClose();
+      fail("expected the RPC to fail");
+    } catch (ExecutionException e) {
+      Status status = ((StatusException) e.getCause()).getStatus();
+      assertThat(status.getDescription()).doesNotContain("Channel shutdown invoked");
+    }
+  }
+
   /**
    * Verifies that we can create multiple TLS client transports from the same builder.
    */
