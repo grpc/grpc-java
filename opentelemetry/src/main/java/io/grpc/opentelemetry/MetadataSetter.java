@@ -20,6 +20,7 @@ package io.grpc.opentelemetry;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata;
 import io.opentelemetry.context.propagation.TextMapSetter;
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -40,6 +41,8 @@ final class MetadataSetter implements TextMapSetter<Metadata> {
 
   @Override
   public void set(@Nullable Metadata carrier, String key, String value) {
+    logger.log(Level.FINE, "Setting text trace header key={0} value={1}",
+        new Object[]{key, value});
     if (carrier == null) {
       logger.log(Level.FINE, "Carrier is null, setting no data");
       return;
@@ -57,6 +60,8 @@ final class MetadataSetter implements TextMapSetter<Metadata> {
   }
 
   void set(@Nullable Metadata carrier, String key, byte[] value) {
+    logger.log(Level.FINE, "Setting binary trace header key={0} value={1}",
+        new Object[]{key, Arrays.toString(value)});
     if (carrier == null) {
       logger.log(Level.FINE, "Carrier is null, setting no data");
       return;
