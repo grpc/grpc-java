@@ -57,8 +57,6 @@ import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.okhttp.InternalOkHttpChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
-import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
@@ -70,22 +68,24 @@ import io.grpc.testing.integration.Messages.SimpleResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
 import io.grpc.testing.integration.Messages.TestOrcaReport;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
+import java.util.HashMap;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /**
  * Application that starts a client for the {@link TestServiceGrpc.TestServiceImplBase} and runs
@@ -108,9 +108,9 @@ public class TestServiceClient {
     client.parseArgs(args);
     customBackendMetricsLoadBalancerProvider = new CustomBackendMetricsLoadBalancerProvider();
     LoadBalancerRegistry.getDefaultRegistry().register(customBackendMetricsLoadBalancerProvider);
+    client.setUp();
 
     try {
-      client.setUp();
       client.run();
     } finally {
       client.tearDown();
@@ -125,8 +125,6 @@ public class TestServiceClient {
   private boolean useTls = true;
   private boolean useAlts = false;
   private boolean useH2cUpgrade = false;
-  private boolean enableOpentelemetry = false;
-  private OpenTelemetrySdk openTelemetrySdk;
   private String customCredentialsType;
   private boolean useTestCa;
   private boolean useOkHttp;
@@ -144,8 +142,10 @@ public class TestServiceClient {
   private int soakRequestSize = 271828;
   private int soakResponseSize = 314159;
   private int numThreads = 1;
-  private String additionalMetadata = "";
+  private boolean enableOpentelemetry;
   private String otelCollectorAddress;
+  private OpenTelemetrySdk openTelemetrySdk;
+  private String additionalMetadata = "";
   private static LoadBalancerProvider customBackendMetricsLoadBalancerProvider;
 
   private Tester tester = new Tester();
@@ -328,9 +328,7 @@ public class TestServiceClient {
       Map<String, String> properties = new HashMap<>();
       properties.put("otel.traces.exporter", "otlp");
       properties.put("otel.bsp.schedule.delay", "100");
-      if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
         String endpoint = otelCollectorAddress;
-        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
           endpoint = "http://" + endpoint;
         }
         properties.put("otel.exporter.otlp.endpoint", endpoint);
@@ -350,11 +348,15 @@ public class TestServiceClient {
   private synchronized void tearDown() {
     try {
       tester.tearDown();
-    } finally {
       if (customBackendMetricsLoadBalancerProvider != null) {
         LoadBalancerRegistry.getDefaultRegistry()
             .deregister(customBackendMetricsLoadBalancerProvider);
       }
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    } finally {
       if (openTelemetrySdk != null) {
         openTelemetrySdk.close();
       }
@@ -461,36 +463,28 @@ public class TestServiceClient {
 
       case SERVICE_ACCOUNT_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        try (FileInputStream credentialsStream =
-            new FileInputStream(new File(serviceAccountKeyFile))) {
-          tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
-        }
+        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
+        tester.serviceAccountCreds(jsonKey, credentialsStream, oauthScope);
         break;
       }
 
       case JWT_TOKEN_CREDS: {
-        try (FileInputStream credentialsStream =
-            new FileInputStream(new File(serviceAccountKeyFile))) {
-          tester.jwtTokenCreds(credentialsStream);
-        }
+        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
+        tester.jwtTokenCreds(credentialsStream);
         break;
       }
 
       case OAUTH2_AUTH_TOKEN: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        try (FileInputStream credentialsStream =
-            new FileInputStream(new File(serviceAccountKeyFile))) {
-          tester.oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
-        }
+        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
+        tester.oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
         break;
       }
 
       case PER_RPC_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
-        try (FileInputStream credentialsStream =
-            new FileInputStream(new File(serviceAccountKeyFile))) {
-          tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
-        }
+        FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
+        tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
         break;
       }
 
@@ -722,8 +716,7 @@ public class TestServiceClient {
         if (serverPort == 0) {
           nettyBuilder = NettyChannelBuilder.forTarget(serverHost, channelCredentials);
         } else {
-          nettyBuilder =
-              NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
+          nettyBuilder = NettyChannelBuilder.forAddress(serverHost, serverPort, channelCredentials);
         }
         nettyBuilder.flowControlWindow(AbstractInteropTest.TEST_FLOW_CONTROL_WINDOW);
         if (serverHostOverride != null) {
@@ -841,8 +834,8 @@ public class TestServiceClient {
     }
 
     /** Sends a large unary rpc with service account credentials. */
-    public void serviceAccountCreds(
-        String jsonKey, InputStream credentialsStream, String authScope) throws Exception {
+    public void serviceAccountCreds(String jsonKey, InputStream credentialsStream, String authScope)
+        throws Exception {
       // cast to ServiceAccountCredentials to double-check the right type of object was created.
       GoogleCredentials credentials =
           ServiceAccountCredentials.class.cast(GoogleCredentials.fromStream(credentialsStream));
