@@ -3,8 +3,8 @@
 # Build protoc
 set -evux -o pipefail
 
-PROTOBUF_VERSION=35.1
-ABSL_VERSION=20250127.1
+PROTOBUF_VERSION=36.0-rc2
+ABSL_VERSION=20250512.1
 
 # ARCH is x86_64 bit unless otherwise specified.
 ARCH="${ARCH:-x86_64}"
@@ -77,7 +77,7 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
-  if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
+  if [[ ! -d "protobuf-${PROTOBUF_VERSION}" || ! -d "abseil-cpp-${ABSL_VERSION}" ]]; then
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
     curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
   fi
