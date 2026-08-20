@@ -447,6 +447,21 @@ class DelayedStream implements ClientStream {
     }
   }
 
+  @Override
+  public void setMessageCompression(boolean enabled, String compressorName) {
+    checkState(listener != null, "May only be called after start");
+    if (passThrough) {
+      realStream.setMessageCompression(enabled, compressorName);
+    } else {
+      delayOrExecute(new Runnable() {
+        @Override
+        public void run() {
+          realStream.setMessageCompression(enabled, compressorName);
+        }
+      });
+    }
+  }
+
   @VisibleForTesting
   ClientStream getRealStream() {
     return realStream;

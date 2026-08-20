@@ -669,6 +669,12 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
+      @SuppressWarnings({"UnusedMethod", "UnusedVariable"})
+      public void setMessageCompression(boolean enabled, String compressorName) {
+        // noop
+      }
+
+      @Override
       public void optimizeForDirectExecutor() {}
 
       @Override
@@ -892,9 +898,6 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      public void setMessageCompression(boolean enable) {}
-
-      @Override
       public void setAuthority(String string) {
         InProcessStream.this.authority = string;
       }
@@ -944,6 +947,17 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public void appendTimeoutInsight(InsightBuilder insight) {
+      }
+
+      @Override
+      public void setMessageCompression(boolean enable) {
+        // noop
+      }
+
+      @Override
+      @SuppressWarnings({"UnusedMethod", "UnusedVariable"})
+      public void setMessageCompression(boolean enabled, String compressorName) {
+        // noop
       }
     }
   }
