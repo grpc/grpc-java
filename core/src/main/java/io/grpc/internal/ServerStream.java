@@ -88,6 +88,12 @@ public interface ServerStream extends Stream {
   void setListener(ServerStreamListener serverStreamListener);
 
   /**
+   * Triggers a custom event. Implementations must ensure this is propagated to the
+   * listener on the transport thread.
+   */
+  void triggerEvent(Object event);
+
+  /**
    * The context for recording stats and traces for this stream.
    */
   StatsTraceContext statsTraceContext();

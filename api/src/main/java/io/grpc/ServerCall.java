@@ -100,6 +100,20 @@ public abstract class ServerCall<ReqT, RespT> {
      * <em>another</em> {@code onReady()} callback.
      */
     public void onReady() {}
+
+    /**
+     * A custom event has been triggered by the call.
+     *
+     * <p>This callback is guaranteed to run on the call's executor, serialized with other
+     * callbacks (like {@link #onMessage}, {@link #onHalfClose}). This means the implementation
+     * does not need internal synchronization to access call-specific state.
+     *
+     * @param event the triggered event.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+    public void onEvent(Object event) {
+      // Default no-op
+    }
   }
 
   /**
@@ -260,6 +274,20 @@ public abstract class ServerCall<ReqT, RespT> {
   @Nullable
   public String getAuthority() {
     return null;
+  }
+
+  /**
+   * Triggers a custom event to be processed by the listener.
+   * The event will be delivered to {@link Listener#onEvent(Object)} on the call's executor.
+   *
+   * <p>This method is thread-safe and can be called from any thread. No events will be delivered
+   * after the RPC is cancelled or completed.
+   *
+   * @param event the event to trigger.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12979")
+  public void triggerEvent(Object event) {
+    // Default no-op
   }
 
   /**
