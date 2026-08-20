@@ -20,6 +20,7 @@ import static io.grpc.okhttp.internal.framed.Http2.FLAG_NONE;
 import static io.grpc.okhttp.internal.framed.Http2.FLAG_PADDED;
 import static io.grpc.okhttp.internal.framed.Http2.TYPE_DATA;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
@@ -73,6 +74,50 @@ public class Http2Test {
 
     verify(mockHandler).data(eq(false), eq(STREAM_ID), eq(bufferIn), eq(2037 - 126), eq(2037));
     assertEquals(2037 - 125, bufferIn.size());
+  }
+
+  @Test
+  public void ackSettingsHeaderTableSizeZeroUpdatesWriter() throws IOException {
+    Buffer sink = new Buffer();
+    Http2.Writer writer = new Http2.Writer(sink, true);
+    Settings settings = new Settings().set(Settings.HEADER_TABLE_SIZE, 0, 0);
+
+    writer.ackSettings(settings);
+    assertEquals(9, sink.size());
+    sink.skip(9); // SETTINGS ACK frame.
+
+    writer.headers(false, 3, Arrays.asList(new Header("custom-key", "custom-value")));
+    sink.skip(9); // HEADERS frame header.
+
+    assertEquals(0x20, sink.readByte() & 0xff); // Dynamic table size update to zero.
+  }
+
+  @Test
+  public void ackSettingsWithoutHeaderTableSizeDoesNotUpdateWriter() throws IOException {
+    Buffer sink = new Buffer();
+    Http2.Writer writer = new Http2.Writer(sink, true);
+
+    writer.ackSettings(new Settings());
+    assertEquals(9, sink.size());
+    sink.skip(9); // SETTINGS ACK frame.
+
+    writer.headers(false, 3, Arrays.asList(new Header("custom-key", "custom-value")));
+    sink.skip(9); // HEADERS frame header.
+
+    assertEquals(0x40, sink.readByte() & 0xff); // Literal with incremental indexing.
+  }
+
+  @Test
+  public void peerHeaderTableSizeDoesNotChangeInboundDecoder() throws IOException {
+    Buffer frames = new Buffer();
+    Http2.Writer peerWriter = new Http2.Writer(frames, false);
+    peerWriter.settings(new Settings().set(Settings.HEADER_TABLE_SIZE, 0, 0));
+    Http2.Reader reader = new Http2.Reader(frames, 4096, true);
+
+    assertTrue(reader.nextFrame(mockHandler));
+
+    // The peer's setting limits our encoder; it does not limit decoding the peer's headers.
+    assertEquals(4096, reader.hpackReader.maxDynamicTableByteCount());
   }
 
   private Buffer createData(int flag, int length, int paddingLength) throws IOException {

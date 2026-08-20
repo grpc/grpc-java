@@ -155,10 +155,11 @@ final class Hpack {
     }
 
     /**
-     * Called by the reader when the peer sent {@link Settings#HEADER_TABLE_SIZE}.
-     * While this establishes the maximum dynamic table size, the
-     * {@link #maxDynamicTableByteCount} set during processing may limit the
-     * table size to a smaller amount.
+     * Updates the limit for header blocks received from the peer. This corresponds to a
+     * {@link Settings#HEADER_TABLE_SIZE} advertised by the local endpoint, not one received from
+     * the peer. While this establishes the maximum dynamic table size, the
+     * {@link #maxDynamicTableByteCount} set during processing may limit the table size to a smaller
+     * amount.
      * <p> Evicts entries or clears the table as needed.
      */
     void headerTableSizeSetting(int headerTableSizeSetting) {

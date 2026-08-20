@@ -59,7 +59,6 @@ import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
-import io.netty.handler.codec.http2.DefaultHttp2HeadersEncoder;
 import io.netty.handler.codec.http2.DefaultHttp2LocalFlowController;
 import io.netty.handler.codec.http2.DefaultHttp2RemoteFlowController;
 import io.netty.handler.codec.http2.Http2CodecUtil;
@@ -158,6 +157,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       @Nullable KeepAliveManager keepAliveManager,
       boolean autoFlowControl,
       int flowControlWindow,
+      int hpackDynamicTableSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -171,8 +171,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ClientHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(headersDecoder);
-    Http2HeadersEncoder encoder = new DefaultHttp2HeadersEncoder(
-        Http2HeadersEncoder.NEVER_SENSITIVE, false, 16, Integer.MAX_VALUE);
+    Http2HeadersEncoder encoder = new GrpcHttp2HeadersEncoder(hpackDynamicTableSize);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter(encoder);
     Http2Connection connection = new DefaultHttp2Connection(false);
     UniformStreamByteDistributor dist = new UniformStreamByteDistributor(connection);
@@ -189,6 +188,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         keepAliveManager,
         autoFlowControl,
         flowControlWindow,
+        hpackDynamicTableSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
         stopwatchFactory,
@@ -210,6 +210,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       KeepAliveManager keepAliveManager,
       boolean autoFlowControl,
       int flowControlWindow,
+      int hpackDynamicTableSize,
       int maxHeaderListSize,
       int softLimitHeaderListSize,
       Supplier<Stopwatch> stopwatchFactory,
@@ -257,6 +258,9 @@ class NettyClientHandler extends AbstractNettyHandler {
     settings.initialWindowSize(flowControlWindow);
     settings.maxConcurrentStreams(0);
     settings.maxHeaderListSize(maxHeaderListSize);
+    if (hpackDynamicTableSize != GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE) {
+      settings.headerTableSize(hpackDynamicTableSize);
+    }
 
     return new NettyClientHandler(
         decoder,

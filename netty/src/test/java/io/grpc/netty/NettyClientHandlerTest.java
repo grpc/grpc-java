@@ -128,6 +128,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
   private int maxHeaderListSize = Integer.MAX_VALUE;
   private int softLimitHeaderListSize = Integer.MAX_VALUE;
+  private int hpackDynamicTableSize;
   private int streamId = STREAM_ID;
   private ClientTransportLifecycleManager lifecycleManager;
   private KeepAliveManager mockKeepAliveManager = null;
@@ -178,6 +179,13 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
    */
   @Before
   public void setUp() throws Exception {
+    if ("shouldAdvertiseZeroHpackDynamicTable".equals(testNameRule.getMethodName())) {
+      hpackDynamicTableSize = 0;
+    } else if ("shouldAdvertiseEightKiBHpackDynamicTable".equals(testNameRule.getMethodName())) {
+      hpackDynamicTableSize = 8192;
+    } else {
+      hpackDynamicTableSize = GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE;
+    }
     doAnswer(
           new Answer<Void>() {
             @Override
@@ -226,6 +234,49 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
     channelRead(serializedSettings);
     channel().releaseOutbound();
+  }
+
+  @Test
+  public void shouldAdvertiseZeroHpackDynamicTable() throws Exception {
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+
+    assertThat(captor.getValue().headerTableSize()).isEqualTo(0);
+    assertThat(frameReader().configuration().headersConfiguration().maxHeaderTableSize())
+        .isEqualTo(4096);
+
+    channelRead(serializeSettingsAck());
+
+    assertThat(frameReader().configuration().headersConfiguration().maxHeaderTableSize())
+        .isEqualTo(0);
+  }
+
+  @Test
+  public void shouldAdvertiseEightKiBHpackDynamicTable() throws Exception {
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+
+    assertThat(captor.getValue().headerTableSize()).isEqualTo(8192);
+    assertThat(frameReader().configuration().headersConfiguration().maxHeaderTableSize())
+        .isEqualTo(4096);
+
+    channelRead(serializeSettingsAck());
+
+    // The allowed maximum is now 8 KiB, but Netty reports the current capacity. It remains at the
+    // RFC default until the peer sends an HPACK dynamic table size update.
+    assertThat(frameReader().configuration().headersConfiguration().maxHeaderTableSize())
+        .isEqualTo(4096);
+  }
+
+  @Test
+  public void shouldNotAdvertiseHpackDynamicTableSizeByDefault() {
+    ArgumentCaptor<Http2Settings> captor = ArgumentCaptor.forClass(Http2Settings.class);
+    verifyWrite().writeSettings(
+        any(ChannelHandlerContext.class), captor.capture(), any(ChannelPromise.class));
+
+    assertThat(captor.getValue().headerTableSize()).isNull();
   }
 
   @Test
@@ -1158,6 +1209,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         mockKeepAliveManager,
         false,
         flowControlWindow,
+        hpackDynamicTableSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
         stopwatchSupplier,

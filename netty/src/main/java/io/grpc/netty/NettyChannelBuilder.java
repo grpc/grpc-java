@@ -105,6 +105,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private boolean autoFlowControl = DEFAULT_AUTO_FLOW_CONTROL;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
+  private int hpackDynamicTableSize = GrpcHttp2HeadersEncoder.DEFAULT_DYNAMIC_TABLE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -435,6 +436,21 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
   }
 
   /**
+   * Sets the maximum HPACK dynamic table size, in bytes, for both directions of a connection.
+   * The peer may advertise a smaller maximum for headers encoded by this endpoint. A value of
+   * zero disables the dynamic table while retaining HPACK static-table references and Huffman
+   * encoding. By default, HTTP/2's standard 4 KiB capacity is used.
+   *
+   * @throws IllegalArgumentException if {@code bytes} is negative
+   */
+  @CanIgnoreReturnValue
+  public NettyChannelBuilder hpackDynamicTableSize(int bytes) {
+    checkArgument(bytes >= 0, "hpackDynamicTableSize must not be negative: %s", bytes);
+    hpackDynamicTableSize = bytes;
+    return this;
+  }
+
+  /**
    * Sets the maximum size of header list allowed to be received. This is cumulative size of the
    * headers with some overhead, as defined for
    * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">
@@ -626,6 +642,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         eventLoopGroupPool,
         autoFlowControl,
         flowControlWindow,
+        hpackDynamicTableSize,
         maxInboundMessageSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
@@ -769,6 +786,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
     private final EventLoopGroup group;
     private final boolean autoFlowControl;
     private final int flowControlWindow;
+    private final int hpackDynamicTableSize;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
     private final int softLimitHeaderListSize;
@@ -790,6 +808,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
         ObjectPool<? extends EventLoopGroup> groupPool,
         boolean autoFlowControl,
         int flowControlWindow,
+        int hpackDynamicTableSize,
         int maxMessageSize,
         int maxHeaderListSize,
         int softLimitHeaderListSize,
@@ -807,6 +826,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
       this.group = groupPool.getObject();
       this.autoFlowControl = autoFlowControl;
       this.flowControlWindow = flowControlWindow;
+      this.hpackDynamicTableSize = hpackDynamicTableSize;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
       this.softLimitHeaderListSize = softLimitHeaderListSize;
@@ -856,6 +876,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               localNegotiator,
               autoFlowControl,
               flowControlWindow,
+              hpackDynamicTableSize,
               maxMessageSize,
               maxHeaderListSize,
               softLimitHeaderListSize,
@@ -895,6 +916,7 @@ public final class NettyChannelBuilder extends ForwardingChannelBuilder2<NettyCh
               groupPool,
               autoFlowControl,
               flowControlWindow,
+              hpackDynamicTableSize,
               maxMessageSize,
               maxHeaderListSize,
               softLimitHeaderListSize,
