@@ -109,11 +109,21 @@ interface Filter extends Closeable {
         Message rawProtoMessage, FilterConfigParseContext context);
   }
 
-  /** Uses the FilterConfigs produced above to produce an HTTP filter interceptor for clients. */
+  /**
+   * Builds an HTTP filter interceptor for this route.
+   *
+   * <p>Filters that create stateful resources (e.g., shared channels) should register
+   * cleanup tasks via {@code cleanupRegistry}. These tasks execute in the xDS
+   * {@code SynchronizationContext} when the route's reference count reaches zero,
+   * meaning no in-flight RPCs reference the route and the control plane has released it.
+   *
+   * @param cleanupRegistry registry for cleanup tasks; never null
+   */
   @Nullable
   default ClientInterceptor buildClientInterceptor(
       FilterConfig config, @Nullable FilterConfig overrideConfig,
-      ScheduledExecutorService scheduler) {
+      ScheduledExecutorService scheduler,
+      ResourceCleanupRegistry cleanupRegistry) {
     return null;
   }
 
@@ -205,5 +215,16 @@ interface Filter extends Closeable {
           .add("filterConfig", filterConfig)
           .toString();
     }
+  }
+
+  /**
+   * Registry for cleanup tasks associated with a route's resource scope.
+   */
+  @FunctionalInterface
+  interface ResourceCleanupRegistry {
+    /**
+     * Registers a task to run when the route is no longer in use.
+     */
+    void addCleanupTask(Runnable task);
   }
 }
