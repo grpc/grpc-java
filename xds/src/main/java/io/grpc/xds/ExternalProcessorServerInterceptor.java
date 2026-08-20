@@ -305,6 +305,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingResponseBodyMessages = new ConcurrentLinkedQueue<>();
     @GuardedBy("streamLock")
+    private int outstandingResponseBodyRequests = 0;
+    @GuardedBy("streamLock")
     private final AtomicBoolean pendingClose = new AtomicBoolean(false);
 
     // Path 4 flow control: Buffered mutated response bodies from ext_proc to send to client transport
@@ -343,6 +345,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     final AtomicBoolean trailersOnly = new AtomicBoolean(false);
     final AtomicBoolean terminationTriggered = new AtomicBoolean(false);
     private final AtomicBoolean closeCalled = new AtomicBoolean(false);
+
+
 
     protected DataPlaneServerCall(
         ServerCall<InputStream, InputStream> rawCall,
@@ -492,6 +496,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
         @Override
         public void onNext(ProcessingResponse response) {
+          System.out.println("JETS_LOG: onNext response: " + response);
           DataPlaneServerCall.this.triggerEvent(new ExtProcResponseEvent(response));
         }
 
@@ -576,6 +581,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           expectedResponses.add(EventType.RESPONSE_HEADERS);
         } else if (requestToSend.hasResponseTrailers()) {
           expectedResponses.add(EventType.RESPONSE_TRAILERS);
+        }
+        if (requestToSend.hasResponseBody()) {
+          outstandingResponseBodyRequests++;
         }
 
         extProcClientCallRequestObserver.onNext(requestToSend);
@@ -683,6 +691,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     private void internalOnError(Throwable t) {
+
       if (markExtProcStreamFailed(extProcStreamState)) {
         synchronized (streamLock) {
           if (extProcClientCallRequestObserver != null) {
@@ -708,6 +717,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     void handleExtProcResponse(ProcessingResponse response) {
       try {
+        System.out.println("JETS_LOG: handleExtProcResponse: hasResponseBody=" + response.hasResponseBody()
+            + ", expected=" + expectedResponses.peek()
+            + ", expectedResponses=" + expectedResponses);
         if (config.getObservabilityMode()) {
           return;
         }
@@ -824,6 +836,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           }
         }
         else if (response.hasResponseBody()) {
+          System.out.println("JETS_LOG: handleExtProcResponse: took hasResponseBody branch");
           if (validateCompressionSupport(response.getResponseBody())) {
             handleResponseBodyResponse(response.getResponseBody());
           }
@@ -1072,7 +1085,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           sendToExtProc(requestToSend);
         }
       } catch (IOException e) {
-        rawCall.close(
+        proceedWithClose(
             Status.INTERNAL.withDescription("Failed to serialize response body").withCause(e),
             new Metadata());
       }
@@ -1084,6 +1097,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         return;
       }
       serverTrailersStartNanos = System.nanoTime();
+
       if (isExtProcStreamFailed()
           && !config.getObservabilityMode()
           && (!config.getFailureModeAllow() || bodyMessageSentToExtProc.get())) {
@@ -1108,7 +1122,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
-        if (!pendingResponseBodyMessages.isEmpty()) {
+        if (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0) {
           pendingClose.set(true);
           return;
         }
@@ -1154,7 +1168,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
       }
     }
 
-    private void proceedWithClose(Status status, Metadata trailers) {
+    void proceedWithClose(Status status, Metadata trailers) {
       if (dataPlaneCallClosed.compareAndSet(false, true)) {
 
         if (serverTrailersStartNanos > 0) {
@@ -1167,6 +1181,10 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     private void triggerCloseHandshake(Metadata trailers) {
+      System.out.println("JETS_LOG: triggerCloseHandshake: trailersOnly=" + trailersOnly.get()
+          + ", isExtProcStreamCompleted=" + isExtProcStreamCompleted()
+          + ", terminationTriggered=" + terminationTriggered.get()
+          + ", isRequestSideCompleted=" + isRequestSideCompleted());
       if (isExtProcStreamDraining()) {
         return;
       }
@@ -1241,7 +1259,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             request = prepareResponseBodyRequest(body);
           }
           if (request == null) {
-            if (pendingResponseBodyMessages.isEmpty() && pendingClose.get()) {
+            if (pendingResponseBodyMessages.isEmpty() && pendingClose.get() && outstandingResponseBodyRequests == 0) {
               triggerClose = true;
               pendingClose.set(false);
             }
@@ -1253,7 +1271,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         }
       }
       if (triggerClose) {
-        proceedWithClose();
+        synchronized (streamLock) {
+          triggerCloseHandshake(savedTrailers);
+        }
       }
     }
 
@@ -1336,14 +1356,31 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           trySendAccumulatedWindowUpdates();
         }
       }
+
+      synchronized (streamLock) {
+        outstandingResponseBodyRequests--;
+        System.out.println("JETS_LOG: handleResponseBodyResponse: pendingClose=" + pendingClose.get()
+            + ", pendingMsgEmpty=" + pendingResponseBodyMessages.isEmpty()
+            + ", outstanding=" + outstandingResponseBodyRequests);
+        if (pendingClose.get() && pendingResponseBodyMessages.isEmpty() && outstandingResponseBodyRequests == 0) {
+          System.out.println("JETS_LOG: handleResponseBodyResponse: triggering close");
+          pendingClose.set(false);
+          triggerCloseHandshake(savedTrailers);
+        }
+      }
     }
 
     private void deliverResponseBodyToClient(ByteString body) {
       boolean shouldSend = false;
       synchronized (streamLock) {
+        System.out.println("JETS_LOG: deliverResponseBodyToClient: method=" + getMethodDescriptor().getFullMethodName()
+            + ", type=" + getMethodDescriptor().getType()
+            + ", super.isReady()=" + super.isReady()
+            + ", pendingDownstreamBodyMessages.isEmpty()=" + pendingDownstreamBodyMessages.isEmpty());
         if (super.isReady() && pendingDownstreamBodyMessages.isEmpty()) {
           shouldSend = true;
         } else {
+          System.out.println("JETS_LOG: deliverResponseBodyToClient: buffering message of size " + body.size());
           pendingDownstreamBodyMessages.add(body);
         }
       }
@@ -1587,6 +1624,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public void onEvent(Object event) {
+      System.out.println("JETS_LOG: onEvent: " + event);
       if (dataPlaneServerCall.dataPlaneCallClosed.get()) {
         return;
       }
@@ -1666,7 +1704,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             ByteString copiedBytes = ByteString.readFrom(message);
             savedMessages.add(new KnownLengthInputStream(copiedBytes));
           } catch (IOException e) {
-            dataPlaneServerCall.rawCall.close(
+            dataPlaneServerCall.proceedWithClose(
                 Status.INTERNAL.withDescription("Failed to buffer client request").withCause(e),
                 new Metadata());
           }
@@ -1701,7 +1739,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         }
         dataPlaneServerCall.drainPendingRequests();
       } catch (IOException e) {
-        dataPlaneServerCall.rawCall.close(
+        dataPlaneServerCall.proceedWithClose(
             Status.INTERNAL.withDescription("Failed to read client request").withCause(e),
             new Metadata());
       }
@@ -1709,6 +1747,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public void onHalfClose() {
+      System.out.println("JETS_LOG: onHalfClose");
       if (dataPlaneServerCall.dataPlaneCallClosed.get()) {
         return;
       }
@@ -1760,6 +1799,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     void proceedWithHalfClose() {
+      System.out.println("JETS_LOG: proceedWithHalfClose");
       if (!dataPlaneServerCall.requestSideClosed.compareAndSet(false, true)) {
         return;
       }
