@@ -28,17 +28,25 @@ import io.grpc.ServerInterceptors;
 import io.grpc.TlsServerCredentials;
 import io.grpc.alts.AltsServerCredentials;
 import io.grpc.netty.NettyServerBuilder;
+import io.grpc.opentelemetry.GrpcOpenTelemetry;
+import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.services.MetricRecorder;
 import io.grpc.testing.TlsTesting;
 import io.grpc.xds.orca.OrcaMetricReportingServerInterceptor;
 import io.grpc.xds.orca.OrcaServiceImpl;
+import io.opentelemetry.sdk.OpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
+import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 
 /** Server that manages startup/shutdown of a single {@code TestService}. */
 public class TestServiceServer {
@@ -76,6 +84,9 @@ public class TestServiceServer {
   private boolean useTls = true;
   private boolean useAlts = false;
   private int mcsLimit = -1;
+  private boolean enableOpentelemetry = false;
+  private String otelCollectorAddress;
+  private OpenTelemetrySdk openTelemetrySdk;
 
   private ScheduledExecutorService executor;
   private Server server;
@@ -123,6 +134,10 @@ public class TestServiceServer {
         mcsLimit = Integer.parseInt(value);
         // TODO: Make Netty server builder usable for IPV6 as well (not limited to MCS handling)
         addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
+      } else if ("enable_opentelemetry".equals(key)) {
+        enableOpentelemetry = Boolean.parseBoolean(value);
+      } else if ("otel_collector_address".equals(key)) {
+        otelCollectorAddress = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -155,7 +170,31 @@ public class TestServiceServer {
 
   @SuppressWarnings("AddressSelection")
   @VisibleForTesting
+  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void start() throws Exception {
+    if (enableOpentelemetry) {
+      AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
+          AutoConfiguredOpenTelemetrySdk.builder();
+      Map<String, String> properties = new HashMap<>();
+      properties.put("otel.traces.exporter", "otlp");
+      // Reduce BatchSpanProcessor export delay from default 5000ms to 100ms for fast test runs.
+      properties.put("otel.bsp.schedule.delay", "100");
+      if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
+        String endpoint = otelCollectorAddress;
+        if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
+          endpoint = "http://" + endpoint;
+        }
+        properties.put("otel.exporter.otlp.endpoint", endpoint);
+      }
+      sdkBuilder.addPropertiesSupplier(() -> properties);
+      AutoConfiguredOpenTelemetrySdk autoSdk = sdkBuilder.build();
+      this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
+      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetrySdk);
+      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
+      grpcOpenTelemetry.registerGlobal();
+    }
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;
     if (useAlts) {
@@ -224,11 +263,17 @@ public class TestServiceServer {
 
   @VisibleForTesting
   void stop() throws Exception {
-    server.shutdownNow();
-    if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
-      System.err.println("Timed out waiting for server shutdown");
+    try {
+      server.shutdownNow();
+      if (!server.awaitTermination(5, TimeUnit.SECONDS)) {
+        System.err.println("Timed out waiting for server shutdown");
+      }
+      MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
+    } finally {
+      if (openTelemetrySdk != null) {
+        openTelemetrySdk.close();
+      }
     }
-    MoreExecutors.shutdownAndAwaitTermination(executor, 5, TimeUnit.SECONDS);
   }
 
   @VisibleForTesting
