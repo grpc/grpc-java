@@ -134,6 +134,10 @@ public class TestServiceServer {
         mcsLimit = Integer.parseInt(value);
         // TODO: Make Netty server builder usable for IPV6 as well (not limited to MCS handling)
         addressType = Util.AddressType.IPV4; // To use NettyServerBuilder
+      } else if ("enable_opentelemetry".equals(key)) {
+        enableOpentelemetry = Boolean.parseBoolean(value);
+      } else if ("otel_collector_address".equals(key)) {
+        otelCollectorAddress = value;
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
