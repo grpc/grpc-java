@@ -18,6 +18,8 @@ package io.grpc.okhttp;
 
 import com.google.common.base.Preconditions;
 import io.grpc.ExperimentalApi;
+import io.grpc.okhttp.internal.ConnectionSpec;
+
 import javax.net.ssl.SSLSocketFactory;
 
 /** A credential with full control over the SSLSocketFactory. */
@@ -29,16 +31,41 @@ public final class SslSocketFactoryChannelCredentials {
     return new ChannelCredentials(factory);
   }
 
+  public static io.grpc.ChannelCredentials create(
+      SSLSocketFactory factory, com.squareup.okhttp.ConnectionSpec connectionSpec) {
+    return new ChannelCredentials(factory, Utils.convertSpec(connectionSpec));
+  }
+
+  public static io.grpc.ChannelCredentials create(
+      SSLSocketFactory factory, String[] tlsVersions, String[] cipherSuiteList, boolean supportsTlsExtensions) {
+    ConnectionSpec connectionSpec = new ConnectionSpec.Builder(true)
+        .tlsVersions(tlsVersions)
+        .cipherSuites(cipherSuiteList)
+        .supportsTlsExtensions(supportsTlsExtensions)
+        .build();
+    return new ChannelCredentials(factory, connectionSpec);
+  }
+
   // Hide implementation detail of how these credentials operate
   static final class ChannelCredentials extends io.grpc.ChannelCredentials {
     private final SSLSocketFactory factory;
+    private final ConnectionSpec connectionSpec;
 
-    private ChannelCredentials(SSLSocketFactory factory) {
+    ChannelCredentials(SSLSocketFactory factory) {
+      this(factory, OkHttpChannelBuilder.INTERNAL_DEFAULT_CONNECTION_SPEC);
+    }
+
+    ChannelCredentials(SSLSocketFactory factory, ConnectionSpec connectionSpec) {
       this.factory = Preconditions.checkNotNull(factory, "factory");
+      this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
     }
 
     public SSLSocketFactory getFactory() {
       return factory;
+    }
+
+    public ConnectionSpec getConnectionSpec() {
+      return connectionSpec;
     }
 
     @Override
