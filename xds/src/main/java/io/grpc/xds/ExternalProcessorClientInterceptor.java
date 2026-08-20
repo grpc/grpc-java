@@ -60,9 +60,11 @@ import io.grpc.MetricRecorder;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.internal.DelayedClientCall;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
+import io.grpc.stub.MetadataUtils;
 import io.grpc.xds.ExternalProcessorFilter.ExternalProcessorFilterConfig;
 import io.grpc.xds.Filter.FilterContext;
 import io.grpc.xds.internal.extproc.DataPlaneCallState;
@@ -119,7 +121,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
   }
 
   static synchronized void initMetricInstruments() {
-    if (io.grpc.internal.GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
+    if (GrpcUtil.getFlag("GRPC_EXPERIMENTAL_XDS_EXT_PROC_ON_CLIENT", false)) {
       if (clientHeadersDuration == null) {
         MetricInstrumentRegistry registry = MetricInstrumentRegistry.getDefaultRegistry();
 
@@ -226,7 +228,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         }
       }
       extProcStub = extProcStub.withInterceptors(
-          io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
+          MetadataUtils.newAttachHeadersInterceptor(extraHeaders));
     }
 
     // The filter chain is preceded by RawMessageClientInterceptor, so ReqT and RespT are
@@ -315,14 +317,14 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     // Path 2: Buffered request body messages from ext_proc server to forward upstream
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingUpstreamBodyMessages =
-        new java.util.concurrent.ConcurrentLinkedQueue<>();
+        new ConcurrentLinkedQueue<>();
     // Path 4: Outstanding requests from downstream for pulling responses
     @GuardedBy("streamLock")
     private int downstreamRequestsPending = 0;
     // Buffered mutated response bodies from ext_proc server
     @GuardedBy("streamLock")
     private final Queue<ByteString> pendingMutatedResponseBodies =
-        new java.util.concurrent.ConcurrentLinkedQueue<>();
+        new ConcurrentLinkedQueue<>();
 
     // Accumulated client window updates to send to ext_proc
     @GuardedBy("streamLock")
@@ -481,8 +483,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
             if (response.hasServerWindowUpdate()) {
               ProcessingResponse.ServerWindowUpdate update = response.getServerWindowUpdate();
-              boolean wasReady = isReady();
+              boolean wasReady;
               synchronized (streamLock) {
+                wasReady = isReady();
                 downstreamToSidestreamWindow += update.getWindowIncrementDownstreamToSidestream();
                 upstreamToSidestreamWindow += update.getWindowIncrementUpstreamToSidestream();
                 drainPendingRequestBodyMessages();
@@ -731,7 +734,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
               .setFlowControlInit(ProcessingRequest.FlowControlInit.newBuilder()
                   .setInitialWindowDownstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .setInitialWindowSidestreamToUpstream(DEFAULT_INITIAL_WINDOW_SIZE)
-                  .setInitialWindowUpstreamToSidestreama(DEFAULT_INITIAL_WINDOW_SIZE)
+                  .setInitialWindowUpstreamToSidestream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .setInitialWindowSidestreamToDownstream(DEFAULT_INITIAL_WINDOW_SIZE)
                   .build())
               .build();
@@ -939,15 +942,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
       synchronized (streamLock) {
-        boolean sendResponseBodiesToExtProc = config.getObservabilityMode()
-            || currentProcessingMode.getResponseBodyMode() == ProcessingMode.BodySendMode.GRPC;
-
-        if (!sendResponseBodiesToExtProc) {
-          // We do not send response bodies to ext_proc server at all. Bypassed.
-          super.request(numMessages);
-          return;
-        }
-
         // We send response bodies to ext_proc server (either in normal GRPC mode or
         // observability mode).
         // Gated by ext_proc server readiness.
@@ -1054,7 +1048,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         ByteString body = pendingRequestBodyMessages.poll();
         sendRequestBodyToExtProc(body);
       }
-      if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.get()) {
+      if (pendingRequestBodyMessages.isEmpty() && pendingHalfClose.compareAndSet(true, false)) {
         halfClose();
       }
     }
@@ -1142,7 +1136,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
           if (!streamed.getEndOfStreamWithoutMessage()) {
-            com.google.protobuf.ByteString body = streamed.getBody();
+            ByteString body = streamed.getBody();
             boolean sendImmediately = false;
             synchronized (streamLock) {
               sidestreamToUpstreamWindow -= body.size();
@@ -1179,7 +1173,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         BodyMutation mutation = bodyResponse.getResponse().getBodyMutation();
         if (mutation.hasStreamedResponse()) {
           StreamedBodyResponse streamed = mutation.getStreamedResponse();
-          com.google.protobuf.ByteString body = streamed.getBody();
+          ByteString body = streamed.getBody();
           final int bodySize = body.size();
           synchronized (streamLock) {
             sidestreamToDownstreamWindow -= bodySize;
@@ -1239,6 +1233,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    // Used to immediately flush any mutated response chunks that we already received and buffered
+    // before the stream failed, ensuring the application receives them in the correct order
     void drainPendingMutatedResponseBodiesDirect(DataPlaneListener listener) {
       List<ByteString> toDeliver = new ArrayList<>();
       synchronized (streamLock) {
@@ -1333,7 +1329,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 && pendingRequestBodyMessages.isEmpty()
                 && pendingDrainingMessages.isEmpty()) {
               passThroughMode.set(true);
-              if (pendingHalfClose.get()) {
+              if (pendingHalfClose.compareAndSet(true, false)) {
                 triggerHalfClose = true;
               }
             }
@@ -1539,6 +1535,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
         try {
           ByteString bodyByteString = ByteString.readFrom(message);
+          // TODO: Consider having separate classes handling normal mode and observability mode
           if (dataPlaneClientCall.getConfig().getObservabilityMode()) {
             sendResponseBodyToExtProc(bodyByteString, false);
             dataPlaneClientCall.bodyMessageSentToExtProc.set(true);
