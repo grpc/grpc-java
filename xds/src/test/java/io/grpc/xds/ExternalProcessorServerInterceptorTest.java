@@ -13665,6 +13665,8 @@ public class ExternalProcessorServerInterceptorTest {
     final List<ProcessingRequest> receivedRequests = new java.util.concurrent.CopyOnWriteArrayList<>();
     final CountDownLatch extProcLatch1 = new CountDownLatch(1);
     final CountDownLatch extProcLatch2 = new CountDownLatch(2);
+    final CountDownLatch extProcLatch3 = new CountDownLatch(3);
+    final CountDownLatch extProcLatch4 = new CountDownLatch(4);
     final AtomicReference<StreamObserver<ProcessingResponse>> extProcResponseObserverRef =
         new AtomicReference<>();
 
@@ -13678,9 +13680,12 @@ public class ExternalProcessorServerInterceptorTest {
             return new StreamObserver<ProcessingRequest>() {
               @Override
               public void onNext(ProcessingRequest request) {
+                System.out.println("JETS_LOG: extProc received request: " + request.getRequestCase());
                 receivedRequests.add(request);
                 extProcLatch1.countDown();
                 extProcLatch2.countDown();
+                extProcLatch3.countDown();
+                extProcLatch4.countDown();
               }
 
               @Override
@@ -13833,15 +13838,25 @@ public class ExternalProcessorServerInterceptorTest {
                     .build())
             .build());
 
+    // Verify ext_proc received Response Trailers
+    assertThat(extProcLatch4.await(5, TimeUnit.SECONDS)).isTrue();
+    // Respond to Response Trailers
+    extProcResponseObserver.onNext(
+        ProcessingResponse.newBuilder()
+            .setResponseTrailers(TrailersResponse.newBuilder().build())
+            .build());
+
     // Now call should complete and Message 2 should be delivered
     assertThat(callCompletedLatch.await(5, TimeUnit.SECONDS)).isTrue();
     assertThat(closedStatus.get().isOk()).isTrue();
 
-    assertThat(receivedRequests).hasSize(2);
+    assertThat(receivedRequests).hasSize(4);
     assertThat(receivedRequests.get(0).hasResponseBody()).isTrue();
     assertThat(receivedRequests.get(0).getResponseBody().getBody()).isEqualTo(ByteString.copyFrom(largeMessageBytes));
     assertThat(receivedRequests.get(1).hasResponseBody()).isTrue();
     assertThat(receivedRequests.get(1).getResponseBody().getBody()).isEqualTo(ByteString.copyFrom(smallMessageBytes));
+    assertThat(receivedRequests.get(2).hasClientWindowUpdate()).isTrue();
+    assertThat(receivedRequests.get(3).hasResponseTrailers()).isTrue();
 
     assertThat(receivedMessages).hasSize(2);
     assertThat(receivedMessages.get(0)).isEqualTo(ByteString.copyFrom(largeMessageBytes));
