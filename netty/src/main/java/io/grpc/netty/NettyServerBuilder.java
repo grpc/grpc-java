@@ -33,6 +33,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerBuilder;
 import io.grpc.Internal;
+import io.grpc.Metadata;
 import io.grpc.MetricRecorder;
 import io.grpc.ServerBuilder;
 import io.grpc.ServerCredentials;
@@ -53,14 +54,18 @@ import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
+import io.netty.util.AsciiString;
 import java.io.File;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLException;
 
@@ -105,6 +110,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
   private boolean autoFlowControl = true;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
+  private final Set<AsciiString> neverIndexedMetadataKeys = new HashSet<>();
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
   private int softLimitHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -441,6 +447,43 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
   }
 
   /**
+   * Configures an outbound metadata key to use HPACK's never-indexed literal representation.
+   *
+   * <p>All values associated with the key's normalized name will be sent as literals and will not
+   * be added to the peer's HPACK dynamic table. This method is additive and may be called multiple
+   * times. Configuring the same normalized key name more than once has no additional effect. By
+   * default, no metadata keys are configured as never indexed.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @CanIgnoreReturnValue
+  public NettyServerBuilder neverIndexMetadataKey(Metadata.Key<?> key) {
+    neverIndexedMetadataKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    return this;
+  }
+
+  /**
+   * Configures outbound metadata keys to use HPACK's never-indexed literal representation.
+   *
+   * <p>This method is equivalent to calling {@link #neverIndexMetadataKey} for each key in {@code
+   * keys}. Duplicate normalized key names are ignored.
+   *
+   * @since 1.84.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/12976")
+  @CanIgnoreReturnValue
+  public NettyServerBuilder neverIndexMetadataKeys(
+      Collection<? extends Metadata.Key<?>> keys) {
+    Set<AsciiString> normalizedKeys = new HashSet<>();
+    for (Metadata.Key<?> key : checkNotNull(keys, "keys")) {
+      normalizedKeys.add(AsciiString.of(checkNotNull(key, "key").name()));
+    }
+    neverIndexedMetadataKeys.addAll(normalizedKeys);
+    return this;
+  }
+
+  /**
    * Sets the maximum message size allowed to be received on the server. If not called,
    * defaults to 4 MiB. The default provides protection to services who haven't considered the
    * possibility of receiving large messages while trying to be large enough to not be hit in normal
@@ -729,6 +772,7 @@ public final class NettyServerBuilder extends ForwardingServerBuilder<NettyServe
         maxConcurrentCallsPerConnection,
         autoFlowControl,
         flowControlWindow,
+        neverIndexedMetadataKeys,
         maxMessageSize,
         maxHeaderListSize,
         softLimitHeaderListSize,
