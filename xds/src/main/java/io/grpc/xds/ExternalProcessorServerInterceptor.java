@@ -1122,7 +1122,8 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         this.savedStatus = status;
         this.savedTrailers = trailers;
 
-        if (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0) {
+        if (!config.getObservabilityMode()
+            && (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0)) {
           pendingClose.set(true);
           return;
         }
@@ -1784,6 +1785,9 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
           sendHalfCloseToExtProc();
         }
       }
+      if (dataPlaneServerCall.config.getObservabilityMode()) {
+        proceedWithHalfClose();
+      }
     }
 
     void handleDeferredHalfClose() {
@@ -1800,6 +1804,11 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     void proceedWithHalfClose() {
       System.out.println("JETS_LOG: proceedWithHalfClose");
+      ServerCall.Listener<InputStream> del = delegate;
+      if (del == null) {
+        halfCloseReceived = true;
+        return;
+      }
       if (!dataPlaneServerCall.requestSideClosed.compareAndSet(false, true)) {
         return;
       }
@@ -1809,10 +1818,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         dataPlaneServerCall.recordDuration(clientHalfCloseDuration, durationNanos);
         dataPlaneServerCall.clientHalfCloseStartNanos = 0;
       }
-      ServerCall.Listener<InputStream> del = delegate;
-      if (del != null) {
-        dataPlaneServerCall.callContext.run(del::onHalfClose);
-      }
+      dataPlaneServerCall.callContext.run(del::onHalfClose);
       dataPlaneServerCall.checkEndOfStream();
     }
 
