@@ -846,6 +846,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         if (!internalCancel(serverStatus, serverStatus)) {
           return;
         }
+        statsTraceCtx.clientCancelled(reason);
         serverStream.clientCancelled(reason);
         streamClosed();
       }

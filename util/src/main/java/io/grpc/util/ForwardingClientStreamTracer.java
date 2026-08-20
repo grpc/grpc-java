@@ -79,6 +79,11 @@ public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   }
 
   @Override
+  public void cancelled(Status status) {
+    delegate().cancelled(status);
+  }
+
+  @Override
   public void streamClosed(Status status) {
     delegate().streamClosed(status);
   }
