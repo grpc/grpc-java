@@ -338,9 +338,10 @@ public class TestServiceClient {
       sdkBuilder.addPropertiesSupplier(() -> properties);
       AutoConfiguredOpenTelemetrySdk autoSdk = sdkBuilder.build();
       this.openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
-      GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
-          .sdk(openTelemetrySdk)
-          .build();
+      GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
+          .sdk(openTelemetrySdk);
+      InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
+      GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
       grpcOpenTelemetry.registerGlobal();
     }
     tester.setUp();

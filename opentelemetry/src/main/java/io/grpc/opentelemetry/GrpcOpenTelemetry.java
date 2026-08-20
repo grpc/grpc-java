@@ -69,6 +69,10 @@ public final class GrpcOpenTelemetry {
     }
   };
 
+  @VisibleForTesting
+  static boolean ENABLE_OTEL_TRACING =
+      GrpcUtil.getFlag("GRPC_EXPERIMENTAL_ENABLE_OTEL_TRACING", false);
+
   private final OpenTelemetry openTelemetrySdk;
   private final MeterProvider meterProvider;
   private final Meter meter;
@@ -173,7 +177,9 @@ public final class GrpcOpenTelemetry {
     InternalManagedChannelBuilder.addMetricSink(builder, sink);
     InternalManagedChannelBuilder.interceptWithTarget(
         builder, openTelemetryMetricsModule::getClientInterceptor);
-    builder.intercept(openTelemetryTracingModule.getClientInterceptor());
+    if (ENABLE_OTEL_TRACING) {
+      builder.intercept(openTelemetryTracingModule.getClientInterceptor());
+    }
   }
 
   /**
@@ -184,9 +190,11 @@ public final class GrpcOpenTelemetry {
   public void configureServerBuilder(ServerBuilder<?> serverBuilder) {
     /* To ensure baggage propagation to metrics, we need the tracing
     tracers to be initialised before metrics */
-    serverBuilder.addStreamTracerFactory(
-        openTelemetryTracingModule.getServerTracerFactory());
-    serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
+    if (ENABLE_OTEL_TRACING) {
+      serverBuilder.addStreamTracerFactory(
+          openTelemetryTracingModule.getServerTracerFactory());
+      serverBuilder.intercept(openTelemetryTracingModule.getServerSpanPropagationInterceptor());
+    }
     serverBuilder.addStreamTracerFactory(openTelemetryMetricsModule.getServerTracerFactory());
     serverBuilder.addMetricSink(sink);
   }
@@ -427,12 +435,8 @@ public final class GrpcOpenTelemetry {
       return this;
     }
 
-    /**
-     * @deprecated Tracing is enabled by default whenever GrpcOpenTelemetry is configured.
-     */
-    @Deprecated
-    @SuppressWarnings("InlineMeSuggester")
     Builder enableTracing(boolean enable) {
+      ENABLE_OTEL_TRACING = enable;
       return this;
     }
 

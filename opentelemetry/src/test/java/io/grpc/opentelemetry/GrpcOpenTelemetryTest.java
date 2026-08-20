@@ -36,9 +36,9 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.metrics.SdkMeterProvider;
 import io.opentelemetry.sdk.testing.exporter.InMemoryMetricReader;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -50,6 +50,17 @@ public class GrpcOpenTelemetryTest {
       SdkMeterProvider.builder().registerMetricReader(inMemoryMetricReader).build();
   private final SdkTracerProvider tracerProvider = SdkTracerProvider.builder().build();
   private final OpenTelemetry noopOpenTelemetry = OpenTelemetry.noop();
+  private boolean originalEnableOtelTracing;
+
+  @Before
+  public void setup() {
+    originalEnableOtelTracing = GrpcOpenTelemetry.ENABLE_OTEL_TRACING;
+  }
+
+  @After
+  public void tearDown() {
+    GrpcOpenTelemetry.ENABLE_OTEL_TRACING = originalEnableOtelTracing;
+  }
 
   @Test
   public void build() {
@@ -76,6 +87,7 @@ public class GrpcOpenTelemetryTest {
         OpenTelemetrySdk.builder().setTracerProvider(tracerProvider).build();
 
     GrpcOpenTelemetry grpcOpenTelemetry = GrpcOpenTelemetry.newBuilder()
+        .enableTracing(true)
         .sdk(sdk).build();
 
     assertThat(grpcOpenTelemetry.getOpenTelemetryInstance()).isSameInstanceAs(sdk);
@@ -165,29 +177,15 @@ public class GrpcOpenTelemetryTest {
     grpcOpenTelemetry.configureChannelBuilder(testBuilder);
     assertThat(testBuilder.metricSink).isSameInstanceAs(grpcOpenTelemetry.getSink());
     assertThat(testBuilder.interceptorFactory).isNotNull();
-    assertThat(testBuilder.interceptors).hasSize(1);
   }
 
   private static class TestChannelBuilder extends ForwardingChannelBuilder2<TestChannelBuilder> {
     Object interceptorFactory;
     MetricSink metricSink;
-    List<ClientInterceptor> interceptors = new ArrayList<>();
 
     @Override
     protected ManagedChannelBuilder<?> delegate() {
       return null;
-    }
-
-    @Override
-    public TestChannelBuilder intercept(ClientInterceptor... interceptors) {
-      this.interceptors.addAll(Arrays.asList(interceptors));
-      return this;
-    }
-
-    @Override
-    public TestChannelBuilder intercept(List<ClientInterceptor> interceptors) {
-      this.interceptors.addAll(interceptors);
-      return this;
     }
 
     @Override
