@@ -977,7 +977,6 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
 
     @Override
     public void sendHeaders(Metadata headers) {
-
       serverHeadersStartNanos = System.nanoTime();
       responseHeadersSent.set(true);
       boolean sendResponseHeaders =
@@ -1022,7 +1021,12 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
             sendMessage(msg);
           }
           if (savedStatus != null) {
-            triggerCloseHandshake(savedTrailers);
+            if (!config.getObservabilityMode()
+                && (!pendingResponseBodyMessages.isEmpty() || outstandingResponseBodyRequests > 0)) {
+              pendingClose.set(true);
+            } else {
+              triggerCloseHandshake(savedTrailers);
+            }
           }
         }
       }
@@ -1190,6 +1194,35 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
         return;
       }
       if (isExtProcStreamCompleted() || !terminationTriggered.compareAndSet(false, true)) {
+        return;
+      }
+
+      if (config.getObservabilityMode()) {
+        boolean sendResponseHeaders =
+            currentProcessingMode.getResponseHeaderMode() == ProcessingMode.HeaderSendMode.SEND
+            || currentProcessingMode.getResponseHeaderMode()
+                == ProcessingMode.HeaderSendMode.DEFAULT;
+        boolean sendResponseTrailers =
+            currentProcessingMode.getResponseTrailerMode() == ProcessingMode.HeaderSendMode.SEND;
+
+        if (trailersOnly.get()) {
+          if (sendResponseHeaders) {
+            sendToExtProc(ProcessingRequest.newBuilder()
+                .setResponseHeaders(HttpHeaders.newBuilder()
+                    .setHeaders(toHeaderMap(trailers, config.getForwardRulesConfig()))
+                    .setEndOfStream(true)
+                    .build())
+                .build());
+          }
+        } else if (sendResponseTrailers) {
+          sendToExtProc(ProcessingRequest.newBuilder()
+              .setResponseTrailers(HttpTrailers.newBuilder()
+                  .setTrailers(toHeaderMap(trailers, config.getForwardRulesConfig()))
+                  .build())
+              .build());
+        }
+        proceedWithClose();
+        closeExtProcStream();
         return;
       }
 
@@ -1581,8 +1614,7 @@ final class ExternalProcessorServerInterceptor implements ServerInterceptor {
     }
 
     private boolean isRequestSideCompleted() {
-      return (currentProcessingMode.getRequestHeaderMode() != ProcessingMode.HeaderSendMode.SEND
-          && currentProcessingMode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC)
+      return currentProcessingMode.getRequestBodyMode() != ProcessingMode.BodySendMode.GRPC
           || requestSideClosed.get();
     }
 
