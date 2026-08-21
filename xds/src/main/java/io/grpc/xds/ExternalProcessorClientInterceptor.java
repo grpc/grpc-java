@@ -368,14 +368,12 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     }
 
     private void recordDuration(DoubleHistogramMetricInstrument instrument, long durationNanos) {
-      if (instrument != null) {
-        double durationSecs = (double) durationNanos / 1_000_000_000.0;
-        metricsRecorder.recordDoubleHistogram(
-            instrument,
-            durationSecs,
-            ImmutableList.of(target),
-            ImmutableList.of(backendService));
-      }
+      double durationSecs = (double) durationNanos / 1_000_000_000.0;
+      metricsRecorder.recordDoubleHistogram(
+          instrument,
+          durationSecs,
+          ImmutableList.of(target),
+          ImmutableList.of(backendService));
     }
 
     /**
@@ -733,9 +731,6 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     private boolean isSidecarReady() {
       ExtProcStreamState state = extProcStreamState.get();
-      if (state.isCompleted()) {
-        return true;
-      }
       if (state.isDraining()) {
         return false;
       }
