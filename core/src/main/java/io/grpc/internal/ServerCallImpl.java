@@ -255,6 +255,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   @Override
+  public void triggerEvent(Object event) {
+    stream.triggerEvent(event);
+  }
+
+  @Override
   public SecurityLevel getSecurityLevel() {
     final Attributes attributes = getAttributes();
     if (attributes == null) {
@@ -394,6 +399,14 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         }
         listener.onReady();
       }
+    }
+
+    @Override
+    public void triggerEvent(Object event) {
+      if (call.cancelled) {
+        return;
+      }
+      listener.onEvent(event);
     }
   }
 }
