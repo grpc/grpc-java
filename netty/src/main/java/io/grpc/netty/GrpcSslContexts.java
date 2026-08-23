@@ -47,6 +47,7 @@ import java.util.logging.Logger;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 public class GrpcSslContexts {
   private static final Logger logger = Logger.getLogger(GrpcSslContexts.class.getName());
+  static final String DEFAULT_ENDPOINT_IDENTIFICATION_ALGORITHM = "HTTPS";
 
   private GrpcSslContexts() {}
 
@@ -88,6 +89,11 @@ public class GrpcSslContexts {
 
   /**
    * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
+   *
+   * <p>HTTPS endpoint identification is enabled by default. Clients that authenticate a non-DNS
+   * identity may explicitly disable it with {@link
+   * SslContextBuilder#endpointIdentificationAlgorithm(String) endpointIdentificationAlgorithm("")},
+   * but must perform alternative identity verification.
    *
    * @see SslContextBuilder#forClient()
    * @see #configure(SslContextBuilder)
@@ -140,7 +146,8 @@ public class GrpcSslContexts {
 
   /**
    * Set ciphers and APN appropriate for gRPC. Precisely what is set is permitted to change, so if
-   * an application requires particular settings it should override the options set here.
+   * an application requires particular settings it should override the options set here. For
+   * client builders, HTTPS endpoint identification is enabled by default.
    */
   @CanIgnoreReturnValue
   public static SslContextBuilder configure(SslContextBuilder builder) {
@@ -149,7 +156,8 @@ public class GrpcSslContexts {
 
   /**
    * Set ciphers and APN appropriate for gRPC. Precisely what is set is permitted to change, so if
-   * an application requires particular settings it should override the options set here.
+   * an application requires particular settings it should override the options set here. For
+   * client builders, HTTPS endpoint identification is enabled by default.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
   @CanIgnoreReturnValue
@@ -173,7 +181,8 @@ public class GrpcSslContexts {
         return builder
             .sslProvider(SslProvider.OPENSSL)
             .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
-            .applicationProtocolConfig(apc);
+            .applicationProtocolConfig(apc)
+            .endpointIdentificationAlgorithm(DEFAULT_ENDPOINT_IDENTIFICATION_ALGORITHM);
       }
       default:
         throw new IllegalArgumentException("Unsupported provider: " + provider);
@@ -182,7 +191,8 @@ public class GrpcSslContexts {
 
   /**
    * Set ciphers and APN appropriate for gRPC. Precisely what is set is permitted to change, so if
-   * an application requires particular settings it should override the options set here.
+   * an application requires particular settings it should override the options set here. For
+   * client builders, HTTPS endpoint identification is enabled by default.
    */
   @CanIgnoreReturnValue
   public static SslContextBuilder configure(SslContextBuilder builder, Provider jdkProvider) {
@@ -220,7 +230,8 @@ public class GrpcSslContexts {
         .sslProvider(SslProvider.JDK)
         .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
         .applicationProtocolConfig(apc)
-        .sslContextProvider(jdkProvider);
+        .sslContextProvider(jdkProvider)
+        .endpointIdentificationAlgorithm(DEFAULT_ENDPOINT_IDENTIFICATION_ALGORITHM);
   }
 
   /**
