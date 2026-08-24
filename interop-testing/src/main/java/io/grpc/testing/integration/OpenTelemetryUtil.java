@@ -44,6 +44,7 @@ public final class OpenTelemetryUtil {
         AutoConfiguredOpenTelemetrySdk.builder();
     Map<String, String> properties = new HashMap<>();
     properties.put("otel.traces.exporter", "otlp");
+    properties.put("otel.exporter.otlp.protocol", "grpc");
     // Reduce BatchSpanProcessor export delay from default 5000ms to 100ms for fast test runs.
     properties.put("otel.bsp.schedule.delay", "100");
     if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
