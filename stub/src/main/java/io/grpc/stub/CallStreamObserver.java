@@ -49,11 +49,11 @@ import io.grpc.ExperimentalApi;
  *
  * <p>On flow control: {@link #isReady} returns whether an observer can accept more messages without
  * excessive buffering. Readiness is affected by the volume of messages previously sent and how much
- * of that data has been requested by the peer application. But the link between local readiness and
- * peer message requests may not be immediate and may not be reflected message-for-message. All
- * that's guaranteed is this: if an outbound is being fed messages but the peer is not requesting
- * them, the outbound's {@link #isReady} will eventually return false. If, later, the peer does
- * request enough of those messages, the outbound observer will eventually become ready again.
+ * of that data has been requested by the peer application. But this effect may not be immediate and
+ * may not be message-for-message. All that's guaranteed is this: if an outbound is being fed
+ * messages but the peer is not requesting them, the outbound's {@link #isReady} will eventually
+ * return false. If, later, the peer does ask for enough of those messages, the outbound observer
+ * will eventually become ready again.
  *
  * <p>DO NOT MOCK: The API is too complex to reliably mock. Use InProcessChannelBuilder to create
  * "real" RPCs suitable for testing.
