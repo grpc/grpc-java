@@ -72,6 +72,65 @@ public class RlsProtoConvertersTest {
   }
 
   @Test
+  public void convert_toRequestProto_staleHeaderData() {
+    Converter<RouteLookupRequest, RlsProtoData.RouteLookupRequest> converter =
+        new RouteLookupRequestConverter();
+
+    // Non-null value
+    RouteLookupRequest protoWithStaleHeader = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .setStaleHeaderData("stale-header-v1")
+        .build();
+    RlsProtoData.RouteLookupRequest objectWithStaleHeader =
+        converter.convert(protoWithStaleHeader);
+    assertThat(objectWithStaleHeader.staleHeaderData()).isEqualTo("stale-header-v1");
+
+    // Null value (unset)
+    RouteLookupRequest protoUnset = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .build();
+    RlsProtoData.RouteLookupRequest objectUnset = converter.convert(protoUnset);
+    assertThat(objectUnset.staleHeaderData()).isNull();
+
+    // Empty string
+    RouteLookupRequest protoEmpty = RouteLookupRequest.newBuilder()
+        .putKeyMap("key1", "val1")
+        .setStaleHeaderData("")
+        .build();
+    RlsProtoData.RouteLookupRequest objectEmpty = converter.convert(protoEmpty);
+    assertThat(objectEmpty.staleHeaderData()).isNull();
+  }
+
+  @Test
+  public void convert_toRequestObject_staleHeaderData() {
+    Converter<RlsProtoData.RouteLookupRequest, RouteLookupRequest> converter =
+        new RouteLookupRequestConverter().reverse();
+
+    // Non-null value
+    RlsProtoData.RouteLookupRequest objectWithStaleHeader =
+        RlsProtoData.RouteLookupRequest.create(
+            ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_STALE,
+            "stale-header-v1");
+    RouteLookupRequest protoWithStaleHeader = converter.convert(objectWithStaleHeader);
+    assertThat(protoWithStaleHeader.getStaleHeaderData()).isEqualTo("stale-header-v1");
+    assertThat(protoWithStaleHeader.getReason())
+        .isEqualTo(RouteLookupRequest.Reason.REASON_STALE);
+
+    // Null value
+    RlsProtoData.RouteLookupRequest objectNull =
+        RlsProtoData.RouteLookupRequest.create(
+            ImmutableMap.of("key1", "val1"),
+            RlsProtoData.RouteLookupRequest.Reason.REASON_MISS,
+            null);
+    RouteLookupRequest protoNull = converter.convert(objectNull);
+    assertThat(protoNull.getStaleHeaderData()).isEmpty();
+    assertThat(protoNull.getReason())
+        .isEqualTo(RouteLookupRequest.Reason.REASON_MISS);
+  }
+
+
+  @Test
   public void convert_toResponseProto() {
     Converter<RouteLookupResponse, RlsProtoData.RouteLookupResponse> converter =
         new RouteLookupResponseConverter();
