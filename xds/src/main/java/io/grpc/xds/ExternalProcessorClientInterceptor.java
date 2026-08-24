@@ -297,10 +297,10 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
     private final String backendService;
     private volatile Context callContext = Context.ROOT;
 
-    private long clientHeadersStartNanos;
-    private long clientHalfCloseStartNanos;
-    private long serverHeadersStartNanos;
-    private long serverTrailersStartNanos;
+    private volatile long clientHeadersStartNanos;
+    private volatile long clientHalfCloseStartNanos;
+    private volatile long serverHeadersStartNanos;
+    private volatile long serverTrailersStartNanos;
 
     private boolean protocolConfigSent = false;
     private ImmutableMap<String, Struct> collectedAttributes;
