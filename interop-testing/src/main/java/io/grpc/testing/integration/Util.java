@@ -20,22 +20,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.MessageLite;
 import com.google.protobuf.StringValue;
 import io.grpc.Metadata;
-import io.grpc.opentelemetry.GrpcOpenTelemetry;
-import io.grpc.opentelemetry.InternalGrpcOpenTelemetry;
 import io.grpc.protobuf.lite.ProtoLiteUtils;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
-import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdkBuilder;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement;
 import org.junit.Assert;
 
 /**
@@ -127,37 +119,5 @@ public class Util {
     IPV4,
     IPV6,
     IPV4_IPV6
-  }
-
-  /**
-   * Initializes and registers OpenTelemetry tracing for interop client and server.
-   *
-   * @param otelCollectorAddress optional collector address (e.g. "localhost:4317")
-   * @return the configured {@link OpenTelemetrySdk}
-   */
-  @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
-  public static OpenTelemetrySdk setupOpenTelemetry(String otelCollectorAddress) {
-    AutoConfiguredOpenTelemetrySdkBuilder sdkBuilder =
-        AutoConfiguredOpenTelemetrySdk.builder();
-    Map<String, String> properties = new HashMap<>();
-    properties.put("otel.traces.exporter", "otlp");
-    // Reduce BatchSpanProcessor export delay from default 5000ms to 100ms for fast test runs.
-    properties.put("otel.bsp.schedule.delay", "100");
-    if (otelCollectorAddress != null && !otelCollectorAddress.isEmpty()) {
-      String endpoint = otelCollectorAddress;
-      if (!endpoint.startsWith("http://") && !endpoint.startsWith("https://")) {
-        endpoint = "http://" + endpoint;
-      }
-      properties.put("otel.exporter.otlp.endpoint", endpoint);
-    }
-    sdkBuilder.addPropertiesSupplier(() -> properties);
-    AutoConfiguredOpenTelemetrySdk autoSdk = sdkBuilder.build();
-    OpenTelemetrySdk openTelemetrySdk = autoSdk.getOpenTelemetrySdk();
-    GrpcOpenTelemetry.Builder grpcOpentelemetryBuilder = GrpcOpenTelemetry.newBuilder()
-        .sdk(openTelemetrySdk);
-    InternalGrpcOpenTelemetry.enableTracing(grpcOpentelemetryBuilder, true);
-    GrpcOpenTelemetry grpcOpenTelemetry = grpcOpentelemetryBuilder.build();
-    grpcOpenTelemetry.registerGlobal();
-    return openTelemetrySdk;
   }
 }

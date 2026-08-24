@@ -167,7 +167,7 @@ public class TestServiceServer {
   @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void start() throws Exception {
     if (enableOpentelemetry) {
-      this.openTelemetrySdk = Util.setupOpenTelemetry(otelCollectorAddress);
+      this.openTelemetrySdk = OpenTelemetryUtil.setupOpenTelemetry(otelCollectorAddress);
     }
     executor = Executors.newSingleThreadScheduledExecutor();
     ServerCredentials serverCreds;

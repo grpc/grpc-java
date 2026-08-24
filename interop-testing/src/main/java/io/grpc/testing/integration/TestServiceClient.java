@@ -318,7 +318,7 @@ public class TestServiceClient {
   @IgnoreJRERequirement // OpenTelemetry uses Java 8+ APIs
   void setUp() {
     if (enableOpentelemetry) {
-      this.openTelemetrySdk = Util.setupOpenTelemetry(otelCollectorAddress);
+      this.openTelemetrySdk = OpenTelemetryUtil.setupOpenTelemetry(otelCollectorAddress);
     }
     tester.setUp();
   }
