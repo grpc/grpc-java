@@ -77,8 +77,10 @@ if [ -f ${INSTALL_DIR}/bin/protoc ]; then
   echo "Not building protobuf. Already built"
 # TODO(ejona): swap to `brew install --devel protobuf` once it is up-to-date
 else
-  if [[ ! -d "protobuf-${PROTOBUF_VERSION}" || ! -d "abseil-cpp-${ABSL_VERSION}" ]]; then
+  if [[ ! -d "protobuf-${PROTOBUF_VERSION}" ]]; then
     curl -Ls "https://github.com/google/protobuf/releases/download/v${PROTOBUF_VERSION}/protobuf-${PROTOBUF_VERSION}.tar.gz" | tar xz
+  fi
+  if [[ ! -d "abseil-cpp-${ABSL_VERSION}" ]]; then
     curl -Ls "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSL_VERSION}.tar.gz" | tar xz
   fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
