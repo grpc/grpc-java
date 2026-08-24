@@ -15,7 +15,7 @@ if %ERRORLEVEL% neq 0 (
 
 choco install -y openjdk --version=17.0
 set PATH=%PATH%;"c:\Program Files\OpenJDK\jdk-17\bin"
-set PROTOBUF_VER=36.0-rc2
+set PROTOBUF_VER=36.0
 set ABSL_VERSION=20250512.1
 set CMAKE_NAME=cmake-3.26.3-windows-x86_64
 

@@ -54,13 +54,7 @@ bazel_dep(name = "bazel_jar_jar", version = "0.1.11.bcr.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "googleapis", version = "0.0.0-20260514-1dbb1a14", repo_name = "com_google_googleapis")
 bazel_dep(name = "grpc-proto", version = "0.0.0-20240627-ec30f58.bcr.1", repo_name = "io_grpc_grpc_proto")
-bazel_dep(name = "protobuf", version = "36.0-rc2", repo_name = "com_google_protobuf")
-archive_override(
-    module_name = "protobuf",
-    integrity = "sha256-tWR/2Ank29ZSNjgof/Zn5N8BbUZCZ+LtTy4ZUb+wks8=",
-    strip_prefix = "protobuf-36.0-rc2",
-    urls = ["https://github.com/protocolbuffers/protobuf/releases/download/v36.0-rc2/protobuf-36.0-rc2.tar.gz"],
-)
+bazel_dep(name = "protobuf", version = "36.0", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_proto", version = "7.1.0")
 bazel_dep(name = "rules_android", version = "0.7.3")
 bazel_dep(name = "rules_cc", version = "0.0.9")
