@@ -358,6 +358,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         new AtomicReference<>(ExtProcStreamState.ACTIVE);
     final AtomicBoolean passThroughMode = new AtomicBoolean(false);
     final AtomicBoolean requestSideClosed = new AtomicBoolean(false);
+    final AtomicBoolean appHalfClosed = new AtomicBoolean(false);
     final AtomicBoolean isProcessingTrailers = new AtomicBoolean(false);
     final AtomicBoolean pendingHalfClose = new AtomicBoolean(false);
     final AtomicBoolean bodyMessageSentToExtProc = new AtomicBoolean(false);
@@ -745,6 +746,8 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       }
     }
 
+    // Note: This method not only modifies the builder, but has the side effect of modifying
+    // the window update bookkeeping.
     @GuardedBy("streamLock")
     void mergeAccumulatedWindowUpdates(ProcessingRequest.Builder requestBuilder) {
       long incrementUpstream = accumulatedWindowUpdateSidestreamToUpstream;
@@ -1064,7 +1067,9 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
 
     @Override
     public void halfClose() {
-      clientHalfCloseStartNanos = System.nanoTime();
+      if (appHalfClosed.compareAndSet(false, true)) {
+        clientHalfCloseStartNanos = System.nanoTime();
+      }
       if (passThroughMode.get()) {
         if (requestSideClosed.compareAndSet(false, true)) {
           proceedWithHalfClose();
@@ -1072,25 +1077,13 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
         return;
       }
 
-      pendingHalfClose.set(true);
-
       if (extProcStreamState.get().isCompleted()) {
+        pendingHalfClose.set(true);
         return;
       }
 
       if (extProcStreamState.get().isDraining()) {
-        boolean canProceed = false;
-        synchronized (streamLock) {
-          if (currentProcessingMode.getRequestBodyMode() == ProcessingMode.BodySendMode.NONE
-              || (!bodyMessageSentToExtProc.get() && pendingDrainingMessages.isEmpty())) {
-            canProceed = true;
-          }
-        }
-        if (canProceed) {
-          if (requestSideClosed.compareAndSet(false, true)) {
-            proceedWithHalfClose();
-          }
-        }
+        pendingHalfClose.set(true);
         return;
       }
 
@@ -1104,6 +1097,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
       // Mode is GRPC
       synchronized (streamLock) {
         if (!pendingRequestBodyMessages.isEmpty()) {
+          pendingHalfClose.set(true);
           return;
         }
 
@@ -1329,7 +1323,7 @@ final class ExternalProcessorClientInterceptor implements ClientInterceptor {
                 && pendingRequestBodyMessages.isEmpty()
                 && pendingDrainingMessages.isEmpty()) {
               passThroughMode.set(true);
-              if (pendingHalfClose.compareAndSet(true, false)) {
+              if (appHalfClosed.get()) {
                 triggerHalfClose = true;
               }
             }
