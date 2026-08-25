@@ -40,6 +40,7 @@ import io.grpc.Attributes;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Detachable;
 import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -51,6 +52,7 @@ import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import org.junit.Before;
@@ -84,7 +86,23 @@ public class ServerCallImplTest {
 
   private static final MethodDescriptor<Long, Long> CLIENT_STREAMING_METHOD =
       MethodDescriptor.<Long, Long>newBuilder()
-          .setType(MethodType.UNARY)
+          .setType(MethodType.CLIENT_STREAMING)
+          .setFullMethodName("service/method")
+          .setRequestMarshaller(new LongMarshaller())
+          .setResponseMarshaller(new LongMarshaller())
+          .build();
+
+  private static final MethodDescriptor<Long, Long> BIDI_STREAMING_METHOD =
+      MethodDescriptor.<Long, Long>newBuilder()
+          .setType(MethodType.BIDI_STREAMING)
+          .setFullMethodName("service/method")
+          .setRequestMarshaller(new LongMarshaller())
+          .setResponseMarshaller(new LongMarshaller())
+          .build();
+
+  private static final MethodDescriptor<Long, Long> SERVER_STREAMING_METHOD =
+      MethodDescriptor.<Long, Long>newBuilder()
+          .setType(MethodType.SERVER_STREAMING)
           .setFullMethodName("service/method")
           .setRequestMarshaller(new LongMarshaller())
           .setResponseMarshaller(new LongMarshaller())
@@ -456,41 +474,169 @@ public class ServerCallImplTest {
   }
 
   @Test
-  public void streamListener_messageRead() {
+  public void streamListener_messageRead_unary_delayed() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
 
+    // Message should not be delivered yet
+    verify(callListener, never()).onMessage(any(Long.class));
+
+    streamListener.halfClosed();
+
+    // Now it should be delivered
     verify(callListener).onMessage(1234L);
+    verify(callListener).onHalfClose();
   }
 
   @Test
-  public void streamListener_messageRead_onlyOnce() {
+  public void streamListener_messageRead_unary_detachable() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
+    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate);
+
+    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
+
+    // It should have been detached immediately
+    assertTrue(detachableStream.detached);
+    verify(callListener, never()).onMessage(any(Long.class));
+
+    streamListener.halfClosed();
+
+    // Now it should be delivered
+    verify(callListener).onMessage(1234L);
+    verify(callListener).onHalfClose();
+  }
+
+  @Test
+  public void streamListener_messageRead_unary_bufferMessageException() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
+    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate, true);
+
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> streamListener.messagesAvailable(new SingleMessageProducer(detachableStream)));
+    assertThat(e).hasMessageThat().isEqualTo("detach failed");
+
+    // The stream should have been closed in the catch block
+    assertTrue(detachableStream.closed);
+    verify(callListener, never()).onMessage(any(Long.class));
+  }
+
+  @Test
+  public void streamListener_messageRead_serverStreaming_delayed() {
+    call = new ServerCallImpl<>(stream, SERVER_STREAMING_METHOD, requestHeaders, context,
+        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
+        serverCallTracer, PerfMark.createTag());
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+    streamListener.messagesAvailable(
+        new SingleMessageProducer(SERVER_STREAMING_METHOD.streamRequest(1234L)));
+
+    // Message should not be delivered yet
+    verify(callListener, never()).onMessage(any(Long.class));
+
+    streamListener.halfClosed();
+
+    // Now it should be delivered
+    verify(callListener).onMessage(1234L);
+    verify(callListener).onHalfClose();
+  }
+
+  @Test
+  public void streamListener_messageRead_bidi_notDelayed() {
+    call = new ServerCallImpl<>(stream, BIDI_STREAMING_METHOD, requestHeaders, context,
+        DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
+        serverCallTracer, PerfMark.createTag());
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+    streamListener.messagesAvailable(
+        new SingleMessageProducer(BIDI_STREAMING_METHOD.streamRequest(1234L)));
+
+    // Message should be delivered immediately
+    verify(callListener).onMessage(1234L);
+    verify(callListener, never()).onHalfClose();
+  }
+
+  @Test
+  public void streamListener_messageRead_unary_tooManyRequests() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
-    // canceling the call should short circuit future halfClosed() calls.
+
+    // Sending second message should fail
+    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(5678L)));
+
+    verify(stream).close(any(Status.class), any(Metadata.class));
+    verify(callListener, never()).onMessage(any(Long.class));
+  }
+
+  @Test
+  public void streamListener_messageRead_onlyOnce_unary() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
+    
+    // canceling the call should clean up and prevent delivery
     streamListener.closed(Status.CANCELLED);
 
-    streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(1234L)));
+    streamListener.halfClosed();
 
-    verify(callListener).onMessage(1234L);
+    verify(callListener, never()).onMessage(any(Long.class));
   }
 
   @Test
-  public void streamListener_unexpectedRuntimeException() {
+  public void streamListener_unexpectedRuntimeException_unary() {
     ServerStreamListenerImpl<Long> streamListener =
         new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
     doThrow(new RuntimeException("unexpected exception"))
         .when(callListener)
         .onMessage(any(Long.class));
 
-    InputStream inputStream = UNARY_METHOD.streamRequest(1234L);
+    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
+    FakeDetachableInputStream detachableStream = new FakeDetachableInputStream(delegate);
 
-    SingleMessageProducer producer = new SingleMessageProducer(inputStream);
+    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
+
+    // Exception should not be thrown yet because deserialization/delivery is delayed
+    verify(callListener, never()).onMessage(any(Long.class));
+
+    // It should be thrown during halfClosed
     RuntimeException e = assertThrows(RuntimeException.class,
-        () -> streamListener.messagesAvailable(producer));
+        () -> streamListener.halfClosed());
     assertThat(e).hasMessageThat().isEqualTo("unexpected exception");
+
+    // The detached stream should have been closed in the catch block
+    assertTrue(detachableStream.detachedStream.closed);
+  }
+
+  @Test
+  public void streamListener_halfClosed_closeException() {
+    ServerStreamListenerImpl<Long> streamListener =
+        new ServerCallImpl.ServerStreamListenerImpl<>(call, callListener, context);
+
+    InputStream delegate = UNARY_METHOD.streamRequest(1234L);
+    FakeDetachableInputStream detachableStream =
+        new FakeDetachableInputStream(delegate, false, true);
+
+    streamListener.messagesAvailable(new SingleMessageProducer(detachableStream));
+
+    // Message should not be delivered yet
+    verify(callListener, never()).onMessage(any(Long.class));
+
+    // halfClosed should throw RuntimeException wrapping IOException
+    RuntimeException e = assertThrows(RuntimeException.class,
+        () -> streamListener.halfClosed());
+    assertThat(e).hasCauseThat().isInstanceOf(IOException.class);
+    assertThat(e.getCause()).hasMessageThat().isEqualTo("close failed");
+
+    // The message was delivered before close failed
+    verify(callListener).onMessage(1234L);
+    assertTrue(detachableStream.detachedStream.closed);
   }
 
   private static class LongMarshaller implements Marshaller<Long> {
@@ -506,6 +652,75 @@ public class ServerCallImplTest {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
+    }
+  }
+
+  private static class FakeCloseTrackerInputStream extends InputStream {
+    boolean closed = false;
+    private final InputStream delegate;
+    private final boolean throwOnClose;
+
+    FakeCloseTrackerInputStream(InputStream delegate, boolean throwOnClose) {
+      this.delegate = delegate;
+      this.throwOnClose = throwOnClose;
+    }
+
+    @Override
+    public int read() throws IOException {
+      return delegate.read();
+    }
+
+    @Override
+    public void close() throws IOException {
+      closed = true;
+      if (throwOnClose) {
+        throw new IOException("close failed");
+      }
+      delegate.close();
+    }
+  }
+
+  private static class FakeDetachableInputStream extends InputStream implements Detachable {
+    boolean detached = false;
+    boolean closed = false;
+    private final InputStream delegate;
+    private final boolean throwOnDetach;
+    private final boolean throwOnClose;
+    FakeCloseTrackerInputStream detachedStream;
+
+    FakeDetachableInputStream(InputStream delegate) {
+      this(delegate, false, false);
+    }
+
+    FakeDetachableInputStream(InputStream delegate, boolean throwOnDetach) {
+      this(delegate, throwOnDetach, false);
+    }
+
+    FakeDetachableInputStream(InputStream delegate, boolean throwOnDetach, boolean throwOnClose) {
+      this.delegate = delegate;
+      this.throwOnDetach = throwOnDetach;
+      this.throwOnClose = throwOnClose;
+    }
+
+    @Override
+    public InputStream detach() {
+      if (throwOnDetach) {
+        throw new RuntimeException("detach failed");
+      }
+      detached = true;
+      detachedStream = new FakeCloseTrackerInputStream(delegate, throwOnClose);
+      return detachedStream;
+    }
+
+    @Override
+    public int read() throws IOException {
+      return delegate.read();
+    }
+
+    @Override
+    public void close() throws IOException {
+      closed = true;
+      delegate.close();
     }
   }
 }
