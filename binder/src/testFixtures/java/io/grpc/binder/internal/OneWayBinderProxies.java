@@ -134,13 +134,19 @@ public final class OneWayBinderProxies {
 
   /** A {@link OneWayBinderProxy} that queues transactions for a test to deliver manually later. */
   public static final class QueueingOneWayBinderProxy extends OneWayBinderProxy {
-    public static final class Transaction {
+    public static final class Transaction implements AutoCloseable {
       public final int code;
       private final ParcelHolder parcel;
 
       public Transaction(int code, ParcelHolder parcel) {
         this.code = code;
         this.parcel = parcel;
+      }
+
+      /** Discards this transaction and recycles its parcel if it hasn't already been delivered. */
+      @Override
+      public void close() {
+        parcel.close();
       }
     }
 
