@@ -571,7 +571,7 @@ public class ServerCallImplTest {
     // Sending second message should fail
     streamListener.messagesAvailable(new SingleMessageProducer(UNARY_METHOD.streamRequest(5678L)));
 
-    verify(stream).close(any(Status.class), any(Metadata.class));
+    verify(stream).cancel(any(Status.class));
     verify(callListener, never()).onMessage(any(Long.class));
   }
 
@@ -628,14 +628,12 @@ public class ServerCallImplTest {
     // Message should not be delivered yet
     verify(callListener, never()).onMessage(any(Long.class));
 
-    // halfClosed should throw RuntimeException wrapping IOException
-    RuntimeException e = assertThrows(RuntimeException.class,
-        () -> streamListener.halfClosed());
-    assertThat(e).hasCauseThat().isInstanceOf(IOException.class);
-    assertThat(e.getCause()).hasMessageThat().isEqualTo("close failed");
+    // halfClosed should not throw because we use closeQuietly
+    streamListener.halfClosed();
 
-    // The message was delivered before close failed
+    // The message was delivered and halfClosed completed
     verify(callListener).onMessage(1234L);
+    verify(callListener).onHalfClose();
     assertTrue(detachableStream.detachedStream.closed);
   }
 

@@ -352,9 +352,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           if (call.method.getType().clientSendsOneMessage()) {
             if (delayedMessage != null) {
               GrpcUtil.closeQuietly(message);
-              call.close(
-                  Status.INTERNAL.withDescription("Too many requests"),
-                  new Metadata());
+              call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
               GrpcUtil.closeQuietly(delayedMessage);
               delayedMessage = null;
               return;
@@ -401,11 +399,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
             Throwables.throwIfUnchecked(t);
             throw new RuntimeException(t);
           }
-          try {
-            message.close();
-          } catch (IOException e) {
-            throw new RuntimeException(e);
-          }
+          GrpcUtil.closeQuietly(message);
         }
 
         listener.onHalfClose();
