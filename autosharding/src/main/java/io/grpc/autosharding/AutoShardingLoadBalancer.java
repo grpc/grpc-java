@@ -93,7 +93,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
   private Channel shardingChannel;
   private ShardingClient shardingClient;
   private String currentChannelFactoryKey;
-  private String currentSlicingTarget;
+  private String currentAutoshardingTarget;
 
   private boolean fallbackEnabled = false;
   private String sliceKeyHeaderName = "";
@@ -131,14 +131,14 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
       this.initialAssignmentTimeoutNanos = config.initialAssignmentTimeoutNanos;
     }
 
-    // Connect to sharding service if channelFactoryKey or slicingTarget changed
+    // Connect to sharding service if channelFactoryKey or autoshardingTarget changed
     if (shardingClient == null
         || !config.channelFactoryKey.equals(currentChannelFactoryKey)
-        || !config.slicingTarget.equals(currentSlicingTarget)) {
+        || !config.autoshardingTarget.equals(currentAutoshardingTarget)) {
       initShardingClient(
           resolvedAddresses.getAttributes(),
           config.channelFactoryKey,
-          config.slicingTarget);
+          config.autoshardingTarget);
     }
 
     // Process endpoints from Name Resolver
@@ -226,7 +226,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
   }
 
   private void initShardingClient(
-      Attributes attributes, String channelFactoryKey, String slicingTarget) {
+      Attributes attributes, String channelFactoryKey, String autoshardingTarget) {
     closeShardingChannel();
     if (fallbackTimer != null) {
       fallbackTimer.cancel();
@@ -234,7 +234,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
     }
 
     currentChannelFactoryKey = channelFactoryKey;
-    currentSlicingTarget = slicingTarget;
+    currentAutoshardingTarget = autoshardingTarget;
 
     ChannelFactory factory = attributes.get(CHANNEL_FACTORY_KEY);
     if (factory == null) {
@@ -248,7 +248,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
     if (locality == null) {
       locality = "";
     }
-    String actualTarget = slicingTarget.replace("%s", locality);
+    String actualTarget = autoshardingTarget.replace("%s", locality);
 
     shardingChannelHolder = factory.createChannel(channelFactoryKey);
     if (shardingChannelHolder == null || shardingChannelHolder.getChannel() == null) {

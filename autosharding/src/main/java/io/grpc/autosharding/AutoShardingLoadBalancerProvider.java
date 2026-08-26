@@ -62,12 +62,16 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
                 "Missing required field 'channelFactoryKey' in autosharding config"));
       }
 
-      String slicingTarget =
-          JsonUtil.getString(rawLoadBalancingPolicyConfig, "slicingTarget");
-      if (slicingTarget == null || slicingTarget.isEmpty()) {
+      String autoshardingTarget =
+          JsonUtil.getString(rawLoadBalancingPolicyConfig, "autoshardingTarget");
+      if (autoshardingTarget == null || autoshardingTarget.isEmpty()) {
+        autoshardingTarget =
+            JsonUtil.getString(rawLoadBalancingPolicyConfig, "slicingTarget");
+      }
+      if (autoshardingTarget == null || autoshardingTarget.isEmpty()) {
         return ConfigOrError.fromError(
             Status.INVALID_ARGUMENT.withDescription(
-                "Missing required field 'slicingTarget' in autosharding config"));
+                "Missing required field 'autoshardingTarget' in autosharding config"));
       }
 
       String sliceKeyHeaderName =
@@ -91,7 +95,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
       return ConfigOrError.fromConfig(
           new AutoShardingConfig(
               channelFactoryKey,
-              slicingTarget,
+              autoshardingTarget,
               sliceKeyHeaderName,
               enableFallback,
               initialAssignmentTimeoutNanos));
@@ -104,19 +108,19 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
 
   public static final class AutoShardingConfig {
     final String channelFactoryKey;
-    final String slicingTarget;
+    final String autoshardingTarget;
     final String sliceKeyHeaderName;
     final boolean enableFallback;
     final Long initialAssignmentTimeoutNanos;
 
     public AutoShardingConfig(
         String channelFactoryKey,
-        String slicingTarget,
+        String autoshardingTarget,
         String sliceKeyHeaderName,
         boolean enableFallback,
         Long initialAssignmentTimeoutNanos) {
       this.channelFactoryKey = channelFactoryKey;
-      this.slicingTarget = slicingTarget;
+      this.autoshardingTarget = autoshardingTarget;
       this.sliceKeyHeaderName = sliceKeyHeaderName;
       this.enableFallback = enableFallback;
       this.initialAssignmentTimeoutNanos = initialAssignmentTimeoutNanos;
@@ -133,7 +137,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
       AutoShardingConfig that = (AutoShardingConfig) o;
       return enableFallback == that.enableFallback
           && Objects.equals(channelFactoryKey, that.channelFactoryKey)
-          && Objects.equals(slicingTarget, that.slicingTarget)
+          && Objects.equals(autoshardingTarget, that.autoshardingTarget)
           && Objects.equals(sliceKeyHeaderName, that.sliceKeyHeaderName)
           && Objects.equals(initialAssignmentTimeoutNanos, that.initialAssignmentTimeoutNanos);
     }
@@ -142,7 +146,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
     public int hashCode() {
       return Objects.hash(
           channelFactoryKey,
-          slicingTarget,
+          autoshardingTarget,
           sliceKeyHeaderName,
           enableFallback,
           initialAssignmentTimeoutNanos);
@@ -152,7 +156,7 @@ public final class AutoShardingLoadBalancerProvider extends LoadBalancerProvider
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("channelFactoryKey", channelFactoryKey)
-          .add("slicingTarget", slicingTarget)
+          .add("autoshardingTarget", autoshardingTarget)
           .add("sliceKeyHeaderName", sliceKeyHeaderName)
           .add("enableFallback", enableFallback)
           .add("initialAssignmentTimeoutNanos", initialAssignmentTimeoutNanos)
