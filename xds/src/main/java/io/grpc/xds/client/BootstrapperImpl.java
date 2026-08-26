@@ -23,7 +23,6 @@ import io.grpc.CallCredentials;
 import io.grpc.CompositeCallCredentials;
 import io.grpc.Internal;
 import io.grpc.InternalLogId;
-import io.grpc.auth.JwtTokenFileCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.GrpcUtil.GrpcBuildVersion;
 import io.grpc.internal.JsonParser;
