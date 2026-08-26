@@ -21,8 +21,9 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
-import com.google.cloud.autosharding.v1main.PerSliceEndpointState;
-import com.google.cloud.autosharding.v1main.SliceAssignment;
+import com.google.cloud.autosharding.v1.EndpointState;
+import com.google.cloud.autosharding.v1.PerSliceEndpointState;
+import com.google.cloud.autosharding.v1.SliceAssignment;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ConnectivityState;
@@ -104,7 +105,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
 
   private SliceMap currentSliceMap;
   private List<SliceAssignment> latestSliceAssignments;
-  private List<com.google.cloud.autosharding.v1main.EndpointState> latestEndpointsProto;
+  private List<EndpointState> latestEndpointsProto;
   private long latestGeneration = 0;
 
   private SynchronizationContext.ScheduledHandle fallbackTimer;
@@ -322,7 +323,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
       }
       sliceEntries.add(
           new SliceEntry(
-              protoSlice.getSlice().getStartKeyInclusive().toByteArray(), sliceEndpoints));
+              protoSlice.getSlice().getStartKey().toByteArray(), sliceEndpoints));
     }
 
     currentSliceMap = new SliceMap(sliceEntries, fallbackPool, latestGeneration);
@@ -441,7 +442,7 @@ public final class AutoShardingLoadBalancer extends LoadBalancer {
     @Override
     public void onAssignmentReceived(
         List<SliceAssignment> sliceAssignments,
-        List<com.google.cloud.autosharding.v1main.EndpointState> endpoints,
+        List<EndpointState> endpoints,
         long generation) {
       if (fallbackTimer != null) {
         fallbackTimer.cancel();

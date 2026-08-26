@@ -1,4 +1,4 @@
-package com.google.cloud.autosharding.v1main;
+package com.google.cloud.autosharding.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 
@@ -22,37 +22,37 @@ import static io.grpc.MethodDescriptor.generateFullMethodName;
  * </pre>
  */
 @io.grpc.stub.annotations.GrpcGenerated
-public final class DynamicShardingServiceGrpc {
+public final class AutoshardingServiceGrpc {
 
-  private DynamicShardingServiceGrpc() {}
+  private AutoshardingServiceGrpc() {}
 
-  public static final java.lang.String SERVICE_NAME = "google.cloud.autosharding.v1main.DynamicShardingService";
+  public static final java.lang.String SERVICE_NAME = "google.cloud.autosharding.v1.AutoshardingService";
 
   // Static method descriptors that strictly reflect the proto.
-  private static volatile io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest,
-      com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod;
+  private static volatile io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest,
+      com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
       fullMethodName = SERVICE_NAME + '/' + "WatchShardingAssignment",
-      requestType = com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest.class,
-      responseType = com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse.class,
+      requestType = com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest.class,
+      responseType = com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-  public static io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest,
-      com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod() {
-    io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod;
-    if ((getWatchShardingAssignmentMethod = DynamicShardingServiceGrpc.getWatchShardingAssignmentMethod) == null) {
-      synchronized (DynamicShardingServiceGrpc.class) {
-        if ((getWatchShardingAssignmentMethod = DynamicShardingServiceGrpc.getWatchShardingAssignmentMethod) == null) {
-          DynamicShardingServiceGrpc.getWatchShardingAssignmentMethod = getWatchShardingAssignmentMethod =
-              io.grpc.MethodDescriptor.<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse>newBuilder()
+  public static io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest,
+      com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod() {
+    io.grpc.MethodDescriptor<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse> getWatchShardingAssignmentMethod;
+    if ((getWatchShardingAssignmentMethod = AutoshardingServiceGrpc.getWatchShardingAssignmentMethod) == null) {
+      synchronized (AutoshardingServiceGrpc.class) {
+        if ((getWatchShardingAssignmentMethod = AutoshardingServiceGrpc.getWatchShardingAssignmentMethod) == null) {
+          AutoshardingServiceGrpc.getWatchShardingAssignmentMethod = getWatchShardingAssignmentMethod =
+              io.grpc.MethodDescriptor.<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "WatchShardingAssignment"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest.getDefaultInstance()))
+                  com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse.getDefaultInstance()))
-              .setSchemaDescriptor(new DynamicShardingServiceMethodDescriptorSupplier("WatchShardingAssignment"))
+                  com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse.getDefaultInstance()))
+              .setSchemaDescriptor(new AutoshardingServiceMethodDescriptorSupplier("WatchShardingAssignment"))
               .build();
         }
       }
@@ -63,60 +63,60 @@ public final class DynamicShardingServiceGrpc {
   /**
    * Creates a new async stub that supports all call types for the service
    */
-  public static DynamicShardingServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceStub>() {
+  public static AutoshardingServiceStub newStub(io.grpc.Channel channel) {
+    io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceStub>() {
         @java.lang.Override
-        public DynamicShardingServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicShardingServiceStub(channel, callOptions);
+        public AutoshardingServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AutoshardingServiceStub(channel, callOptions);
         }
       };
-    return DynamicShardingServiceStub.newStub(factory, channel);
+    return AutoshardingServiceStub.newStub(factory, channel);
   }
 
   /**
    * Creates a new blocking-style stub that supports all types of calls on the service
    */
-  public static DynamicShardingServiceBlockingV2Stub newBlockingV2Stub(
+  public static AutoshardingServiceBlockingV2Stub newBlockingV2Stub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceBlockingV2Stub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceBlockingV2Stub>() {
+    io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceBlockingV2Stub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceBlockingV2Stub>() {
         @java.lang.Override
-        public DynamicShardingServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicShardingServiceBlockingV2Stub(channel, callOptions);
+        public AutoshardingServiceBlockingV2Stub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AutoshardingServiceBlockingV2Stub(channel, callOptions);
         }
       };
-    return DynamicShardingServiceBlockingV2Stub.newStub(factory, channel);
+    return AutoshardingServiceBlockingV2Stub.newStub(factory, channel);
   }
 
   /**
    * Creates a new blocking-style stub that supports unary and streaming output calls on the service
    */
-  public static DynamicShardingServiceBlockingStub newBlockingStub(
+  public static AutoshardingServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceBlockingStub>() {
+    io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceBlockingStub>() {
         @java.lang.Override
-        public DynamicShardingServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicShardingServiceBlockingStub(channel, callOptions);
+        public AutoshardingServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AutoshardingServiceBlockingStub(channel, callOptions);
         }
       };
-    return DynamicShardingServiceBlockingStub.newStub(factory, channel);
+    return AutoshardingServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
    * Creates a new ListenableFuture-style stub that supports unary calls on the service
    */
-  public static DynamicShardingServiceFutureStub newFutureStub(
+  public static AutoshardingServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicShardingServiceFutureStub>() {
+    io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<AutoshardingServiceFutureStub>() {
         @java.lang.Override
-        public DynamicShardingServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicShardingServiceFutureStub(channel, callOptions);
+        public AutoshardingServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new AutoshardingServiceFutureStub(channel, callOptions);
         }
       };
-    return DynamicShardingServiceFutureStub.newStub(factory, channel);
+    return AutoshardingServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -146,7 +146,7 @@ public final class DynamicShardingServiceGrpc {
      * sharding assignments.
      * A given client may use this stream just to receive assignments or also to
      * report load, and it may opt in or out of reporting load at any time. (An
-     * implementation of the DynamicSharding service may impose restrictions on
+     * implementation of the Autosharding service may impose restrictions on
      * which clients are allowed to report load, and it may respond to clients
      * improperly reporting load by ignoring their reports or terminating their
      * streams with an error.)
@@ -155,14 +155,14 @@ public final class DynamicShardingServiceGrpc {
      * data.
      * </pre>
      */
-    default io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest> watchShardingAssignment(
-        io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse> responseObserver) {
+    default io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest> watchShardingAssignment(
+        io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse> responseObserver) {
       return io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall(getWatchShardingAssignmentMethod(), responseObserver);
     }
   }
 
   /**
-   * Base class for the server implementation of the service DynamicShardingService.
+   * Base class for the server implementation of the service AutoshardingService.
    * <pre>
    * An auto-sharding service that assigns keys in an application's keyspace to
    * abstract "endpoints", and which uses load information from clients to update
@@ -181,16 +181,16 @@ public final class DynamicShardingServiceGrpc {
    * * CPU cost of processing requests
    * </pre>
    */
-  public static abstract class DynamicShardingServiceImplBase
+  public static abstract class AutoshardingServiceImplBase
       implements io.grpc.BindableService, AsyncService {
 
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
-      return DynamicShardingServiceGrpc.bindService(this);
+      return AutoshardingServiceGrpc.bindService(this);
     }
   }
 
   /**
-   * A stub to allow clients to do asynchronous rpc calls to service DynamicShardingService.
+   * A stub to allow clients to do asynchronous rpc calls to service AutoshardingService.
    * <pre>
    * An auto-sharding service that assigns keys in an application's keyspace to
    * abstract "endpoints", and which uses load information from clients to update
@@ -209,17 +209,17 @@ public final class DynamicShardingServiceGrpc {
    * * CPU cost of processing requests
    * </pre>
    */
-  public static final class DynamicShardingServiceStub
-      extends io.grpc.stub.AbstractAsyncStub<DynamicShardingServiceStub> {
-    private DynamicShardingServiceStub(
+  public static final class AutoshardingServiceStub
+      extends io.grpc.stub.AbstractAsyncStub<AutoshardingServiceStub> {
+    private AutoshardingServiceStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicShardingServiceStub build(
+    protected AutoshardingServiceStub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new DynamicShardingServiceStub(channel, callOptions);
+      return new AutoshardingServiceStub(channel, callOptions);
     }
 
     /**
@@ -228,7 +228,7 @@ public final class DynamicShardingServiceGrpc {
      * sharding assignments.
      * A given client may use this stream just to receive assignments or also to
      * report load, and it may opt in or out of reporting load at any time. (An
-     * implementation of the DynamicSharding service may impose restrictions on
+     * implementation of the Autosharding service may impose restrictions on
      * which clients are allowed to report load, and it may respond to clients
      * improperly reporting load by ignoring their reports or terminating their
      * streams with an error.)
@@ -237,15 +237,15 @@ public final class DynamicShardingServiceGrpc {
      * data.
      * </pre>
      */
-    public io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest> watchShardingAssignment(
-        io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse> responseObserver) {
+    public io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest> watchShardingAssignment(
+        io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse> responseObserver) {
       return io.grpc.stub.ClientCalls.asyncBidiStreamingCall(
           getChannel().newCall(getWatchShardingAssignmentMethod(), getCallOptions()), responseObserver);
     }
   }
 
   /**
-   * A stub to allow clients to do synchronous rpc calls to service DynamicShardingService.
+   * A stub to allow clients to do synchronous rpc calls to service AutoshardingService.
    * <pre>
    * An auto-sharding service that assigns keys in an application's keyspace to
    * abstract "endpoints", and which uses load information from clients to update
@@ -264,17 +264,17 @@ public final class DynamicShardingServiceGrpc {
    * * CPU cost of processing requests
    * </pre>
    */
-  public static final class DynamicShardingServiceBlockingV2Stub
-      extends io.grpc.stub.AbstractBlockingStub<DynamicShardingServiceBlockingV2Stub> {
-    private DynamicShardingServiceBlockingV2Stub(
+  public static final class AutoshardingServiceBlockingV2Stub
+      extends io.grpc.stub.AbstractBlockingStub<AutoshardingServiceBlockingV2Stub> {
+    private AutoshardingServiceBlockingV2Stub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicShardingServiceBlockingV2Stub build(
+    protected AutoshardingServiceBlockingV2Stub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new DynamicShardingServiceBlockingV2Stub(channel, callOptions);
+      return new AutoshardingServiceBlockingV2Stub(channel, callOptions);
     }
 
     /**
@@ -283,7 +283,7 @@ public final class DynamicShardingServiceGrpc {
      * sharding assignments.
      * A given client may use this stream just to receive assignments or also to
      * report load, and it may opt in or out of reporting load at any time. (An
-     * implementation of the DynamicSharding service may impose restrictions on
+     * implementation of the Autosharding service may impose restrictions on
      * which clients are allowed to report load, and it may respond to clients
      * improperly reporting load by ignoring their reports or terminating their
      * streams with an error.)
@@ -293,7 +293,7 @@ public final class DynamicShardingServiceGrpc {
      * </pre>
      */
     @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/10918")
-    public io.grpc.stub.BlockingClientCall<com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse>
+    public io.grpc.stub.BlockingClientCall<com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest, com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse>
         watchShardingAssignment() {
       return io.grpc.stub.ClientCalls.blockingBidiStreamingCall(
           getChannel(), getWatchShardingAssignmentMethod(), getCallOptions());
@@ -301,7 +301,7 @@ public final class DynamicShardingServiceGrpc {
   }
 
   /**
-   * A stub to allow clients to do limited synchronous rpc calls to service DynamicShardingService.
+   * A stub to allow clients to do limited synchronous rpc calls to service AutoshardingService.
    * <pre>
    * An auto-sharding service that assigns keys in an application's keyspace to
    * abstract "endpoints", and which uses load information from clients to update
@@ -320,22 +320,22 @@ public final class DynamicShardingServiceGrpc {
    * * CPU cost of processing requests
    * </pre>
    */
-  public static final class DynamicShardingServiceBlockingStub
-      extends io.grpc.stub.AbstractBlockingStub<DynamicShardingServiceBlockingStub> {
-    private DynamicShardingServiceBlockingStub(
+  public static final class AutoshardingServiceBlockingStub
+      extends io.grpc.stub.AbstractBlockingStub<AutoshardingServiceBlockingStub> {
+    private AutoshardingServiceBlockingStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicShardingServiceBlockingStub build(
+    protected AutoshardingServiceBlockingStub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new DynamicShardingServiceBlockingStub(channel, callOptions);
+      return new AutoshardingServiceBlockingStub(channel, callOptions);
     }
   }
 
   /**
-   * A stub to allow clients to do ListenableFuture-style rpc calls to service DynamicShardingService.
+   * A stub to allow clients to do ListenableFuture-style rpc calls to service AutoshardingService.
    * <pre>
    * An auto-sharding service that assigns keys in an application's keyspace to
    * abstract "endpoints", and which uses load information from clients to update
@@ -354,17 +354,17 @@ public final class DynamicShardingServiceGrpc {
    * * CPU cost of processing requests
    * </pre>
    */
-  public static final class DynamicShardingServiceFutureStub
-      extends io.grpc.stub.AbstractFutureStub<DynamicShardingServiceFutureStub> {
-    private DynamicShardingServiceFutureStub(
+  public static final class AutoshardingServiceFutureStub
+      extends io.grpc.stub.AbstractFutureStub<AutoshardingServiceFutureStub> {
+    private AutoshardingServiceFutureStub(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicShardingServiceFutureStub build(
+    protected AutoshardingServiceFutureStub build(
         io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-      return new DynamicShardingServiceFutureStub(channel, callOptions);
+      return new AutoshardingServiceFutureStub(channel, callOptions);
     }
   }
 
@@ -399,7 +399,7 @@ public final class DynamicShardingServiceGrpc {
       switch (methodId) {
         case METHODID_WATCH_SHARDING_ASSIGNMENT:
           return (io.grpc.stub.StreamObserver<Req>) serviceImpl.watchShardingAssignment(
-              (io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse>) responseObserver);
+              (io.grpc.stub.StreamObserver<com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse>) responseObserver);
         default:
           throw new AssertionError();
       }
@@ -412,38 +412,38 @@ public final class DynamicShardingServiceGrpc {
           getWatchShardingAssignmentMethod(),
           io.grpc.stub.ServerCalls.asyncBidiStreamingCall(
             new MethodHandlers<
-              com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest,
-              com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse>(
+              com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest,
+              com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse>(
                 service, METHODID_WATCH_SHARDING_ASSIGNMENT)))
         .build();
   }
 
-  private static abstract class DynamicShardingServiceBaseDescriptorSupplier
+  private static abstract class AutoshardingServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoFileDescriptorSupplier, io.grpc.protobuf.ProtoServiceDescriptorSupplier {
-    DynamicShardingServiceBaseDescriptorSupplier() {}
+    AutoshardingServiceBaseDescriptorSupplier() {}
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
-      return com.google.cloud.autosharding.v1main.DynamicShardingProto.getDescriptor();
+      return com.google.cloud.autosharding.v1.AutoshardingProto.getDescriptor();
     }
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.ServiceDescriptor getServiceDescriptor() {
-      return getFileDescriptor().findServiceByName("DynamicShardingService");
+      return getFileDescriptor().findServiceByName("AutoshardingService");
     }
   }
 
-  private static final class DynamicShardingServiceFileDescriptorSupplier
-      extends DynamicShardingServiceBaseDescriptorSupplier {
-    DynamicShardingServiceFileDescriptorSupplier() {}
+  private static final class AutoshardingServiceFileDescriptorSupplier
+      extends AutoshardingServiceBaseDescriptorSupplier {
+    AutoshardingServiceFileDescriptorSupplier() {}
   }
 
-  private static final class DynamicShardingServiceMethodDescriptorSupplier
-      extends DynamicShardingServiceBaseDescriptorSupplier
+  private static final class AutoshardingServiceMethodDescriptorSupplier
+      extends AutoshardingServiceBaseDescriptorSupplier
       implements io.grpc.protobuf.ProtoMethodDescriptorSupplier {
     private final java.lang.String methodName;
 
-    DynamicShardingServiceMethodDescriptorSupplier(java.lang.String methodName) {
+    AutoshardingServiceMethodDescriptorSupplier(java.lang.String methodName) {
       this.methodName = methodName;
     }
 
@@ -458,11 +458,11 @@ public final class DynamicShardingServiceGrpc {
   public static io.grpc.ServiceDescriptor getServiceDescriptor() {
     io.grpc.ServiceDescriptor result = serviceDescriptor;
     if (result == null) {
-      synchronized (DynamicShardingServiceGrpc.class) {
+      synchronized (AutoshardingServiceGrpc.class) {
         result = serviceDescriptor;
         if (result == null) {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
-              .setSchemaDescriptor(new DynamicShardingServiceFileDescriptorSupplier())
+              .setSchemaDescriptor(new AutoshardingServiceFileDescriptorSupplier())
               .addMethod(getWatchShardingAssignmentMethod())
               .build();
         }

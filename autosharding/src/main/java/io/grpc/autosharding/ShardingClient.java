@@ -16,15 +16,15 @@
 
 package io.grpc.autosharding;
 
-import com.google.cloud.autosharding.v1main.AssignmentChunk;
-import com.google.cloud.autosharding.v1main.AssignmentMetadata;
-import com.google.cloud.autosharding.v1main.DynamicShardingServiceGrpc;
-import com.google.cloud.autosharding.v1main.EndpointState;
-import com.google.cloud.autosharding.v1main.InitialClientConfig;
-import com.google.cloud.autosharding.v1main.PerSliceEndpointState;
-import com.google.cloud.autosharding.v1main.SliceAssignment;
-import com.google.cloud.autosharding.v1main.WatchShardingAssignmentRequest;
-import com.google.cloud.autosharding.v1main.WatchShardingAssignmentResponse;
+import com.google.cloud.autosharding.v1.AssignmentChunk;
+import com.google.cloud.autosharding.v1.AssignmentMetadata;
+import com.google.cloud.autosharding.v1.AutoshardingServiceGrpc;
+import com.google.cloud.autosharding.v1.EndpointState;
+import com.google.cloud.autosharding.v1.InitialClientConfig;
+import com.google.cloud.autosharding.v1.PerSliceEndpointState;
+import com.google.cloud.autosharding.v1.SliceAssignment;
+import com.google.cloud.autosharding.v1.WatchShardingAssignmentRequest;
+import com.google.cloud.autosharding.v1.WatchShardingAssignmentResponse;
 import com.google.protobuf.ByteString;
 import io.grpc.Channel;
 import io.grpc.Context;
@@ -116,8 +116,8 @@ final class ShardingClient {
 
     cancellableContext = Context.current().withCancellation();
     cancellableContext.run(() -> {
-      DynamicShardingServiceGrpc.DynamicShardingServiceStub stub =
-          DynamicShardingServiceGrpc.newStub(channel).withWaitForReady();
+      AutoshardingServiceGrpc.AutoshardingServiceStub stub =
+          AutoshardingServiceGrpc.newStub(channel).withWaitForReady();
 
       requestStream = stub.watchShardingAssignment(
           new StreamObserver<WatchShardingAssignmentResponse>() {
@@ -138,13 +138,17 @@ final class ShardingClient {
             }
           });
 
-      InitialClientConfig initConfig = InitialClientConfig.newBuilder()
+      InitialClientConfig.Builder initConfigBuilder = InitialClientConfig.newBuilder()
           .setTarget(target)
-          .setClientUuid(clientUuid)
-          .setCurrentGeneration(currentGeneration)
-          .build();
+          .setClientUuid(clientUuid);
+      if (currentGeneration > 0) {
+        initConfigBuilder.setLatestGeneration(currentGeneration);
+      }
 
-      requestStream.onNext(WatchShardingAssignmentRequest.newBuilder().setInit(initConfig).build());
+      requestStream.onNext(
+          WatchShardingAssignmentRequest.newBuilder()
+              .setInitialClientConfig(initConfigBuilder.build())
+              .build());
     });
   }
 
@@ -205,19 +209,21 @@ final class ShardingClient {
     List<SliceAssignment> sorted = new ArrayList<>(slices);
     sorted.sort(
         Comparator.comparing(
-            sa -> sa.getSlice().getStartKeyInclusive(),
+            sa -> sa.getSlice().getStartKey(),
             ByteString.unsignedLexicographicalComparator()));
 
     // First slice must start at empty ByteString (start of keyspace)
-    if (!sorted.get(0).getSlice().getStartKeyInclusive().isEmpty()) {
+    if (!sorted.get(0).getSlice().getStartKey().isEmpty()) {
       return false;
     }
 
     for (int i = 0; i < sorted.size() - 1; i++) {
-      ByteString currentEnd = sorted.get(i).getSlice().getEndKeyExclusive();
-      ByteString nextStart = sorted.get(i + 1).getSlice().getStartKeyInclusive();
-      // If end_key is unset (empty), this slice extends to the largest allowed key.
-      // It cannot have subsequent slices.
+      if (!sorted.get(i).getSlice().hasEndKey()) {
+        // If end_key is unset, this slice extends to largest key, cannot have subsequent slices
+        return false;
+      }
+      ByteString currentEnd = sorted.get(i).getSlice().getEndKey();
+      ByteString nextStart = sorted.get(i + 1).getSlice().getStartKey();
       if (currentEnd.isEmpty()) {
         return false;
       }
@@ -226,8 +232,9 @@ final class ShardingClient {
       }
     }
 
-    // Last slice's end_key must be empty (sentinel indicating end of keyspace)
-    if (!sorted.get(sorted.size() - 1).getSlice().getEndKeyExclusive().isEmpty()) {
+    // Last slice's end_key must be unset (or empty) indicating end of keyspace
+    if (sorted.get(sorted.size() - 1).getSlice().hasEndKey()
+        && !sorted.get(sorted.size() - 1).getSlice().getEndKey().isEmpty()) {
       return false;
     }
 
