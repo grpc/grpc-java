@@ -355,6 +355,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
               call.stream.cancel(Status.INTERNAL.withDescription("Too many requests"));
               GrpcUtil.closeQuietly(delayedMessage);
               delayedMessage = null;
+              closedInternal(Status.INTERNAL.withDescription("Too many requests"));
               return;
             }
             try {

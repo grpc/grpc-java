@@ -573,6 +573,8 @@ public class ServerCallImplTest {
 
     verify(stream).cancel(any(Status.class));
     verify(callListener, never()).onMessage(any(Long.class));
+    verify(callListener).onCancel();
+    assertTrue(context.isCancelled());
   }
 
   @Test
